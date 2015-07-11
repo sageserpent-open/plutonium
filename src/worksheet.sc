@@ -28,9 +28,22 @@ class IsotopicAssay(val id: String, val isotopeMolarFractionsByElement: Map[Stri
   type Id = String
 }
 
+// NOTE: abstract over what market data is required by specific instrument subclasses.
+trait Instrument
+{
+  this: Identified =>
 
-class Trade(val id: Long) {
+  type Id = Long
+  type Volume
 
+  val id: Id
+
+  def fairPrice: Double
+  def fairPrice(volume: Volume)(implicit conversion: Volume => Double): Double
+}
+
+class Contract(val id: Long, val party: String, val counterparty: String, val instrument: Bitemporal[Instrument], val volume: Instrument#Volume) extends Identified {
+  type Id = Long
 }
 
 
