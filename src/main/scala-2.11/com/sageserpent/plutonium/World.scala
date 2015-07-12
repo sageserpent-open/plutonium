@@ -12,7 +12,7 @@ import scala.collection.generic.Sorted
 object World
 {
   type EventGroupId = Long
-  def unique(): World.EventGroupId = ???
+  def unique(): EventGroupId = ???
   type Revision = Long
   val initialRevision: Revision = 0L;
 }
@@ -34,10 +34,12 @@ trait World{
 
   // NOTE: this increments 'currentRevision' if it succeeds.
   // NOTE: however, it doesn't always succeed - the events may produce an inconsistency, or may cause collision of bitemoral ids for related types.
+  // TODO - use 'Unbounded[Instant]' instead of 'Instant' to allow events to be defined at +/- Infinity.
   def recordEvents(eventGroupId: EventGroupId, events: Iterable[(Instant, Event)]): Unit = {
 
   }
 
+  // TODO - use 'Unbounded[Instant]' instead of 'Instant' to allow queries at +/- Infinity.
   def scopeFor(when: Instant, revision: Revision): Scope = ???
 
   def scopeFor(when: Instant, asOf: Instant): Scope = ???
