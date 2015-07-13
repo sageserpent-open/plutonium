@@ -34,12 +34,17 @@ trait World{
   // Hmmm - could generalise this to specify a precedence enumeration - 'OrderUsingOriginalVersion', 'First', 'Last'.
 
   // NOTE: this increments 'currentRevision' if it succeeds.
-  // NOTE: however, it doesn't always succeed - the events may produce an inconsistency, or may cause collision of bitemoral ids for related types.
-  def recordEvents(eventGroupId: EventGroupId, events: Iterable[(Unbounded[Instant], Event)]): Unit = {
+  // NOTE: however, it doesn't always succeed - the events may produce an inconsistency, or may cause collision of bitemporal ids for related types
+  // - in which case an admissible failure exception is thrown.
+  // NOTE: if an instant is not given, the event is taken to be 'at the beginning of time' - this is a way of introducing
+  // timeless events, although it permits following events to modify the outcome, which may be quite handy. There is no notion
+  // of an event occurring 'at the end of time', contrast this with the query methods below...
+  def recordEvents(eventGroupId: EventGroupId, events: Iterable[(Option[Instant], Event)]): Unit = {
 
   }
-
+  // I can imagine queries being set to 'the beginning of time' and 'past the latest event'...
   def scopeFor(when: Unbounded[Instant], revision: Revision): Scope = ???
 
+  // I can imagine queries being set to 'the beginning of time' and 'past the latest event'...
   def scopeFor(when: Unbounded[Instant], asOf: Instant): Scope = ???
 }
