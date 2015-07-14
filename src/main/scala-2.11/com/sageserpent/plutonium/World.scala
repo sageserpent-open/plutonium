@@ -3,7 +3,6 @@ package com.sageserpent.plutonium
 import java.time.Instant
 
 import com.sageserpent.infrastructure.Unbounded
-import com.sageserpent.plutonium.World.{EventGroupId, Revision}
 
 import scala.collection.generic.Sorted
 
@@ -42,9 +41,11 @@ trait World{
   def recordEvents(eventGroupId: EventGroupId, events: Iterable[(Option[Instant], Event)]): Unit = {
 
   }
+  // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
   // I can imagine queries being set to 'the beginning of time' and 'past the latest event'...
   def scopeFor(when: Unbounded[Instant], revision: Revision): Scope = ???
 
+  // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
   // I can imagine queries being set to 'the beginning of time' and 'past the latest event'...
   def scopeFor(when: Unbounded[Instant], asOf: Instant): Scope = ???
 }
