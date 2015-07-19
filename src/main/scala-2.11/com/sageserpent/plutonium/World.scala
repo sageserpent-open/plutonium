@@ -18,7 +18,7 @@ object World
 }
 
 trait World{
-  def currentRevision: Revision // TODO - need a value class with an invariant of being no less than the initial revision value here.
+  def currentRevision: World.Revision // TODO - need a value class with an invariant of being no less than the initial revision value here.
   // NOTE: this a revision of the entire world modelled by the 'World'.
 
   def versionTimeline: Sorted[Instant, _]  // The revision number is an index into this timeline.
@@ -38,12 +38,12 @@ trait World{
   // NOTE: if an instant is not given, the event is taken to be 'at the beginning of time' - this is a way of introducing
   // timeless events, although it permits following events to modify the outcome, which may be quite handy. There is no notion
   // of an event occurring 'at the end of time', contrast this with the query methods below...
-  def recordEvents(eventGroupId: EventGroupId, events: Iterable[(Option[Instant], Event)]): Unit = {
+  def recordEvents(eventGroupId: World.EventGroupId, events: Iterable[(Option[Instant], Event)]): Unit = {
 
   }
   // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
   // I can imagine queries being set to 'the beginning of time' and 'past the latest event'...
-  def scopeFor(when: Unbounded[Instant], revision: Revision): Scope = ???
+  def scopeFor(when: Unbounded[Instant], revision: World.Revision): Scope = ???
 
   // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
   // I can imagine queries being set to 'the beginning of time' and 'past the latest event'...
