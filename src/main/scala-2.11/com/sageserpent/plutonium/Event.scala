@@ -14,7 +14,8 @@ sealed trait Event {
 // NOTE: the scope is 'writeable' - raw values that it renders from bitemporals can be mutated. One can call any public
 // property or method, be it getter or setter, unit- or value-returning. The crux is that only top-level calls to
 // public property setters and public unit returning methods are patched.
-//
+// NOTE: the scope initially represents the state of the world when the event is to be applied, but *without* the event having been
+// applied yet - so all previous history will have taken place.
 case class Change(update: Spore[Scope, Unit]) extends Event {
 
 }
@@ -38,8 +39,10 @@ object Change {
 // NOTE: the scope is 'writeable' - raw values that it renders from bitemporals can be mutated. In contrast to the situation
 // with 'Change', in an 'Observation' the only interaction with the raw value is via setting public properties or calling
 // public unit-returning methods from client code - and that only the top-level calls are recorded as patches, any nested calls made within
-// the execution of a top-level invocation are not recorded. Any attempt to call public property getters, or public value-returning
-// methods will result in an exception being thrown.
+// the execution of a top-level invocation are not recorded (actually the code isn't executed at all). Any attempt to call public property
+// getters, or public value-returning methods will result in an exception being thrown.
+// NOTE: the scope is synthetic one that has no prior history applied it to whatsoever - it is there purely to capture the effects
+// of the recording.
 case class Observation(recording: Spore[Scope, Unit]) extends Event {
 }
 
