@@ -1,6 +1,4 @@
-
-
-
+import com.sageserpent.plutonium.{Bitemporal, Identified}
 
 
 object Uranium{
@@ -45,7 +43,4 @@ trait Instrument
 class Contract(val id: Long, val party: String, val counterparty: String, val instrument: Bitemporal[Instrument], val volume: Instrument#Volume) extends Identified {
   type Id = Long
 }
-
-
-
 

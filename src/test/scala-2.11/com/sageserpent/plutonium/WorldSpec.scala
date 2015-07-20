@@ -11,7 +11,7 @@ import org.scalatest._
 
 class WorldSpec extends FlatSpec {
   "A world with no history" should "not contain any identifiables" in {
-    val world = new WorldModelImplementation()
+    val world = new WorldReferenceImplementation()
 
     val scope = world.scopeFor(PositiveInfinity[Instant](), World.initialRevision)
 

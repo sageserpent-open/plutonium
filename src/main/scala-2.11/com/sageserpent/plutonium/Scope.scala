@@ -23,7 +23,7 @@ trait Scope{
 
   // NOTE: this should return proxies to raw values, rather than the raw values themselves. Depending on the kind of the scope (created by client using 'World', or implicitly in an event),
   // the proxies will be read-only or allow writes with interception to do mysterious magic.
-  def render[Raw](bitemporal: Bitemporal[Raw]): Iterable[Raw] = ???
+  def render[Raw](bitemporal: Bitemporal[Raw]): Iterable[Raw] = Iterable.empty
 
   // This begs a question - what happens if a bitemporal computation uses 'Bitemporal.withId' to create a bitemporal value on the fly in a computation? This looks like a can of worms
   // semantically! It isn't though - because the only way the id makes sense to the api / scope implementation is when the bitemporal result is rendered - and at that point, it is the

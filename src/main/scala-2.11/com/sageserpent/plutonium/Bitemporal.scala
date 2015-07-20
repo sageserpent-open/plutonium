@@ -16,7 +16,7 @@ trait Bitemporal[Raw] {
 object Bitemporal{
   def withId[Raw <: Identified](id: Raw#Id): Bitemporal[Raw] = ??? // TODO - don't we need a manifest type for 'Raw'?
 
-  def wildcard[Raw <: Identified](): Bitemporal[Raw] = ???
+  def wildcard[Raw <: Identified](): Bitemporal[Raw] = new BitemporalReferenceImplementation[Raw]
 
   def none[Raw]: Bitemporal[Raw] = ???
 }
