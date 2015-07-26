@@ -11,7 +11,7 @@ object Bar {
       (foo: Foo) => {
         val raws = foo.render()
         val raw = raws.head
-        val raw2 = foo.render().head  // Huh? - I see "the invocation of 'foo.render[Nothing]' is not static" here.
+        //val raw2 = foo.render().head  // Huh? - I see "the invocation of 'foo.render[Nothing]' is not static" here.
       }
     }
   }
