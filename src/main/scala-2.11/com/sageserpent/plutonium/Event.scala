@@ -1,12 +1,17 @@
 package com.sageserpent.plutonium
 
+import java.time.Instant
+
 import scala.spores._
 
 /**
  * Created by Gerard on 09/07/2015.
  */
-sealed trait Event {
 
+// NOTE: if an instant is not given, the event is taken to be 'at the beginning of time' - this is a way of introducing
+// timeless events, although it permits following events to modify the outcome, which may be quite handy.
+sealed trait Event {
+  val when: Option[Instant]
 }
 
 
@@ -16,13 +21,13 @@ sealed trait Event {
 // public property setters and public unit returning methods are patched.
 // NOTE: the scope initially represents the state of the world when the event is to be applied, but *without* the event having been
 // applied yet - so all previous history will have taken place.
-case class Change(update: Spore[Scope, Unit]) extends Event {
+case class Change(val when: Option[Instant], update: Spore[Scope, Unit]) extends Event {
 
 }
 
 object Change {
-  def apply[Raw <: Identified](id: Raw#Id, update: Spore[Raw, Unit]): Change = {
-    Change(spore {
+  def apply[Raw <: Identified](when: Option[Instant])(id: Raw#Id, update: Spore[Raw, Unit]): Change = {
+    Change(when, spore {
       val bitemporal = Bitemporal.withId(id)
       (scope: Scope) => {
         val raws = scope.render(bitemporal)
@@ -43,12 +48,12 @@ object Change {
 // getters, or public value-returning methods will result in an exception being thrown.
 // NOTE: the scope is synthetic one that has no prior history applied it to whatsoever - it is there purely to capture the effects
 // of the recording.
-case class Observation(recording: Spore[Scope, Unit]) extends Event {
+case class Observation(val when: Option[Instant], recording: Spore[Scope, Unit]) extends Event {
 }
 
 object Observation {
-  def apply[Raw <: Identified](id: Raw#Id, recording: Spore[Raw, Unit]): Observation = {
-    Observation(spore {
+  def apply[Raw <: Identified](when: Option[Instant])(id: Raw#Id, recording: Spore[Raw, Unit]): Observation = {
+    Observation(when, spore {
       val bitemporal = Bitemporal.withId(capture(id))
       (scope: Scope) => {
         val raws = scope.render(bitemporal)
@@ -62,5 +67,5 @@ object Observation {
 
 
 // NOTE: creation is implied by the first change or observation, so we don't bother with an explicit case class for that.
-case class Annihilation[Raw <: Identified](id: Raw#Id) extends Event {
+case class Annihilation[Raw <: Identified](val when: Option[Instant], id: Raw#Id) extends Event {
 }
