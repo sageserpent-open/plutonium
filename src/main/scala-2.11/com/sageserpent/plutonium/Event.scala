@@ -8,7 +8,7 @@ import scala.spores._
  * Created by Gerard on 09/07/2015.
  */
 
-// NOTE: if an instant is not given, the event is taken to be 'at the beginning of time' - this is a way of introducing
+// NOTE: if 'when' is 'None', the event is taken to be 'at the beginning of time' - this is a way of introducing
 // timeless events, although it permits following events to modify the outcome, which may be quite handy.
 sealed trait Event {
   val when: Option[Instant]
@@ -48,12 +48,14 @@ object Change {
 // getters, or public value-returning methods will result in an exception being thrown.
 // NOTE: the scope is synthetic one that has no prior history applied it to whatsoever - it is there purely to capture the effects
 // of the recording.
-case class Observation(val when: Option[Instant], recording: Spore[Scope, Unit]) extends Event {
+case class Observation(definiteWhen: Instant, recording: Spore[Scope, Unit]) extends Event {
+  val when = Some(definiteWhen)
 }
 
+
 object Observation {
-  def apply[Raw <: Identified](when: Option[Instant])(id: Raw#Id, recording: Spore[Raw, Unit]): Observation = {
-    Observation(when, spore {
+  def apply[Raw <: Identified](definiteWhen: Instant)(id: Raw#Id, recording: Spore[Raw, Unit]): Observation = {
+    Observation(definiteWhen, spore {
       val bitemporal = Bitemporal.withId(capture(id))
       (scope: Scope) => {
         val raws = scope.render(bitemporal)
@@ -67,5 +69,7 @@ object Observation {
 
 
 // NOTE: creation is implied by the first change or observation, so we don't bother with an explicit case class for that.
-case class Annihilation[Raw <: Identified](val when: Option[Instant], id: Raw#Id) extends Event {
+// NOTE: annihilation has to happen at some definite time.
+case class Annihilation[Raw <: Identified](definiteWhen: Instant, id: Raw#Id) extends Event {
+  val when = Some(definiteWhen)
 }
