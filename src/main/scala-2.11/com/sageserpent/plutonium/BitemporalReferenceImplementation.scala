@@ -8,7 +8,7 @@ class BitemporalReferenceImplementation[Raw] extends Bitemporal[Raw]{
 
   override def filter(predicate: (Raw) => Boolean): Bitemporal[Raw] = ???
 
-  override def flatMap[Raw2](stage: (Raw) => Bitemporal[Raw2]): Bitemporal[Raw2] = ???
+  override def flatMap[Raw2](stage: (Raw) => Bitemporal[Raw2]): Bitemporal[Raw2] = Bitemporal.none
 
   override def map[Raw2](transform: (Raw) => Raw2): Bitemporal[Raw2] = ???
 }

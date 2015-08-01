@@ -14,6 +14,6 @@ package object plutonium {
   }
 
   implicit def equal[Raw]: Equal[Bitemporal[Raw]] = new Equal[Bitemporal[Raw]] {
-    override def equal(a1: Bitemporal[Raw], a2: Bitemporal[Raw]): Boolean = false
+    override def equal(a1: Bitemporal[Raw], a2: Bitemporal[Raw]): Boolean = true
   }
 }
