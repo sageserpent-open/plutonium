@@ -14,11 +14,13 @@ trait Bitemporal[Raw] {
 // This companion object can produce a bitemporal instance that refers to zero, one or many raw instances depending
 // how many of those raw instances match the id or wildcard.
 object Bitemporal{
+  def apply[Raw](raw: Raw) = new BitemporalReferenceImplementation[Raw](raw)
+
   def withId[Raw <: Identified](id: Raw#Id): Bitemporal[Raw] = ??? // TODO - don't we need a manifest type for 'Raw'?
 
   def wildcard[Raw <: Identified](): Bitemporal[Raw] = new BitemporalReferenceImplementation[Raw]
 
-  def none[Raw]: Bitemporal[Raw] = ???
+  def none[Raw]: Bitemporal[Raw] = new BitemporalReferenceImplementation[Raw]
 }
 
 

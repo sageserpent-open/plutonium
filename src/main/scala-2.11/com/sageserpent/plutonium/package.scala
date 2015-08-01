@@ -8,12 +8,12 @@ import scalaz.{Monad, Equal}
 package object plutonium {
 
   implicit val monad: Monad[Bitemporal] = new Monad[Bitemporal] {
-    override def point[A](a: => A): Bitemporal[A] = ???
+    override def point[A](a: => A): Bitemporal[A] = Bitemporal(a)
 
-    override def bind[A, B](fa: Bitemporal[A])(f: (A) => Bitemporal[B]): Bitemporal[B] = ???
+    override def bind[A, B](fa: Bitemporal[A])(f: (A) => Bitemporal[B]): Bitemporal[B] = fa flatMap f
   }
 
   implicit def equal[Raw]: Equal[Bitemporal[Raw]] = new Equal[Bitemporal[Raw]] {
-    override def equal(a1: Bitemporal[Raw], a2: Bitemporal[Raw]): Boolean = ???
+    override def equal(a1: Bitemporal[Raw], a2: Bitemporal[Raw]): Boolean = false
   }
 }
