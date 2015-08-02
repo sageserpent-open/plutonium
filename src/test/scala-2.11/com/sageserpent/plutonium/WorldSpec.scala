@@ -6,21 +6,26 @@ package com.sageserpent.plutonium
 
 import java.time.Instant
 
-import com.sageserpent.infrastructure.PositiveInfinity
-import org.scalatest._
+import org.scalacheck.{Arbitrary, Prop}
+import org.scalatest.FlatSpec
+import org.scalatest.prop.Checkers
 
-class WorldSpec extends FlatSpec {
+class WorldSpec extends FlatSpec with Checkers {
+  implicit def arbitraryInstant(implicit longArbitrary: Arbitrary[Long]): Arbitrary[Instant] = Arbitrary(longArbitrary.arbitrary map (Instant.ofEpochSecond(_)))
+
+  implicit def arbitraryScope(implicit instantArbitrary: Arbitrary[Instant]): Arbitrary[Scope] = ??? // TODO!!!!
+
   "A world with no history" should "not contain any identifiables" in {
     val world = new WorldReferenceImplementation()
-
-    val scope = world.scopeFor(PositiveInfinity[Instant](), World.initialRevision)
 
     class NonExistentIdentified extends AbstractIdentified {
       override val id: String = fail("If I am not supposed to exist, why is something asking for my id?")
     }
 
-    val exampleBitemporal = Bitemporal.wildcard[NonExistentIdentified]()
+    check(Prop.forAllNoShrink(Arbitrary.arbitrary[Scope])((scope: Scope) => {
+      val exampleBitemporal = Bitemporal.wildcard[NonExistentIdentified]()
 
-    assert(scope.render(exampleBitemporal).isEmpty)
+      scope.render(exampleBitemporal).isEmpty
+    }))
   }
 }

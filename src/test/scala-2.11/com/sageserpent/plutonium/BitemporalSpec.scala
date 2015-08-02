@@ -12,7 +12,7 @@ import scalaz.scalacheck._
  */
 class BitemporalSpec extends FlatSpec with Checkers {
 
-  implicit def arbitrary[Raw](implicit rawArbitrary: Arbitrary[Raw]): Arbitrary[Bitemporal[Raw]] = Arbitrary { Arbitrary.arbitrary[Raw] map (Monad[Bitemporal].point(_)) }
+  implicit def arbitraryBitemporal[Raw](implicit rawArbitrary: Arbitrary[Raw]): Arbitrary[Bitemporal[Raw]] = Arbitrary { Arbitrary.arbitrary[Raw] map (Monad[Bitemporal].point(_)) }
 
   "The class Bitemporal" should "be a monad" in {
     check(ScalazProperties.monad.laws[Bitemporal])

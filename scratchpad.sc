@@ -3,7 +3,7 @@ import org.scalacheck.Prop.forAllNoShrink
 import org.scalacheck.Gen
 
 
-val numbers = Gen.choose(0, 20)
+val numbers = Gen.frequency(1 -> Gen.choose(0, 20), 2 -> Gen.choose(-50, -40))
 
 val upperTrianglePasses = for {column <- numbers
                                row <- Gen.choose(column, 20)} yield column -> row

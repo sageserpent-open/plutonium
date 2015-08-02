@@ -2,13 +2,15 @@ package com.sageserpent.plutonium
 
 import java.time.Instant
 
+import com.sageserpent.infrastructure.Unbounded
+
 /**
  * Created by Gerard on 09/07/2015.
  */
 trait Scope{
   // TODO - hmmm, an id has to relate to an API instance....think about this ... presumably the act of rendering will supply an API via the scope to the bitemporals being rendered, so the id is then interpreted in context.
 
-  val when: Instant
+  val when: Unbounded[Instant]
 
   val revision: Long  // The least upper bound of all revisions coming no later than 'asOf'.
 
