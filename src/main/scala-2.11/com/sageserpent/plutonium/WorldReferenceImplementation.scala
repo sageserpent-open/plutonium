@@ -2,7 +2,7 @@ package com.sageserpent.plutonium
 
 import java.time.Instant
 
-import com.sageserpent.infrastructure.Unbounded
+import com.sageserpent.infrastructure.{Finite, Unbounded}
 import com.sageserpent.plutonium.World.Revision
 
 import scala.collection.generic.Sorted
@@ -11,6 +11,12 @@ import scala.collection.generic.Sorted
  * Created by Gerard on 19/07/2015.
  */
 class WorldReferenceImplementation extends World {
+  class ScopeReferenceImplementation extends Scope{
+    override val when: Unbounded[Instant] = Finite(Instant.MIN)
+    override val asOf: Instant = Instant.MIN
+    override val revision: Long = 0
+  }
+
   override def currentRevision: Revision = ???
 
   override def versionTimeline: Sorted[Instant, _] = ???
