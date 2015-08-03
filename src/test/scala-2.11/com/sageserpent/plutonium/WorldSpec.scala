@@ -6,15 +6,12 @@ package com.sageserpent.plutonium
 
 import java.time.Instant
 
-import org.scalacheck.{Arbitrary, Prop}
+import com.sageserpent.infrastructure.{Finite, PositiveInfinity, NegativeInfinity}
+import org.scalacheck.{Gen, Arbitrary, Prop}
 import org.scalatest.FlatSpec
 import org.scalatest.prop.Checkers
 
 class WorldSpec extends FlatSpec with Checkers {
-  implicit def arbitraryInstant(implicit longArbitrary: Arbitrary[Long]): Arbitrary[Instant] = Arbitrary(longArbitrary.arbitrary map (Instant.ofEpochSecond(_)))
-
-  implicit def arbitraryScope(implicit instantArbitrary: Arbitrary[Instant]): Arbitrary[World#Scope] = ??? // TODO!!!!
-
   "A world with no history" should "not contain any identifiables" in {
     val world = new WorldReferenceImplementation()
 
@@ -22,7 +19,14 @@ class WorldSpec extends FlatSpec with Checkers {
       override val id: String = fail("If I am not supposed to exist, why is something asking for my id?")
     }
 
-    check(Prop.forAllNoShrink(Arbitrary.arbitrary[World#Scope])((scope: World#Scope) => {
+    val instantGenerator = Arbitrary.arbitrary[Long] map (Instant.ofEpochMilli(_))
+
+    val unboundedInstantGenerator = Gen.frequency(1 -> Gen.oneOf(NegativeInfinity[Instant], PositiveInfinity[Instant]), 3 -> (instantGenerator map Finite.apply))
+
+    val scopeGenerator = for {when <- unboundedInstantGenerator
+                              asOf <- instantGenerator} yield world.scopeFor(when = when, asOf = asOf)
+
+    check(Prop.forAllNoShrink(scopeGenerator)((scope: world.Scope) => {
       val exampleBitemporal = Bitemporal.wildcard[NonExistentIdentified]()
 
       scope.render(exampleBitemporal).isEmpty

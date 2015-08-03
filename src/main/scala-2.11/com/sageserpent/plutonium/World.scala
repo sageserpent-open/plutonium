@@ -47,6 +47,7 @@ trait World{
 
   // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
   // I can imagine queries being set to 'the beginning of time' and 'past the latest event'...
+  // NOTE: precondition that 'revision' <= 'this.currentRevision'.
   def scopeFor(when: Unbounded[Instant], revision: World.Revision): Scope
 
   // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
