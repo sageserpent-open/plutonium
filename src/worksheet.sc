@@ -44,3 +44,38 @@ class Contract(val id: Long, val party: String, val counterparty: String, val in
   type Id = Long
 }
 
+
+// A question - what happens if a bitemporal computation uses 'Bitemporal.withId' to create a bitemporal value on the fly in a computation? This looks like a can of worms
+// semantically! It isn't though - because the only way the id makes sense to the api / scope implementation is when the bitemporal result is rendered - and at that point, it is the
+// world line of relevant events that determines what the id refers to. Here's another way of thinking about it ... shouldn't the two bits of code below doing the same thing?
+
+class Example(val id: Int) extends Identified{
+  type Id = Int
+
+  // One way...
+
+  private var anotherBitemporal: Bitemporal[Example] = Bitemporal.none
+
+  // An event would call this.
+  def referenceToAnotherBitemporal_=(id: Int) = {
+    this.anotherBitemporal = Bitemporal.withId[Example](id)
+  }
+
+  def referenceToAnotherBitemporal_ = this.anotherBitemporal
+
+
+
+  // Another way (ugh)...
+
+  private var anotherBitemporalId: Option[Int] = None
+
+  // An event would call this.
+  def referenceToAnotherBitemporal2_=(id: Int) = {
+    this.anotherBitemporalId = Some(id)
+  }
+
+  def referenceToAnotherBitemporal2_ = this.anotherBitemporalId match {
+    case Some(id) => Bitemporal.withId[Example](id)
+    case None => Bitemporal.none[Example]
+  }
+}
