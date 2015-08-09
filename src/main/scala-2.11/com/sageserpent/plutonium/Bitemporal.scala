@@ -21,6 +21,8 @@ object Bitemporal{
   def wildcard[Raw <: Identified](): Bitemporal[Raw] = new BitemporalReferenceImplementation[Raw]
 
   def none[Raw]: Bitemporal[Raw] = new BitemporalReferenceImplementation[Raw]
+
+  // TODO - something that makes Bitemporal[Instant] to provide a way of snooping into the scope's 'when' from within the monad.
 }
 
 
