@@ -66,16 +66,46 @@ class WorldSpec extends FlatSpec with Checkers {
 
   val queryWhenGenerator = instantGenerator // TODO - use Unbounded[Instant]
 
-  val fooHistoryIdGenerator = Arbitrary.arbitrary[FooHistory#Id]
+  val fooHistoryIdGenerator = Arbitrary.arbitrary[String]
 
-  val dataSampleGenerator = for {data <- Arbitrary.arbitrary[String]} yield (data, (when: Instant, fooHistoryId: FooHistory#Id) => Change[FooHistory](Some(when))(fooHistoryId, (fooHistory: FooHistory) => {
+  val barHistoryIdGenerator = Arbitrary.arbitrary[Int]
+
+  val dataSampleGenerator1 = for {data <- Arbitrary.arbitrary[String]} yield (data, (when: Instant, fooHistoryId: String) => Change[FooHistory](Some(when))(fooHistoryId, (fooHistory: FooHistory) => {
     fooHistory.property1 = capture(data)
   }))
 
-  val dataSamplesGenerator = Gen.listOf(dataSampleGenerator) filter (!_.isEmpty)
+  val dataSampleGenerator2 = for {data <- Arbitrary.arbitrary[Boolean]} yield (data, (when: Instant, fooHistoryId: String) => Change[FooHistory](Some(when))(fooHistoryId, (fooHistory: FooHistory) => {
+    fooHistory.property2 = capture(data)
+  }))
 
-  val dataSamplesForAnIdGenerator = for {dataSamples <- dataSamplesGenerator
-                                         fooHistoryId <- fooHistoryIdGenerator} yield (fooHistoryId: Object, (scope: Scope) => scope.render(Bitemporal.withId[FooHistory](fooHistoryId)).head: History, for {(data, changeFor) <- dataSamples} yield (data: Object, changeFor(_: Instant, fooHistoryId)))
+  val dataSampleGenerator3 = for {data <- Arbitrary.arbitrary[Double]} yield (data, (when: Instant, barHistoryId: Int) => Change[BarHistory](Some(when))(barHistoryId, (barHistory: BarHistory) => {
+    barHistory.property1 = capture(data)
+  }))
+
+  val dataSampleGenerator4 = for {data1 <- Arbitrary.arbitrary[String]
+                                  data2 <- Arbitrary.arbitrary[Int]} yield (data1 -> data2, (when: Instant, barHistoryId: Int) => Change[BarHistory](Some(when))(barHistoryId, (barHistory: BarHistory) => {
+    barHistory.method1(capture(data1), capture(data2))
+  }))
+
+  val dataSampleGenerator5 = for {data1 <- Arbitrary.arbitrary[Int]
+                                  data2 <- Arbitrary.arbitrary[String]
+                                  data3 <- Arbitrary.arbitrary[Boolean]} yield ((data1, data2, data3), (when: Instant, barHistoryId: Int) => Change[BarHistory](Some(when))(barHistoryId, (barHistory: BarHistory) => {
+    barHistory.method2(capture(data1), capture(data2), capture(data3))
+  }))
+
+
+  def dataSamplesForAnIdGenerator_[AHistory <: History](dataSampleGenerator: Gen[(_, (Instant, AHistory#Id) => Change)], historyIdGenerator: Gen[AHistory#Id]) = {
+    val dataSamplesGenerator = Gen.listOf(dataSampleGenerator) filter (!_.isEmpty)
+
+    for {dataSamples <- dataSamplesGenerator
+         historyId <- historyIdGenerator} yield (historyId: Any, (scope: Scope) => scope.render(Bitemporal.withId[AHistory](historyId)).head: History, for {(data, changeFor) <- dataSamples} yield (data: Any, changeFor(_: Instant, historyId)))
+  }
+
+  val dataSamplesForAnIdGenerator = Gen.frequency(Seq(dataSamplesForAnIdGenerator_[FooHistory](dataSampleGenerator1, fooHistoryIdGenerator),
+    dataSamplesForAnIdGenerator_[FooHistory](dataSampleGenerator2, fooHistoryIdGenerator),
+    dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator3, barHistoryIdGenerator),
+    dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator4, barHistoryIdGenerator),
+    dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator5, barHistoryIdGenerator)) map (1 -> _): _*)
 
   val recordingsForAnIdGenerator = for {(historyId, historyFrom, dataSamples) <- dataSamplesForAnIdGenerator
                                         sampleWhens <- Gen.listOfN(dataSamples.length, instantGenerator)} yield (historyId, historyFrom, for {((data, changeFor), when) <- dataSamples zip sampleWhens} yield (data, when, changeFor(when)))
@@ -92,7 +122,7 @@ class WorldSpec extends FlatSpec with Checkers {
     val scopeGenerator = for {when <- unboundedInstantGenerator
                               asOf <- instantGenerator} yield world.scopeFor(when = when, asOf = asOf)
 
-    check(Prop.forAllNoShrink(scopeGenerator)((scope: world.Scope) => {
+    check(Prop.forAllNoShrink(scopeGenerator)((scope: world.ScopeReferenceImplementation) => {
       val exampleBitemporal = Bitemporal.wildcard[NonExistentIdentified]()
 
       scope.render(exampleBitemporal).isEmpty
