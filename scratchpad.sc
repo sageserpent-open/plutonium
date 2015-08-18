@@ -14,4 +14,9 @@ val property = forAllNoShrink(upperTrianglePasses) { case (column, row) =>
 }
 
 property.check
+def curried(x: Int)(y: String) = x + y
+val c1 = curried(2) _
+val c2 = curried (_: Int) ("Hello")
+c1("Hi")
+c2(3)
 
