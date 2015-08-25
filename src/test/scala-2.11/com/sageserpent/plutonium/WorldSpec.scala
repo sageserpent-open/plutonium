@@ -64,44 +64,46 @@ class WorldSpec extends FlatSpec with Checkers {
 
   val unboundedInstantGenerator = Gen.frequency(1 -> Gen.oneOf(NegativeInfinity[Instant], PositiveInfinity[Instant]), 10 -> (instantGenerator map Finite.apply))
 
-  val queryWhenGenerator = instantGenerator // TODO - use Unbounded[Instant]
+  val queryWhenGenerator = unboundedInstantGenerator
+
+  val changeWhenGenerator = Gen.frequency(1 -> Gen.oneOf(Seq(None)), 10 -> (instantGenerator map (Some(_))))
 
   val fooHistoryIdGenerator = Arbitrary.arbitrary[FooHistory#Id]
 
   val barHistoryIdGenerator = Arbitrary.arbitrary[BarHistory#Id]
 
-  val dataSampleGenerator1 = for {data <- Arbitrary.arbitrary[String]} yield (data, (when: Instant, fooHistoryId: FooHistory#Id) => Change[FooHistory](when)(fooHistoryId, (fooHistory: FooHistory) => {
+  val dataSampleGenerator1 = for {data <- Arbitrary.arbitrary[String]} yield (data, (when: Option[Instant], fooHistoryId: FooHistory#Id) => Change[FooHistory](when)(fooHistoryId, (fooHistory: FooHistory) => {
     fooHistory.property1 = capture(data)
   }))
 
-  val dataSampleGenerator2 = for {data <- Arbitrary.arbitrary[Boolean]} yield (data, (when: Instant, fooHistoryId: FooHistory#Id) => Change[FooHistory](when)(fooHistoryId, (fooHistory: FooHistory) => {
+  val dataSampleGenerator2 = for {data <- Arbitrary.arbitrary[Boolean]} yield (data, (when: Option[Instant], fooHistoryId: FooHistory#Id) => Change[FooHistory](when)(fooHistoryId, (fooHistory: FooHistory) => {
     fooHistory.property2 = capture(data)
   }))
 
-  val dataSampleGenerator3 = for {data <- Arbitrary.arbitrary[Double]} yield (data, (when: Instant, barHistoryId: BarHistory#Id) => Change[BarHistory](when)(barHistoryId, (barHistory: BarHistory) => {
+  val dataSampleGenerator3 = for {data <- Arbitrary.arbitrary[Double]} yield (data, (when: Option[Instant], barHistoryId: BarHistory#Id) => Change[BarHistory](when)(barHistoryId, (barHistory: BarHistory) => {
     barHistory.property1 = capture(data)
   }))
 
   val dataSampleGenerator4 = for {data1 <- Arbitrary.arbitrary[String]
-                                  data2 <- Arbitrary.arbitrary[Int]} yield (data1 -> data2, (when: Instant, barHistoryId: BarHistory#Id) => Change[BarHistory](when)(barHistoryId, (barHistory: BarHistory) => {
+                                  data2 <- Arbitrary.arbitrary[Int]} yield (data1 -> data2, (when: Option[Instant], barHistoryId: BarHistory#Id) => Change[BarHistory](when)(barHistoryId, (barHistory: BarHistory) => {
     barHistory.method1(capture(data1), capture(data2))
   }))
 
   val dataSampleGenerator5 = for {data1 <- Arbitrary.arbitrary[Int]
                                   data2 <- Arbitrary.arbitrary[String]
-                                  data3 <- Arbitrary.arbitrary[Boolean]} yield ((data1, data2, data3), (when: Instant, barHistoryId: BarHistory#Id) => Change[BarHistory](when)(barHistoryId, (barHistory: BarHistory) => {
+                                  data3 <- Arbitrary.arbitrary[Boolean]} yield ((data1, data2, data3), (when: Option[Instant], barHistoryId: BarHistory#Id) => Change[BarHistory](when)(barHistoryId, (barHistory: BarHistory) => {
     barHistory.method2(capture(data1), capture(data2), capture(data3))
   }))
 
-  def dataSamplesForAnIdGenerator_[AHistory <: History](dataSampleGenerator: Gen[(_, (Instant, AHistory#Id) => Change)], historyIdGenerator: Gen[AHistory#Id]) = {
-    val dataSamplesGenerator = Gen.listOf(dataSampleGenerator) filter (!_.isEmpty)  // It makes no sense to have an id without associated data samples - the act of recording a data sample
-                                                                                    // via a change is what introduces an id into the world.
+  def dataSamplesForAnIdGenerator_[AHistory <: History](dataSampleGenerator: Gen[(_, (Option[Instant], AHistory#Id) => Change)], historyIdGenerator: Gen[AHistory#Id]) = {
+    val dataSamplesGenerator = Gen.listOf(dataSampleGenerator) filter (!_.isEmpty) // It makes no sense to have an id without associated data samples - the act of recording a data sample
+    // via a change is what introduces an id into the world.
 
     for {dataSamples <- dataSamplesGenerator
-         historyId <- historyIdGenerator} yield (historyId, (scope: Scope) => scope.render(Bitemporal.withId[AHistory](historyId)).head: History, for {(data, changeFor: ((Instant, AHistory#Id) => Change)) <- dataSamples} yield (data: Any, changeFor(_: Instant, historyId)))
+         historyId <- historyIdGenerator} yield (historyId, (scope: Scope) => scope.render(Bitemporal.withId[AHistory](historyId)).head: History, for {(data, changeFor: ((Option[Instant], AHistory#Id) => Change)) <- dataSamples} yield (data: Any, changeFor(_: Option[Instant], historyId)))
   }
 
-  case class RecordingsForAnId(historyId: Any, historyFrom: Scope => History, recordings: List[(Any, Instant, Change)])
+  case class RecordingsForAnId(historyId: Any, historyFrom: Scope => History, recordings: List[(Any, Option[Instant], Change)])
 
   val dataSamplesForAnIdGenerator = Gen.frequency(Seq(dataSamplesForAnIdGenerator_[FooHistory](dataSampleGenerator1, fooHistoryIdGenerator),
     dataSamplesForAnIdGenerator_[FooHistory](dataSampleGenerator2, fooHistoryIdGenerator),
@@ -110,7 +112,7 @@ class WorldSpec extends FlatSpec with Checkers {
     dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator5, barHistoryIdGenerator)) map (1 -> _): _*)
 
   val recordingsForAnIdGenerator = for {(historyId, historyFrom, dataSamples) <- dataSamplesForAnIdGenerator
-                                        sampleWhens <- Gen.listOfN(dataSamples.length, instantGenerator)} yield RecordingsForAnId(historyId, historyFrom, for {((data, changeFor), when) <- dataSamples zip sampleWhens} yield (data, when, changeFor(when)))
+                                        sampleWhens <- Gen.listOfN(dataSamples.length, changeWhenGenerator)} yield RecordingsForAnId(historyId, historyFrom, for {((data, changeFor), when) <- dataSamples zip sampleWhens} yield (data, when, changeFor(when)))
 
   val recordingsGroupedByIdGenerator = Gen.listOf(recordingsForAnIdGenerator) filter (!_.isEmpty)
 
@@ -146,11 +148,13 @@ class WorldSpec extends FlatSpec with Checkers {
         world.revise(Map(eventId -> Some(change)), asOf)
       }
 
-      val scope = world.scopeFor(Finite(queryWhen), asOfs.last)
+      val scope = world.scopeFor(queryWhen, asOfs.last)
 
       val checks = (for (RecordingsForAnId(historyId, historyFrom, recordings) <- recordingsGroupedById)
         yield {
-          val pertinentRecordings = recordings.filter { case (_, when, _) => 0 <= queryWhen.compareTo(when) }
+          val pertinentRecordings = recordings.filter { case (_, Some(when), _) => 0 <= queryWhen.compareTo(Finite(when))
+          case (_, None, _) => 0 == queryWhen.compareTo(NegativeInfinity())
+          }
           val history = historyFrom(scope)
           history.datums.zip(pertinentRecordings.map(_._1))
         }) flatMap identity
