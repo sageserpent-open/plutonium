@@ -20,3 +20,7 @@ val c2 = curried (_: Int) ("Hello")
 c1("Hi")
 c2(3)
 
+val x, y = 2
+
+x
+y

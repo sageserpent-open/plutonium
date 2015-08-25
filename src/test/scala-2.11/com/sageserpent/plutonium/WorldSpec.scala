@@ -66,36 +66,37 @@ class WorldSpec extends FlatSpec with Checkers {
 
   val queryWhenGenerator = instantGenerator // TODO - use Unbounded[Instant]
 
-  val fooHistoryIdGenerator = Arbitrary.arbitrary[String]
+  val fooHistoryIdGenerator = Arbitrary.arbitrary[FooHistory#Id]
 
-  val barHistoryIdGenerator = Arbitrary.arbitrary[Int]
+  val barHistoryIdGenerator = Arbitrary.arbitrary[BarHistory#Id]
 
-  val dataSampleGenerator1 = for {data <- Arbitrary.arbitrary[String]} yield (data, (when: Instant, fooHistoryId: String) => Change[FooHistory](Some(when))(fooHistoryId, (fooHistory: FooHistory) => {
+  val dataSampleGenerator1 = for {data <- Arbitrary.arbitrary[String]} yield (data, (when: Instant, fooHistoryId: FooHistory#Id) => Change[FooHistory](Some(when))(fooHistoryId, (fooHistory: FooHistory) => {
     fooHistory.property1 = capture(data)
   }))
 
-  val dataSampleGenerator2 = for {data <- Arbitrary.arbitrary[Boolean]} yield (data, (when: Instant, fooHistoryId: String) => Change[FooHistory](Some(when))(fooHistoryId, (fooHistory: FooHistory) => {
+  val dataSampleGenerator2 = for {data <- Arbitrary.arbitrary[Boolean]} yield (data, (when: Instant, fooHistoryId: FooHistory#Id) => Change[FooHistory](Some(when))(fooHistoryId, (fooHistory: FooHistory) => {
     fooHistory.property2 = capture(data)
   }))
 
-  val dataSampleGenerator3 = for {data <- Arbitrary.arbitrary[Double]} yield (data, (when: Instant, barHistoryId: Int) => Change[BarHistory](Some(when))(barHistoryId, (barHistory: BarHistory) => {
+  val dataSampleGenerator3 = for {data <- Arbitrary.arbitrary[Double]} yield (data, (when: Instant, barHistoryId: BarHistory#Id) => Change[BarHistory](Some(when))(barHistoryId, (barHistory: BarHistory) => {
     barHistory.property1 = capture(data)
   }))
 
   val dataSampleGenerator4 = for {data1 <- Arbitrary.arbitrary[String]
-                                  data2 <- Arbitrary.arbitrary[Int]} yield (data1 -> data2, (when: Instant, barHistoryId: Int) => Change[BarHistory](Some(when))(barHistoryId, (barHistory: BarHistory) => {
+                                  data2 <- Arbitrary.arbitrary[Int]} yield (data1 -> data2, (when: Instant, barHistoryId: BarHistory#Id) => Change[BarHistory](Some(when))(barHistoryId, (barHistory: BarHistory) => {
     barHistory.method1(capture(data1), capture(data2))
   }))
 
   val dataSampleGenerator5 = for {data1 <- Arbitrary.arbitrary[Int]
                                   data2 <- Arbitrary.arbitrary[String]
-                                  data3 <- Arbitrary.arbitrary[Boolean]} yield ((data1, data2, data3), (when: Instant, barHistoryId: Int) => Change[BarHistory](Some(when))(barHistoryId, (barHistory: BarHistory) => {
+                                  data3 <- Arbitrary.arbitrary[Boolean]} yield ((data1, data2, data3), (when: Instant, barHistoryId: BarHistory#Id) => Change[BarHistory](Some(when))(barHistoryId, (barHistory: BarHistory) => {
     barHistory.method2(capture(data1), capture(data2), capture(data3))
   }))
 
 
   def dataSamplesForAnIdGenerator_[AHistory <: History](dataSampleGenerator: Gen[(_, (Instant, AHistory#Id) => Change)], historyIdGenerator: Gen[AHistory#Id]) = {
-    val dataSamplesGenerator = Gen.listOf(dataSampleGenerator) filter (!_.isEmpty)
+    val dataSamplesGenerator = Gen.listOf(dataSampleGenerator) filter (!_.isEmpty)  // It makes no sense to have an id without associated data samples - the act of recording a data sample
+                                                                                    // via a change is what introduces an id into the world.
 
     for {dataSamples <- dataSamplesGenerator
          historyId <- historyIdGenerator} yield (historyId: Any, (scope: Scope) => scope.render(Bitemporal.withId[AHistory](historyId)).head: History, for {(data, changeFor) <- dataSamples} yield (data: Any, changeFor(_: Instant, historyId)))
@@ -150,7 +151,7 @@ class WorldSpec extends FlatSpec with Checkers {
         yield {
           val pertinentRecordings = recordings.filter { case (_, when, _) => 0 <= queryWhen.compareTo(when) }
           val history = historyFrom(scope)
-          history.datums.zip(pertinentRecordings.map(_._3))
+          history.datums.zip(pertinentRecordings.map(_._1))
         }) flatMap identity
 
       checks.forall { case (actual, expected) => actual == expected }
