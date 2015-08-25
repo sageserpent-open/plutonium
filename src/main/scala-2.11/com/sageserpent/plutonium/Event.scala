@@ -36,6 +36,10 @@ object Change {
     })
   }
 
+  def apply[Raw <: Identified](when: Instant)(id: Raw#Id, update: Spore[Raw, Unit]): Change = apply(Some(when))(id, update)
+
+  def apply[Raw <: Identified](id: Raw#Id, update: Spore[Raw, Unit]): Change = apply(None)(id, update)
+
   // etc for multiple bitemporals....
 }
 

@@ -70,26 +70,26 @@ class WorldSpec extends FlatSpec with Checkers {
 
   val barHistoryIdGenerator = Arbitrary.arbitrary[BarHistory#Id]
 
-  val dataSampleGenerator1 = for {data <- Arbitrary.arbitrary[String]} yield (data, (when: Instant, fooHistoryId: FooHistory#Id) => Change[FooHistory](Some(when))(fooHistoryId, (fooHistory: FooHistory) => {
+  val dataSampleGenerator1 = for {data <- Arbitrary.arbitrary[String]} yield (data, (when: Instant, fooHistoryId: FooHistory#Id) => Change[FooHistory](when)(fooHistoryId, (fooHistory: FooHistory) => {
     fooHistory.property1 = capture(data)
   }))
 
-  val dataSampleGenerator2 = for {data <- Arbitrary.arbitrary[Boolean]} yield (data, (when: Instant, fooHistoryId: FooHistory#Id) => Change[FooHistory](Some(when))(fooHistoryId, (fooHistory: FooHistory) => {
+  val dataSampleGenerator2 = for {data <- Arbitrary.arbitrary[Boolean]} yield (data, (when: Instant, fooHistoryId: FooHistory#Id) => Change[FooHistory](when)(fooHistoryId, (fooHistory: FooHistory) => {
     fooHistory.property2 = capture(data)
   }))
 
-  val dataSampleGenerator3 = for {data <- Arbitrary.arbitrary[Double]} yield (data, (when: Instant, barHistoryId: BarHistory#Id) => Change[BarHistory](Some(when))(barHistoryId, (barHistory: BarHistory) => {
+  val dataSampleGenerator3 = for {data <- Arbitrary.arbitrary[Double]} yield (data, (when: Instant, barHistoryId: BarHistory#Id) => Change[BarHistory](when)(barHistoryId, (barHistory: BarHistory) => {
     barHistory.property1 = capture(data)
   }))
 
   val dataSampleGenerator4 = for {data1 <- Arbitrary.arbitrary[String]
-                                  data2 <- Arbitrary.arbitrary[Int]} yield (data1 -> data2, (when: Instant, barHistoryId: BarHistory#Id) => Change[BarHistory](Some(when))(barHistoryId, (barHistory: BarHistory) => {
+                                  data2 <- Arbitrary.arbitrary[Int]} yield (data1 -> data2, (when: Instant, barHistoryId: BarHistory#Id) => Change[BarHistory](when)(barHistoryId, (barHistory: BarHistory) => {
     barHistory.method1(capture(data1), capture(data2))
   }))
 
   val dataSampleGenerator5 = for {data1 <- Arbitrary.arbitrary[Int]
                                   data2 <- Arbitrary.arbitrary[String]
-                                  data3 <- Arbitrary.arbitrary[Boolean]} yield ((data1, data2, data3), (when: Instant, barHistoryId: BarHistory#Id) => Change[BarHistory](Some(when))(barHistoryId, (barHistory: BarHistory) => {
+                                  data3 <- Arbitrary.arbitrary[Boolean]} yield ((data1, data2, data3), (when: Instant, barHistoryId: BarHistory#Id) => Change[BarHistory](when)(barHistoryId, (barHistory: BarHistory) => {
     barHistory.method2(capture(data1), capture(data2), capture(data3))
   }))
 
