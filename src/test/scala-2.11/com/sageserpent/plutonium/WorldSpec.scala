@@ -6,8 +6,8 @@ package com.sageserpent.plutonium
 
 import java.time.Instant
 
-import com.sageserpent.infrastructure.{Finite, PositiveInfinity, NegativeInfinity}
-import org.scalacheck.{Gen, Arbitrary, Prop}
+import com.sageserpent.infrastructure.{Finite, NegativeInfinity, PositiveInfinity, _}
+import org.scalacheck.{Arbitrary, Gen, Prop}
 import org.scalatest.FlatSpec
 import org.scalatest.prop.Checkers
 
@@ -63,8 +63,6 @@ class WorldSpec extends FlatSpec with Checkers {
   val instantGenerator = Arbitrary.arbitrary[Long] map (Instant.ofEpochMilli(_))
 
   val unboundedInstantGenerator = Gen.frequency(1 -> Gen.oneOf(NegativeInfinity[Instant], PositiveInfinity[Instant]), 10 -> (instantGenerator map Finite.apply))
-
-  val queryWhenGenerator = unboundedInstantGenerator
 
   val changeWhenGenerator = Gen.frequency(1 -> Gen.oneOf(Seq(None)), 10 -> (instantGenerator map (Some(_))))
 
@@ -137,27 +135,56 @@ class WorldSpec extends FlatSpec with Checkers {
 
 
 
-  "A world with history defined in simple events" should "reveal all the history up to the limits of a scope made from it" in {
-    val bigHistoryAndRevisionInstantsGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
-                                                      bigHistoryOverLotsOfThings = recordingsGroupedById map (_.recordings) flatMap identity sortBy (_._2)
-                                                      revisionInstants <- Gen.listOfN(bigHistoryOverLotsOfThings.length, instantGenerator)} yield (recordingsGroupedById, bigHistoryOverLotsOfThings, revisionInstants.sorted)
-    check(Prop.forAllNoShrink(bigHistoryAndRevisionInstantsGenerator, queryWhenGenerator) { case ((recordingsGroupedById, bigHistoryOverLotsOfThings, asOfs), queryWhen) => {
+  "A world with history defined in simple events" should "reveal all the history up to the 'when' limit of a scope made from it" in {
+    val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
+                                 bigHistoryOverLotsOfThings = recordingsGroupedById map (_.recordings) flatMap identity
+                                 asOfs <- Gen.listOfN(bigHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
+                                 queryWhen <- unboundedInstantGenerator} yield (recordingsGroupedById, bigHistoryOverLotsOfThings, asOfs, queryWhen)
+    check(Prop.forAllNoShrink(testCaseGenerator) { case ((recordingsGroupedById, bigHistoryOverLotsOfThings, asOfs, queryWhen)) => {
       val world = new WorldReferenceImplementation()
 
       for ((((_, _, change), asOf), eventId) <- bigHistoryOverLotsOfThings zip asOfs zipWithIndex) {
         world.revise(Map(eventId -> Some(change)), asOf)
       }
 
-      val scope = world.scopeFor(queryWhen, asOfs.last)
+      val finalRevision: Instant = asOfs.last
+      val scope = world.scopeFor(queryWhen, finalRevision)
 
-      val checks = (for (RecordingsForAnId(historyId, historyFrom, recordings) <- recordingsGroupedById)
-        yield {
-          val pertinentRecordings = recordings.filter { case (_, Some(when), _) => 0 <= queryWhen.compareTo(Finite(when))
-          case (_, None, _) => 0 == queryWhen.compareTo(NegativeInfinity())
-          }
-          val history = historyFrom(scope)
-          history.datums.zip(pertinentRecordings.map(_._1))
-        }) flatMap identity
+      val checks = (for {RecordingsForAnId(historyId, historyFrom, recordings) <- recordingsGroupedById
+                         pertinentRecordings = recordings.filter { case (_, Some(when), _) => Finite(when) <= queryWhen
+                         case (_, None, _) => queryWhen == NegativeInfinity()
+                         }
+                         history = historyFrom(scope)}
+        yield history.datums.zip(pertinentRecordings.map(_._1))) flatMap identity
+
+      checks.forall { case (actual, expected) => actual == expected }
+    }
+    })
+  }
+
+  "A world with history added in order of increasing event time" should "reveal all history up to the 'asOf' limit of a cope made from it" in {
+    val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
+                                 bigHistoryOverLotsOfThings = recordingsGroupedById map (_.recordings) flatMap identity
+                                 asOfs <- Gen.listOfN(bigHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
+                                 queryWhen <- instantGenerator filter (0 <= asOfs.head.compareTo(_))} yield (recordingsGroupedById, bigHistoryOverLotsOfThings, asOfs, queryWhen)
+    check(Prop.forAllNoShrink(testCaseGenerator) { case ((recordingsGroupedById, bigHistoryOverLotsOfThings, asOfs, queryWhen)) => {
+      val world = new WorldReferenceImplementation()
+
+      for ((((_, _, change), asOf), eventId) <- bigHistoryOverLotsOfThings zip asOfs zipWithIndex) {
+        world.revise(Map(eventId -> Some(change)), asOf)
+      }
+
+      val asOfsComingNoLaterThanQueryWhen = asOfs filter (0 <= _.compareTo(queryWhen))
+
+      assert(!asOfsComingNoLaterThanQueryWhen.isEmpty)
+
+      val checks = (for {asOf <- asOfsComingNoLaterThanQueryWhen
+                         scope = world.scopeFor(Finite(queryWhen), asOf)
+                         RecordingsForAnId(historyId, historyFrom, recordings) <- recordingsGroupedById
+                         pertinentRecordings = recordings.filter { case (_, Some(when), _) => 0 <= when.compareTo(asOf)
+                         }
+                         history = historyFrom(scope)}
+        yield history.datums.zip(pertinentRecordings.map(_._1))) flatMap identity
 
       checks.forall { case (actual, expected) => actual == expected }
     }
