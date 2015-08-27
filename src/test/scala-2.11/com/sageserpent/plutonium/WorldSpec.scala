@@ -5,6 +5,7 @@ package com.sageserpent.plutonium
  */
 
 import java.time.Instant
+import java.time.temporal.ChronoUnit
 
 import com.sageserpent.infrastructure.{Finite, NegativeInfinity, PositiveInfinity, _}
 import org.scalacheck.{Arbitrary, Gen, Prop}
@@ -12,6 +13,7 @@ import org.scalatest.FlatSpec
 import org.scalatest.prop.Checkers
 
 import scala.spores._
+import scala.util.Random
 
 abstract class History extends Identified {
   private val _datums = scala.collection.mutable.Seq[Any]()
@@ -60,6 +62,8 @@ class BarHistory(val id: BarHistory#Id) extends History {
 
 
 class WorldSpec extends FlatSpec with Checkers {
+  val seedGenerator = Arbitrary.arbitrary[Long]
+
   val instantGenerator = Arbitrary.arbitrary[Long] map (Instant.ofEpochMilli(_))
 
   val unboundedInstantGenerator = Gen.frequency(1 -> Gen.oneOf(NegativeInfinity[Instant], PositiveInfinity[Instant]), 10 -> (instantGenerator map Finite.apply))
@@ -162,7 +166,7 @@ class WorldSpec extends FlatSpec with Checkers {
     })
   }
 
-  "A world with history added in order of increasing event time" should "reveal all history up to the 'asOf' limit of a cope made from it" in {
+  "A world with history added in order of increasing event time" should "reveal all history up to the 'asOf' limit of a scope made from it" in {
     val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
                                  bigHistoryOverLotsOfThings = recordingsGroupedById map (_.recordings) flatMap identity
                                  asOfs <- Gen.listOfN(bigHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
@@ -185,6 +189,40 @@ class WorldSpec extends FlatSpec with Checkers {
                          }
                          history = historyFrom(scope)}
         yield history.datums.zip(pertinentRecordings.map(_._1))) flatMap identity
+
+      checks.forall { case (actual, expected) => actual == expected }
+    }
+    })
+  }
+
+  "A world revealing a history from a scope with a 'revision' limit" should "reveal the same histories from scopes with an 'asOf' limit that comes at or after that revision but before the following revision" in {
+    val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
+                                 bigHistoryOverLotsOfThings = recordingsGroupedById map (_.recordings) flatMap identity
+                                 asOfs <- Gen.listOfN(bigHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
+                                 queryWhen <- unboundedInstantGenerator
+                                 seed <- seedGenerator} yield (recordingsGroupedById, bigHistoryOverLotsOfThings, asOfs, queryWhen, seed)
+    check(Prop.forAllNoShrink(testCaseGenerator) { case ((recordingsGroupedById, bigHistoryOverLotsOfThings, asOfs, queryWhen, seed)) => {
+      val world = new WorldReferenceImplementation()
+
+      val revisions = for ((((_, _, change), asOf), eventId) <- bigHistoryOverLotsOfThings zip asOfs zipWithIndex) yield
+      world.revise(Map(eventId -> Some(change)), asOf) // NOTE: the yield expression *has* side-effects - it is modifying the world.
+
+      val asOfComingAfterTheLastRevision = asOfs.last.plusSeconds(10L)
+
+      val asOfPairs = asOfs.scanRight((asOfComingAfterTheLastRevision, asOfComingAfterTheLastRevision)) { case (asOf, (laterAsOf, _)) => (asOf, laterAsOf) } init
+
+      val checks = (for {((earlierAsOfCorrespondingToRevision, laterAsOfComingNoLaterThanAnySuccessiveRevision), revision) <- asOfPairs zip revisions
+                         random = new Random(seed + revision)
+                         laterAsOfSharingTheSameRevisionAsTheEarlierOne = earlierAsOfCorrespondingToRevision plusMillis random.chooseAnyNumberFromZeroToOneLessThan(earlierAsOfCorrespondingToRevision.until(laterAsOfComingNoLaterThanAnySuccessiveRevision, ChronoUnit.MILLIS))
+
+                         baselineScope = world.scopeFor(queryWhen, earlierAsOfCorrespondingToRevision)
+
+                         scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne = world.scopeFor(queryWhen, laterAsOfComingNoLaterThanAnySuccessiveRevision)
+
+                         RecordingsForAnId(_, historyFrom, _) <- recordingsGroupedById
+                         baselineHistory = historyFrom(baselineScope)
+                         historyUnderTest = historyFrom(scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne)}
+        yield baselineHistory.datums.zip(historyUnderTest.datums)) flatMap identity
 
       checks.forall { case (actual, expected) => actual == expected }
     }
