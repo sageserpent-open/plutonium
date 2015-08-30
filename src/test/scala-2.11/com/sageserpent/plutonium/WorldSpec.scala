@@ -15,6 +15,8 @@ import org.scalatest.prop.Checkers
 import scala.spores._
 import scala.util.Random
 
+import Prop.BooleanOperators
+
 abstract class History extends Identified {
   private val _datums = scala.collection.mutable.Seq[Any]()
 
@@ -159,9 +161,9 @@ class WorldSpec extends FlatSpec with Checkers {
                          case (_, None, _) => queryWhen == NegativeInfinity()
                          }
                          history = historyFrom(scope)}
-        yield history.datums.zip(pertinentRecordings.map(_._1))) flatMap identity
+        yield history.datums.zip(pertinentRecordings.map(_._1)).zipWithIndex map (historyId -> _)) flatMap identity
 
-      checks.forall { case (actual, expected) => actual == expected }
+      Prop.all(checks.map { case (((actual, expected), step), historyId) => (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}" }: _*)
     }
     })
   }
@@ -188,9 +190,9 @@ class WorldSpec extends FlatSpec with Checkers {
                          pertinentRecordings = recordings.filter { case (_, Some(when), _) => 0 <= when.compareTo(asOf)
                          }
                          history = historyFrom(scope)}
-        yield history.datums.zip(pertinentRecordings.map(_._1))) flatMap identity
+        yield history.datums.zip(pertinentRecordings.map(_._1)).zipWithIndex map (historyId -> _)) flatMap identity
 
-      checks.forall { case (actual, expected) => actual == expected }
+      Prop.all(checks.map { case (((actual, expected), step), historyId) => (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}" }: _*)
     }
     })
   }
@@ -219,12 +221,12 @@ class WorldSpec extends FlatSpec with Checkers {
 
                          scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne = world.scopeFor(queryWhen, laterAsOfComingNoLaterThanAnySuccessiveRevision)
 
-                         RecordingsForAnId(_, historyFrom, _) <- recordingsGroupedById
+                         RecordingsForAnId(historyId, historyFrom, _) <- recordingsGroupedById
                          baselineHistory = historyFrom(baselineScope)
                          historyUnderTest = historyFrom(scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne)}
-        yield baselineHistory.datums.zip(historyUnderTest.datums)) flatMap identity
+        yield baselineHistory.datums.zip(historyUnderTest.datums).zipWithIndex map (historyId -> _)) flatMap identity
 
-      checks.forall { case (actual, expected) => actual == expected }
+      Prop.all(checks.map { case (((actual, expected), step), historyId) => (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}" }: _*)
     }
     })
   }
