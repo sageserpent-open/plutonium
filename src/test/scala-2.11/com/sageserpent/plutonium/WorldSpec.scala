@@ -219,7 +219,7 @@ class WorldSpec extends FlatSpec with Checkers {
 
                          baselineScope = world.scopeFor(queryWhen, earlierAsOfCorrespondingToRevision)
 
-                         scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne = world.scopeFor(queryWhen, laterAsOfComingNoLaterThanAnySuccessiveRevision)
+                         scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne = world.scopeFor(queryWhen, laterAsOfSharingTheSameRevisionAsTheEarlierOne)
 
                          RecordingsForAnId(historyId, historyFrom, _) <- recordingsGroupedById
                          baselineHistory = historyFrom(baselineScope)
