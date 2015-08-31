@@ -2,16 +2,20 @@ package com.sageserpent.plutonium
 
 import java.time.Instant
 
+import com.sageserpent.infrastructure.{NegativeInfinity, Finite, PositiveInfinity, Unbounded}
+
 import scala.spores._
 
 /**
  * Created by Gerard on 09/07/2015.
  */
 
-// NOTE: if 'when' is 'None', the event is taken to be 'at the beginning of time' - this is a way of introducing
-// timeless events, although it permits following events to modify the outcome, which may be quite handy.
-sealed trait Event {
-  val when: Option[Instant]
+// NOTE: if 'when' is 'NegativeInfinity', the event is taken to be 'at the beginning of time' - this is a way of introducing
+// timeless events, although it permits following events to modify the outcome, which may be quite handy. For now, there is
+// no such corresponding use for 'PositiveInfinity' - that results in a precondition failure.
+sealed abstract class Event {
+  val when: Unbounded[Instant]
+  require(when < PositiveInfinity())
 }
 
 
@@ -21,12 +25,12 @@ sealed trait Event {
 // public property setters and public unit returning methods are patched.
 // NOTE: the scope initially represents the state of the world when the event is to be applied, but *without* the event having been
 // applied yet - so all previous history will have taken place.
-case class Change(val when: Option[Instant], update: Spore[World#Scope, Unit]) extends Event {
+case class Change(val when: Unbounded[Instant], update: Spore[World#Scope, Unit]) extends Event {
 
 }
 
 object Change {
-  def apply[Raw <: Identified](when: Option[Instant])(id: Raw#Id, update: Spore[Raw, Unit]): Change = {
+  def apply[Raw <: Identified](when: Unbounded[Instant])(id: Raw#Id, update: Spore[Raw, Unit]): Change = {
     Change(when, spore {
       val bitemporal = Bitemporal.withId(id)
       (scope: World#Scope) => {
@@ -36,9 +40,9 @@ object Change {
     })
   }
 
-  def apply[Raw <: Identified](when: Instant)(id: Raw#Id, update: Spore[Raw, Unit]): Change = apply(Some(when))(id, update)
+  def apply[Raw <: Identified](when: Instant)(id: Raw#Id, update: Spore[Raw, Unit]): Change = apply(Finite(when))(id, update)
 
-  def apply[Raw <: Identified](id: Raw#Id, update: Spore[Raw, Unit]): Change = apply(None)(id, update)
+  def apply[Raw <: Identified](id: Raw#Id, update: Spore[Raw, Unit]): Change = apply(NegativeInfinity[Instant]())(id, update)
 
   // etc for multiple bitemporals....
 }
@@ -53,7 +57,7 @@ object Change {
 // NOTE: the scope is synthetic one that has no prior history applied it to whatsoever - it is there purely to capture the effects
 // of the recording.
 case class Observation(definiteWhen: Instant, recording: Spore[World#Scope, Unit]) extends Event {
-  val when = Some(definiteWhen)
+  val when = Finite(definiteWhen)
 }
 
 
@@ -75,5 +79,5 @@ object Observation {
 // NOTE: creation is implied by the first change or observation, so we don't bother with an explicit case class for that.
 // NOTE: annihilation has to happen at some definite time.
 case class Annihilation[Raw <: Identified](definiteWhen: Instant, id: Raw#Id) extends Event {
-  val when = Some(definiteWhen)
+  val when = Finite(definiteWhen)
 }
