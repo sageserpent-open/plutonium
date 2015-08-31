@@ -145,14 +145,14 @@ class WorldSpec extends FlatSpec with Checkers {
     val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
                                  seed <- seedGenerator
                                  random = new Random(seed)
-                                 bigShuffledHistoryOverLotsOfThings = random shuffle (recordingsGroupedById map (_.recordings) flatMap identity)
+                                 bigShuffledHistoryOverLotsOfThings = random.shuffle(recordingsGroupedById map (_.recordings) flatMap identity).zipWithIndex
                                  asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
                                  queryWhen <- unboundedInstantGenerator
     } yield (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
     check(Prop.forAllNoShrink(testCaseGenerator) { case ((recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)) => {
       val world = new WorldReferenceImplementation()
 
-      for ((((_, _, change), asOf), eventId) <- bigShuffledHistoryOverLotsOfThings zip asOfs zipWithIndex) {
+      for ((((_, _, change), eventId), asOf) <- bigShuffledHistoryOverLotsOfThings zip asOfs) {
         world.revise(Map(eventId -> Some(change)), asOf)
       }
 
@@ -171,17 +171,17 @@ class WorldSpec extends FlatSpec with Checkers {
 
   "A world with history added in order of increasing event time" should "reveal all history up to the 'asOf' limit of a scope made from it" in {
     val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
-                                 bigHistoryOverLotsOfThingsSortedInEventWhenOrder = recordingsGroupedById map (_.recordings) flatMap identity sortBy { case (_, eventWhen, _) => eventWhen }
+                                 bigHistoryOverLotsOfThingsSortedInEventWhenOrder = (recordingsGroupedById map (_.recordings) flatMap identity sortBy { case (_, eventWhen, _) => eventWhen }).zipWithIndex
                                  asOfs <- Gen.listOfN(bigHistoryOverLotsOfThingsSortedInEventWhenOrder.length, instantGenerator) map (_.sorted)
                                  queryWhen <- instantGenerator filter (0 <= asOfs.head.compareTo(_))} yield (recordingsGroupedById, bigHistoryOverLotsOfThingsSortedInEventWhenOrder, asOfs, queryWhen)
     check(Prop.forAllNoShrink(testCaseGenerator) { case ((recordingsGroupedById, bigHistoryOverLotsOfThingsSortedInEventWhenOrder, asOfs, queryWhen)) => {
       val world = new WorldReferenceImplementation()
 
-      for ((((_, _, change), asOf), eventId) <- bigHistoryOverLotsOfThingsSortedInEventWhenOrder zip asOfs zipWithIndex) {
+      for ((((_, _, change), eventId), asOf) <- bigHistoryOverLotsOfThingsSortedInEventWhenOrder zip asOfs) {
         world.revise(Map(eventId -> Some(change)), asOf)
       }
 
-      val asOfToEventWhenMap = TreeMap(asOfs zip (bigHistoryOverLotsOfThingsSortedInEventWhenOrder map { case (_, eventWhen, _) => eventWhen }): _*)
+      val asOfToEventWhenMap = TreeMap(asOfs zip (bigHistoryOverLotsOfThingsSortedInEventWhenOrder map { case ((_, eventWhen, _), _) => eventWhen }): _*)
 
       val asOfsIncludingAllEventsNoLaterThanTheQueryWhen = asOfs takeWhile (asOf => asOfToEventWhenMap(asOf) <= Finite(queryWhen))
 
@@ -204,13 +204,13 @@ class WorldSpec extends FlatSpec with Checkers {
     val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
                                  seed <- seedGenerator
                                  random = new Random(seed)
-                                 bigShuffledHistoryOverLotsOfThings = random shuffle (recordingsGroupedById map (_.recordings) flatMap identity)
+                                 bigShuffledHistoryOverLotsOfThings = random.shuffle(recordingsGroupedById map (_.recordings) flatMap identity).zipWithIndex
                                  asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
                                  queryWhen <- unboundedInstantGenerator} yield (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen, random)
     check(Prop.forAllNoShrink(testCaseGenerator) { case ((recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen, random)) => {
       val world = new WorldReferenceImplementation()
 
-      val revisions = for ((((_, _, change), asOf), eventId) <- bigShuffledHistoryOverLotsOfThings zip asOfs zipWithIndex) yield
+      val revisions = for ((((_, _, change), eventId), asOf) <- bigShuffledHistoryOverLotsOfThings zip asOfs) yield
       world.revise(Map(eventId -> Some(change)), asOf) // NOTE: the yield expression *has* side-effects - it is modifying the world.
 
       val asOfComingAfterTheLastRevision = asOfs.last.plusSeconds(10L)
