@@ -13,8 +13,8 @@ import scala.collection.generic.Sorted
 
 object World
 {
-  type Revision = Long
-  val initialRevision: Revision = 0L;
+  type Revision = Int
+  val initialRevision: Revision = 0;
 }
 
 trait World{
