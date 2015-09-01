@@ -15,6 +15,9 @@ class WorldReferenceImplementation extends World {
 
   class ScopeReferenceImplementation(val when: Unbounded[Instant], val asOf: Instant) extends com.sageserpent.plutonium.Scope{
     override val revision: Long = 0
+
+    // NOTE: this should return proxies to raw values, rather than the raw values themselves. Depending on the kind of the scope (created by client using 'World', or implicitly in an event),
+    override def render[Raw](bitemporal: Bitemporal[Raw]): Iterable[Raw] = Iterable.empty
   }
 
   override def currentRevision: Revision = ???

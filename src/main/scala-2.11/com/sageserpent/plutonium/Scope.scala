@@ -24,5 +24,5 @@ trait Scope{
 
   // NOTE: this should return proxies to raw values, rather than the raw values themselves. Depending on the kind of the scope (created by client using 'World', or implicitly in an event),
   // the proxies will be read-only or allow writes with interception to do mysterious magic.
-  def render[Raw](bitemporal: Bitemporal[Raw]): Iterable[Raw] = Iterable.empty
+  def render[Raw](bitemporal: Bitemporal[Raw]): Iterable[Raw]
 }
