@@ -32,7 +32,7 @@ case class Change(val when: Unbounded[Instant], update: Spore[World#Scope, Unit]
 object Change {
   def apply[Raw <: Identified](when: Unbounded[Instant])(id: Raw#Id, update: Spore[Raw, Unit]): Change = {
     Change(when, spore {
-      val bitemporal = Bitemporal.withId(id)
+      val bitemporal = Bitemporal.singleOneOf(id)
       (scope: World#Scope) => {
         val raws = scope.render(bitemporal)
         capture(update)(raws.head)
@@ -64,7 +64,7 @@ case class Observation(definiteWhen: Instant, recording: Spore[World#Scope, Unit
 object Observation {
   def apply[Raw <: Identified](definiteWhen: Instant)(id: Raw#Id, recording: Spore[Raw, Unit]): Observation = {
     Observation(definiteWhen, spore {
-      val bitemporal = Bitemporal.withId(capture(id))
+      val bitemporal = Bitemporal.singleOneOf(capture(id))
       (scope: World#Scope) => {
         val raws = scope.render(bitemporal)
         capture(recording)(raws.head)

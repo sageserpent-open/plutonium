@@ -18,6 +18,9 @@ object Bitemporal{
 
   def withId[Raw <: Identified](id: Raw#Id): Bitemporal[Raw] = ??? // TODO - don't we need a manifest type for 'Raw'?
 
+  // NOTE: if there is either no or several instances matching the id, a precondition exception is thrown when it is rendered.
+  def singleOneOf[Raw <: Identified](id: Raw#Id): Bitemporal[Raw] = ???
+
   def wildcard[Raw <: Identified](): Bitemporal[Raw] = new BitemporalReferenceImplementation[Raw]
 
   def none[Raw]: Bitemporal[Raw] = new BitemporalReferenceImplementation[Raw]
