@@ -270,7 +270,7 @@ class WorldSpec extends FlatSpec with Checkers {
 
       val revisions = recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
 
-      Prop.all((revisions zipWithIndex) map { case (revision, index) => (World.initialRevision + index === revision) :| s"${World.initialRevision} + ${index} === ${revision}" }: _*)
+      Prop.all((revisions zipWithIndex) map { case (revision, index) => (1 + World.initialRevision + index === revision) :| s"${World.initialRevision} + ${index} === ${revision}" }: _*)
     })
   }
 
