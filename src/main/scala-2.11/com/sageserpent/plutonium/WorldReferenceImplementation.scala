@@ -13,7 +13,7 @@ import scala.collection.generic.Sorted
 class WorldReferenceImplementation extends World {
   type Scope = ScopeReferenceImplementation
 
-  class ScopeReferenceImplementation(val when: Unbounded[Instant], val asOf: Instant) extends com.sageserpent.plutonium.Scope{
+  class ScopeReferenceImplementation(val when: Unbounded[Instant], val asOf: Instant) extends com.sageserpent.plutonium.Scope {
     override val revision: Revision = 0
 
     // NOTE: this should return proxies to raw values, rather than the raw values themselves. Depending on the kind of the scope (created by client using 'World', or implicitly in an event),

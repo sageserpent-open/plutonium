@@ -3,27 +3,39 @@ package com.sageserpent.plutonium
 /**
  * Created by Gerard on 09/07/2015.
  */
+
+import scala.reflect.runtime.universe._
+
 trait Bitemporal[Raw] {
   def filter(predicate: Raw => Boolean): Bitemporal[Raw]
 
   def map[Raw2](transform: Raw => Raw2): Bitemporal[Raw2]
 
   def flatMap[Raw2](stage: Raw => Bitemporal[Raw2]): Bitemporal[Raw2]
+
+  def interpret(scope: Bitemporal.Scope): Stream[Raw]
 }
 
 // This companion object can produce a bitemporal instance that refers to zero, one or many raw instances depending
 // how many of those raw instances match the id or wildcard.
-object Bitemporal{
-  def apply[Raw](raw: Raw) = new BitemporalReferenceImplementation[Raw](raw)
+object Bitemporal {
 
-  def withId[Raw <: Identified](id: Raw#Id): Bitemporal[Raw] = ??? // TODO - don't we need a manifest type for 'Raw'?
+  trait Scope {
+    def itemsFor[Raw <: Identified](id: Raw#Id): Stream[Raw]
+
+    def allItems[Raw <: Identified](): Stream[Raw]
+  }
+
+  def apply[Raw](raw: Raw) = new DefaultBitemporalReferenceImplementation[Raw](raw)
+
+  def withId[Raw <: Identified : TypeTag](id: Raw#Id): Bitemporal[Raw] = new ZeroOrOneItemBitemporalReferenceImplementation(id)
 
   // NOTE: if there is either no or several instances matching the id, a precondition exception is thrown when it is rendered.
-  def singleOneOf[Raw <: Identified](id: Raw#Id): Bitemporal[Raw] = ???
+  def singleOneOf[Raw <: Identified : TypeTag](id: Raw#Id): Bitemporal[Raw] = new SingleItemBitemporalReferenceImplementation(id)
 
-  def wildcard[Raw <: Identified](): Bitemporal[Raw] = new BitemporalReferenceImplementation[Raw]
+  def wildcard[Raw <: Identified](): Bitemporal[Raw] = new WildcardBitemporalReferenceImplementation[Raw]
 
-  def none[Raw]: Bitemporal[Raw] = new BitemporalReferenceImplementation[Raw]
+  def none[Raw]: Bitemporal[Raw] = new DefaultBitemporalReferenceImplementation[Raw]
 
   // TODO - something that makes Bitemporal[Instant] to provide a way of snooping into the scope's 'when' from within the monad.
 

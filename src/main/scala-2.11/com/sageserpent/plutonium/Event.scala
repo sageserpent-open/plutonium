@@ -6,6 +6,8 @@ import com.sageserpent.infrastructure.{NegativeInfinity, Finite, PositiveInfinit
 
 import scala.spores._
 
+import scala.reflect.runtime.universe._
+
 /**
  * Created by Gerard on 09/07/2015.
  */
@@ -30,7 +32,7 @@ case class Change(val when: Unbounded[Instant], update: Spore[World#Scope, Unit]
 }
 
 object Change {
-  def apply[Raw <: Identified](when: Unbounded[Instant])(id: Raw#Id, update: Spore[Raw, Unit]): Change = {
+  def apply[Raw <: Identified: TypeTag](when: Unbounded[Instant])(id: Raw#Id, update: Spore[Raw, Unit]): Change = {
     Change(when, spore {
       val bitemporal = Bitemporal.singleOneOf(id)
       (scope: World#Scope) => {
@@ -40,9 +42,9 @@ object Change {
     })
   }
 
-  def apply[Raw <: Identified](when: Instant)(id: Raw#Id, update: Spore[Raw, Unit]): Change = apply(Finite(when))(id, update)
+  def apply[Raw <: Identified: TypeTag](when: Instant)(id: Raw#Id, update: Spore[Raw, Unit]): Change = apply(Finite(when))(id, update)
 
-  def apply[Raw <: Identified](id: Raw#Id, update: Spore[Raw, Unit]): Change = apply(NegativeInfinity[Instant]())(id, update)
+  def apply[Raw <: Identified: TypeTag](id: Raw#Id, update: Spore[Raw, Unit]): Change = apply(NegativeInfinity[Instant]())(id, update)
 
   // etc for multiple bitemporals....
 }
@@ -62,7 +64,7 @@ case class Observation(definiteWhen: Instant, recording: Spore[World#Scope, Unit
 
 
 object Observation {
-  def apply[Raw <: Identified](definiteWhen: Instant)(id: Raw#Id, recording: Spore[Raw, Unit]): Observation = {
+  def apply[Raw <: Identified: TypeTag](definiteWhen: Instant)(id: Raw#Id, recording: Spore[Raw, Unit]): Observation = {
     Observation(definiteWhen, spore {
       val bitemporal = Bitemporal.singleOneOf(capture(id))
       (scope: World#Scope) => {

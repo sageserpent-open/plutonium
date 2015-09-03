@@ -17,6 +17,8 @@ import scala.collection.immutable.TreeMap
 import scala.spores._
 import scala.util.Random
 
+import scala.reflect.runtime.universe._
+
 abstract class History extends Identified {
   private val _datums = scala.collection.mutable.Seq[Any]()
 
@@ -99,7 +101,7 @@ class WorldSpec extends FlatSpec with Checkers {
     barHistory.method2(capture(data1), capture(data2), capture(data3))
   }))
 
-  def dataSamplesForAnIdGenerator_[AHistory <: History](dataSampleGenerator: Gen[(_, (Unbounded[Instant], AHistory#Id) => Change)], historyIdGenerator: Gen[AHistory#Id]) = {
+  def dataSamplesForAnIdGenerator_[AHistory <: History : TypeTag](dataSampleGenerator: Gen[(_, (Unbounded[Instant], AHistory#Id) => Change)], historyIdGenerator: Gen[AHistory#Id]) = {
     val dataSamplesGenerator = Gen.listOf(dataSampleGenerator) filter (_.nonEmpty) // It makes no sense to have an id without associated data samples - the act of recording a data sample
     // via a change is what introduces an id into the world.
 
