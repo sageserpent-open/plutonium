@@ -7,13 +7,15 @@ package com.sageserpent.plutonium
 import scala.reflect.runtime.universe._
 
 trait Bitemporal[Raw] {
-  def filter(predicate: Raw => Boolean): Bitemporal[Raw]
+  def filter = monadPlus.filter[Raw](this) _
 
-  def map[Raw2](transform: Raw => Raw2): Bitemporal[Raw2]
+  def map[Raw2] = monadPlus.map[Raw, Raw2](this) _
 
   def flatMap[Raw2](stage: Raw => Bitemporal[Raw2]): Bitemporal[Raw2]
 
   def interpret(scope: Bitemporal.Scope): Stream[Raw]
+
+  def join[Raw2 <: Raw](another: Bitemporal[Raw2]): Bitemporal[Raw]
 }
 
 // This companion object can produce a bitemporal instance that refers to zero, one or many raw instances depending

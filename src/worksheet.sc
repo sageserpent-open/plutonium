@@ -8,7 +8,7 @@ object Uranium {
 class Drum(val id: String, val mass: Double, val chemicalAssay: Bitemporal[ChemicalAssay]) extends Identified {
   type Id = String
 
-  def isotopeMasses = for {chemicalAssay <- chemicalAssay
+  def isotopeMasses = for {chemicalAssay <- chemicalAssay if true
                            isotopeMolarFractions <- chemicalAssay.isotopeMolarFractions} yield isotopeMolarFractions.mapValues(mass * _)
 
   def fissileUraniumMass = for (isotopeMasses <- isotopeMasses) yield isotopeMasses.collectFirst { case ((Uranium.symbol, massNumber), fissileMass) if Uranium.fissileUraniumMassNumbers contains massNumber => fissileMass }
