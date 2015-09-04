@@ -5,8 +5,7 @@ import java.time.Instant
 import com.sageserpent.infrastructure.{Finite, Unbounded}
 import com.sageserpent.plutonium.World.Revision
 
-import scala.collection.mutable
-import scala.collection.mutable.TreeBag
+import scala.collection.mutable.MutableList
 
 /**
  * Created by Gerard on 19/07/2015.
@@ -27,13 +26,11 @@ class WorldReferenceImplementation extends World {
 
   override def nextRevision: Revision = _nextRevision
 
-  private implicit def config = mutable.SortedBagConfiguration.compact[Instant]
+  override val versionTimeline: MutableList[Instant] = MutableList.empty
 
-  override def versionTimeline: TreeBag[Instant] = TreeBag.empty[Instant]
-
-  // NOTE: this increments 'currentRevision' if it succeeds.
-  def revise[EventId](events: Map[EventId, Option[Event]], revisionTime: Instant): Revision = {
-    versionTimeline + revisionTime
+  def revise[EventId](events: Map[EventId, Option[Event]], asOf: Instant): Revision = {
+    if (versionTimeline.nonEmpty && versionTimeline.last.isAfter(asOf)) throw new IllegalArgumentException(s"'asOf': ${asOf} should be no earlier than that of the last revision: ${versionTimeline.last}")
+    versionTimeline += asOf
     val revision = nextRevision
     _nextRevision += 1
     revision

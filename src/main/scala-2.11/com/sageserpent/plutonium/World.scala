@@ -5,25 +5,22 @@ import java.time.Instant
 import com.sageserpent.infrastructure.Unbounded
 import com.sageserpent.plutonium.World.Revision
 
-import scala.collection.Bag
 
-
-object World
-{
+object World {
   type Revision = Int
   val initialRevision: Revision = 0 // NOTE: this is the revision defined when the world is first revised.
-                                    // For now, this implies that if we want to book in events that have always been
-                                    // known (think of reference data), this should be done by the subclass constructor
-                                    // of 'World', and has no revision, nor any appearance on the version timeline.
+  // For now, this implies that if we want to book in events that have always been
+  // known (think of reference data), this should be done by the subclass constructor
+  // of 'World', and has no revision, nor any appearance on the version timeline.
 }
 
-trait World{
+trait World {
   type Scope <: com.sageserpent.plutonium.Scope
 
 
   def nextRevision: Revision
 
-  def versionTimeline: Bag[Instant]  // NOTE: the next revision is the number of versions.
+  val versionTimeline: collection.Seq[Instant] // NOTE: the next revision is the number of versions.
 
   // Can have duplicated instants associated with different events - more than one thing can happen at a given time.
   // Question: does the order of appearance of the events matter, then? - Hmmm - the answer is that they take effect in order

@@ -310,9 +310,9 @@ class WorldSpec extends FlatSpec with Checkers {
     check(Prop.forAllNoShrink(testCaseGenerator) { case (bigShuffledHistoryOverLotsOfThings, asOfs, random) =>
       val numberOfRevisions = asOfs.length
 
-      val candidateIndicesToStartATranspose = asOfs.sliding(2).filter(2 == _.length).zipWithIndex filter ({
+      val candidateIndicesToStartATranspose = asOfs.sliding(2).filter(2 == _.length).zipWithIndex filter {
         case (List(first, second), index) => first isBefore second
-      }) map (_._2) toSeq
+      } map (_._2) toSeq
 
       val indexOfFirstAsOfBeingTransposed = random.chooseOneOf(candidateIndicesToStartATranspose)
 
@@ -330,8 +330,8 @@ class WorldSpec extends FlatSpec with Checkers {
   }
 
   def recordEventsInWorld(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[((Any, Unbounded[Instant], Change), Int)]], asOfs: List[Instant], world: WorldReferenceImplementation) = {
-    for {(pieceOfHistory, asOf) <- bigShuffledHistoryOverLotsOfThings zip asOfs
-         events = pieceOfHistory map { case ((_, _, change), eventId) => eventId -> Some(change) } toMap} yield
-    world.revise(events, asOf)
+    (for {(pieceOfHistory, asOf) <- bigShuffledHistoryOverLotsOfThings zip asOfs
+          events = pieceOfHistory map { case ((_, _, change), eventId) => eventId -> Some(change) } toMap} yield
+    world.revise(events, asOf)).force
   }
 }
