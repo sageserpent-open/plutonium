@@ -5,11 +5,12 @@ package com.sageserpent.plutonium
  */
 
 import scala.reflect.runtime.universe._
+import scalaz.MonadPlus
 
 trait Bitemporal[Raw] {
-  def filter = monadPlus.filter[Raw](this) _
+  def filter = implicitly[MonadPlus[Bitemporal]].filter[Raw](this) _
 
-  def map[Raw2] = monadPlus.map[Raw, Raw2](this) _
+  def map[Raw2] = implicitly[MonadPlus[Bitemporal]].map[Raw, Raw2](this) _
 
   def flatMap[Raw2](stage: Raw => Bitemporal[Raw2]): Bitemporal[Raw2]
 
