@@ -326,8 +326,8 @@ class WorldSpec extends FlatSpec with Checkers {
     check(Prop.forAllNoShrink(testCaseGenerator) { case (bigShuffledHistoryOverLotsOfThings, asOfs, random) =>
       val numberOfRevisions = asOfs.length
 
-      val candidateIndicesToStartATranspose = asOfs.sliding(2).filter(2 == _.length).zipWithIndex filter {
-        case (List(first, second), index) => first isBefore second
+      val candidateIndicesToStartATranspose = asOfs.zip(asOfs.tail).zipWithIndex filter {
+        case ((first, second), index) => first isBefore second
       } map (_._2) toSeq
 
       val indexOfFirstAsOfBeingTransposed = random.chooseOneOf(candidateIndicesToStartATranspose)

@@ -30,6 +30,9 @@ class WorldReferenceImplementation extends World {
 
   def revise[EventId](events: Map[EventId, Option[Event]], asOf: Instant): Revision = {
     if (versionTimeline.nonEmpty && versionTimeline.last.isAfter(asOf)) throw new IllegalArgumentException(s"'asOf': ${asOf} should be no earlier than that of the last revision: ${versionTimeline.last}")
+
+    // TODO: make exception safe - especially against the expected failures to apply events due to inconsistencies.
+
     versionTimeline += asOf
     val revision = nextRevision
     _nextRevision += 1
