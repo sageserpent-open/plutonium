@@ -267,6 +267,22 @@ class WorldSpec extends FlatSpec with Checkers {
     })
   }
 
+  it should "have a sorted version timeline" in {
+    val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
+                                 seed <- seedGenerator
+                                 random = new Random(seed)
+                                 bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(random.shuffle(recordingsGroupedById map (_.recordings) flatMap identity).zipWithIndex)
+                                 asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
+    } yield (bigShuffledHistoryOverLotsOfThings, asOfs)
+    check(Prop.forAllNoShrink(testCaseGenerator) { case (bigShuffledHistoryOverLotsOfThings, asOfs) =>
+      val world = new WorldReferenceImplementation()
+
+      recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
+
+      Prop.all(world.versionTimeline zip world.versionTimeline.tail map {case (first, second) => !first.isAfter(second) :| s"!${first}.isAfter(${second})" }: _*)
+    })
+  }
+
   it should "allocate revision numbers sequentially" in {
     val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
                                  seed <- seedGenerator
