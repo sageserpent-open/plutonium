@@ -16,3 +16,7 @@ libraryDependencies += "org.scalaz" %% "scalaz-core" % "7.1.3"
 
 libraryDependencies += "org.scalaz" %% "scalaz-scalacheck-binding" % "7.1.3" % "test"
 
+libraryDependencies += "org.spire-math" %% "spire" % "0.10.1"
+
+libraryDependencies += "io.github.nicolasstucki" %% "multisets" % "0.3"
+

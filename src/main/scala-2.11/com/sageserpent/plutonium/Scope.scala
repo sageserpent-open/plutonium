@@ -11,7 +11,7 @@ import com.sageserpent.infrastructure.Unbounded
 trait Scope {
   val when: Unbounded[Instant]
 
-  val revision: World.Revision // The least upper bound of all revisions coming no later than 'asOf'.
+  val nextRevision: World.Revision // The greatest lower bound of all revisions coming after 'asOf'.
 
   val asOf: Instant // NOTE: this is the same 'asOf' that was supplied to the 'World' instance that created the scope - so it doesn't have to be the instant the revision was defined
   // at in the 'World' instance.

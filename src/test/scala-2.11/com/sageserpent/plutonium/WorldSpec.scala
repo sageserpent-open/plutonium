@@ -139,6 +139,14 @@ class WorldSpec extends FlatSpec with Checkers {
     }))
   }
 
+  "A world with no history" should "has no current revision" in {
+    val world = new WorldReferenceImplementation()
+
+    World.initialRevision === world.nextRevision
+  }
+
+
+
   "A world with history defined in simple events" should "reveal all the history up to the 'when' limit of a scope made from it" in {
     val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
                                  seed <- seedGenerator
@@ -152,8 +160,7 @@ class WorldSpec extends FlatSpec with Checkers {
 
       recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
 
-      val finalRevision: Instant = asOfs.last
-      val scope = world.scopeFor(queryWhen, finalRevision)
+      val scope = world.scopeFor(queryWhen, world.nextRevision)
 
       val checks = (for {RecordingsForAnId(historyId, historyFrom, recordings) <- recordingsGroupedById
                          pertinentRecordings = recordings takeWhile { case (_, eventWhen, _) => eventWhen <= queryWhen }
@@ -228,7 +235,7 @@ class WorldSpec extends FlatSpec with Checkers {
     })
   }
 
-  "A world" should "have a current revision that reflects the last added revision" in {
+  "A world with history" should "have a next revision that reflects the last added revision" in {
     val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
                                  seed <- seedGenerator
                                  random = new Random(seed)
@@ -240,11 +247,11 @@ class WorldSpec extends FlatSpec with Checkers {
 
       val revisions = recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
 
-      (revisions.last === world.currentRevision) :| s"${revisions}.last === ${world.currentRevision}"
+      (1 + revisions.last === world.nextRevision) :| s"1 + ${revisions}.last === ${world.nextRevision}"
     })
   }
 
-  "A world" should "have a version timeline that records the 'asOf' time for each of its revisions" in {
+  it should "have a version timeline that records the 'asOf' time for each of its revisions" in {
     val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
                                  seed <- seedGenerator
                                  random = new Random(seed)
@@ -256,11 +263,11 @@ class WorldSpec extends FlatSpec with Checkers {
 
       recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
 
-      Prop.all(asOfs zip world.versionTimeline.keySet map { case (asOf, timelineAsOf) => (asOf === timelineAsOf) :| s"${asOf} === ${timelineAsOf}" }: _*)
+      Prop.all(asOfs zip world.versionTimeline map { case (asOf, timelineAsOf) => (asOf === timelineAsOf) :| s"${asOf} === ${timelineAsOf}" }: _*)
     })
   }
 
-  "A world" should "allocate revisions sequentially" in {
+  it should "allocate revision numbers sequentially" in {
     val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
                                  seed <- seedGenerator
                                  random = new Random(seed)
@@ -272,10 +279,55 @@ class WorldSpec extends FlatSpec with Checkers {
 
       val revisions = recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
 
-      Prop.all((revisions zipWithIndex) map { case (revision, index) => (1 + World.initialRevision + index === revision) :| s"${World.initialRevision} + ${index} === ${revision}" }: _*)
+      Prop.all((revisions zipWithIndex) map { case (revision, index) => (index === revision) :| s"${index} === ${revision}" }: _*)
     })
   }
 
+  it should "have a next revision number that is the size of its version timeline" in {
+    val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
+                                 seed <- seedGenerator
+                                 random = new Random(seed)
+                                 bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(random.shuffle(recordingsGroupedById map (_.recordings) flatMap identity).zipWithIndex)
+                                 asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
+    } yield (bigShuffledHistoryOverLotsOfThings, asOfs)
+    check(Prop.forAllNoShrink(testCaseGenerator) { case (bigShuffledHistoryOverLotsOfThings, asOfs) =>
+      val world = new WorldReferenceImplementation()
+
+      recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
+
+      (world.nextRevision === world.versionTimeline.size) :| s"{world.currentRevision} === ${world.versionTimeline}.size"
+    })
+  }
+
+
+  it should "not permit the 'asOf' time for a new revision to be less than that of any existing revision." in {
+    val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
+                                 seed <- seedGenerator
+                                 random = new Random(seed)
+                                 bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(random.shuffle(recordingsGroupedById map (_.recordings) flatMap identity).zipWithIndex)
+                                 asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted) filter (1 < _.toSet.size) // Make sure we have at least two revisions at different times.
+    } yield (bigShuffledHistoryOverLotsOfThings, asOfs, random)
+    check(Prop.forAllNoShrink(testCaseGenerator) { case (bigShuffledHistoryOverLotsOfThings, asOfs, random) =>
+      val numberOfRevisions = asOfs.length
+
+      val candidateIndicesToStartATranspose = asOfs.sliding(2).filter(2 == _.length).zipWithIndex filter ({
+        case (List(first, second), index) => first isBefore second
+      }) map (_._2) toSeq
+
+      val indexOfFirstAsOfBeingTransposed = random.chooseOneOf(candidateIndicesToStartATranspose)
+
+      val asOfsWithIncorrectTransposition = asOfs.splitAt(indexOfFirstAsOfBeingTransposed) match {
+        case (asOfsBeforeTransposition, Seq(first, second, asOfsAfterTransposition@_*)) => asOfsBeforeTransposition ++ Seq(second, first) ++ asOfsAfterTransposition
+      }
+
+      val world = new WorldReferenceImplementation()
+
+      {
+        intercept[IllegalArgumentException](recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfsWithIncorrectTransposition, world))
+        true
+      } :| s"Using ${asOfsWithIncorrectTransposition} should cause a precondition failure."
+    })
+  }
 
   def recordEventsInWorld(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[((Any, Unbounded[Instant], Change), Int)]], asOfs: List[Instant], world: WorldReferenceImplementation) = {
     for {(pieceOfHistory, asOf) <- bigShuffledHistoryOverLotsOfThings zip asOfs
