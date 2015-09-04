@@ -5,7 +5,7 @@ import java.time.Instant
 import com.sageserpent.infrastructure.Unbounded
 import com.sageserpent.plutonium.World.Revision
 
-import scala.collection.immutable.TreeBag
+import scala.collection.Bag
 
 
 object World
@@ -23,7 +23,7 @@ trait World{
 
   def nextRevision: Revision
 
-  def versionTimeline: TreeBag[Instant]  // NOTE: the next revision is the number of versions.
+  def versionTimeline: Bag[Instant]  // NOTE: the next revision is the number of versions.
 
   // Can have duplicated instants associated with different events - more than one thing can happen at a given time.
   // Question: does the order of appearance of the events matter, then? - Hmmm - the answer is that they take effect in order

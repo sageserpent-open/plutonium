@@ -5,11 +5,14 @@ import java.time.Instant
 import com.sageserpent.infrastructure.{Finite, Unbounded}
 import com.sageserpent.plutonium.World.Revision
 
-import scala.collection.immutable.TreeBag
+import scala.collection.mutable
+import scala.collection.mutable.TreeBag
 
 /**
  * Created by Gerard on 19/07/2015.
  */
+
+
 class WorldReferenceImplementation extends World {
   type Scope = ScopeReferenceImplementation
 
@@ -20,12 +23,21 @@ class WorldReferenceImplementation extends World {
     override def render[Raw](bitemporal: Bitemporal[Raw]): Stream[Raw] = Stream.empty
   }
 
-  override def nextRevision: Revision = ???
+  private var _nextRevision = World.initialRevision
 
-  override def versionTimeline: TreeBag[Instant] = ???
+  override def nextRevision: Revision = _nextRevision
+
+  private implicit def config = mutable.SortedBagConfiguration.compact[Instant]
+
+  override def versionTimeline: TreeBag[Instant] = TreeBag.empty[Instant]
 
   // NOTE: this increments 'currentRevision' if it succeeds.
-  def revise[EventId](events: Map[EventId, Option[Event]], revisionTime: Instant): Revision = ???
+  def revise[EventId](events: Map[EventId, Option[Event]], revisionTime: Instant): Revision = {
+    versionTimeline + revisionTime
+    val revision = nextRevision
+    _nextRevision += 1
+    revision
+  }
 
   // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
   override def scopeFor(when: Unbounded[Instant], nextRevision: Revision): Scope = new ScopeReferenceImplementation(Finite(Instant.MIN), Instant.MIN)

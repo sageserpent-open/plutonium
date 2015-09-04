@@ -295,7 +295,7 @@ class WorldSpec extends FlatSpec with Checkers {
 
       recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
 
-      (world.nextRevision === world.versionTimeline.size) :| s"{world.currentRevision} === ${world.versionTimeline}.size"
+      (world.nextRevision === world.versionTimeline.size) :| s"${world.nextRevision} === ${world.versionTimeline}.size"
     })
   }
 
