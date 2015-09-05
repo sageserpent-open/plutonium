@@ -14,10 +14,13 @@ import scala.reflect.runtime.universe._
 
 import scala.collection.mutable.TreeBag
 
+import scala.collection.Searching._
+
+(0 to 10 toList) search -1 insertionPoint
+
 implicit val config = mutable.SortedBagConfiguration.compact[Int]
 
 val tb = TreeBag.empty[Int]
-
 tb.add(1, 2)
 tb.contents
 tb.setMultiplicity(7, 6)
@@ -25,7 +28,6 @@ tb += 2
 tb += 1
 tb += 2
 tb += 3
-
 tb.contents
 tb.size
 tb

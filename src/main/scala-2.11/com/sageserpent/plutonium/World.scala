@@ -44,10 +44,10 @@ trait World {
   // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
   // I can imagine queries being set to 'the beginning of time' and 'past the latest event'...
   // NOTE: precondition that 'revision' <= 'this.nextRevision' - which implies that a scope makes a *snapshot* of the world when it is created - subsequent revisions to the world are disregarded.
-  def scopeFor(when: Unbounded[Instant], nextRevision: World.Revision): Scope
+  def scopeFor(when: Unbounded[Instant], nextRevision: World.Revision): Scope   // TODO - test to relate the properties on the scope to the call / state of the world.
 
   // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
   // I can imagine queries being set to 'the beginning of time' and 'past the latest event'...
   // NOTE: again, the scope makes a *snapshot*, so the 'asOf' is interpreted wrt the state of the world at the point of creation of the scope.
-  def scopeFor(when: Unbounded[Instant], asOf: Instant): Scope
+  def scopeFor(when: Unbounded[Instant], asOf: Instant): Scope   // TODO - test to relate the properties on the scope to the call / state of the world.
 }

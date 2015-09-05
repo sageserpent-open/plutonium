@@ -13,7 +13,7 @@ trait Scope {
 
   val nextRevision: World.Revision // The greatest lower bound of all revisions coming after 'asOf'.
 
-  val asOf: Instant // NOTE: this is the same 'asOf' that was supplied to the 'World' instance that created the scope - so it doesn't have to be the instant the revision was defined
+  val asOf: Unbounded[Instant] // NOTE: this could be the lifted form of the 'asOf' that was supplied to the 'World' instance that created the scope - so it doesn't have to be the instant the revision was defined
   // at in the 'World' instance.
 
   // Why a stream for the result type? - 2 reasons that overlap - we may have no instance in force for the scope, or we might have several that share the same id, albeit with
