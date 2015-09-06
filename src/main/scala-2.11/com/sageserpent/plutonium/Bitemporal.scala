@@ -31,10 +31,11 @@ object Bitemporal {
 
   def apply[Raw](raw: Raw) = new DefaultBitemporalReferenceImplementation[Raw](raw)
 
-  def withId[Raw <: Identified : TypeTag](id: Raw#Id): Bitemporal[Raw] = new ZeroOrOneItemBitemporalReferenceImplementation(id)
+  def withId[Raw <: Identified : TypeTag](id: Raw#Id): Bitemporal[Raw] = new IdentifiedItemsBitemporalReferenceImplementation(id)
 
-  // NOTE: if there is either no or several instances matching the id, a precondition exception is thrown when it is rendered.
-  def singleOneOf[Raw <: Identified : TypeTag](id: Raw#Id): Bitemporal[Raw] = new SingleItemBitemporalReferenceImplementation(id)
+  def zeroOrOneOf[Raw <: Identified : TypeTag](id: Raw#Id): Bitemporal[Raw] = new ZeroOrOneIdentifiedItemBitemporalReferenceImplementation(id)
+
+  def singleOneOf[Raw <: Identified : TypeTag](id: Raw#Id): Bitemporal[Raw] = new SingleIdentifiedItemBitemporalReferenceImplementation(id)
 
   def wildcard[Raw <: Identified](): Bitemporal[Raw] = new WildcardBitemporalReferenceImplementation[Raw]
 
