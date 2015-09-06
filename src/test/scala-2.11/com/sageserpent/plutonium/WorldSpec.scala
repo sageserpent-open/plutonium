@@ -400,9 +400,9 @@ class WorldSpec extends FlatSpec with Checkers {
                         scopeViaNextRevision = world.scopeFor(queryWhen, nextRevision)
       } yield (asOf, nextRevision, scopeViaAsOf, scopeViaNextRevision)
 
-      (checks.head match { case (asOf, nextRevision, scopeViaAsOf, scopeViaNextRevision) => (NegativeInfinity[Instant] === scopeViaAsOf.asOf && NegativeInfinity[Instant] === scopeViaNextRevision.asOf &&
+      (checks.head match { case (asOf, nextRevision, scopeViaAsOf, scopeViaNextRevision) => (Finite(asOf) === scopeViaAsOf.asOf && NegativeInfinity[Instant] === scopeViaNextRevision.asOf &&
         nextRevision === scopeViaAsOf.nextRevision && nextRevision === scopeViaNextRevision.nextRevision &&
-        queryWhen == scopeViaAsOf.when && queryWhen === scopeViaNextRevision.when) :| s"NegativeInfinity[Instant] === ${scopeViaAsOf}.asOf && NegativeInfinity[Instant] === ${scopeViaNextRevision}.asOf && " +
+        queryWhen == scopeViaAsOf.when && queryWhen === scopeViaNextRevision.when) :| s"${asOf} === ${scopeViaAsOf}.asOf && NegativeInfinity[Instant] === ${scopeViaNextRevision}.asOf && " +
         s"${nextRevision} === ${scopeViaAsOf}.nextRevision && ${nextRevision} === ${scopeViaNextRevision}.nextRevision && " +
         s"${queryWhen} == ${scopeViaAsOf}.when && ${queryWhen} === ${scopeViaNextRevision}.when"
       }) &&
