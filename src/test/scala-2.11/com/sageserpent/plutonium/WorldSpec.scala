@@ -229,15 +229,15 @@ class WorldSpec extends FlatSpec with Checkers {
 
       val asOfPairs = asOfs.scanRight((asOfComingAfterTheLastRevision, asOfComingAfterTheLastRevision)) { case (asOf, (laterAsOf, _)) => (asOf, laterAsOf) } init
 
-      val checks = (for {((earlierAsOfCorrespondingToRevision, laterAsOfComingNoLaterThanAnySucceedingRevision), revision) <- asOfPairs zip revisions
-                         laterAsOfSharingTheSameRevisionAsTheEarlierOne = earlierAsOfCorrespondingToRevision plusSeconds random.chooseAnyNumberFromZeroToOneLessThan(earlierAsOfCorrespondingToRevision.until(laterAsOfComingNoLaterThanAnySucceedingRevision, ChronoUnit.SECONDS))
+      val checks = for {((earlierAsOfCorrespondingToRevision, laterAsOfComingNoLaterThanAnySucceedingRevision), revision) <- asOfPairs zip revisions
+                        laterAsOfSharingTheSameRevisionAsTheEarlierOne = earlierAsOfCorrespondingToRevision plusSeconds random.chooseAnyNumberFromZeroToOneLessThan(earlierAsOfCorrespondingToRevision.until(laterAsOfComingNoLaterThanAnySucceedingRevision, ChronoUnit.SECONDS))
 
-                         baselineScope = world.scopeFor(queryWhen, earlierAsOfCorrespondingToRevision)
+                        baselineScope = world.scopeFor(queryWhen, earlierAsOfCorrespondingToRevision)
 
-                         scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne = world.scopeFor(queryWhen, laterAsOfSharingTheSameRevisionAsTheEarlierOne)
+                        scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne = world.scopeFor(queryWhen, laterAsOfSharingTheSameRevisionAsTheEarlierOne)
 
       }
-        yield (baselineScope, scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne))
+        yield (baselineScope, scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne)
 
       Prop.all(checks.map { case (baselineScope, scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne) => (baselineScope.nextRevision === scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne.nextRevision) :| s"${baselineScope.nextRevision} === ${scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne}.nextRevision" }: _*)
     })
@@ -400,27 +400,33 @@ class WorldSpec extends FlatSpec with Checkers {
                         scopeViaNextRevision = world.scopeFor(queryWhen, nextRevision)
       } yield (asOf, nextRevision, scopeViaAsOf, scopeViaNextRevision)
 
-      Prop.all(checks map { case (asOf, nextRevision, scopeViaAsOf, scopeViaNextRevision) => (asOf === scopeViaAsOf.asOf && asOf === scopeViaNextRevision.asOf &&
+      (checks.head match { case (asOf, nextRevision, scopeViaAsOf, scopeViaNextRevision) => (NegativeInfinity[Instant] === scopeViaAsOf.asOf && NegativeInfinity[Instant] === scopeViaNextRevision.asOf &&
         nextRevision === scopeViaAsOf.nextRevision && nextRevision === scopeViaNextRevision.nextRevision &&
-        queryWhen == scopeViaAsOf.when && queryWhen === scopeViaNextRevision.when) :| s"${asOf} === ${scopeViaAsOf}.asOf && ${asOf} === ${scopeViaNextRevision}.asOf && " +
+        queryWhen == scopeViaAsOf.when && queryWhen === scopeViaNextRevision.when) :| s"NegativeInfinity[Instant] === ${scopeViaAsOf}.asOf && NegativeInfinity[Instant] === ${scopeViaNextRevision}.asOf && " +
         s"${nextRevision} === ${scopeViaAsOf}.nextRevision && ${nextRevision} === ${scopeViaNextRevision}.nextRevision && " +
         s"${queryWhen} == ${scopeViaAsOf}.when && ${queryWhen} === ${scopeViaNextRevision}.when"
-      }: _*)
+      }) &&
+        Prop.all(checks.tail map { case (asOf, nextRevision, scopeViaAsOf, scopeViaNextRevision) => (Finite(asOf) === scopeViaAsOf.asOf && Finite(asOf) === scopeViaNextRevision.asOf &&
+          nextRevision === scopeViaAsOf.nextRevision && nextRevision === scopeViaNextRevision.nextRevision &&
+          queryWhen == scopeViaAsOf.when && queryWhen === scopeViaNextRevision.when) :| s"${asOf} === ${scopeViaAsOf}.asOf && ${asOf} === ${scopeViaNextRevision}.asOf && " +
+          s"${nextRevision} === ${scopeViaAsOf}.nextRevision && ${nextRevision} === ${scopeViaNextRevision}.nextRevision && " +
+          s"${queryWhen} == ${scopeViaAsOf}.when && ${queryWhen} === ${scopeViaNextRevision}.when"
+        }: _*)
     })
   }
 
 
-/*  it should "create a scope that is a snapshot unaffected by subsequent revisions" in {
-    val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
-                                 seed <- seedGenerator
-                                 random = new Random(seed)
-                                 bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(random.shuffle(recordingsGroupedById map (_.recordings) flatMap identity).zipWithIndex)
-                                 asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted) filter (1 < _.toSet.size) // Make sure we have at least two revisions at different times.
-    } yield (bigShuffledHistoryOverLotsOfThings, asOfs, random)
-    check(Prop.forAllNoShrink(testCaseGenerator) { case (bigShuffledHistoryOverLotsOfThings, asOfs, random) =>
-      // TODO - check the actual history.
-    })
-  }*/
+  /*  it should "create a scope that is a snapshot unaffected by subsequent revisions" in {
+      val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
+                                   seed <- seedGenerator
+                                   random = new Random(seed)
+                                   bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(random.shuffle(recordingsGroupedById map (_.recordings) flatMap identity).zipWithIndex)
+                                   asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted) filter (1 < _.toSet.size) // Make sure we have at least two revisions at different times.
+      } yield (bigShuffledHistoryOverLotsOfThings, asOfs, random)
+      check(Prop.forAllNoShrink(testCaseGenerator) { case (bigShuffledHistoryOverLotsOfThings, asOfs, random) =>
+        // TODO - check the actual history.
+      })
+    }*/
 
   def recordEventsInWorld(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[((Any, Unbounded[Instant], Change), Int)]], asOfs: List[Instant], world: WorldReferenceImplementation) = {
     (for {(pieceOfHistory, asOf) <- bigShuffledHistoryOverLotsOfThings zip asOfs
