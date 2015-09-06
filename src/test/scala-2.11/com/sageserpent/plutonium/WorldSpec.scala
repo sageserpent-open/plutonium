@@ -296,7 +296,7 @@ class WorldSpec extends FlatSpec with Checkers {
 
       recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
 
-      Prop.all(asOfs zip world.versionTimeline map { case (asOf, timelineAsOf) => (asOf === timelineAsOf) :| s"${asOf} === ${timelineAsOf}" }: _*)
+      Prop.all(asOfs zip world.revisionTimeline map { case (asOf, timelineAsOf) => (asOf === timelineAsOf) :| s"${asOf} === ${timelineAsOf}" }: _*)
     })
   }
 
@@ -312,7 +312,7 @@ class WorldSpec extends FlatSpec with Checkers {
 
       recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
 
-      Prop.all(world.versionTimeline zip world.versionTimeline.tail map { case (first, second) => !first.isAfter(second) :| s"!${first}.isAfter(${second})" }: _*)
+      Prop.all(world.revisionTimeline zip world.revisionTimeline.tail map { case (first, second) => !first.isAfter(second) :| s"!${first}.isAfter(${second})" }: _*)
     })
   }
 
@@ -344,7 +344,7 @@ class WorldSpec extends FlatSpec with Checkers {
 
       recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
 
-      (world.nextRevision === world.versionTimeline.size) :| s"${world.nextRevision} === ${world.versionTimeline}.size"
+      (world.nextRevision === world.revisionTimeline.size) :| s"${world.nextRevision} === ${world.revisionTimeline}.size"
     })
   }
 
@@ -400,17 +400,22 @@ class WorldSpec extends FlatSpec with Checkers {
                         scopeViaNextRevision = world.scopeFor(queryWhen, nextRevision)
       } yield (asOf, nextRevision, scopeViaAsOf, scopeViaNextRevision)
 
-      (checks.head match { case (asOf, nextRevision, scopeViaAsOf, scopeViaNextRevision) => (Finite(asOf) === scopeViaAsOf.asOf && NegativeInfinity[Instant] === scopeViaNextRevision.asOf &&
-        nextRevision === scopeViaAsOf.nextRevision && nextRevision === scopeViaNextRevision.nextRevision &&
-        queryWhen == scopeViaAsOf.when && queryWhen === scopeViaNextRevision.when) :| s"${asOf} === ${scopeViaAsOf}.asOf && NegativeInfinity[Instant] === ${scopeViaNextRevision}.asOf && " +
-        s"${nextRevision} === ${scopeViaAsOf}.nextRevision && ${nextRevision} === ${scopeViaNextRevision}.nextRevision && " +
-        s"${queryWhen} == ${scopeViaAsOf}.when && ${queryWhen} === ${scopeViaNextRevision}.when"
+      (checks.head match {
+        case (asOf, nextRevision, scopeViaAsOf, scopeViaNextRevision) =>
+          (Finite(asOf) === scopeViaAsOf.asOf) :| s"Finite(${asOf}) === scopeViaAsOf.asOf" &&
+            (NegativeInfinity[Instant] === scopeViaNextRevision.asOf) :| s"NegativeInfinity[Instant] === scopeViaNextRevision.asOf" &&
+            (nextRevision === scopeViaAsOf.nextRevision) :| s"${nextRevision} === scopeViaAsOf.nextRevision" &&
+            (nextRevision === scopeViaNextRevision.nextRevision) :| s"${nextRevision} === scopeViaNextRevision.nextRevision" &&
+            (queryWhen == scopeViaAsOf.when) :| s"${queryWhen} == scopeViaAsOf.when" &&
+            (queryWhen === scopeViaNextRevision.when) :| s"${queryWhen} === scopeViaNextRevision.when"
       }) &&
-        Prop.all(checks.tail map { case (asOf, nextRevision, scopeViaAsOf, scopeViaNextRevision) => (Finite(asOf) === scopeViaAsOf.asOf && Finite(asOf) === scopeViaNextRevision.asOf &&
-          nextRevision === scopeViaAsOf.nextRevision && nextRevision === scopeViaNextRevision.nextRevision &&
-          queryWhen == scopeViaAsOf.when && queryWhen === scopeViaNextRevision.when) :| s"${asOf} === ${scopeViaAsOf}.asOf && ${asOf} === ${scopeViaNextRevision}.asOf && " +
-          s"${nextRevision} === ${scopeViaAsOf}.nextRevision && ${nextRevision} === ${scopeViaNextRevision}.nextRevision && " +
-          s"${queryWhen} == ${scopeViaAsOf}.when && ${queryWhen} === ${scopeViaNextRevision}.when"
+        Prop.all(checks.tail map { case (asOf, nextRevision, scopeViaAsOf, scopeViaNextRevision) =>
+          (Finite(asOf) === scopeViaAsOf.asOf) :| s"Finite(${asOf}) === scopeViaAsOf.asOf" &&
+            (Finite(asOf) === scopeViaNextRevision.asOf) :| s"Finite(${asOf}) === scopeViaNextRevision.asOf" &&
+            (nextRevision === scopeViaAsOf.nextRevision) :| s"${nextRevision} === scopeViaAsOf.nextRevision" &&
+            (nextRevision === scopeViaNextRevision.nextRevision) :| s"${nextRevision} === scopeViaNextRevision.nextRevision" &&
+            (queryWhen == scopeViaAsOf.when) :| s"${queryWhen} == scopeViaAsOf.when" &&
+            (queryWhen === scopeViaNextRevision.when) :| s"${queryWhen} === scopeViaNextRevision.when"
         }: _*)
     })
   }
