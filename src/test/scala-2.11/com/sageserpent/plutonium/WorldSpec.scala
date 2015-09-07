@@ -13,7 +13,7 @@ import org.scalacheck.{Arbitrary, Gen, Prop}
 import org.scalatest.FlatSpec
 import org.scalatest.prop.Checkers
 
-import scala.collection.immutable.TreeMap
+import scala.collection.immutable.{::, TreeMap}
 import scala.spores._
 import scala.util.Random
 
@@ -387,34 +387,44 @@ class WorldSpec extends FlatSpec with Checkers {
                                  queryWhen <- unboundedInstantGenerator
     } yield (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
     check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
-      // TODO - need to check 'when', 'nextRevision', 'asOf'.
       var world = new WorldReferenceImplementation()
 
       recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
 
       val asOfBeforeInitialRevision = asOfs.head minusSeconds 10
 
-      val checks = for {(asOf, revisionOffset) <- (asOfBeforeInitialRevision :: asOfs zipWithIndex)
-                        nextRevision = World.initialRevision + revisionOffset
-                        scopeViaAsOf = world.scopeFor(queryWhen, asOf)
-                        scopeViaNextRevision = world.scopeFor(queryWhen, nextRevision)
-      } yield (asOf, nextRevision, scopeViaAsOf, scopeViaNextRevision)
+      def nextRevisions(nextRevisions: List[(Instant, (Int, Int))], asOf: Instant) = nextRevisions match {
+        case (preceedingAsOf, (preceedingNextRevision, preceedingNextRevisionAfterFirstDuplicate)) :: tail if asOf == preceedingAsOf => (asOf -> ((1 + preceedingNextRevision) -> preceedingNextRevisionAfterFirstDuplicate)) :: tail
+        case (_, (preceedingNextRevision, _)) :: _ => {
+          var nextRevision = 1 + preceedingNextRevision
+          (asOf -> (nextRevision -> nextRevision)) :: nextRevisions
+        }
+      }
 
-      (checks.head match {
-        case (asOf, nextRevision, scopeViaAsOf, scopeViaNextRevision) =>
-          (Finite(asOf) === scopeViaAsOf.asOf) :| s"Finite(${asOf}) === scopeViaAsOf.asOf" &&
-            (NegativeInfinity[Instant] === scopeViaNextRevision.asOf) :| s"NegativeInfinity[Instant] === scopeViaNextRevision.asOf" &&
-            (nextRevision === scopeViaAsOf.nextRevision) :| s"${nextRevision} === scopeViaAsOf.nextRevision" &&
+      val asOfAndNextRevisionPairs = (List(asOfBeforeInitialRevision -> (World.initialRevision -> World.initialRevision)) /: asOfs)(nextRevisions) reverse
+
+      val checksViaAsOf = for {(asOf, (nextRevisionAfterDuplicates, _)) <- asOfAndNextRevisionPairs
+                               scopeViaAsOf = world.scopeFor(queryWhen, asOf)
+      } yield (asOf, nextRevisionAfterDuplicates, scopeViaAsOf)
+
+      val checksViaNextRevision = for {(asOf, (nextRevisionAfterDuplicates, nextRevisionAfterFirstDuplicate)) <- asOfAndNextRevisionPairs
+                                       nextRevision <- nextRevisionAfterFirstDuplicate to nextRevisionAfterDuplicates
+                                       scopeViaNextRevision = world.scopeFor(queryWhen, nextRevision)
+      } yield (asOf, nextRevision, scopeViaNextRevision)
+
+      Prop.all(checksViaAsOf map { case (asOf, nextRevision, scopeViaAsOf) =>
+        (Finite(asOf) === scopeViaAsOf.asOf) :| s"Finite(${asOf}) === scopeViaAsOf.asOf" &&
+          (nextRevision === scopeViaAsOf.nextRevision) :| s"${nextRevision} === scopeViaAsOf.nextRevision" &&
+          (queryWhen == scopeViaAsOf.when) :| s"${queryWhen} == scopeViaAsOf.when"
+      }: _*) && (checksViaNextRevision.head match {
+        case (asOf, nextRevision, scopeViaNextRevision) =>
+          (NegativeInfinity[Instant] === scopeViaNextRevision.asOf) :| s"NegativeInfinity[Instant] === scopeViaNextRevision.asOf" &&
             (nextRevision === scopeViaNextRevision.nextRevision) :| s"${nextRevision} === scopeViaNextRevision.nextRevision" &&
-            (queryWhen == scopeViaAsOf.when) :| s"${queryWhen} == scopeViaAsOf.when" &&
             (queryWhen === scopeViaNextRevision.when) :| s"${queryWhen} === scopeViaNextRevision.when"
       }) &&
-        Prop.all(checks.tail map { case (asOf, nextRevision, scopeViaAsOf, scopeViaNextRevision) =>
-          (Finite(asOf) === scopeViaAsOf.asOf) :| s"Finite(${asOf}) === scopeViaAsOf.asOf" &&
-            (Finite(asOf) === scopeViaNextRevision.asOf) :| s"Finite(${asOf}) === scopeViaNextRevision.asOf" &&
-            (nextRevision === scopeViaAsOf.nextRevision) :| s"${nextRevision} === scopeViaAsOf.nextRevision" &&
+        Prop.all(checksViaNextRevision.tail map { case (asOf, nextRevision, scopeViaNextRevision) =>
+          (Finite(asOf) === scopeViaNextRevision.asOf) :| s"Finite(${asOf}) === scopeViaNextRevision.asOf" &&
             (nextRevision === scopeViaNextRevision.nextRevision) :| s"${nextRevision} === scopeViaNextRevision.nextRevision" &&
-            (queryWhen == scopeViaAsOf.when) :| s"${queryWhen} == scopeViaAsOf.when" &&
             (queryWhen === scopeViaNextRevision.when) :| s"${queryWhen} === scopeViaNextRevision.when"
         }: _*)
     })
