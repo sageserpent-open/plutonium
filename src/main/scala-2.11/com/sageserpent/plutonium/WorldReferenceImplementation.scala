@@ -30,13 +30,14 @@ class WorldReferenceImplementation extends World {
     }
   }
 
-  abstract class ScopeBasedOnAsOf(val when: Unbounded[Instant], val asOf: Unbounded[Instant]) extends com.sageserpent.plutonium.Scope {
+  abstract class ScopeBasedOnAsOf(val when: Unbounded[Instant], unliftedAsOf: Instant) extends com.sageserpent.plutonium.Scope {
+    override val asOf = Finite(unliftedAsOf)
+
     override val nextRevision: Revision = {
-      var liftedVersionTimeline = revisionTimeline map (Finite(_: Instant))
-      liftedVersionTimeline.search(asOf) match {
+      revisionTimeline.search(unliftedAsOf) match {
         case found@Found(_) => {
-          val versionTimelineNotIncludingAllUpToTheMatch = liftedVersionTimeline drop (1 + found.foundIndex)
-          versionTimelineNotIncludingAllUpToTheMatch.indexWhere(asOf < _) match {
+          val versionTimelineNotIncludingAllUpToTheMatch = revisionTimeline drop (1 + found.foundIndex)
+          versionTimelineNotIncludingAllUpToTheMatch.indexWhere(implicitly[Ordering[Instant]].lt(unliftedAsOf, _)) match {
             case -1 => revisionTimeline.length
             case index => found.foundIndex + 1 + index
           }
@@ -74,5 +75,5 @@ class WorldReferenceImplementation extends World {
   override def scopeFor(when: Unbounded[Instant], nextRevision: Revision): Scope = new ScopeBasedOnNextRevision(when, nextRevision) with ScopeImplementation
 
   // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
-  override def scopeFor(when: Unbounded[Instant], asOf: Instant): Scope = new ScopeBasedOnAsOf(when, Finite(asOf)) with ScopeImplementation
+  override def scopeFor(when: Unbounded[Instant], asOf: Instant): Scope = new ScopeBasedOnAsOf(when, asOf) with ScopeImplementation
 }
