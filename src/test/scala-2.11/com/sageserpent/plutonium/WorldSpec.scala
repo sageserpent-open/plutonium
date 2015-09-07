@@ -132,7 +132,7 @@ class WorldSpec extends FlatSpec with Checkers {
     val scopeGenerator = for {when <- unboundedInstantGenerator
                               asOf <- instantGenerator} yield world.scopeFor(when = when, asOf = asOf)
 
-    check(Prop.forAllNoShrink(scopeGenerator)((scope: world.ScopeReferenceImplementation) => {
+    check(Prop.forAllNoShrink(scopeGenerator)((scope: world.Scope) => {
       val exampleBitemporal = Bitemporal.wildcard[NonExistentIdentified]()
 
       scope.render(exampleBitemporal).isEmpty
@@ -144,10 +144,6 @@ class WorldSpec extends FlatSpec with Checkers {
 
     World.initialRevision === world.nextRevision
   }
-
-
-
-
 
   "A world with history added in order of increasing event time" should "reveal all history up to the 'asOf' limit of a scope made from it" in {
     val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
