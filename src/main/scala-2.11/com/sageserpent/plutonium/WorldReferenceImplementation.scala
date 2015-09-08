@@ -5,7 +5,7 @@ import java.time.Instant
 import com.sageserpent.infrastructure.{Finite, NegativeInfinity, Unbounded}
 import com.sageserpent.plutonium.Bitemporal.IdentifiedItemsScope
 import com.sageserpent.plutonium.World.Revision
-import com.sageserpent.plutonium.WorldReferenceImplementation.{ScopeBasedOnNextRevision, IdentifiedItemsScopeImplementation}
+import com.sageserpent.plutonium.WorldReferenceImplementation.{IdentifiedItemsScopeImplementation}
 
 import scala.collection.Searching._
 import scala.collection.immutable.SortedSet
@@ -21,11 +21,16 @@ object WorldReferenceImplementation {
     override def compare(lhs: Event, rhs: Event): Revision = lhs.when.compareTo(rhs.when)
   }
 
-  class IdentifiedItemsScopeImplementation extends Bitemporal.IdentifiedItemsScope {
+  class IdentifiedItemsScopeImplementation extends IdentifiedItemsScope {
     // TODO - data structure!!!!!
 
-    def this(when: Unbounded[Instant], nextRevision: Revision, eventTimeline: WorldReferenceImplementation#EventTimeline) = {
+    def this(nextRevision: Revision, eventTimeline: WorldReferenceImplementation#EventTimeline) = {
       this()
+      // For each event in the timeline...
+
+      // ... construct a scope whose 'when' corresponds to the event (shouldn't we be grouping them together, perhaps?) ...
+
+      // ... then run the event spore.
     }
 
     override def itemsFor[Raw <: Identified](id: Raw#Id): Stream[Raw] = ???
@@ -71,7 +76,7 @@ class WorldReferenceImplementation extends World {
 
     val identifiedItemsScope = nextRevision match {
       case World.initialRevision => new IdentifiedItemsScopeImplementation
-      case _ => new IdentifiedItemsScopeImplementation(when, nextRevision, revisionToEventTimelineMap(nextRevision - 1))
+      case _ => new IdentifiedItemsScopeImplementation(nextRevision, revisionToEventTimelineMap(nextRevision - 1))
     }
 
     // NOTE: this should return proxies to raw values, rather than the raw values themselves. Depending on the kind of the scope (created by client using 'World', or implicitly in an event).
