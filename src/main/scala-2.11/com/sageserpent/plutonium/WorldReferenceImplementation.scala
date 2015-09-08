@@ -5,6 +5,7 @@ import java.time.Instant
 import com.sageserpent.infrastructure.{Finite, NegativeInfinity, Unbounded}
 import com.sageserpent.plutonium.Bitemporal.IdentifiedItemsScope
 import com.sageserpent.plutonium.World.Revision
+import com.sageserpent.plutonium.WorldReferenceImplementation.IdentifiedItemsScopeImplementation
 
 import scala.collection.Searching._
 import scala.collection.immutable.SortedSet
@@ -20,9 +21,14 @@ object WorldReferenceImplementation {
     override def compare(lhs: Event, rhs: Event): Revision = lhs.when.compareTo(rhs.when)
   }
 
-  private def playbackEventTimeline(eventTimeline: WorldReferenceImplementation#EventTimeline, scope: com.sageserpent.plutonium.Scope): Unit =
+  class IdentifiedItemsScopeImplementation extends Bitemporal.IdentifiedItemsScope{
+    override def itemsFor[Raw <: Identified](id: Raw#Id): Stream[Raw] = ???
+
+    override def allItems[Raw <: Identified](): Stream[Raw] = ???
+  }
+
+  private def playbackEventTimeline(eventTimeline: WorldReferenceImplementation#EventTimeline, identifiedItemsScope: IdentifiedItemsScope): Unit =
   {
-    ??? // TODO - implement!
   }
 }
 
@@ -57,22 +63,21 @@ class WorldReferenceImplementation extends World {
     }
   }
 
-  trait ScopeImplementation extends com.sageserpent.plutonium.Scope with Bitemporal.IdentifiedItemsScope {
+  trait ScopeImplementation extends com.sageserpent.plutonium.Scope {
     // TODO: snapshot the state from the world on construction - the effects of further revisions should not be apparent.
 
-    lazy val initialisedMarker = nextRevision match {
+    val identifiedItemsScope = new IdentifiedItemsScopeImplementation
+
+    lazy val forcePopulationOfItems = nextRevision match {
       case World.initialRevision =>
-      case _ => WorldReferenceImplementation.playbackEventTimeline(revisionToEventTimelineMap(nextRevision - 1), this)
+      case _ => WorldReferenceImplementation.playbackEventTimeline(revisionToEventTimelineMap(nextRevision - 1), identifiedItemsScope)
     }
 
     // NOTE: this should return proxies to raw values, rather than the raw values themselves. Depending on the kind of the scope (created by client using 'World', or implicitly in an event).
     override def render[Raw](bitemporal: Bitemporal[Raw]): Stream[Raw] = {
-      bitemporal.interpret(this)
+      forcePopulationOfItems
+      bitemporal.interpret(identifiedItemsScope)
     }
-
-    override def itemsFor[Raw <: Identified](id: Raw#Id): Stream[Raw] = ???
-
-    override def allItems[Raw <: Identified](): Stream[Raw] = ???
   }
 
   private var _nextRevision = World.initialRevision
