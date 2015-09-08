@@ -18,20 +18,19 @@ trait World {
   type Scope <: com.sageserpent.plutonium.Scope
 
 
-  def nextRevision: Revision
+  def nextRevision: Revision  // NOTE: this is the number of *revisions* that have all been made via 'revise'.
 
-  val revisionTimeline: collection.Seq[Instant] // NOTE: the next revision is the number of versions.
-                                                // Adjacent duplicates are permitted - this is taken to mean that successive revisions were booked in faster than than the time resolution.
+  val revisionAsOfs: collection.Seq[Instant]  // Adjacent duplicates are permitted - this is taken to mean that successive revisions were booked in faster than than the time resolution.
 
   // Can have duplicated instants associated with different events - more than one thing can happen at a given time.
   // Question: does the order of appearance of the events matter, then? - Hmmm - the answer is that they take effect in order
-  // of instant key (obviously), using the order of appearance in 'events' as a tiebreaker.
+  // of their 'when' value (obviously), using the order of appearance in 'events' as a tiebreaker.
   // Next question: what if two events belonging to different event groups collide in time? Hmmm - the answer is that whichever
   // event group was when originally recorded the later version of the world's timeline contributes the secondary event, regardless
   // of any subsequent revision to either event group.
   // Hmmm - could generalise this to specify a precedence enumeration - 'OrderUsingOriginalVersion', 'First', 'Last'.
 
-  // NOTE: this increments 'currentRevision' if it succeeds, associating the new revision with 'revisionTime'.
+  // NOTE: this increments 'nextRevision' if it succeeds, associating the new revision with 'revisionTime'.
   // NOTE: there is a precondition that 'asOf' must be greater than or equal 'versonTimeline.last'.
   // On success, the new revision defined by the recording is returned, which as a postcondition is one less than the updated value of 'nextRevision' at method exit.
   // NOTE: however, it doesn't have to succeed - the events may produce an inconsistency, or may cause collision of bitemporal ids for related types

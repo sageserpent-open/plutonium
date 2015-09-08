@@ -291,7 +291,7 @@ class WorldSpec extends FlatSpec with Checkers {
 
       recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
 
-      Prop.all(asOfs zip world.revisionTimeline map { case (asOf, timelineAsOf) => (asOf === timelineAsOf) :| s"${asOf} === ${timelineAsOf}" }: _*)
+      Prop.all(asOfs zip world.revisionAsOfs map { case (asOf, timelineAsOf) => (asOf === timelineAsOf) :| s"${asOf} === ${timelineAsOf}" }: _*)
     })
   }
 
@@ -307,7 +307,7 @@ class WorldSpec extends FlatSpec with Checkers {
 
       recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
 
-      Prop.all(world.revisionTimeline zip world.revisionTimeline.tail map { case (first, second) => !first.isAfter(second) :| s"!${first}.isAfter(${second})" }: _*)
+      Prop.all(world.revisionAsOfs zip world.revisionAsOfs.tail map { case (first, second) => !first.isAfter(second) :| s"!${first}.isAfter(${second})" }: _*)
     })
   }
 
@@ -339,7 +339,7 @@ class WorldSpec extends FlatSpec with Checkers {
 
       recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
 
-      (world.nextRevision === world.revisionTimeline.size) :| s"${world.nextRevision} === ${world.revisionTimeline}.size"
+      (world.nextRevision === world.revisionAsOfs.size) :| s"${world.nextRevision} === ${world.revisionAsOfs}.size"
     })
   }
 

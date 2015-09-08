@@ -16,11 +16,10 @@ import scala.collection.mutable.MutableList
 class WorldReferenceImplementation extends World {
   type Scope = ScopeImplementation
 
-
   abstract class ScopeBasedOnNextRevision(val when: Unbounded[Instant], val nextRevision: Revision) extends com.sageserpent.plutonium.Scope {
     val asOf = nextRevision match {
       case World.initialRevision => NegativeInfinity[Instant]
-      case _ => Finite(revisionTimeline(nextRevision - 1))
+      case _ => Finite(revisionAsOfs(nextRevision - 1))
     }
   }
 
@@ -34,11 +33,11 @@ class WorldReferenceImplementation extends World {
     override val asOf = Finite(unliftedAsOf)
 
     override val nextRevision: Revision = {
-      revisionTimeline.search(unliftedAsOf) match {
+      revisionAsOfs.search(unliftedAsOf) match {
         case found@Found(_) => {
-          val versionTimelineNotIncludingAllUpToTheMatch = revisionTimeline drop (1 + found.foundIndex)
+          val versionTimelineNotIncludingAllUpToTheMatch = revisionAsOfs drop (1 + found.foundIndex)
           versionTimelineNotIncludingAllUpToTheMatch.indexWhere(implicitly[Ordering[Instant]].lt(unliftedAsOf, _)) match {
-            case -1 => revisionTimeline.length
+            case -1 => revisionAsOfs.length
             case index => found.foundIndex + 1 + index
           }
         }
@@ -58,14 +57,14 @@ class WorldReferenceImplementation extends World {
 
   override def nextRevision: Revision = _nextRevision
 
-  override val revisionTimeline: MutableList[Instant] = MutableList.empty
+  override val revisionAsOfs: MutableList[Instant] = MutableList.empty
 
   def revise[EventId](events: Map[EventId, Option[Event]], asOf: Instant): Revision = {
-    if (revisionTimeline.nonEmpty && revisionTimeline.last.isAfter(asOf)) throw new IllegalArgumentException(s"'asOf': ${asOf} should be no earlier than that of the last revision: ${revisionTimeline.last}")
+    if (revisionAsOfs.nonEmpty && revisionAsOfs.last.isAfter(asOf)) throw new IllegalArgumentException(s"'asOf': ${asOf} should be no earlier than that of the last revision: ${revisionAsOfs.last}")
 
     // TODO: make exception safe - especially against the expected failures to apply events due to inconsistencies.
 
-    revisionTimeline += asOf
+    revisionAsOfs += asOf
     val revision = nextRevision
     _nextRevision += 1
     revision
