@@ -26,20 +26,22 @@ object WorldReferenceImplementation {
 
     def this(_nextRevision: Revision, _asOf: Unbounded[Instant], eventTimeline: WorldReferenceImplementation#EventTimeline) = {
       this()
-      // For each event in the timeline...
-
       for (event <- eventTimeline) {
-        // ... construct a scope whose 'when' corresponds to the event (shouldn't we be grouping them together, perhaps?) ...
         val scopeForEvent = new com.sageserpent.plutonium.Scope {
           override val when: Unbounded[Instant] = event.when
 
           // NOTE: this should return proxies to raw values, rather than the raw values themselves. Depending on the kind of the scope (created by client using 'World', or implicitly in an event),
-          override def render[Raw](bitemporal: Bitemporal[Raw]): Stream[Raw] = ???
+          override def render[Raw](bitemporal: Bitemporal[Raw]): Stream[Raw] = {
+            bitemporal.interpret(IdentifiedItemsScopeImplementation.this)
+          }
 
           override val nextRevision: Revision = _nextRevision
           override val asOf: Unbounded[Instant] = _asOf
         }
-        // ... then run the event spore.
+
+        event match {
+          case Change(_, update) => update(scopeForEvent)
+        }
       }
     }
 
