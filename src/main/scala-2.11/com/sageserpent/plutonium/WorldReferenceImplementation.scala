@@ -3,6 +3,7 @@ package com.sageserpent.plutonium
 import java.time.Instant
 
 import com.sageserpent.infrastructure.{Finite, NegativeInfinity, Unbounded}
+import com.sageserpent.plutonium.Bitemporal.IdentifiedItemsScope
 import com.sageserpent.plutonium.World.Revision
 
 import scala.collection.Searching._
@@ -14,9 +15,14 @@ import scala.collection.mutable.MutableList
  */
 
 
-object WorldReferenceImplementation{
-  implicit val eventOrdering = new Ordering[Event]{
+object WorldReferenceImplementation {
+  implicit val eventOrdering = new Ordering[Event] {
     override def compare(lhs: Event, rhs: Event): Revision = lhs.when.compareTo(rhs.when)
+  }
+
+  private def playbackEventTimeline(eventTimeline: WorldReferenceImplementation#EventTimeline, scope: com.sageserpent.plutonium.Scope): Unit =
+  {
+    ??? // TODO - implement!
   }
 }
 
@@ -51,11 +57,22 @@ class WorldReferenceImplementation extends World {
     }
   }
 
-  trait ScopeImplementation extends com.sageserpent.plutonium.Scope {
+  trait ScopeImplementation extends com.sageserpent.plutonium.Scope with Bitemporal.IdentifiedItemsScope {
     // TODO: snapshot the state from the world on construction - the effects of further revisions should not be apparent.
 
+    lazy val initialisedMarker = nextRevision match {
+      case World.initialRevision =>
+      case _ => WorldReferenceImplementation.playbackEventTimeline(revisionToEventTimelineMap(nextRevision - 1), this)
+    }
+
     // NOTE: this should return proxies to raw values, rather than the raw values themselves. Depending on the kind of the scope (created by client using 'World', or implicitly in an event).
-    override def render[Raw](bitemporal: Bitemporal[Raw]): Stream[Raw] = Stream.empty
+    override def render[Raw](bitemporal: Bitemporal[Raw]): Stream[Raw] = {
+      bitemporal.interpret(this)
+    }
+
+    override def itemsFor[Raw <: Identified](id: Raw#Id): Stream[Raw] = ???
+
+    override def allItems[Raw <: Identified](): Stream[Raw] = ???
   }
 
   private var _nextRevision = World.initialRevision
@@ -83,7 +100,7 @@ class WorldReferenceImplementation extends World {
 
     // 3. Add new events.
 
-    val newEvents = events.values filter (PartialFunction.cond (_) {case Some(_) => true}) map {case Some(event) => event}
+    val newEvents = events.values filter (PartialFunction.cond(_) { case Some(_) => true }) map { case Some(event) => event }
 
     val newEventTimeline = baselineEventTimeline ++ newEvents
 
