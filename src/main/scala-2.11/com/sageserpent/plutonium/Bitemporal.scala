@@ -14,7 +14,7 @@ trait Bitemporal[Raw] {
 
   def flatMap[Raw2](stage: Raw => Bitemporal[Raw2]): Bitemporal[Raw2]
 
-  def interpret(scope: Bitemporal.Scope): Stream[Raw]
+  def interpret(scope: Bitemporal.IdentifiedItemsScope): Stream[Raw]
 
   def join[Raw2 <: Raw](another: Bitemporal[Raw2]): Bitemporal[Raw]
 }
@@ -23,7 +23,7 @@ trait Bitemporal[Raw] {
 // how many of those raw instances match the id or wildcard.
 object Bitemporal {
 
-  trait Scope {
+  trait IdentifiedItemsScope {
     def itemsFor[Raw <: Identified](id: Raw#Id): Stream[Raw]
 
     def allItems[Raw <: Identified](): Stream[Raw]

@@ -7,5 +7,5 @@ package com.sageserpent.plutonium
 import scala.reflect.runtime.universe._
 
 class IdentifiedItemsBitemporalReferenceImplementation[Raw <: Identified: TypeTag](id: Raw#Id) extends AbstractBitemporalReferenceImplementation[Raw] {
-  override def interpret(scope: Bitemporal.Scope): Stream[Raw] = scope.itemsFor(id)
+  override def interpret(scope: Bitemporal.IdentifiedItemsScope): Stream[Raw] = scope.itemsFor(id)
 }

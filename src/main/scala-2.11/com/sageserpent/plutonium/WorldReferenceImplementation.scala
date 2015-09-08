@@ -34,12 +34,6 @@ class WorldReferenceImplementation extends World {
     }
   }
 
-/*  object ScopeBasedOnAsOf {
-    implicit val instantOrdering = new Ordering[Instant] {
-      override def compare(lhs: Instant, rhs: Instant): Revision = lhs compareTo rhs
-    }
-  }*/
-
   abstract class ScopeBasedOnAsOf(val when: Unbounded[Instant], unliftedAsOf: Instant) extends com.sageserpent.plutonium.Scope {
     override val asOf = Finite(unliftedAsOf)
 
