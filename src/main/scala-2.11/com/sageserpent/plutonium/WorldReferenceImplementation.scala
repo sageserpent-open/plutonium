@@ -21,15 +21,17 @@ object WorldReferenceImplementation {
     override def compare(lhs: Event, rhs: Event): Revision = lhs.when.compareTo(rhs.when)
   }
 
-  class IdentifiedItemsScopeImplementation extends Bitemporal.IdentifiedItemsScope{
+  class IdentifiedItemsScopeImplementation extends Bitemporal.IdentifiedItemsScope {
+    def this(when: Unbounded[Instant], eventTimeline: WorldReferenceImplementation#EventTimeline) = {
+      // TODO - playback!
+      this()
+    }
+
     override def itemsFor[Raw <: Identified](id: Raw#Id): Stream[Raw] = ???
 
     override def allItems[Raw <: Identified](): Stream[Raw] = ???
   }
 
-  private def playbackEventTimeline(eventTimeline: WorldReferenceImplementation#EventTimeline, identifiedItemsScope: IdentifiedItemsScope): Unit =
-  {
-  }
 }
 
 class WorldReferenceImplementation extends World {
@@ -66,16 +68,13 @@ class WorldReferenceImplementation extends World {
   trait ScopeImplementation extends com.sageserpent.plutonium.Scope {
     // TODO: snapshot the state from the world on construction - the effects of further revisions should not be apparent.
 
-    val identifiedItemsScope = new IdentifiedItemsScopeImplementation
-
-    lazy val forcePopulationOfItems = nextRevision match {
-      case World.initialRevision =>
-      case _ => WorldReferenceImplementation.playbackEventTimeline(revisionToEventTimelineMap(nextRevision - 1), identifiedItemsScope)
+    val identifiedItemsScope = nextRevision match {
+      case World.initialRevision => new IdentifiedItemsScopeImplementation
+      case _ => new IdentifiedItemsScopeImplementation(when, revisionToEventTimelineMap(nextRevision - 1))
     }
 
     // NOTE: this should return proxies to raw values, rather than the raw values themselves. Depending on the kind of the scope (created by client using 'World', or implicitly in an event).
     override def render[Raw](bitemporal: Bitemporal[Raw]): Stream[Raw] = {
-      forcePopulationOfItems
       bitemporal.interpret(identifiedItemsScope)
     }
   }
