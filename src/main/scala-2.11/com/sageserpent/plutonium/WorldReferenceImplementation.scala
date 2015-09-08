@@ -5,7 +5,7 @@ import java.time.Instant
 import com.sageserpent.infrastructure.{Finite, NegativeInfinity, Unbounded}
 import com.sageserpent.plutonium.Bitemporal.IdentifiedItemsScope
 import com.sageserpent.plutonium.World.Revision
-import com.sageserpent.plutonium.WorldReferenceImplementation.{IdentifiedItemsScopeImplementation}
+import com.sageserpent.plutonium.WorldReferenceImplementation.IdentifiedItemsScopeImplementation
 
 import scala.collection.Searching._
 import scala.collection.immutable.SortedSet
@@ -28,9 +28,19 @@ object WorldReferenceImplementation {
       this()
       // For each event in the timeline...
 
-      // ... construct a scope whose 'when' corresponds to the event (shouldn't we be grouping them together, perhaps?) ...
+      for (event <- eventTimeline) {
+        // ... construct a scope whose 'when' corresponds to the event (shouldn't we be grouping them together, perhaps?) ...
+        val scopeForEvent = new com.sageserpent.plutonium.Scope {
+          override val when: Unbounded[Instant] = ???
 
-      // ... then run the event spore.
+          // NOTE: this should return proxies to raw values, rather than the raw values themselves. Depending on the kind of the scope (created by client using 'World', or implicitly in an event),
+          override def render[Raw](bitemporal: Bitemporal[Raw]): Stream[Raw] = ???
+
+          override val nextRevision: Revision = ???
+          override val asOf: Unbounded[Instant] = ???
+        }
+        // ... then run the event spore.
+      }
     }
 
     override def itemsFor[Raw <: Identified](id: Raw#Id): Stream[Raw] = ???

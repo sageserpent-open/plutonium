@@ -27,7 +27,7 @@ sealed abstract class Event {
 // public property setters and public unit returning methods are patched.
 // NOTE: the scope initially represents the state of the world when the event is to be applied, but *without* the event having been
 // applied yet - so all previous history will have taken place.
-case class Change(val when: Unbounded[Instant], update: Spore[World#Scope, Unit]) extends Event {
+case class Change(val when: Unbounded[Instant], update: Spore[com.sageserpent.plutonium.Scope, Unit]) extends Event {
 
 }
 
@@ -35,7 +35,7 @@ object Change {
   def apply[Raw <: Identified: TypeTag](when: Unbounded[Instant])(id: Raw#Id, update: Spore[Raw, Unit]): Change = {
     Change(when, spore {
       val bitemporal = Bitemporal.singleOneOf(id)
-      (scope: World#Scope) => {
+      (scope: com.sageserpent.plutonium.Scope) => {
         val raws = scope.render(bitemporal)
         capture(update)(raws.head)
       }
@@ -58,7 +58,7 @@ object Change {
 // getters, or public value-returning methods will result in an exception being thrown.
 // NOTE: the scope is synthetic one that has no prior history applied it to whatsoever - it is there purely to capture the effects
 // of the recording.
-case class Observation(definiteWhen: Instant, recording: Spore[World#Scope, Unit]) extends Event {
+case class Observation(definiteWhen: Instant, recording: Spore[com.sageserpent.plutonium.Scope, Unit]) extends Event {
   val when = Finite(definiteWhen)
 }
 
@@ -67,7 +67,7 @@ object Observation {
   def apply[Raw <: Identified: TypeTag](definiteWhen: Instant)(id: Raw#Id, recording: Spore[Raw, Unit]): Observation = {
     Observation(definiteWhen, spore {
       val bitemporal = Bitemporal.singleOneOf(capture(id))
-      (scope: World#Scope) => {
+      (scope: com.sageserpent.plutonium.Scope) => {
         val raws = scope.render(bitemporal)
         capture(recording)(raws.head)
       }
