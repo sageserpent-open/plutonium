@@ -6,6 +6,7 @@ import com.sageserpent.infrastructure.{Finite, NegativeInfinity, Unbounded}
 import com.sageserpent.plutonium.World.Revision
 
 import scala.collection.Searching._
+import scala.collection.immutable.SortedSet
 import scala.collection.mutable.MutableList
 
 /**
@@ -13,8 +14,18 @@ import scala.collection.mutable.MutableList
  */
 
 
+object WorldReferenceImplementation{
+  implicit val eventOrdering = new Ordering[Event]{
+    override def compare(lhs: Event, rhs: Event): Revision = lhs.when.compareTo(rhs.when)
+  }
+}
+
 class WorldReferenceImplementation extends World {
   type Scope = ScopeImplementation
+
+  type EventTimeline = SortedSet[Event]
+
+  val revisionToEventTimelineMap = scala.collection.mutable.Map.empty[Revision, EventTimeline]
 
   abstract class ScopeBasedOnNextRevision(val when: Unbounded[Instant], val nextRevision: Revision) extends com.sageserpent.plutonium.Scope {
     val asOf = nextRevision match {
@@ -23,11 +34,11 @@ class WorldReferenceImplementation extends World {
     }
   }
 
-  object ScopeBasedOnAsOf {
+/*  object ScopeBasedOnAsOf {
     implicit val instantOrdering = new Ordering[Instant] {
       override def compare(lhs: Instant, rhs: Instant): Revision = lhs compareTo rhs
     }
-  }
+  }*/
 
   abstract class ScopeBasedOnAsOf(val when: Unbounded[Instant], unliftedAsOf: Instant) extends com.sageserpent.plutonium.Scope {
     override val asOf = Finite(unliftedAsOf)
@@ -63,6 +74,30 @@ class WorldReferenceImplementation extends World {
     if (revisionAsOfs.nonEmpty && revisionAsOfs.last.isAfter(asOf)) throw new IllegalArgumentException(s"'asOf': ${asOf} should be no earlier than that of the last revision: ${revisionAsOfs.last}")
 
     // TODO: make exception safe - especially against the expected failures to apply events due to inconsistencies.
+
+    // 1. Make a copy of the latest event timeline.
+
+    import WorldReferenceImplementation.eventOrdering
+
+    val baselineEventTimeline = nextRevision match {
+      case World.initialRevision => SortedSet.empty[Event]
+      case _ => revisionToEventTimelineMap(nextRevision - 1)
+    }
+
+    // 2. Replace any old versions of events with corrections (includes removal too). (TODO - want to see this cause a test failure somewhere if it isn't done).
+
+
+    // 3. Add new events.
+
+    val newEvents = events.values filter (PartialFunction.cond (_) {case Some(_) => true}) map {case Some(event) => event}
+
+    val newEventTimeline = baselineEventTimeline ++ newEvents
+
+    // 4. Add new timeline to map.
+
+    revisionToEventTimelineMap += (nextRevision -> newEventTimeline)
+
+    // 5. NOTE: - must remove asinine commentary.
 
     revisionAsOfs += asOf
     val revision = nextRevision
