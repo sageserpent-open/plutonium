@@ -106,7 +106,7 @@ class WorldSpec extends FlatSpec with Checkers {
     // via a change is what introduces an id into the world.
 
     for {dataSamples <- dataSamplesGenerator
-         historyId <- historyIdGenerator} yield (historyId, (scope: Scope) => scope.render(Bitemporal.withId[AHistory](historyId)).head: History, for {(data, changeFor: ((Unbounded[Instant], AHistory#Id) => Change)) <- dataSamples} yield (data, changeFor(_: Unbounded[Instant], historyId)))
+         historyId <- historyIdGenerator} yield (historyId, (scope: Scope) => (scope.render(Bitemporal.withId[AHistory](historyId)) match {case Seq(history) => history}): History, for {(data, changeFor: ((Unbounded[Instant], AHistory#Id) => Change)) <- dataSamples} yield (data, changeFor(_: Unbounded[Instant], historyId)))
   }
 
   case class RecordingsForAnId(historyId: Any, historyFrom: Scope => History, recordings: List[(Any, Unbounded[Instant], Change)])
