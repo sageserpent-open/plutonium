@@ -5,7 +5,7 @@ import java.time.Instant
 import com.sageserpent.infrastructure.{Finite, NegativeInfinity, Unbounded}
 import com.sageserpent.plutonium.Bitemporal.IdentifiedItemsScope
 import com.sageserpent.plutonium.World.Revision
-import com.sageserpent.plutonium.WorldReferenceImplementation.IdentifiedItemsScopeImplementation
+import com.sageserpent.plutonium.WorldReferenceImplementation.{ScopeBasedOnNextRevision, IdentifiedItemsScopeImplementation}
 
 import scala.collection.Searching._
 import scala.collection.immutable.SortedSet
@@ -22,8 +22,9 @@ object WorldReferenceImplementation {
   }
 
   class IdentifiedItemsScopeImplementation extends Bitemporal.IdentifiedItemsScope {
-    def this(when: Unbounded[Instant], eventTimeline: WorldReferenceImplementation#EventTimeline) = {
-      // TODO - playback!
+    // TODO - data structure!!!!!
+
+    def this(when: Unbounded[Instant], nextRevision: Revision, eventTimeline: WorldReferenceImplementation#EventTimeline) = {
       this()
     }
 
@@ -70,7 +71,7 @@ class WorldReferenceImplementation extends World {
 
     val identifiedItemsScope = nextRevision match {
       case World.initialRevision => new IdentifiedItemsScopeImplementation
-      case _ => new IdentifiedItemsScopeImplementation(when, revisionToEventTimelineMap(nextRevision - 1))
+      case _ => new IdentifiedItemsScopeImplementation(when, nextRevision, revisionToEventTimelineMap(nextRevision - 1))
     }
 
     // NOTE: this should return proxies to raw values, rather than the raw values themselves. Depending on the kind of the scope (created by client using 'World', or implicitly in an event).
