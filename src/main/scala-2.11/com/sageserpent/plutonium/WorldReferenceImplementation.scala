@@ -8,8 +8,10 @@ import com.sageserpent.plutonium.World.Revision
 import com.sageserpent.plutonium.WorldReferenceImplementation.IdentifiedItemsScopeImplementation
 
 import scala.collection.Searching._
-import scala.collection.immutable.{Bag, SortedSet}
+import scala.collection.immutable.SortedSet
 import scala.collection.mutable.MutableList
+import scala.reflect.runtime._
+import scala.reflect.runtime.universe._
 
 /**
  * Created by Gerard on 19/07/2015.
@@ -31,9 +33,9 @@ object WorldReferenceImplementation {
           // NOTE: this should return proxies to raw values, rather than the raw values themselves. Depending on the kind of the scope (created by client using 'World', or implicitly in an event),
           override def render[Raw](bitemporal: Bitemporal[Raw]): Stream[Raw] = {
             bitemporal.interpret(new IdentifiedItemsScope {
-              override def allItems[Raw <: Identified](): Stream[Raw] = IdentifiedItemsScopeImplementation.this.allItems()
+              override def allItems[Raw <: Identified: TypeTag](): Stream[Raw] = IdentifiedItemsScopeImplementation.this.allItems()
 
-              override def itemsFor[Raw <: Identified](id: Raw#Id): Stream[Raw] = {
+              override def itemsFor[Raw <: Identified: TypeTag](id: Raw#Id): Stream[Raw] = {
                 IdentifiedItemsScopeImplementation.this.ensureItemExistsFor(id) // NASTY HACK, which is what this anonymous class is for. Yuk.
                 IdentifiedItemsScopeImplementation.this.itemsFor(id)
               }
@@ -56,19 +58,30 @@ object WorldReferenceImplementation {
 
     val idToItemsMultiMap = new MultiMap[Identified#Id, Identified]
 
-    private def ensureItemExistsFor[Raw <: Identified](id: Raw#Id): Unit = {
-      if (!idToItemsMultiMap.contains(id))
-        idToItemsMultiMap.addBinding(id, new Raw(id)) // TODO - manifests or typetags or whatever, as 'Raw' is erased.
-                                                      // Does 'Identified' need to become an abstract class to allow generic construction?
+    private def ensureItemExistsFor[Raw <: Identified: TypeTag](id: Raw#Id): Unit = {
+      if (!idToItemsMultiMap.contains(id)) {
+        idToItemsMultiMap.addBinding(id, constructFrom(id))
+      }
     }
 
-    override def itemsFor[Raw <: Identified](id: Raw#Id): Stream[Raw] = {
+    def constructFrom[Raw <: Identified: TypeTag](id: Raw#Id) = {
+      val reflectedType = implicitly[TypeTag[Raw]].tpe
+      val constructor = reflectedType.decls.find(_.isConstructor) get
+      val classMirror = currentMirror.reflectClass(reflectedType.typeSymbol.asClass)
+      val constructorFunction = classMirror.reflectConstructor(constructor.asMethod)
+      constructorFunction(id).asInstanceOf[Raw]
+    }
+
+    override def itemsFor[Raw <: Identified: TypeTag](id: Raw#Id): Stream[Raw] = {
       val items = idToItemsMultiMap(id)
-      var clazzOfRaw = classOf[Raw]
-      (items toStream) filter (clazzOfRaw.isInstance(_)) map(clazzOfRaw.cast(_))
+
+      val reflectedType = implicitly[TypeTag[Raw]].tpe
+      val clazzOfRaw = currentMirror.runtimeClass(reflectedType)
+
+      (items toStream) filter (clazzOfRaw.isInstance(_)) map(_.asInstanceOf[Raw])
     }
 
-    override def allItems[Raw <: Identified](): Stream[Raw] = ???
+    override def allItems[Raw <: Identified: TypeTag](): Stream[Raw] = ???
   }
 
 }

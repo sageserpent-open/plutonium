@@ -122,12 +122,15 @@ class WorldSpec extends FlatSpec with Checkers {
 
   val recordingsGroupedByIdGenerator = Gen.listOf(recordingsForAnIdGenerator) filter (_.nonEmpty)
 
+
+  class NonExistentIdentified extends AbstractIdentified {
+    override val id: String = fail("If I am not supposed to exist, why is something asking for my id?")
+  }
+
   "A world with no history" should "not contain any identifiables" in {
     val world = new WorldReferenceImplementation()
 
-    class NonExistentIdentified extends AbstractIdentified {
-      override val id: String = fail("If I am not supposed to exist, why is something asking for my id?")
-    }
+
 
     val scopeGenerator = for {when <- unboundedInstantGenerator
                               asOf <- instantGenerator} yield world.scopeFor(when = when, asOf = asOf)

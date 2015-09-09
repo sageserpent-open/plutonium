@@ -24,9 +24,9 @@ trait Bitemporal[Raw] {
 object Bitemporal {
 
   trait IdentifiedItemsScope {
-    def itemsFor[Raw <: Identified](id: Raw#Id): Stream[Raw]
+    def itemsFor[Raw <: Identified: TypeTag](id: Raw#Id): Stream[Raw]
 
-    def allItems[Raw <: Identified](): Stream[Raw]
+    def allItems[Raw <: Identified: TypeTag](): Stream[Raw]
   }
 
   def apply[Raw](raw: Raw) = new DefaultBitemporalReferenceImplementation[Raw](raw)
@@ -37,7 +37,7 @@ object Bitemporal {
 
   def singleOneOf[Raw <: Identified : TypeTag](id: Raw#Id): Bitemporal[Raw] = new SingleIdentifiedItemBitemporalReferenceImplementation(id)
 
-  def wildcard[Raw <: Identified](): Bitemporal[Raw] = new WildcardBitemporalReferenceImplementation[Raw]
+  def wildcard[Raw <: Identified : TypeTag](): Bitemporal[Raw] = new WildcardBitemporalReferenceImplementation[Raw]
 
   def none[Raw]: Bitemporal[Raw] = new DefaultBitemporalReferenceImplementation[Raw]
 
