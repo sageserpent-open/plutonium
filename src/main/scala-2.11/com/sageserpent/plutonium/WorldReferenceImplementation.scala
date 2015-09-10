@@ -23,6 +23,29 @@ object WorldReferenceImplementation {
     override def compare(lhs: Event, rhs: Event): Revision = lhs.when.compareTo(rhs.when)
   }
 
+  object IdentifiedItemsScopeImplementation{
+    def constructFrom[Raw <: Identified : TypeTag](id: Raw#Id) = {
+      val reflectedType = implicitly[TypeTag[Raw]].tpe
+      val constructor = reflectedType.decls.find(_.isConstructor) get
+      val classMirror = currentMirror.reflectClass(reflectedType.typeSymbol.asClass)
+      val constructorFunction = classMirror.reflectConstructor(constructor.asMethod)
+      constructorFunction(id).asInstanceOf[Raw]
+    }
+
+    def hasItemOfType[Raw <: Identified : TypeTag](items: scala.collection.mutable.Set[Identified]) = {
+      val reflectedType = implicitly[TypeTag[Raw]].tpe
+      val clazzOfRaw = currentMirror.runtimeClass(reflectedType)
+      items.exists(clazzOfRaw.isInstance(_))
+    }
+
+    def yieldOnlyItemsOfType[Raw  <: Identified: TypeTag](items: Stream[Identified]) = {
+      val reflectedType = implicitly[TypeTag[Raw]].tpe
+      val clazzOfRaw = currentMirror.runtimeClass(reflectedType).asInstanceOf[Class[Raw]]
+
+      items filter (clazzOfRaw.isInstance(_)) map (clazzOfRaw.cast(_))
+    }
+  }
+
   class IdentifiedItemsScopeImplementation extends IdentifiedItemsScope {
     def this(_when: Unbounded[Instant], _nextRevision: Revision, _asOf: Unbounded[Instant], eventTimeline: WorldReferenceImplementation#EventTimeline) = {
       this()
@@ -59,30 +82,21 @@ object WorldReferenceImplementation {
     val idToItemsMultiMap = new MultiMap[Identified#Id, Identified]
 
     private def ensureItemExistsFor[Raw <: Identified : TypeTag](id: Raw#Id): Unit = {
-      if (!idToItemsMultiMap.contains(id) || {
-        val reflectedType = implicitly[TypeTag[Raw]].tpe
-        val clazzOfRaw = currentMirror.runtimeClass(reflectedType)
-        !idToItemsMultiMap.get(id).exists(clazzOfRaw.isInstance(_))
-      }) {
-        idToItemsMultiMap.addBinding(id, constructFrom(id))
+      val needToConstructItem = idToItemsMultiMap.get(id) match {
+        case None => true
+        case Some(items) => !IdentifiedItemsScopeImplementation.hasItemOfType(items)
+      }
+      if (needToConstructItem) {
+        idToItemsMultiMap.addBinding(id, IdentifiedItemsScopeImplementation.constructFrom(id))
       }
     }
 
-    def constructFrom[Raw <: Identified : TypeTag](id: Raw#Id) = {
-      val reflectedType = implicitly[TypeTag[Raw]].tpe
-      val constructor = reflectedType.decls.find(_.isConstructor) get
-      val classMirror = currentMirror.reflectClass(reflectedType.typeSymbol.asClass)
-      val constructorFunction = classMirror.reflectConstructor(constructor.asMethod)
-      constructorFunction(id).asInstanceOf[Raw]
-    }
+
 
     override def itemsFor[Raw <: Identified : TypeTag](id: Raw#Id): Stream[Raw] = {
       val items = idToItemsMultiMap.getOrElse(id, Set.empty[Raw])
 
-      val reflectedType = implicitly[TypeTag[Raw]].tpe
-      val clazzOfRaw = currentMirror.runtimeClass(reflectedType)
-
-      (items toStream) filter (clazzOfRaw.isInstance(_)) map (_.asInstanceOf[Raw])
+      IdentifiedItemsScopeImplementation.yieldOnlyItemsOfType(items toStream)
     }
 
     override def allItems[Raw <: Identified : TypeTag](): Stream[Raw] = ???
