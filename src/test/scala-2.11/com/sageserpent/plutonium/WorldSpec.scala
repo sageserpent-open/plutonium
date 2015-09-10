@@ -20,10 +20,10 @@ import scala.util.Random
 import scala.reflect.runtime.universe._
 
 abstract class History extends Identified {
-  private val _datums = scala.collection.mutable.Seq[Any]()
+  private val _datums = scala.collection.mutable.MutableList.empty[Any]
 
   protected def recordDatum(datum: Any): Unit = {
-    _datums :+ datum
+    _datums += datum
   }
 
   val datums: scala.collection.Seq[Any] = _datums
