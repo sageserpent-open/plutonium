@@ -88,7 +88,7 @@ object WorldReferenceImplementation {
       }
       if (needToConstructItem) {
         idToItemsMultiMap.addBinding(id, IdentifiedItemsScopeImplementation.constructFrom(id))
-      }
+    }
     }
 
 
@@ -174,7 +174,8 @@ class WorldReferenceImplementation extends World {
 
     // 3. Add new events.
 
-    val newEvents = events.values filter (PartialFunction.cond(_) { case Some(_) => true }) map { case Some(event) => event }
+    val newEvents = for {optionalEvent <- events.values
+                         event <- optionalEvent} yield event
 
     val newEventTimeline = baselineEventTimeline ++ newEvents
 
