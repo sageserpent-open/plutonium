@@ -24,16 +24,16 @@ object WorldReferenceImplementation {
   }
 
   class IdentifiedItemsScopeImplementation extends IdentifiedItemsScope {
-    def this(_nextRevision: Revision, _asOf: Unbounded[Instant], eventTimeline: WorldReferenceImplementation#EventTimeline) = {
+    def this(_when: Unbounded[Instant], _nextRevision: Revision, _asOf: Unbounded[Instant], eventTimeline: WorldReferenceImplementation#EventTimeline) = {
       this()
-      for (event <- eventTimeline) {
+      for (event <- eventTimeline takeWhile (_when >= _.when)) {
         val scopeForEvent = new com.sageserpent.plutonium.Scope {
           override val when: Unbounded[Instant] = event.when
 
           // NOTE: this should return proxies to raw values, rather than the raw values themselves. Depending on the kind of the scope (created by client using 'World', or implicitly in an event),
           override def render[Raw](bitemporal: Bitemporal[Raw]): Stream[Raw] = {
             bitemporal.interpret(new IdentifiedItemsScope {
-              override def allItems[Raw <: Identified: TypeTag](): Stream[Raw] = IdentifiedItemsScopeImplementation.this.allItems()
+              override def allItems[Raw <: Identified : TypeTag](): Stream[Raw] = IdentifiedItemsScopeImplementation.this.allItems() // TODO - why doesn't this call 'IdentifiedItemsScopeImplementation.this.ensureItemExistsFor(id)'?
 
               override def itemsFor[Raw <: Identified: TypeTag](id: Raw#Id): Stream[Raw] = {
                 IdentifiedItemsScopeImplementation.this.ensureItemExistsFor(id) // NASTY HACK, which is what this anonymous class is for. Yuk.
@@ -52,19 +52,23 @@ object WorldReferenceImplementation {
       }
     }
 
-    class MultiMap[Key, Value] extends scala.collection.mutable.HashMap[Key, scala.collection.mutable.Set[Value]] with scala.collection.mutable.MultiMap[Key, Value]{
+    class MultiMap[Key, Value] extends scala.collection.mutable.HashMap[Key, scala.collection.mutable.Set[Value]] with scala.collection.mutable.MultiMap[Key, Value] {
 
     }
 
     val idToItemsMultiMap = new MultiMap[Identified#Id, Identified]
 
-    private def ensureItemExistsFor[Raw <: Identified: TypeTag](id: Raw#Id): Unit = {
-      if (!idToItemsMultiMap.contains(id)) {
+    private def ensureItemExistsFor[Raw <: Identified : TypeTag](id: Raw#Id): Unit = {
+      if (!idToItemsMultiMap.contains(id) || {
+        val reflectedType = implicitly[TypeTag[Raw]].tpe
+        val clazzOfRaw = currentMirror.runtimeClass(reflectedType)
+        !idToItemsMultiMap.get(id).exists(clazzOfRaw.isInstance(_))
+      }) {
         idToItemsMultiMap.addBinding(id, constructFrom(id))
       }
     }
 
-    def constructFrom[Raw <: Identified: TypeTag](id: Raw#Id) = {
+    def constructFrom[Raw <: Identified : TypeTag](id: Raw#Id) = {
       val reflectedType = implicitly[TypeTag[Raw]].tpe
       val constructor = reflectedType.decls.find(_.isConstructor) get
       val classMirror = currentMirror.reflectClass(reflectedType.typeSymbol.asClass)
@@ -72,16 +76,16 @@ object WorldReferenceImplementation {
       constructorFunction(id).asInstanceOf[Raw]
     }
 
-    override def itemsFor[Raw <: Identified: TypeTag](id: Raw#Id): Stream[Raw] = {
-      val items = idToItemsMultiMap(id)
+    override def itemsFor[Raw <: Identified : TypeTag](id: Raw#Id): Stream[Raw] = {
+      val items = idToItemsMultiMap.getOrElse(id, Set.empty[Raw])
 
       val reflectedType = implicitly[TypeTag[Raw]].tpe
       val clazzOfRaw = currentMirror.runtimeClass(reflectedType)
 
-      (items toStream) filter (clazzOfRaw.isInstance(_)) map(_.asInstanceOf[Raw])
+      (items toStream) filter (clazzOfRaw.isInstance(_)) map (_.asInstanceOf[Raw])
     }
 
-    override def allItems[Raw <: Identified: TypeTag](): Stream[Raw] = ???
+    override def allItems[Raw <: Identified : TypeTag](): Stream[Raw] = ???
   }
 
 }
@@ -122,7 +126,7 @@ class WorldReferenceImplementation extends World {
 
     val identifiedItemsScope = nextRevision match {
       case World.initialRevision => new IdentifiedItemsScopeImplementation
-      case _ => new IdentifiedItemsScopeImplementation(nextRevision, asOf, revisionToEventTimelineMap(nextRevision - 1))
+      case _ => new IdentifiedItemsScopeImplementation(when, nextRevision, asOf, revisionToEventTimelineMap(nextRevision - 1))
     }
 
     // NOTE: this should return proxies to raw values, rather than the raw values themselves. Depending on the kind of the scope (created by client using 'World', or implicitly in an event).
