@@ -265,6 +265,40 @@ class WorldSpec extends FlatSpec with Checkers {
     })
   }
 
+  it should "tell me about the test case." in {
+    val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
+                                 seed <- seedGenerator
+                                 random = new Random(seed)
+                                 bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(random.shuffle(recordingsGroupedById map (_.recordings) flatMap identity).zipWithIndex)
+                                 asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
+                                 queryWhen <- unboundedInstantGenerator
+    } yield (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
+    check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
+      val world = new WorldReferenceImplementation()
+
+      recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
+
+
+      println("**** Test case ****")
+
+      println(queryWhen)
+
+      val scope = world.scopeFor(queryWhen, world.nextRevision)
+
+      for {RecordingsForAnId(historyId, _, historiesFrom, recordings) <- recordingsGroupedById filter (queryWhen >= _.whenEarliestChangeHappened)}
+        {
+          println("Recording:-")
+          println(s"History id: '${historyId}', queryWhen: '${queryWhen}'")
+          for (recording <- recordings)
+            {
+              println(s"Recording: '${recording}'")
+            }
+        }
+
+      Prop(true)
+    })
+  }
+
   it should "allow a raw value to be rendered from a bitemporal if the 'when' limit of the scope includes a relevant event." in {
     val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
                                  seed <- seedGenerator
