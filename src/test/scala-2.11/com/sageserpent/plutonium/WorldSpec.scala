@@ -76,7 +76,7 @@ class WorldSpec extends FlatSpec with Checkers {
 
   val fooHistoryIdGenerator = Arbitrary.arbitrary[FooHistory#Id]
 
-  val barHistoryIdGenerator = Arbitrary.arbitrary[BarHistory#Id]
+  val barHistoryIdGenerator = Gen.oneOf(1, 2, 7, 99, 103, 2000, 5000, 7867)
 
   val dataSampleGenerator1 = for {data <- Arbitrary.arbitrary[String]} yield (data, (when: Unbounded[Instant], fooHistoryId: FooHistory#Id) => Change[FooHistory](when)(fooHistoryId, (fooHistory: FooHistory) => {
     fooHistory.property1 = capture(data)
@@ -229,12 +229,6 @@ class WorldSpec extends FlatSpec with Checkers {
 
       val asOfPairs = asOfs.scanRight((asOfComingAfterTheLastRevision, asOfComingAfterTheLastRevision)) { case (asOf, (laterAsOf, _)) => (asOf, laterAsOf) } init
 
-      println("**** Test case ****")
-
-      println(queryWhen)
-
-      println(asOfPairs)
-
       val checks = (for {((earlierAsOfCorrespondingToRevision, laterAsOfComingNoLaterThanAnySucceedingRevision), revision) <- asOfPairs zip revisions
                          laterAsOfSharingTheSameRevisionAsTheEarlierOne = earlierAsOfCorrespondingToRevision plusSeconds random.chooseAnyNumberFromZeroToOneLessThan(earlierAsOfCorrespondingToRevision.until(laterAsOfComingNoLaterThanAnySucceedingRevision, ChronoUnit.SECONDS))
 
@@ -348,8 +342,6 @@ class WorldSpec extends FlatSpec with Checkers {
     check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
       val world = new WorldReferenceImplementation()
 
-      println("**** Test case ****")
-
       recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
 
       val scope = world.scopeFor(queryWhen, world.nextRevision)
@@ -377,6 +369,10 @@ class WorldSpec extends FlatSpec with Checkers {
     } yield (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
     check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
       val world = new WorldReferenceImplementation()
+
+      println("**** Test case ****")
+
+      println(queryWhen)
 
       recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
 
