@@ -8,7 +8,7 @@ import com.sageserpent.plutonium.World.Revision
 import com.sageserpent.plutonium.WorldReferenceImplementation.IdentifiedItemsScopeImplementation
 
 import scala.collection.Searching._
-import scala.collection.immutable.SortedSet
+import scala.collection.immutable.{SortedBagConfiguration, Bag, TreeBag, SortedSet}
 import scala.collection.mutable.MutableList
 import scala.reflect.runtime._
 import scala.reflect.runtime.universe._
@@ -22,6 +22,9 @@ object WorldReferenceImplementation {
   implicit val eventOrdering = new Ordering[Event] {
     override def compare(lhs: Event, rhs: Event): Revision = lhs.when.compareTo(rhs.when)
   }
+
+  implicit val eventBagConfiguration = SortedBagConfiguration.keepAll(eventOrdering)
+
 
   object IdentifiedItemsScopeImplementation{
     def constructFrom[Raw <: Identified : TypeTag](id: Raw#Id) = {
@@ -124,7 +127,7 @@ object WorldReferenceImplementation {
 class WorldReferenceImplementation extends World {
   type Scope = ScopeImplementation
 
-  type EventTimeline = SortedSet[Event]
+  type EventTimeline = TreeBag[Event]
 
   val revisionToEventTimelineMap = new scala.collection.mutable.HashMap[Revision, EventTimeline]
 
@@ -182,10 +185,10 @@ class WorldReferenceImplementation extends World {
 
     // 1. Make a copy of the latest event timeline.
 
-    import WorldReferenceImplementation.eventOrdering
+    import WorldReferenceImplementation._
 
     val baselineEventTimeline = nextRevision match {
-      case World.initialRevision => SortedSet.empty[Event]
+      case World.initialRevision => TreeBag.empty[Event]
       case _ => revisionToEventTimelineMap(nextRevision - 1)
     }
 
