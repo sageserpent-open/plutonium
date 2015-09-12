@@ -64,6 +64,8 @@ object WorldReferenceImplementation {
       this()
       println()
       println(s"Playback started up to: '${_when}'....")
+      println(s"Considering: '${eventTimeline takeWhile (_when >= _.when)}")
+      println(s"Aka: '${eventTimeline takeWhile (_.when <= _when)}")
       for (event <- eventTimeline takeWhile (_when >= _.when)) {
         println(s"Event at: '${event.when}'")
         val scopeForEvent = new com.sageserpent.plutonium.Scope {
