@@ -179,6 +179,37 @@ class WorldSpec extends FlatSpec with Checkers {
     })
   }
 
+  "A world revealing no history from a scope with a 'revision' limit" should "reveal the same lack of history from a scope with an 'asOf' limit that comes at or after that revision but before the following revision" in {
+    val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
+                                 seed <- seedGenerator
+                                 random = new Random(seed)
+                                 bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(random.shuffle(recordingsGroupedById map (_.recordings) flatMap identity).zipWithIndex)
+                                 asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
+                                 queryWhen <- unboundedInstantGenerator} yield (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen, random)
+    check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen, random) =>
+      val world = new WorldReferenceImplementation()
+
+      val revisions = recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
+
+      val asOfComingAfterTheLastRevision = asOfs.last.plusSeconds(10L)
+
+      val asOfPairs = asOfs.scanRight((asOfComingAfterTheLastRevision, asOfComingAfterTheLastRevision)) { case (asOf, (laterAsOf, _)) => (asOf, laterAsOf) } init
+
+      val checks = for {((earlierAsOfCorrespondingToRevision, laterAsOfComingNoLaterThanAnySucceedingRevision), revision) <- asOfPairs zip revisions
+                        laterAsOfSharingTheSameRevisionAsTheEarlierOne = earlierAsOfCorrespondingToRevision plusSeconds random.chooseAnyNumberFromZeroToOneLessThan(earlierAsOfCorrespondingToRevision.until(laterAsOfComingNoLaterThanAnySucceedingRevision, ChronoUnit.SECONDS))
+
+                        baselineScope = world.scopeFor(queryWhen, earlierAsOfCorrespondingToRevision)
+
+                        scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne = world.scopeFor(queryWhen, laterAsOfSharingTheSameRevisionAsTheEarlierOne)
+
+                        RecordingsForAnId(historyId, _, historiesFrom, _) <- recordingsGroupedById filter (queryWhen < _.whenEarliestChangeHappened)}
+        yield (historyId, historiesFrom, baselineScope, scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne)
+
+      Prop.all(checks.map { case (historyId, historiesFrom, baselineScope, scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne) => (historiesFrom(baselineScope).isEmpty && historiesFrom(scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne).isEmpty) :| s"For ${historyId}, neither scope should yield a history."
+      }: _*)
+    })
+  }
+
   "A world revealing a history from a scope with a 'revision' limit" should "reveal the same history from a scope with an 'asOf' limit that comes at or after that revision but before the following revision" in {
     val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
                                  seed <- seedGenerator
@@ -285,15 +316,13 @@ class WorldSpec extends FlatSpec with Checkers {
 
       val scope = world.scopeFor(queryWhen, world.nextRevision)
 
-      for {RecordingsForAnId(historyId, _, historiesFrom, recordings) <- recordingsGroupedById filter (queryWhen >= _.whenEarliestChangeHappened)}
-        {
-          println("Recording:-")
-          println(s"History id: '${historyId}', queryWhen: '${queryWhen}'")
-          for (recording <- recordings)
-            {
-              println(s"Recording: '${recording}'")
-            }
+      for {RecordingsForAnId(historyId, _, historiesFrom, recordings) <- recordingsGroupedById filter (queryWhen >= _.whenEarliestChangeHappened)} {
+        println("Recording:-")
+        println(s"History id: '${historyId}', queryWhen: '${queryWhen}'")
+        for (recording <- recordings) {
+          println(s"Recording: '${recording}'")
         }
+      }
 
       Prop(true)
     })
@@ -312,21 +341,15 @@ class WorldSpec extends FlatSpec with Checkers {
 
       recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
 
-
-      println("**** Test case ****")
-
-      println(queryWhen)
-
       val scope = world.scopeFor(queryWhen, world.nextRevision)
 
-      val checks = for {RecordingsForAnId(historyId, _, historiesFrom, recordings) <- recordingsGroupedById filter (queryWhen >= _.whenEarliestChangeHappened)}
+      val checks = for {RecordingsForAnId(historyId, _, historiesFrom, _) <- recordingsGroupedById filter (queryWhen >= _.whenEarliestChangeHappened)}
         yield (historiesFrom, historyId)
 
       Prop.all(checks.map { case (historiesFrom, historyId) => {
-        println (s"----------------- Checking new 'historiesFrom' for history id of: ${historyId}.")
+        println(s"----------------- Checking new 'historiesFrom' for history id of: ${historyId}.")
         (historiesFrom(scope) match {
           case Seq(_) => true
-          case _ => false
         }) :| s"Could not find a history for id: ${historyId}."
       }
       }: _*)
