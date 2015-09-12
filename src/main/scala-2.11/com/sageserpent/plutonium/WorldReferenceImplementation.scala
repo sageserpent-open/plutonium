@@ -29,6 +29,7 @@ object WorldReferenceImplementation {
       val constructor = reflectedType.decls.find(_.isConstructor) get
       val classMirror = currentMirror.reflectClass(reflectedType.typeSymbol.asClass)
       val constructorFunction = classMirror.reflectConstructor(constructor.asMethod)
+      println(s"Constructing a new '${reflectedType}' of id: '${id}'")
       constructorFunction(id).asInstanceOf[Raw]
     }
 
@@ -42,14 +43,26 @@ object WorldReferenceImplementation {
       val reflectedType = implicitly[TypeTag[Raw]].tpe
       val clazzOfRaw = currentMirror.runtimeClass(reflectedType).asInstanceOf[Class[Raw]]
 
-      items filter (clazzOfRaw.isInstance(_)) map (clazzOfRaw.cast(_))
+      val result = items filter (clazzOfRaw.isInstance(_)) map (clazzOfRaw.cast(_))
+
+      println(s"result: '${result}, items: '${items}")
+
+      if (result.isEmpty)
+        {
+          println(s"AARRRGHHHH")
+        }
+
+      result
     }
   }
 
   class IdentifiedItemsScopeImplementation extends IdentifiedItemsScope {
     def this(_when: Unbounded[Instant], _nextRevision: Revision, _asOf: Unbounded[Instant], eventTimeline: WorldReferenceImplementation#EventTimeline) = {
       this()
+      println()
+      println(s"Playback started up to: '${_when}'....")
       for (event <- eventTimeline takeWhile (_when >= _.when)) {
+        println(s"Event at: '${event.when}'")
         val scopeForEvent = new com.sageserpent.plutonium.Scope {
           override val when: Unbounded[Instant] = event.when
 
@@ -73,6 +86,7 @@ object WorldReferenceImplementation {
           case Change(_, update) => update(scopeForEvent)
         }
       }
+      println(s"... end of playback, got ${idToItemsMultiMap.size} items.")
     }
 
     class MultiMap[Key, Value] extends scala.collection.mutable.HashMap[Key, scala.collection.mutable.Set[Value]] with scala.collection.mutable.MultiMap[Key, Value] {
@@ -88,12 +102,15 @@ object WorldReferenceImplementation {
       }
       if (needToConstructItem) {
         idToItemsMultiMap.addBinding(id, IdentifiedItemsScopeImplementation.constructFrom(id))
+        println("Adding to 'idToItemsMultiMap'.", idToItemsMultiMap, idToItemsMultiMap.size)
     }
     }
 
 
 
     override def itemsFor[Raw <: Identified : TypeTag](id: Raw#Id): Stream[Raw] = {
+      println("Accessing 'idToItemsMultiMap'.", idToItemsMultiMap, idToItemsMultiMap.size, s" for id: '${id}'")
+
       val items = idToItemsMultiMap.getOrElse(id, Set.empty[Raw])
 
       IdentifiedItemsScopeImplementation.yieldOnlyItemsOfType(items toStream)
@@ -109,7 +126,7 @@ class WorldReferenceImplementation extends World {
 
   type EventTimeline = SortedSet[Event]
 
-  val revisionToEventTimelineMap = scala.collection.mutable.Map.empty[Revision, EventTimeline]
+  val revisionToEventTimelineMap = new scala.collection.mutable.HashMap[Revision, EventTimeline]
 
   abstract class ScopeBasedOnNextRevision(val when: Unbounded[Instant], val nextRevision: Revision) extends com.sageserpent.plutonium.Scope {
     val asOf = nextRevision match {
@@ -139,7 +156,10 @@ class WorldReferenceImplementation extends World {
     // TODO: snapshot the state from the world on construction - the effects of further revisions should not be apparent.
 
     val identifiedItemsScope = nextRevision match {
-      case World.initialRevision => new IdentifiedItemsScopeImplementation
+      case World.initialRevision => {
+        println("Scope with initial revision as next revision.")
+        new IdentifiedItemsScopeImplementation
+      }
       case _ => new IdentifiedItemsScopeImplementation(when, nextRevision, asOf, revisionToEventTimelineMap(nextRevision - 1))
     }
 
