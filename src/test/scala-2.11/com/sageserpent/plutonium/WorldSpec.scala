@@ -65,7 +65,7 @@ class BarHistory(val id: BarHistory#Id) extends History {
 }
 
 
-class WorldSpec extends FlatSpec with Checkers {
+class WorldSpec extends FlatSpec with Checkers {  // TODO - suppose an event defining an id comes after the 'when' cutoff?
   val seedGenerator = Arbitrary.arbitrary[Long]
 
   val instantGenerator = Arbitrary.arbitrary[Long] map Instant.ofEpochMilli
@@ -76,7 +76,7 @@ class WorldSpec extends FlatSpec with Checkers {
 
   val fooHistoryIdGenerator = Arbitrary.arbitrary[FooHistory#Id]
 
-  val barHistoryIdGenerator = Arbitrary.arbitrary[BarHistory#Id]
+  val barHistoryIdGenerator = Gen.oneOf(1, 12, 17, 77, 103)//Arbitrary.arbitrary[BarHistory#Id] // TODO - must stop repetition of ids - should be being collected together to make single recordings for an id.
 
   val dataSampleGenerator1 = for {data <- Arbitrary.arbitrary[String]} yield (data, (when: Unbounded[Instant], fooHistoryId: FooHistory#Id) => Change[FooHistory](when)(fooHistoryId, (fooHistory: FooHistory) => {
     fooHistory.property1 = capture(data)
@@ -111,11 +111,11 @@ class WorldSpec extends FlatSpec with Checkers {
 
   case class RecordingsForAnId(historyId: Any, whenEarliestChangeHappened: Unbounded[Instant], historiesFrom: Scope => Seq[History], recordings: List[(Any, Unbounded[Instant], Change)])
 
-  val dataSamplesForAnIdGenerator = Gen.frequency(Seq(dataSamplesForAnIdGenerator_[FooHistory](dataSampleGenerator1, fooHistoryIdGenerator),
-    dataSamplesForAnIdGenerator_[FooHistory](dataSampleGenerator2, fooHistoryIdGenerator),
-    dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator3, barHistoryIdGenerator),
+  val dataSamplesForAnIdGenerator = Gen.frequency(Seq(/*dataSamplesForAnIdGenerator_[FooHistory](dataSampleGenerator1, fooHistoryIdGenerator),
+    dataSamplesForAnIdGenerator_[FooHistory](dataSampleGenerator2, fooHistoryIdGenerator),*/
+    dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator3, barHistoryIdGenerator)/*,
     dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator4, barHistoryIdGenerator),
-    dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator5, barHistoryIdGenerator)) map (1 -> _): _*)
+    dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator5, barHistoryIdGenerator)*/) map (1 -> _): _*)
 
   val recordingsForAnIdGenerator = for {(historyId, historiesFrom, dataSamples) <- dataSamplesForAnIdGenerator
                                         sampleWhens <- Gen.listOfN(dataSamples.length, changeWhenGenerator) map (_ sorted)} yield RecordingsForAnId(historyId, sampleWhens.min, historiesFrom, for {((data, changeFor), when) <- dataSamples zip sampleWhens} yield (data, when, changeFor(when)))
@@ -318,10 +318,7 @@ class WorldSpec extends FlatSpec with Checkers {
 
       for {RecordingsForAnId(historyId, _, historiesFrom, recordings) <- recordingsGroupedById filter (queryWhen >= _.whenEarliestChangeHappened)} {
         println("Recording:-")
-        println(s"History id: '${historyId}', queryWhen: '${queryWhen}'")
-        for (recording <- recordings) {
-          println(s"Recording: '${recording}'")
-        }
+        println(s"History id: '${historyId}', queryWhen: '${queryWhen}', recordings: '${recordings}'")
       }
 
       Prop(true)
