@@ -102,7 +102,7 @@ class WorldSpec extends FlatSpec with Checkers {
   }))
 
   def dataSamplesForAnIdGenerator_[AHistory <: History : TypeTag](dataSampleGenerator: Gen[(_, (Unbounded[Instant], AHistory#Id) => Change)], historyIdGenerator: Gen[AHistory#Id]) = {
-    val dataSamplesGenerator = Gen.listOf(dataSampleGenerator) filter (_.nonEmpty) // It makes no sense to have an id without associated data samples - the act of recording a data sample
+    val dataSamplesGenerator = Gen.nonEmptyListOf(dataSampleGenerator) // It makes no sense to have an id without associated data samples - the act of recording a data sample
     // via a change is what introduces an id into the world.
 
     for {dataSamples <- dataSamplesGenerator
@@ -120,7 +120,10 @@ class WorldSpec extends FlatSpec with Checkers {
   val recordingsForAnIdGenerator = for {(historyId, historiesFrom, dataSamples) <- dataSamplesForAnIdGenerator
                                         sampleWhens <- Gen.listOfN(dataSamples.length, changeWhenGenerator) map (_ sorted)} yield RecordingsForAnId(historyId, sampleWhens.min, historiesFrom, for {((data, changeFor), when) <- dataSamples zip sampleWhens} yield (data, when, changeFor(when)))
 
-  val recordingsGroupedByIdGenerator = Gen.listOf(recordingsForAnIdGenerator) filter (_.nonEmpty)
+  val recordingsGroupedByIdGenerator = {
+    def idsAreNotRepeated(recordings: List[RecordingsForAnId]) = recordings.size == (recordings map (_.historyId) distinct).size
+    Gen.nonEmptyListOf(recordingsForAnIdGenerator) retryUntil idsAreNotRepeated
+  }
 
 
   class NonExistentIdentified extends AbstractIdentified {
@@ -321,7 +324,7 @@ class WorldSpec extends FlatSpec with Checkers {
         println(s"History id: '${historyId}', queryWhen: '${queryWhen}'")
         for (recording <- recordings) {
           println(s"Recording: '${recording}'")
-        }
+      }
       }
 
       Prop(true)
