@@ -348,10 +348,9 @@ class WorldSpec extends FlatSpec with Checkers {
     check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
       val world = new WorldReferenceImplementation()
 
-      recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
-
-
       println("**** Test case ****")
+
+      recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
 
       val scope = world.scopeFor(queryWhen, world.nextRevision)
 
