@@ -114,7 +114,7 @@ class WorldSpec extends FlatSpec with Checkers {
 
   val dataSamplesForAnIdGenerator = Gen.frequency(Seq(/*dataSamplesForAnIdGenerator_[FooHistory](dataSampleGenerator1, fooHistoryIdGenerator),
     dataSamplesForAnIdGenerator_[FooHistory](dataSampleGenerator2, fooHistoryIdGenerator),*/
-    dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator3, barHistoryIdGenerator)/*,
+    dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator3, barHistoryIdGenerator) /*,
     dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator4, barHistoryIdGenerator),
     dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator5, barHistoryIdGenerator)*/) map (1 -> _): _*)
 
@@ -335,7 +335,7 @@ class WorldSpec extends FlatSpec with Checkers {
         println(s"History id: '${historyId}', queryWhen: '${queryWhen}'")
         for (recording <- recordings) {
           println(s"Recording: '${recording}'")
-      }
+        }
       }
 
       Prop(true)
@@ -579,7 +579,8 @@ class WorldSpec extends FlatSpec with Checkers {
           events = pieceOfHistory map { case ((data, _, change), eventId) => {
             println(s"Event id: '${eventId}', data: '${data}'")
             eventId -> Some(change)
-          } } toMap} yield
-    world.revise(events, asOf)).force
+          }
+          } toSeq} yield
+    world.revise(TreeMap(events: _*), asOf)).force
   }
 }
