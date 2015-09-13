@@ -65,8 +65,10 @@ object WorldReferenceImplementation {
       println()
       println(s"Playback started up to: '${_when}'....")
       val relevantEvents = eventTimeline.toStream takeWhile (_when >= _.when)
-      println(s"Considering: '${relevantEvents.toList}")
-      for (event <- relevantEvents) {
+      val relevantEventsWithCoincidentEventsInReverseOrder = relevantEvents.groupBy(_.when).mapValues(_.toSeq.reverse).toSeq.sortBy (_._1).flatMap(_._2)
+
+      println(s"Considering: '${relevantEventsWithCoincidentEventsInReverseOrder.toList}")
+      for (event <- relevantEventsWithCoincidentEventsInReverseOrder) {
         println(s"Event at: '${event.when}'")
         val scopeForEvent = new com.sageserpent.plutonium.Scope {
           override val when: Unbounded[Instant] = event.when
