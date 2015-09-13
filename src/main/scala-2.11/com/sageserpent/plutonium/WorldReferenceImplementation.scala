@@ -8,7 +8,7 @@ import com.sageserpent.plutonium.World.Revision
 import com.sageserpent.plutonium.WorldReferenceImplementation.IdentifiedItemsScopeImplementation
 
 import scala.collection.Searching._
-import scala.collection.immutable.{SortedBagConfiguration, Bag, TreeBag, SortedSet}
+import scala.collection.immutable._
 import scala.collection.mutable.MutableList
 import scala.reflect.runtime._
 import scala.reflect.runtime.universe._
@@ -26,7 +26,7 @@ object WorldReferenceImplementation {
   implicit val eventBagConfiguration = SortedBagConfiguration.keepAll(eventOrdering)
 
 
-  object IdentifiedItemsScopeImplementation{
+  object IdentifiedItemsScopeImplementation {
     def constructFrom[Raw <: Identified : TypeTag](id: Raw#Id) = {
       val reflectedType = implicitly[TypeTag[Raw]].tpe
       val constructor = reflectedType.decls.find(_.isConstructor) get
@@ -42,7 +42,7 @@ object WorldReferenceImplementation {
       items.exists(clazzOfRaw.isInstance(_))
     }
 
-    def yieldOnlyItemsOfType[Raw  <: Identified: TypeTag](items: Stream[Identified]) = {
+    def yieldOnlyItemsOfType[Raw <: Identified : TypeTag](items: Stream[Identified]) = {
       val reflectedType = implicitly[TypeTag[Raw]].tpe
       val clazzOfRaw = currentMirror.runtimeClass(reflectedType).asInstanceOf[Class[Raw]]
 
@@ -50,10 +50,9 @@ object WorldReferenceImplementation {
 
       println(s"result: '${result}, items: '${items}")
 
-      if (result.isEmpty)
-        {
-          println(s"AARRRGHHHH")
-        }
+      if (result.isEmpty) {
+        println(s"AARRRGHHHH")
+      }
 
       result
     }
@@ -64,7 +63,7 @@ object WorldReferenceImplementation {
       this()
       println()
       println(s"Playback started up to: '${_when}'....")
-      val relevantEvents = eventTimeline.toStream takeWhile (_when >= _.when)
+      val relevantEvents = eventTimeline.toStream takeWhile { case (when, _) => _when >= when } flatMap (_._2)
       println(s"Considering: '${relevantEvents.toList}")
       for (event <- relevantEvents) {
         println(s"Event at: '${event.when}'")
@@ -76,7 +75,7 @@ object WorldReferenceImplementation {
             bitemporal.interpret(new IdentifiedItemsScope {
               override def allItems[Raw <: Identified : TypeTag](): Stream[Raw] = IdentifiedItemsScopeImplementation.this.allItems() // TODO - why doesn't this call 'IdentifiedItemsScopeImplementation.this.ensureItemExistsFor(id)'?
 
-              override def itemsFor[Raw <: Identified: TypeTag](id: Raw#Id): Stream[Raw] = {
+              override def itemsFor[Raw <: Identified : TypeTag](id: Raw#Id): Stream[Raw] = {
                 IdentifiedItemsScopeImplementation.this.ensureItemExistsFor(id) // NASTY HACK, which is what this anonymous class is for. Yuk.
                 IdentifiedItemsScopeImplementation.this.itemsFor(id)
               }
@@ -108,9 +107,8 @@ object WorldReferenceImplementation {
       if (needToConstructItem) {
         idToItemsMultiMap.addBinding(id, IdentifiedItemsScopeImplementation.constructFrom(id))
         println("Adding to 'idToItemsMultiMap'.", idToItemsMultiMap, idToItemsMultiMap.size)
+      }
     }
-    }
-
 
 
     override def itemsFor[Raw <: Identified : TypeTag](id: Raw#Id): Stream[Raw] = {
@@ -129,7 +127,7 @@ object WorldReferenceImplementation {
 class WorldReferenceImplementation extends World {
   type Scope = ScopeImplementation
 
-  type EventTimeline = TreeBag[Event]
+  type EventTimeline = TreeMap[Unbounded[Instant], Seq[Event]]
 
   val revisionToEventTimelineMap = new scala.collection.mutable.HashMap[Revision, EventTimeline]
 
@@ -190,7 +188,7 @@ class WorldReferenceImplementation extends World {
     import WorldReferenceImplementation._
 
     val baselineEventTimeline = nextRevision match {
-      case World.initialRevision => TreeBag.empty[Event]
+      case World.initialRevision => TreeMap.empty[Unbounded[Instant], Seq[Event]]
       case _ => revisionToEventTimelineMap(nextRevision - 1)
     }
 
@@ -199,14 +197,15 @@ class WorldReferenceImplementation extends World {
 
     // 3. Add new events.
 
-    val newEvents = for {optionalEvent <- events.values
-                         event <- optionalEvent} yield event
+    val newEvents = (for {optionalEvent <- events.values
+                          event <- optionalEvent} yield event) toList
 
-    println(s"Baseline event timeline: '${baselineEventTimeline map (_.when)}' (${baselineEventTimeline.size}}), new events: '${newEvents map (_.when)}'")
-
-    val newEventTimeline = baselineEventTimeline ++ newEvents
-
-    println(s"New event timeline: '${newEventTimeline map (_.when)}' (${newEventTimeline.size}})")
+    val eventsGroupedByWhen = newEvents.groupBy(_.when)
+    val newEventTimeline = baselineEventTimeline ++ eventsGroupedByWhen.map { case (when, coincidentEvents) => when -> (baselineEventTimeline.get(when) match {
+      case Some(eventsFromBaseline) => eventsFromBaseline ++ coincidentEvents
+      case None => coincidentEvents
+    })
+    }
 
     // 4. Add new timeline to map.
 
