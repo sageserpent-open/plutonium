@@ -100,6 +100,8 @@ object WorldReferenceImplementation {
 
     val idToItemsMultiMap = new MultiMap[Identified#Id, Identified]
 
+    println(s"idToItemsMultiMap: '${idToItemsMultiMap}', ${idToItemsMultiMap.hashCode()}")
+
     private def ensureItemExistsFor[Raw <: Identified : TypeTag](id: Raw#Id): Unit = {
       val needToConstructItem = idToItemsMultiMap.get(id) match {
         case None => true
@@ -107,14 +109,14 @@ object WorldReferenceImplementation {
       }
       if (needToConstructItem) {
         idToItemsMultiMap.addBinding(id, IdentifiedItemsScopeImplementation.constructFrom(id))
-        println("Adding to 'idToItemsMultiMap'.", idToItemsMultiMap, idToItemsMultiMap.size)
+        println("Adding to 'idToItemsMultiMap'.", idToItemsMultiMap, idToItemsMultiMap.size, idToItemsMultiMap.hashCode())
     }
     }
 
 
 
     override def itemsFor[Raw <: Identified : TypeTag](id: Raw#Id): Stream[Raw] = {
-      println("Accessing 'idToItemsMultiMap'.", idToItemsMultiMap, idToItemsMultiMap.size, s" for id: '${id}'")
+      println("Accessing 'idToItemsMultiMap'.", idToItemsMultiMap, idToItemsMultiMap.size, idToItemsMultiMap.hashCode(), s" for id: '${id}'")
 
       val items = idToItemsMultiMap.getOrElse(id, Set.empty[Raw])
 
@@ -167,6 +169,8 @@ class WorldReferenceImplementation extends World {
       }
       case _ => new IdentifiedItemsScopeImplementation(when, nextRevision, asOf, revisionToEventTimelineMap(nextRevision - 1))
     }
+
+    println(s"identifiedItemsScope: '${identifiedItemsScope}'")
 
     // NOTE: this should return proxies to raw values, rather than the raw values themselves. Depending on the kind of the scope (created by client using 'World', or implicitly in an event).
     override def render[Raw](bitemporal: Bitemporal[Raw]): Stream[Raw] = {
