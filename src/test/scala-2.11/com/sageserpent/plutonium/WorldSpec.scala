@@ -52,7 +52,6 @@ class BarHistory(val id: BarHistory#Id) extends History {
   def property1 = ???
 
   def property1_=(data: Double): Unit = {
-    println(s"Hi, I am history: '${id} and I'm getting a new data update of: '${data}'")
     recordDatum(data)
   }
 
@@ -313,10 +312,6 @@ class WorldSpec extends FlatSpec with Checkers {
     } yield (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
     check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
       val world = new WorldReferenceImplementation()
-
-      println("**** Test case ****")
-
-      println(queryWhen)
 
       recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
 
@@ -589,16 +584,12 @@ class WorldSpec extends FlatSpec with Checkers {
       } yield (bigShuffledHistoryOverLotsOfThings, asOfs, random)
       check(Prop.forAllNoShrink(testCaseGenerator) { case (bigShuffledHistoryOverLotsOfThings, asOfs, random) =>
         // TODO - check the actual history.
-        // TODO - review above code block against the other tests.
       })
     }*/
 
   def recordEventsInWorld(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[((Any, Unbounded[Instant], Change), Int)]], asOfs: List[Instant], world: WorldReferenceImplementation) = {
     (for {(pieceOfHistory, asOf) <- bigShuffledHistoryOverLotsOfThings zip asOfs
-          events = pieceOfHistory map { case ((data, _, change), eventId) => {
-            println(s"Event id: '${eventId}', data: '${data}'")
-            eventId -> Some(change)
-  }
+          events = pieceOfHistory map { case ((_, _, change), eventId) => eventId -> Some(change)
           } toSeq} yield
     world.revise(TreeMap(events: _*), asOf)).force
 }}
