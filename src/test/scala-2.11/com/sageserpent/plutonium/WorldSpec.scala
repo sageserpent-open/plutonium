@@ -177,10 +177,13 @@ class WorldSpec extends FlatSpec with Checkers {
 
       val checks = (for {asOf <- asOfsIncludingAllEventsNoLaterThanTheQueryWhen
                          scope = world.scopeFor(Finite(queryWhen), asOf)
-                         RecordingsForAnId(historyId, _, historiesFrom, recordings) <- recordingsGroupedById filter (Finite(queryWhen) >= _.whenEarliestChangeHappened)
                          eventWhenAlignedWithAsOf = asOfToEventWhenMap(asOf)
+                         RecordingsForAnId(historyId, _, historiesFrom, recordings) <- recordingsGroupedById filter (Finite(queryWhen) >= _.whenEarliestChangeHappened) filter (eventWhenAlignedWithAsOf >= _.whenEarliestChangeHappened)
                          pertinentRecordings = recordings takeWhile { case (_, eventWhen, _) => eventWhen <= eventWhenAlignedWithAsOf }
-                         Seq(history) = historiesFrom(scope)}
+                         Seq(history) = {
+                           assert(pertinentRecordings.nonEmpty)
+                           historiesFrom(scope)
+                         }}
         yield history.datums.zip(pertinentRecordings.map(_._1)).zipWithIndex map (historyId -> _)) flatMap identity
 
       Prop.all(checks.map { case (historyId, ((actual, expected), step)) => (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}" }: _*)
