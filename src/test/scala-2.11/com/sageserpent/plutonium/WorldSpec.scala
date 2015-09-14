@@ -171,7 +171,9 @@ class WorldSpec extends FlatSpec with Checkers {
 
       recordEventsInWorld(bigHistoryOverLotsOfThingsSortedInEventWhenOrder, asOfs, world)
 
-      val asOfsIncludingAllEventsNoLaterThanTheQueryWhen = asOfs takeWhile (asOf => asOfToEventWhenMap(asOf) <= Finite(queryWhen))
+      val latestAsOfsThatMapUnambiguouslyToEventWhens = (asOfToEventWhenMap map (_.swap)).values.toSeq
+
+      val asOfsIncludingAllEventsNoLaterThanTheQueryWhen = latestAsOfsThatMapUnambiguouslyToEventWhens takeWhile (asOf => asOfToEventWhenMap(asOf) <= Finite(queryWhen))
 
       assert(asOfsIncludingAllEventsNoLaterThanTheQueryWhen.nonEmpty)
 
