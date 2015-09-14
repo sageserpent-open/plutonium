@@ -25,7 +25,6 @@ object WorldReferenceImplementation {
 
   implicit val eventBagConfiguration = SortedBagConfiguration.keepAll(eventOrdering)
 
-
   object IdentifiedItemsScopeImplementation{
     def constructFrom[Raw <: Identified : TypeTag](id: Raw#Id) = {
       val reflectedType = implicitly[TypeTag[Raw]].tpe
@@ -60,6 +59,8 @@ object WorldReferenceImplementation {
   }
 
   class IdentifiedItemsScopeImplementation extends IdentifiedItemsScope {
+    identifiedItemsScopeThis =>
+
     def this(_when: Unbounded[Instant], _nextRevision: Revision, _asOf: Unbounded[Instant], eventTimeline: WorldReferenceImplementation#EventTimeline) = {
       this()
       println()
@@ -74,11 +75,11 @@ object WorldReferenceImplementation {
           // NOTE: this should return proxies to raw values, rather than the raw values themselves. Depending on the kind of the scope (created by client using 'World', or implicitly in an event),
           override def render[Raw](bitemporal: Bitemporal[Raw]): Stream[Raw] = {
             bitemporal.interpret(new IdentifiedItemsScope {
-              override def allItems[Raw <: Identified : TypeTag](): Stream[Raw] = IdentifiedItemsScopeImplementation.this.allItems() // TODO - why doesn't this call 'IdentifiedItemsScopeImplementation.this.ensureItemExistsFor(id)'?
+              override def allItems[Raw <: Identified : TypeTag](): Stream[Raw] = identifiedItemsScopeThis.allItems() // TODO - why doesn't this call 'IdentifiedItemsScopeImplementation.this.ensureItemExistsFor(id)'?
 
               override def itemsFor[Raw <: Identified: TypeTag](id: Raw#Id): Stream[Raw] = {
-                IdentifiedItemsScopeImplementation.this.ensureItemExistsFor(id) // NASTY HACK, which is what this anonymous class is for. Yuk.
-                IdentifiedItemsScopeImplementation.this.itemsFor(id)
+                identifiedItemsScopeThis.ensureItemExistsFor(id) // NASTY HACK, which is what this anonymous class is for. Yuk.
+                identifiedItemsScopeThis.itemsFor(id)
               }
             })
           }
