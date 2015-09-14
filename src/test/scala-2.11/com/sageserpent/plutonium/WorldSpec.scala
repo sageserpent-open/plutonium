@@ -350,7 +350,7 @@ class WorldSpec extends FlatSpec with Checkers {
         println(s"History id: '${historyId}', queryWhen: '${queryWhen}'")
         for (recording <- recordings) {
           println(s"Recording: '${recording}'")
-        }
+      }
       }
 
       Prop(true)
@@ -594,8 +594,7 @@ class WorldSpec extends FlatSpec with Checkers {
           events = pieceOfHistory map { case ((data, _, change), eventId) => {
             println(s"Event id: '${eventId}', data: '${data}'")
             eventId -> Some(change)
-          }
+  }
           } toSeq} yield
     world.revise(TreeMap(events: _*), asOf)).force
-  }
-}
+}}
