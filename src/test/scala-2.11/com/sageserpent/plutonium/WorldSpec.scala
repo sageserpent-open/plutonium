@@ -156,6 +156,8 @@ class WorldSpec extends FlatSpec with Checkers {
     case ((_, eventWhen, _), _) => eventWhen
   }
 
+  private val chunksShareTheSameEventWhens: (((Unbounded[Instant], Unbounded[Instant]), Instant), ((Unbounded[Instant], Unbounded[Instant]), Instant)) => Boolean = {case (((_, trailingEventWhen), _), ((leadingEventWhen, _), _)) => true}
+
   "A world with history added in order of increasing event time" should "reveal all history up to the 'asOf' limit of a scope made from it" in {
     val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
                                  seed <- seedGenerator
@@ -163,8 +165,12 @@ class WorldSpec extends FlatSpec with Checkers {
                                  bigHistoryOverLotsOfThingsSortedInEventWhenOrder = random.splitIntoNonEmptyPieces((recordingsGroupedById map (_.recordings) flatMap identity sortBy { case (_, eventWhen, _) => eventWhen }).zipWithIndex)
                                  asOfs <- Gen.listOfN(bigHistoryOverLotsOfThingsSortedInEventWhenOrder.length, instantGenerator) map (_.sorted)
                                  asOfToLatestEventWhenMap = TreeMap(asOfs zip (bigHistoryOverLotsOfThingsSortedInEventWhenOrder map (_.last) map eventWhenFrom): _*)
-                                 queryWhen <- instantGenerator filter (asOfToLatestEventWhenMap.values.head <= Finite(_))} yield (recordingsGroupedById, bigHistoryOverLotsOfThingsSortedInEventWhenOrder, asOfs, queryWhen, asOfToLatestEventWhenMap)
-    check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigHistoryOverLotsOfThingsSortedInEventWhenOrder, asOfs, queryWhen, asOfToLatestEventWhenMap) =>
+                                 chunksForRevisions = bigHistoryOverLotsOfThingsSortedInEventWhenOrder map (recordingAndEventIdPairs => eventWhenFrom(recordingAndEventIdPairs.head) -> eventWhenFrom(recordingAndEventIdPairs.last)) zip asOfs
+                                 latestAsOfsThatMapUnambiguouslyToEventWhens = BargainBasement.groupWhile(chunksForRevisions, chunksShareTheSameEventWhens) map (_.last._2)    
+                                 queryWhen <- instantGenerator filter (asOfToLatestEventWhenMap(latestAsOfsThatMapUnambiguouslyToEventWhens.head) <= Finite(_))
+                                 asOfsIncludingAllEventsNoLaterThanTheQueryWhen = latestAsOfsThatMapUnambiguouslyToEventWhens takeWhile (asOf => asOfToLatestEventWhenMap(asOf) <= Finite(queryWhen))
+    } yield (recordingsGroupedById, bigHistoryOverLotsOfThingsSortedInEventWhenOrder, asOfs, queryWhen, asOfToLatestEventWhenMap, asOfsIncludingAllEventsNoLaterThanTheQueryWhen)
+    check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigHistoryOverLotsOfThingsSortedInEventWhenOrder, asOfs, queryWhen, asOfToLatestEventWhenMap, asOfsIncludingAllEventsNoLaterThanTheQueryWhen) =>
       val world = new WorldReferenceImplementation()
 
       println("**** Test case ****")
@@ -173,9 +179,10 @@ class WorldSpec extends FlatSpec with Checkers {
 
       recordEventsInWorld(bigHistoryOverLotsOfThingsSortedInEventWhenOrder, asOfs, world)
 
-      val latestAsOfsThatMapUnambiguouslyToEventWhens = TreeMap((bigHistoryOverLotsOfThingsSortedInEventWhenOrder map (_.head) map eventWhenFrom zip asOfs): _*).values.toSeq // NOTE: need the *head* of the chunk here, the last may miss an event time shared between two chunks..
 
-      val asOfsIncludingAllEventsNoLaterThanTheQueryWhen = latestAsOfsThatMapUnambiguouslyToEventWhens takeWhile (asOf => asOfToLatestEventWhenMap(asOf) <= Finite(queryWhen))
+      //val latestAsOfsThatMapUnambiguouslyToEventWhens = TreeMap((bigHistoryOverLotsOfThingsSortedInEventWhenOrder map (_.head) map eventWhenFrom zip asOfs): _*).values.toSeq // NOTE: need the *head* of the chunk here, the last may miss an event time shared between two chunks..
+
+
 
       assert(asOfsIncludingAllEventsNoLaterThanTheQueryWhen.nonEmpty)
 
