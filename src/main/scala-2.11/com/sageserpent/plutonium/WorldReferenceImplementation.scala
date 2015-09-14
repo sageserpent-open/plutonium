@@ -8,7 +8,7 @@ import com.sageserpent.plutonium.World.Revision
 import com.sageserpent.plutonium.WorldReferenceImplementation.IdentifiedItemsScopeImplementation
 
 import scala.collection.Searching._
-import scala.collection.immutable.SortedSet
+import scala.collection.immutable.{SortedBagConfiguration, Bag, TreeBag, SortedSet}
 import scala.collection.mutable.MutableList
 import scala.reflect.runtime._
 import scala.reflect.runtime.universe._
@@ -22,6 +22,8 @@ object WorldReferenceImplementation {
   implicit val eventOrdering = new Ordering[Event] {
     override def compare(lhs: Event, rhs: Event): Revision = lhs.when.compareTo(rhs.when)
   }
+
+  implicit val eventBagConfiguration = SortedBagConfiguration.keepAll(eventOrdering)
 
   object IdentifiedItemsScopeImplementation{
     def constructFrom[Raw <: Identified : TypeTag](id: Raw#Id) = {
@@ -43,24 +45,27 @@ object WorldReferenceImplementation {
       val clazzOfRaw = currentMirror.runtimeClass(reflectedType).asInstanceOf[Class[Raw]]
 
       items filter (clazzOfRaw.isInstance(_)) map (clazzOfRaw.cast(_))
+        }
     }
-  }
 
   class IdentifiedItemsScopeImplementation extends IdentifiedItemsScope {
+    identifiedItemsScopeThis =>
+
     def this(_when: Unbounded[Instant], _nextRevision: Revision, _asOf: Unbounded[Instant], eventTimeline: WorldReferenceImplementation#EventTimeline) = {
       this()
-      for (event <- eventTimeline takeWhile (_when >= _.when)) {
+      val relevantEvents = eventTimeline.toStream takeWhile (_when >= _.when)
+      for (event <- relevantEvents) {
         val scopeForEvent = new com.sageserpent.plutonium.Scope {
           override val when: Unbounded[Instant] = event.when
 
           // NOTE: this should return proxies to raw values, rather than the raw values themselves. Depending on the kind of the scope (created by client using 'World', or implicitly in an event),
           override def render[Raw](bitemporal: Bitemporal[Raw]): Stream[Raw] = {
             bitemporal.interpret(new IdentifiedItemsScope {
-              override def allItems[Raw <: Identified : TypeTag](): Stream[Raw] = IdentifiedItemsScopeImplementation.this.allItems() // TODO - why doesn't this call 'IdentifiedItemsScopeImplementation.this.ensureItemExistsFor(id)'?
+              override def allItems[Raw <: Identified : TypeTag](): Stream[Raw] = identifiedItemsScopeThis.allItems() // TODO - why doesn't this call 'IdentifiedItemsScopeImplementation.this.ensureItemExistsFor(id)'?
 
               override def itemsFor[Raw <: Identified: TypeTag](id: Raw#Id): Stream[Raw] = {
-                IdentifiedItemsScopeImplementation.this.ensureItemExistsFor(id) // NASTY HACK, which is what this anonymous class is for. Yuk.
-                IdentifiedItemsScopeImplementation.this.itemsFor(id)
+                identifiedItemsScopeThis.ensureItemExistsFor(id) // NASTY HACK, which is what this anonymous class is for. Yuk.
+                identifiedItemsScopeThis.itemsFor(id)
               }
             })
           }
@@ -99,7 +104,7 @@ object WorldReferenceImplementation {
       IdentifiedItemsScopeImplementation.yieldOnlyItemsOfType(items toStream)
     }
 
-    override def allItems[Raw <: Identified : TypeTag](): Stream[Raw] = ???
+    override def allItems[Raw <: Identified : TypeTag](): Stream[Raw] = IdentifiedItemsScopeImplementation.yieldOnlyItemsOfType(idToItemsMultiMap.values.flatMap(identity) toStream)
   }
 
 }
@@ -107,7 +112,7 @@ object WorldReferenceImplementation {
 class WorldReferenceImplementation extends World {
   type Scope = ScopeImplementation
 
-  type EventTimeline = SortedSet[Event]
+  type EventTimeline = TreeBag[Event]
 
   val revisionToEventTimelineMap = scala.collection.mutable.Map.empty[Revision, EventTimeline]
 
@@ -162,10 +167,10 @@ class WorldReferenceImplementation extends World {
 
     // 1. Make a copy of the latest event timeline.
 
-    import WorldReferenceImplementation.eventOrdering
+    import WorldReferenceImplementation._
 
     val baselineEventTimeline = nextRevision match {
-      case World.initialRevision => SortedSet.empty[Event]
+      case World.initialRevision => TreeBag.empty[Event]
       case _ => revisionToEventTimelineMap(nextRevision - 1)
     }
 
