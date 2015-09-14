@@ -174,10 +174,6 @@ class WorldSpec extends FlatSpec with Checkers {
     check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigHistoryOverLotsOfThingsSortedInEventWhenOrder, asOfs, queryWhen, asOfToLatestEventWhenMap, asOfsIncludingAllEventsNoLaterThanTheQueryWhen) =>
       val world = new WorldReferenceImplementation()
 
-      println("**** Test case ****")
-
-      println(queryWhen)
-
       recordEventsInWorld(bigHistoryOverLotsOfThingsSortedInEventWhenOrder, asOfs, world)
 
       assert(asOfsIncludingAllEventsNoLaterThanTheQueryWhen.nonEmpty)
@@ -351,7 +347,7 @@ class WorldSpec extends FlatSpec with Checkers {
         println(s"History id: '${historyId}', queryWhen: '${queryWhen}'")
         for (recording <- recordings) {
           println(s"Recording: '${recording}'")
-      }
+        }
       }
 
       Prop(true)

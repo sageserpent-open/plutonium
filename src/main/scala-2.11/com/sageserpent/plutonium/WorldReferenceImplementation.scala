@@ -86,8 +86,6 @@ object WorldReferenceImplementation {
 
     val idToItemsMultiMap = new MultiMap[Identified#Id, Identified]
 
-    println(s"idToItemsMultiMap: '${idToItemsMultiMap}', ${idToItemsMultiMap.hashCode()}")
-
     private def ensureItemExistsFor[Raw <: Identified : TypeTag](id: Raw#Id): Unit = {
       val needToConstructItem = idToItemsMultiMap.get(id) match {
         case None => true
@@ -149,8 +147,6 @@ class WorldReferenceImplementation extends World {
       case World.initialRevision => new IdentifiedItemsScopeImplementation
       case _ => new IdentifiedItemsScopeImplementation(when, nextRevision, asOf, revisionToEventTimelineMap(nextRevision - 1))
     }
-
-    println(s"identifiedItemsScope: '${identifiedItemsScope}'")
 
     // NOTE: this should return proxies to raw values, rather than the raw values themselves. Depending on the kind of the scope (created by client using 'World', or implicitly in an event).
     override def render[Raw](bitemporal: Bitemporal[Raw]): Stream[Raw] = {
