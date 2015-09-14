@@ -124,7 +124,7 @@ object WorldReferenceImplementation {
       IdentifiedItemsScopeImplementation.yieldOnlyItemsOfType(items toStream)
     }
 
-    override def allItems[Raw <: Identified : TypeTag](): Stream[Raw] = ???
+    override def allItems[Raw <: Identified : TypeTag](): Stream[Raw] = IdentifiedItemsScopeImplementation.yieldOnlyItemsOfType(idToItemsMultiMap.values.flatMap(identity) toStream)
   }
 
 }
