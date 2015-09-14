@@ -186,11 +186,7 @@ class WorldReferenceImplementation extends World {
     val newEvents = for {optionalEvent <- events.values
                          event <- optionalEvent} yield event
 
-    println(s"Baseline event timeline: '${baselineEventTimeline map (_.when)}' (${baselineEventTimeline.size}}), new events: '${newEvents map (_.when)}'")
-
     val newEventTimeline = baselineEventTimeline ++ newEvents
-
-    println(s"New event timeline: '${newEventTimeline map (_.when)}' (${newEventTimeline.size}})")
 
     // 4. Add new timeline to map.
 
