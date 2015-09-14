@@ -246,12 +246,6 @@ class WorldSpec extends FlatSpec with Checkers {
 
       val asOfPairs = asOfs.scanRight((asOfComingAfterTheLastRevision, asOfComingAfterTheLastRevision)) { case (asOf, (laterAsOf, _)) => (asOf, laterAsOf) } init
 
-      println("**** Test case ****")
-
-      println(queryWhen)
-
-      println(asOfPairs)
-
       val checks = (for {((earlierAsOfCorrespondingToRevision, laterAsOfComingNoLaterThanAnySucceedingRevision), revision) <- asOfPairs zip revisions
                          laterAsOfSharingTheSameRevisionAsTheEarlierOne = earlierAsOfCorrespondingToRevision plusSeconds random.chooseAnyNumberFromZeroToOneLessThan(earlierAsOfCorrespondingToRevision.until(laterAsOfComingNoLaterThanAnySucceedingRevision, ChronoUnit.SECONDS))
 
@@ -335,11 +329,6 @@ class WorldSpec extends FlatSpec with Checkers {
 
       recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
 
-
-      println("**** Test case ****")
-
-      println(queryWhen)
-
       val scope = world.scopeFor(queryWhen, world.nextRevision)
 
       for {RecordingsForAnId(historyId, _, historiesFrom, recordings) <- recordingsGroupedById filter (queryWhen >= _.whenEarliestChangeHappened)} {
@@ -365,8 +354,6 @@ class WorldSpec extends FlatSpec with Checkers {
     check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
       val world = new WorldReferenceImplementation()
 
-      println("**** Test case ****")
-
       recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
 
       val scope = world.scopeFor(queryWhen, world.nextRevision)
@@ -375,7 +362,6 @@ class WorldSpec extends FlatSpec with Checkers {
         yield (historiesFrom, historyId)
 
       Prop.all(checks.map { case (historiesFrom, historyId) => {
-        println(s"----------------- Checking new 'historiesFrom' for history id of: ${historyId}.")
         (historiesFrom(scope) match {
           case Seq(_) => true
         }) :| s"Could not find a history for id: ${historyId}."
