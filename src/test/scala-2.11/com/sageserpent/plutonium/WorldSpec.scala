@@ -7,18 +7,18 @@ package com.sageserpent.plutonium
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 
-import com.sageserpent.infrastructure.{BargainBasement, Unbounded, Finite, NegativeInfinity, PositiveInfinity, randomEnrichment}
-import randomEnrichment._
+import com.sageserpent.infrastructure.listEnrichment._
+import com.sageserpent.infrastructure.randomEnrichment._
+import com.sageserpent.infrastructure.{Finite, NegativeInfinity, PositiveInfinity, Unbounded}
 import org.scalacheck.Prop.BooleanOperators
 import org.scalacheck.{Arbitrary, Gen, Prop}
 import org.scalatest.FlatSpec
 import org.scalatest.prop.Checkers
 
 import scala.collection.immutable.{::, TreeMap}
+import scala.reflect.runtime.universe._
 import scala.spores._
 import scala.util.Random
-
-import scala.reflect.runtime.universe._
 
 abstract class History extends Identified {
   private val _datums = scala.collection.mutable.MutableList.empty[Any]
@@ -168,7 +168,7 @@ class WorldSpec extends FlatSpec with Checkers {
                                  asOfs <- Gen.listOfN(bigHistoryOverLotsOfThingsSortedInEventWhenOrder.length, instantGenerator) map (_.sorted)
                                  asOfToLatestEventWhenMap = TreeMap(asOfs zip (bigHistoryOverLotsOfThingsSortedInEventWhenOrder map (_.last) map eventWhenFrom): _*)
                                  chunksForRevisions = bigHistoryOverLotsOfThingsSortedInEventWhenOrder map (recordingAndEventIdPairs => eventWhenFrom(recordingAndEventIdPairs.head) -> eventWhenFrom(recordingAndEventIdPairs.last)) zip asOfs
-                                 latestAsOfsThatMapUnambiguouslyToEventWhens = BargainBasement.groupWhile(chunksForRevisions, chunksShareTheSameEventWhens) map (_.last._2)
+                                 latestAsOfsThatMapUnambiguouslyToEventWhens = chunksForRevisions.groupWhile(chunksShareTheSameEventWhens) map (_.last._2)
                                  queryWhen <- instantGenerator retryUntil (asOfToLatestEventWhenMap(latestAsOfsThatMapUnambiguouslyToEventWhens.head) <= Finite(_))
                                  asOfsIncludingAllEventsNoLaterThanTheQueryWhen = latestAsOfsThatMapUnambiguouslyToEventWhens takeWhile (asOf => asOfToLatestEventWhenMap(asOf) <= Finite(queryWhen))
     } yield (recordingsGroupedById, bigHistoryOverLotsOfThingsSortedInEventWhenOrder, asOfs, queryWhen, asOfToLatestEventWhenMap, asOfsIncludingAllEventsNoLaterThanTheQueryWhen)
