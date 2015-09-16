@@ -7,7 +7,7 @@ package com.sageserpent.plutonium
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 
-import com.sageserpent.infrastructure.listEnrichment._
+import com.sageserpent.infrastructure.seqEnrichment$._
 import com.sageserpent.infrastructure.randomEnrichment._
 import com.sageserpent.infrastructure.{Finite, NegativeInfinity, PositiveInfinity, Unbounded}
 import org.scalacheck.Prop.BooleanOperators
