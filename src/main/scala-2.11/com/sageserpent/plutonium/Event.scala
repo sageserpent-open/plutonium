@@ -2,11 +2,11 @@ package com.sageserpent.plutonium
 
 import java.time.Instant
 
-import com.sageserpent.infrastructure.{NegativeInfinity, Finite, PositiveInfinity, Unbounded}
-
-import scala.spores._
+import com.sageserpent.americium
+import com.sageserpent.americium.{Finite, PositiveInfinity, Unbounded}
 
 import scala.reflect.runtime.universe._
+import scala.spores._
 
 /**
  * Created by Gerard on 09/07/2015.
@@ -44,7 +44,7 @@ object Change {
 
   def apply[Raw <: Identified: TypeTag](when: Instant)(id: Raw#Id, update: Spore[Raw, Unit]): Change = apply(Finite(when))(id, update)
 
-  def apply[Raw <: Identified: TypeTag](id: Raw#Id, update: Spore[Raw, Unit]): Change = apply(NegativeInfinity[Instant]())(id, update)
+  def apply[Raw <: Identified: TypeTag](id: Raw#Id, update: Spore[Raw, Unit]): Change = apply(americium.NegativeInfinity[Instant]())(id, update)
 
   // etc for multiple bitemporals....
 }
@@ -59,7 +59,7 @@ object Change {
 // NOTE: the scope is synthetic one that has no prior history applied it to whatsoever - it is there purely to capture the effects
 // of the recording.
 case class Observation(definiteWhen: Instant, recording: Spore[com.sageserpent.plutonium.Scope, Unit]) extends Event {
-  val when = Finite(definiteWhen)
+  val when = americium.Finite(definiteWhen)
 }
 
 

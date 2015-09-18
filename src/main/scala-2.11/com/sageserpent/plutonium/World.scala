@@ -1,8 +1,7 @@
 package com.sageserpent.plutonium
 
 import java.time.Instant
-
-import com.sageserpent.infrastructure.Unbounded
+import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.World.Revision
 
 

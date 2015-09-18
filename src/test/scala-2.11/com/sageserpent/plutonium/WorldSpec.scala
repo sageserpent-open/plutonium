@@ -7,9 +7,10 @@ package com.sageserpent.plutonium
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 
-import com.sageserpent.infrastructure.seqEnrichment$._
-import com.sageserpent.infrastructure.randomEnrichment._
-import com.sageserpent.infrastructure.{Finite, NegativeInfinity, PositiveInfinity, Unbounded}
+import com.sageserpent.americium
+import com.sageserpent.americium._
+import com.sageserpent.americium.randomEnrichment._
+import com.sageserpent.americium.seqEnrichment$._
 import org.scalacheck.Prop.BooleanOperators
 import org.scalacheck.{Arbitrary, Gen, Prop}
 import org.scalatest.FlatSpec
@@ -71,15 +72,15 @@ class WorldSpec extends FlatSpec with Checkers {
 
   val instantGenerator = Arbitrary.arbitrary[Long] map Instant.ofEpochMilli
 
-  val unboundedInstantGenerator = Gen.frequency(1 -> Gen.oneOf(NegativeInfinity[Instant], PositiveInfinity[Instant]), 10 -> (instantGenerator map Finite.apply))
+  val unboundedInstantGenerator = Gen.frequency(1 -> Gen.oneOf(NegativeInfinity[Instant], americium.PositiveInfinity[Instant]), 10 -> (instantGenerator map Finite.apply))
 
-  val changeWhenGenerator: Gen[Unbounded[Instant]] = Gen.frequency(1 -> Gen.oneOf(Seq(NegativeInfinity[Instant])), 10 -> (instantGenerator map (Finite(_))))
+  val changeWhenGenerator: Gen[Unbounded[Instant]] = Gen.frequency(1 -> Gen.oneOf(Seq(americium.NegativeInfinity[Instant])), 10 -> (instantGenerator map (americium.Finite(_))))
 
   val fooHistoryIdGenerator = Arbitrary.arbitrary[FooHistory#Id]
 
   val barHistoryIdGenerator = Arbitrary.arbitrary[BarHistory#Id]
 
-  val dataSampleGenerator1 = for {data <- Arbitrary.arbitrary[String]} yield (data, (when: Unbounded[Instant], fooHistoryId: FooHistory#Id) => Change[FooHistory](when)(fooHistoryId, (fooHistory: FooHistory) => {
+  val dataSampleGenerator1 = for {data <- Arbitrary.arbitrary[String]} yield (data, (when: americium.Unbounded[Instant], fooHistoryId: FooHistory#Id) => Change[FooHistory](when)(fooHistoryId, (fooHistory: FooHistory) => {
     fooHistory.property1 = capture(data)
   }))
 
@@ -92,7 +93,7 @@ class WorldSpec extends FlatSpec with Checkers {
   }))
 
   val dataSampleGenerator4 = for {data1 <- Arbitrary.arbitrary[String]
-                                  data2 <- Arbitrary.arbitrary[Int]} yield (data1 -> data2, (when: Unbounded[Instant], barHistoryId: BarHistory#Id) => Change[BarHistory](when)(barHistoryId, (barHistory: BarHistory) => {
+                                  data2 <- Arbitrary.arbitrary[Int]} yield (data1 -> data2, (when: americium.Unbounded[Instant], barHistoryId: BarHistory#Id) => Change[BarHistory](when)(barHistoryId, (barHistory: BarHistory) => {
     barHistory.method1(capture(data1), capture(data2))
   }))
 
@@ -156,7 +157,7 @@ class WorldSpec extends FlatSpec with Checkers {
     case ((_, eventWhen, _), _) => eventWhen
   }
 
-  private val chunksShareTheSameEventWhens: (((Unbounded[Instant], Unbounded[Instant]), Instant), ((Unbounded[Instant], Unbounded[Instant]), Instant)) => Boolean = {
+  private val chunksShareTheSameEventWhens: (((Unbounded[Instant], Unbounded[Instant]), Instant), ((americium.Unbounded[Instant], Unbounded[Instant]), Instant)) => Boolean = {
     case (((_, trailingEventWhen), _), ((leadingEventWhen, _), _)) => true
   }
 
@@ -169,7 +170,7 @@ class WorldSpec extends FlatSpec with Checkers {
                                  asOfToLatestEventWhenMap = TreeMap(asOfs zip (bigHistoryOverLotsOfThingsSortedInEventWhenOrder map (_.last) map eventWhenFrom): _*)
                                  chunksForRevisions = bigHistoryOverLotsOfThingsSortedInEventWhenOrder map (recordingAndEventIdPairs => eventWhenFrom(recordingAndEventIdPairs.head) -> eventWhenFrom(recordingAndEventIdPairs.last)) zip asOfs
                                  latestAsOfsThatMapUnambiguouslyToEventWhens = chunksForRevisions.groupWhile(chunksShareTheSameEventWhens) map (_.last._2)
-                                 queryWhen <- instantGenerator retryUntil (asOfToLatestEventWhenMap(latestAsOfsThatMapUnambiguouslyToEventWhens.head) <= Finite(_))
+                                 queryWhen <- instantGenerator retryUntil (asOfToLatestEventWhenMap(latestAsOfsThatMapUnambiguouslyToEventWhens.head) <= americium.Finite(_))
                                  asOfsIncludingAllEventsNoLaterThanTheQueryWhen = latestAsOfsThatMapUnambiguouslyToEventWhens takeWhile (asOf => asOfToLatestEventWhenMap(asOf) <= Finite(queryWhen))
     } yield (recordingsGroupedById, bigHistoryOverLotsOfThingsSortedInEventWhenOrder, asOfs, queryWhen, asOfToLatestEventWhenMap, asOfsIncludingAllEventsNoLaterThanTheQueryWhen)
     check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigHistoryOverLotsOfThingsSortedInEventWhenOrder, asOfs, queryWhen, asOfToLatestEventWhenMap, asOfsIncludingAllEventsNoLaterThanTheQueryWhen) =>
