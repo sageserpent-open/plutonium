@@ -2,7 +2,7 @@ package com.sageserpent.plutonium
 
 import java.time.Instant
 
-import com.sageserpent.infrastructure.Unbounded
+import com.sageserpent.americium.Unbounded
 
 /**
  * Created by Gerard on 09/07/2015.
