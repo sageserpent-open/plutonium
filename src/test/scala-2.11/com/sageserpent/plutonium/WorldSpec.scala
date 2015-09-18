@@ -189,9 +189,11 @@ class WorldSpec extends FlatSpec with Checkers {
                           assert(pertinentRecordings.nonEmpty)
                           historiesFrom(scope)
                         }}
-        yield historyId -> history.datums.zip(pertinentRecordings.map(_._1)).zipWithIndex
+        yield (historyId, history.datums, pertinentRecordings.map(_._1))
 
-      Prop.all(checks.map {case (historyId, historyAudit) => Prop.all(historyAudit map { case ((actual, expected), step) => (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}" }: _*)}: _*)
+      Prop.all(checks.map { case (historyId, actualHistory, expectedHistory) => ((actualHistory.length == expectedHistory.length) :| s"${actualHistory.length} == expectedHistory.length") &&
+        Prop.all((actualHistory zip expectedHistory zipWithIndex) map { case ((actual, expected), step) => (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}" }: _*)
+      }: _*)
     })
   }
 
@@ -312,9 +314,11 @@ class WorldSpec extends FlatSpec with Checkers {
       val checks = for {RecordingsForAnId(historyId, _, historiesFrom, recordings) <- recordingsGroupedById filter (queryWhen >= _.whenEarliestChangeHappened)
                         pertinentRecordings = recordings takeWhile { case (_, eventWhen, _) => eventWhen <= queryWhen }
                         Seq(history) = historiesFrom(scope)}
-        yield historyId -> history.datums.zip(pertinentRecordings.map(_._1)).zipWithIndex
+        yield (historyId, history.datums, pertinentRecordings.map(_._1))
 
-      Prop.all(checks.map {case (historyId, historyAudit) => Prop.all(historyAudit map { case ((actual, expected), step) => (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}" }: _*)}: _*)
+      Prop.all(checks.map { case (historyId, actualHistory, expectedHistory) => ((actualHistory.length == expectedHistory.length) :| s"${actualHistory.length} == expectedHistory.length") &&
+        Prop.all((actualHistory zip expectedHistory zipWithIndex) map { case ((actual, expected), step) => (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}" }: _*)
+      }: _*)
     })
   }
 
@@ -472,7 +476,7 @@ class WorldSpec extends FlatSpec with Checkers {
 
       recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
 
-      (world.nextRevision === world.revisionAsOfs.size) :| s"${world.nextRevision} === ${world.revisionAsOfs}.size"
+      (world.nextRevision === world.revisionAsOfs.length) :| s"${world.nextRevision} === ${world.revisionAsOfs}.length"
     })
   }
 
@@ -576,4 +580,5 @@ class WorldSpec extends FlatSpec with Checkers {
           events = pieceOfHistory map { case ((_, _, change), eventId) => eventId -> Some(change)
           } toSeq} yield
     world.revise(TreeMap(events: _*), asOf)).force
-}}
+  }
+}
