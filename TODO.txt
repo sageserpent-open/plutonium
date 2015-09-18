@@ -1,0 +1,25 @@
+Tests:-
+
+1. 'World.revise' should do a dry-run of changes before it commits the new revision. It should provide the strong exception guarantee if any of the changes throws an admissible failure or precondition violation.
+
+A nice way of doing this would be to have injected faulty changes within ordinary changes - could then verify that the world still behaves the same way as if it was revised with just the ordinary changes.
+
+2. 'WorldSpec' needs to include a test that shows that the effects of a revision in a scope are captured from a snapshot and are unaffected by any subsequent world revisions.
+
+3. Correction testing could be handled by generalising the existing tests so as to start with one set of histories for various ids and then cutover to a completely different set, which is what would be tested against.
+
+Could do this by having a mixture of throwaway histories on the ids under test, plus some throwaway ids whose changes are all eventually annulled.
+
+4. Need tests on the read / write access to raw objects in changes and rendered from query scopes.
+
+5. Does there need to be a test that shows off combinations of rendered items in a Bitemporal monad? So we can see the interaction between histories of several items. Could this be mixed in with the existing tests?
+
+6. Tests for observations and annihilations.
+
+7. Do we need to show that chunking the same histories in different ways yields the same result as long as scope cutoffs are set appropriately?
+
+8. Are there tests for wildcards, plus the various flavours of id-matching? What about the 'none' case? What about having several items of different type sharing the same id? What about attempting to book in a revision that would lead to a new item sharing the same id as one with a sub- or -supertype?
+
+9. Is all of the commentary in the API covered by tests? OK if doing fault injection reveals a failure via existing tests?
+
+10. Bolster the monad-plus generator with bitemporals made from ids / wildcard / none.
