@@ -579,17 +579,21 @@ class WorldSpec extends FlatSpec with Checkers {
         yield historiesFrom(scope) flatMap (_.datums) map (historyId -> _)) flatMap identity
 
       // What's being tested is the imperative behaviour of 'World' wrt its scopes - so use imperative code.
-      val scopeToHistoryMap = scala.collection.mutable.Map.empty[world.Scope, List[(Any, Any)]]
+      val scopeViaRevisionToHistoryMap = scala.collection.mutable.Map.empty[world.Scope, List[(Any, Any)]]
+      val scopeViaAsOfToHistoryMap = scala.collection.mutable.Map.empty[world.Scope, List[(Any, Any)]]
 
       val results = scala.collection.mutable.MutableList.empty[Prop]
 
       for (revisionAction <- revisionActions(bigShuffledHistoryOverLotsOfThings, asOfs, world)) {
-          val revision = revisionAction()
+        val revision = revisionAction()
 
-          results += Prop.all(scopeToHistoryMap map {case (scope, history) => (history === historyFrom(scope)) :| s"history === historyFrom(scope)"} toSeq: _*)
+        results += Prop.all(scopeViaRevisionToHistoryMap map { case (scope, history) => (history === historyFrom(scope)) :| s"history === historyFrom(scope)" } toSeq: _*)
+        results += Prop.all(scopeViaAsOfToHistoryMap map { case (scope, history) => (history === historyFrom(scope)) :| s"history === historyFrom(scope)" } toSeq: _*)
 
-          val scope = world.scopeFor(queryWhen, revision)
-          scopeToHistoryMap += (scope -> historyFrom(scope))
+        val scopeViaRevision = world.scopeFor(queryWhen, revision)
+        scopeViaRevisionToHistoryMap += (scopeViaRevision -> historyFrom(scopeViaRevision))
+        val scopeViaAsOf = world.scopeFor(queryWhen, world.revisionAsOfs(revision))
+        scopeViaAsOfToHistoryMap += (scopeViaAsOf -> historyFrom(scopeViaAsOf))
       }
 
       Prop.all(results: _*)

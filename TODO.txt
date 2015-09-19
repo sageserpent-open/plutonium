@@ -4,7 +4,7 @@ Tests:-
 
 A nice way of doing this would be to have injected faulty changes within ordinary changes - could then verify that the world still behaves the same way as if it was revised with just the ordinary changes.
 
-2. 'WorldSpec' needs to include a test that shows that the effects of a revision in a scope are captured from a snapshot and are unaffected by any subsequent world revisions.
+2. 'WorldSpec' needs to include a test that shows that the effects of a revision in a scope are captured from a snapshot and are unaffected by any subsequent world revisions. (DONE)
 
 3. Do we need to show that chunking the same histories in different ways yields the same result as long as scope cutoffs are set appropriately?
 
