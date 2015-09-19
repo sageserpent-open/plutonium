@@ -520,7 +520,7 @@ class WorldSpec extends FlatSpec with Checkers {
                                  queryWhen <- unboundedInstantGenerator
     } yield (bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
     check(Prop.forAllNoShrink(testCaseGenerator) { case (bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
-      var world = new WorldReferenceImplementation()
+      val world = new WorldReferenceImplementation()
 
       recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
 
@@ -564,21 +564,40 @@ class WorldSpec extends FlatSpec with Checkers {
   }
 
 
-/*  it should "create a scope that is a snapshot unaffected by subsequent revisions" in {
+  it should "create a scope that is a snapshot unaffected by subsequent revisions" in {
     val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
                                  seed <- seedGenerator
                                  random = new Random(seed)
                                  bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, recordingsGroupedById map (_.recordings) flatMap identity).zipWithIndex)
                                  asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
                                  queryWhen <- unboundedInstantGenerator
-    } yield (bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
-    check(Prop.forAllNoShrink(testCaseGenerator) { case (bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
+    } yield (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
+    check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
+      val world = new WorldReferenceImplementation()
 
+      def historyFrom(scope: world.Scope) = (for (RecordingsForAnId(historyId, _, historiesFrom, _) <- recordingsGroupedById)
+        yield historiesFrom(scope) flatMap (_.datums) map (historyId -> _)) flatMap identity
+
+      // What's being tested is the imperative behaviour of 'World' wrt its scopes - so use imperative code.
+      val scopeToHistoryMap = scala.collection.mutable.Map.empty[world.Scope, List[(Any, Any)]]
+
+      val results = scala.collection.mutable.MutableList.empty[Prop]
+
+      for (revisionAction <- revisionActions(bigShuffledHistoryOverLotsOfThings, asOfs, world)) {
+          val revision = revisionAction()
+
+          results += Prop.all(scopeToHistoryMap map {case (scope, history) => (history === historyFrom(scope)) :| s"history === historyFrom(scope)"} toSeq: _*)
+
+          val scope = world.scopeFor(queryWhen, revision)
+          scopeToHistoryMap += (scope -> historyFrom(scope))
+      }
+
+      Prop.all(results: _*)
     })
-  }*/
+  }
 
   def recordEventsInWorld(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[((Any, Unbounded[Instant], Change), Int)]], asOfs: List[Instant], world: WorldReferenceImplementation) = {
-    revisionActions(bigShuffledHistoryOverLotsOfThings, asOfs, world) map (_.apply) force
+    revisionActions(bigShuffledHistoryOverLotsOfThings, asOfs, world) map (_.apply) force // Actually a piece of imperative code that looks functional - 'world' is being mutated as a side-effect; but the revisions are harvested functionally.
   }
 
   def revisionActions(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[((Any, Unbounded[Instant], Change), Int)]], asOfs: List[Instant], world: WorldReferenceImplementation): Stream[() => Revision] = {
