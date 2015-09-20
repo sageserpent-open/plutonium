@@ -621,9 +621,9 @@ class WorldSpec extends FlatSpec with Checkers {
                                  seed <- seedGenerator
                                  random = new Random(seed)
                                  bigShuffledHistoryOverLotsOfThings = (random.splitIntoNonEmptyPieces(shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, recordingsGroupedById map (_.recordings) flatMap identity)
-                                   .zipWithIndex)).toList
+                                   .zipWithIndex)).force
                                  bigShuffledFaultyHistoryOverLotsOfThings = (random.splitIntoNonEmptyPieces(shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, faultyRecordingsGroupedById map (_.recordings) flatMap identity)
-                                   .zipWithIndex map {case (stuff, index) => stuff -> (-1 - index)})).toList  // Map with event ids over to strictly negative values to avoid collisions with the changes that are expected to work.
+                                   .zipWithIndex map {case (stuff, index) => stuff -> (-1 - index)})).force  // Map with event ids over to strictly negative values to avoid collisions with the changes that are expected to work.
                                  asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
                                  faultyAsOfs <- Gen.listOfN(bigShuffledFaultyHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
                                  queryWhen <- unboundedInstantGenerator
@@ -638,7 +638,7 @@ class WorldSpec extends FlatSpec with Checkers {
         yield historiesFrom(scope) flatMap (_.datums) map (historyId -> _)) flatMap identity
 
       recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, utopia)
-      recordEventsInWorldWithoutGivingUpOnFailure(mergedShuffledHistoryOverLotsOfThings, mergedAsOfs, distopia)
+      recordEventsInWorldWithoutGivingUpOnFailure(mergedShuffledHistoryOverLotsOfThings.toStream, mergedAsOfs.toList, distopia)
 
       assert(utopia.nextRevision == distopia.nextRevision)
       assert(utopia.revisionAsOfs == distopia.revisionAsOfs)
@@ -654,11 +654,11 @@ class WorldSpec extends FlatSpec with Checkers {
   }
 
 
-  def recordEventsInWorld(bigShuffledHistoryOverLotsOfThings: Seq[Traversable[((Any, Unbounded[Instant], Change), Int)]], asOfs: List[Instant], world: WorldReferenceImplementation) = {
-    revisionActions(bigShuffledHistoryOverLotsOfThings, asOfs, world) map (_.apply) toSeq // Actually a piece of imperative code that looks functional - 'world' is being mutated as a side-effect; but the revisions are harvested functionally.
+  def recordEventsInWorld(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[((Any, Unbounded[Instant], Change), Int)]], asOfs: List[Instant], world: WorldReferenceImplementation) = {
+    revisionActions(bigShuffledHistoryOverLotsOfThings, asOfs, world) map (_.apply) force // Actually a piece of imperative code that looks functional - 'world' is being mutated as a side-effect; but the revisions are harvested functionally.
   }
 
-  def recordEventsInWorldWithoutGivingUpOnFailure(bigShuffledHistoryOverLotsOfThings: Iterable[Traversable[((Any, Unbounded[Instant], Change), Int)]], asOfs: Iterable[Instant], world: WorldReferenceImplementation) = {
+  def recordEventsInWorldWithoutGivingUpOnFailure(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[((Any, Unbounded[Instant], Change), Int)]], asOfs: List[Instant], world: WorldReferenceImplementation) = {
     for (revisionAction <- revisionActions(bigShuffledHistoryOverLotsOfThings, asOfs, world)) try {
       revisionAction()
     } catch {
@@ -666,7 +666,7 @@ class WorldSpec extends FlatSpec with Checkers {
     }
   }
 
-  def revisionActions(bigShuffledHistoryOverLotsOfThings: Iterable[Traversable[((Any, Unbounded[Instant], Change), Int)]], asOfs: Iterable[Instant], world: WorldReferenceImplementation): Iterable[() => Revision] = {
+  def revisionActions(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[((Any, Unbounded[Instant], Change), Int)]], asOfs: List[Instant], world: WorldReferenceImplementation): Stream[() => Revision] = {
     for {(pieceOfHistory, asOf) <- bigShuffledHistoryOverLotsOfThings zip asOfs
          events = pieceOfHistory map { case ((_, _, change), eventId) => eventId -> Some(change)
          } toSeq} yield
