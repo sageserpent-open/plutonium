@@ -112,21 +112,22 @@ class WorldSpec extends FlatSpec with Checkers {
          historyId <- historyIdGenerator} yield (historyId, (scope: Scope) => scope.render(Bitemporal.zeroOrOneOf[AHistory](historyId)): Seq[History], for {(data, changeFor: ((Unbounded[Instant], AHistory#Id) => Change)) <- dataSamples} yield (data, changeFor(_: Unbounded[Instant], historyId)))
   }
 
-  case class RecordingsForAnId(historyId: Any, whenEarliestChangeHappened: Unbounded[Instant], historiesFrom: Scope => Seq[History], recordings: List[(Any, Unbounded[Instant], Change)])
-
   val dataSamplesForAnIdGenerator = Gen.frequency(Seq(dataSamplesForAnIdGenerator_[FooHistory](dataSampleGenerator1, fooHistoryIdGenerator),
     dataSamplesForAnIdGenerator_[FooHistory](dataSampleGenerator2, fooHistoryIdGenerator),
     dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator3, barHistoryIdGenerator),
     dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator4, barHistoryIdGenerator),
     dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator5, barHistoryIdGenerator)) map (1 -> _): _*)
 
-  val recordingsForAnIdGenerator = for {(historyId, historiesFrom, dataSamples) <- dataSamplesForAnIdGenerator
-                                        sampleWhens <- Gen.listOfN(dataSamples.length, changeWhenGenerator) map (_ sorted)} yield RecordingsForAnId(historyId, sampleWhens.min, historiesFrom, for {((data, changeFor), when) <- dataSamples zip sampleWhens} yield (data, when, changeFor(when)))
+  case class RecordingsForAnId(historyId: Any, whenEarliestChangeHappened: Unbounded[Instant], historiesFrom: Scope => Seq[History], recordings: List[(Any, Unbounded[Instant], Change)])
 
-  val recordingsGroupedByIdGenerator = {
+  def recordingsGroupedByIdGenerator_(dataSamplesForAnIdGenerator: Gen[(Any, (Scope) => Seq[History], List[(Any, (Unbounded[Instant]) => Change)])], changeWhenGenerator: Gen[Unbounded[Instant]]) = {
+    val recordingsForAnIdGenerator = for {(historyId, historiesFrom, dataSamples) <- dataSamplesForAnIdGenerator
+                                          sampleWhens <- Gen.listOfN(dataSamples.length, changeWhenGenerator) map (_ sorted)} yield RecordingsForAnId(historyId, sampleWhens.min, historiesFrom, for {((data, changeFor), when) <- dataSamples zip sampleWhens} yield (data, when, changeFor(when)))
     def idsAreNotRepeated(recordings: List[RecordingsForAnId]) = recordings.size == (recordings map (_.historyId) distinct).size
     Gen.nonEmptyListOf(recordingsForAnIdGenerator) retryUntil idsAreNotRepeated
   }
+
+  val recordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(dataSamplesForAnIdGenerator, changeWhenGenerator)
 
 
   class NonExistentIdentified extends AbstractIdentified {
