@@ -84,30 +84,30 @@ class WorldSpec extends FlatSpec with Checkers {
   val changeError = new Error("Error in making a change.")
 
   def dataSampleGenerator1(faulty: Boolean) = for {data <- Arbitrary.arbitrary[String]} yield (data, (when: americium.Unbounded[Instant], fooHistoryId: FooHistory#Id) => Change[FooHistory](when)(fooHistoryId, (fooHistory: FooHistory) => {
-    if (capture(faulty)) throw changeError  // Modelling a precondition failure.
+    if (capture(faulty)) throw changeError // Modelling a precondition failure.
     fooHistory.property1 = capture(data)
   }))
 
   def dataSampleGenerator2(faulty: Boolean) = for {data <- Arbitrary.arbitrary[Boolean]} yield (data, (when: Unbounded[Instant], fooHistoryId: FooHistory#Id) => Change[FooHistory](when)(fooHistoryId, (fooHistory: FooHistory) => {
     fooHistory.property2 = capture(data)
-    if (capture(faulty)) throw changeError  // Modelling an admissible postcondition failure.
+    if (capture(faulty)) throw changeError // Modelling an admissible postcondition failure.
   }))
 
   def dataSampleGenerator3(faulty: Boolean) = for {data <- Arbitrary.arbitrary[Double]} yield (data, (when: Unbounded[Instant], barHistoryId: BarHistory#Id) => Change[BarHistory](when)(barHistoryId, (barHistory: BarHistory) => {
     if (capture(faulty)) throw changeError
-    barHistory.property1 = capture(data)  // Modelling a precondition failure.
+    barHistory.property1 = capture(data) // Modelling a precondition failure.
   }))
 
   def dataSampleGenerator4(faulty: Boolean) = for {data1 <- Arbitrary.arbitrary[String]
-                                  data2 <- Arbitrary.arbitrary[Int]} yield (data1 -> data2, (when: americium.Unbounded[Instant], barHistoryId: BarHistory#Id) => Change[BarHistory](when)(barHistoryId, (barHistory: BarHistory) => {
+                                                   data2 <- Arbitrary.arbitrary[Int]} yield (data1 -> data2, (when: americium.Unbounded[Instant], barHistoryId: BarHistory#Id) => Change[BarHistory](when)(barHistoryId, (barHistory: BarHistory) => {
     barHistory.method1(capture(data1), capture(data2))
-    if (capture(faulty)) throw changeError  // Modelling an admissible postcondition failure.
+    if (capture(faulty)) throw changeError // Modelling an admissible postcondition failure.
   }))
 
   def dataSampleGenerator5(faulty: Boolean) = for {data1 <- Arbitrary.arbitrary[Int]
-                                  data2 <- Arbitrary.arbitrary[String]
-                                  data3 <- Arbitrary.arbitrary[Boolean]} yield ((data1, data2, data3), (when: Unbounded[Instant], barHistoryId: BarHistory#Id) => Change[BarHistory](when)(barHistoryId, (barHistory: BarHistory) => {
-    if (capture(faulty)) throw changeError  // Modelling an admissible postcondition failure.
+                                                   data2 <- Arbitrary.arbitrary[String]
+                                                   data3 <- Arbitrary.arbitrary[Boolean]} yield ((data1, data2, data3), (when: Unbounded[Instant], barHistoryId: BarHistory#Id) => Change[BarHistory](when)(barHistoryId, (barHistory: BarHistory) => {
+    if (capture(faulty)) throw changeError // Modelling an admissible postcondition failure.
     barHistory.method2(capture(data1), capture(data2), capture(data3))
   }))
 
@@ -119,11 +119,13 @@ class WorldSpec extends FlatSpec with Checkers {
          historyId <- historyIdGenerator} yield (historyId, (scope: Scope) => scope.render(Bitemporal.zeroOrOneOf[AHistory](historyId)): Seq[History], for {(data, changeFor: ((Unbounded[Instant], AHistory#Id) => Change)) <- dataSamples} yield (data, changeFor(_: Unbounded[Instant], historyId)))
   }
 
-  val dataSamplesForAnIdGenerator = Gen.frequency(Seq(dataSamplesForAnIdGenerator_[FooHistory](dataSampleGenerator1(faulty = false), fooHistoryIdGenerator),
-    dataSamplesForAnIdGenerator_[FooHistory](dataSampleGenerator2(faulty = false), fooHistoryIdGenerator),
-    dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator3(faulty = false), barHistoryIdGenerator),
-    dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator4(faulty = false), barHistoryIdGenerator),
-    dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator5(faulty = false), barHistoryIdGenerator)) map (1 -> _): _*)
+  def dataSamplesForAnIdGenerator_(faulty: Boolean = false) = Gen.frequency(Seq(dataSamplesForAnIdGenerator_[FooHistory](dataSampleGenerator1(faulty = false), fooHistoryIdGenerator),
+    dataSamplesForAnIdGenerator_[FooHistory](dataSampleGenerator2(faulty), fooHistoryIdGenerator),
+    dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator3(faulty), barHistoryIdGenerator),
+    dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator4(faulty), barHistoryIdGenerator),
+    dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator5(faulty), barHistoryIdGenerator)) map (1 -> _): _*)
+
+  val dataSamplesForAnIdGenerator = dataSamplesForAnIdGenerator_()
 
   case class RecordingsForAnId(historyId: Any, whenEarliestChangeHappened: Unbounded[Instant], historiesFrom: Scope => Seq[History], recordings: List[(Any, Unbounded[Instant], Change)])
 
