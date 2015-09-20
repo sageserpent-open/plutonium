@@ -81,7 +81,7 @@ class WorldSpec extends FlatSpec with Checkers {
 
   val barHistoryIdGenerator = Arbitrary.arbitrary[BarHistory#Id]
 
-  val changeError = new Error("Error in making a change.")
+  lazy val changeError = new Error("Error in making a change.")
 
   def dataSampleGenerator1(faulty: Boolean) = for {data <- Arbitrary.arbitrary[String]} yield (data, (when: americium.Unbounded[Instant], fooHistoryId: FooHistory#Id) => Change[FooHistory](when)(fooHistoryId, (fooHistory: FooHistory) => {
     if (capture(faulty)) throw changeError // Modelling a precondition failure.
@@ -127,6 +127,8 @@ class WorldSpec extends FlatSpec with Checkers {
 
   val dataSamplesForAnIdGenerator = dataSamplesForAnIdGenerator_()
 
+  val faultyDataSamplesForAnIdGenerator = dataSamplesForAnIdGenerator_(faulty = true)
+
   case class RecordingsForAnId(historyId: Any, whenEarliestChangeHappened: Unbounded[Instant], historiesFrom: Scope => Seq[History], recordings: List[(Any, Unbounded[Instant], Change)])
 
   def recordingsGroupedByIdGenerator_(dataSamplesForAnIdGenerator: Gen[(Any, (Scope) => Seq[History], List[(Any, (Unbounded[Instant]) => Change)])], changeWhenGenerator: Gen[Unbounded[Instant]]) = {
@@ -137,6 +139,8 @@ class WorldSpec extends FlatSpec with Checkers {
   }
 
   val recordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(dataSamplesForAnIdGenerator, changeWhenGenerator)
+
+  val faultyRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(faultyDataSamplesForAnIdGenerator, changeWhenGenerator)
 
 
   class NonExistentIdentified extends AbstractIdentified {
@@ -610,8 +614,54 @@ class WorldSpec extends FlatSpec with Checkers {
     })
   }
 
+  it should "create revisions with the strong exception-safety guarantee" in {
+    // TODO - should mix in some 'good' changes into the faulty revisions - currently this test makes its faulty revisions entirely with faulty changes.
+    val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
+                                 faultyRecordingsGroupedById <- faultyRecordingsGroupedByIdGenerator
+                                 seed <- seedGenerator
+                                 random = new Random(seed)
+                                 bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, recordingsGroupedById map (_.recordings) flatMap identity)
+                                   .zipWithIndex)
+                                 bigShuffledFaultyHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, faultyRecordingsGroupedById map (_.recordings) flatMap identity)
+                                   .zipWithIndex map {case (stuff, index) => stuff -> (-1 - index)})  // Map with event ids over to strictly negative values to avoid collisions with the changes that are expected to work.
+                                 mergedShuffledHistoryOverLotsOfThings = random.pickAlternatelyFrom(Seq(bigShuffledHistoryOverLotsOfThings, bigShuffledFaultyHistoryOverLotsOfThings))
+                                 asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
+                                 queryWhen <- unboundedInstantGenerator
+    } yield (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, mergedShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
+    check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, mergedShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
+      val utopia = new WorldReferenceImplementation()
+      val distopia = new WorldReferenceImplementation()
+
+      def historyFrom(world: World)(scope: world.Scope) = (for (RecordingsForAnId(historyId, _, historiesFrom, _) <- recordingsGroupedById)
+        yield historiesFrom(scope) flatMap (_.datums) map (historyId -> _)) flatMap identity
+
+      recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, utopia)
+      recordEventsInWorldWithoutGivingUpOnFailure(mergedShuffledHistoryOverLotsOfThings, asOfs, distopia)
+
+      assert(utopia.nextRevision == distopia.nextRevision)
+      assert(utopia.revisionAsOfs == distopia.revisionAsOfs)
+
+      val utopianScope = utopia.scopeFor(queryWhen, utopia.nextRevision)
+      val distopianScope = distopia.scopeFor(queryWhen, distopia.nextRevision)
+
+      val utopianHistory = historyFrom(utopia)(utopianScope)
+      val distopianHistory = historyFrom(distopia)(distopianScope)
+
+      ((utopianHistory.length == distopianHistory.length) :| s"${utopianHistory.length} == distopianHistory.length") && Prop.all(utopianHistory zip distopianHistory map { case (utopianCase, distopianCase) => (utopianCase === distopianCase) :| s"${utopianCase} === distopianCase" }: _*)
+    })
+  }
+
+
   def recordEventsInWorld(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[((Any, Unbounded[Instant], Change), Int)]], asOfs: List[Instant], world: WorldReferenceImplementation) = {
     revisionActions(bigShuffledHistoryOverLotsOfThings, asOfs, world) map (_.apply) force // Actually a piece of imperative code that looks functional - 'world' is being mutated as a side-effect; but the revisions are harvested functionally.
+  }
+
+  def recordEventsInWorldWithoutGivingUpOnFailure(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[((Any, Unbounded[Instant], Change), Int)]], asOfs: List[Instant], world: WorldReferenceImplementation) = {
+    for (revisionAction <- revisionActions(bigShuffledHistoryOverLotsOfThings, asOfs, world)) try {
+      revisionAction()
+    } catch {
+      case error if changeError == error =>
+    }
   }
 
   def revisionActions(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[((Any, Unbounded[Instant], Change), Int)]], asOfs: List[Instant], world: WorldReferenceImplementation): Stream[() => Revision] = {
