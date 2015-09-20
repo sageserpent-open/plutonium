@@ -14,4 +14,4 @@ lazy val settings = Seq(organization := "com.sageserpent",
   publishMavenStyle := true)
 
 
-lazy val root = (project in file(".")).settings(settings: _*)
+lazy val plutonium = (project in file(".")).settings(settings: _*)

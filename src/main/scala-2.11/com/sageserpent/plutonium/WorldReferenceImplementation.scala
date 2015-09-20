@@ -3,7 +3,7 @@ package com.sageserpent.plutonium
 import java.time.Instant
 
 import com.sageserpent.americium
-import com.sageserpent.americium.{Finite, NegativeInfinity}
+import com.sageserpent.americium.{PositiveInfinity, Unbounded, Finite, NegativeInfinity}
 import com.sageserpent.plutonium.Bitemporal.IdentifiedItemsScope
 import com.sageserpent.plutonium.World.Revision
 import com.sageserpent.plutonium.WorldReferenceImplementation.IdentifiedItemsScopeImplementation
@@ -110,7 +110,7 @@ object WorldReferenceImplementation {
 
 }
 
-class WorldReferenceImplementation extends World {
+class WorldReferenceImplementation extends World {  // TODO - thread safety.
   type Scope = ScopeImplementation
 
   type EventTimeline = TreeBag[Event]
@@ -185,15 +185,21 @@ class WorldReferenceImplementation extends World {
 
     val newEventTimeline = baselineEventTimeline ++ newEvents
 
-    // 4. Add new timeline to map.
+    // 4. Dry-run for strong exception guarantee - so what about concurrency from this point on....?
+
+    val nextRevisionPostThisOne = 1 + nextRevision
+
+    new IdentifiedItemsScopeImplementation(PositiveInfinity[Instant], nextRevisionPostThisOne, Finite(asOf), newEventTimeline)
+
+    // 5. Add new timeline to map.
 
     revisionToEventTimelineMap += (nextRevision -> newEventTimeline)
 
-    // 5. NOTE: - must remove asinine commentary.
+    // 6. NOTE: - must remove asinine commentary.
 
     revisionAsOfs += asOf
     val revision = nextRevision
-    _nextRevision += 1
+    _nextRevision = nextRevisionPostThisOne
     revision
   }
 
