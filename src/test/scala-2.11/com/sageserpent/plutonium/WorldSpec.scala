@@ -623,8 +623,8 @@ class WorldSpec extends FlatSpec with Checkers {
                                  bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, recordingsGroupedById map (_.recordings) flatMap identity)
                                    .zipWithIndex)
                                  bigShuffledFaultyHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, faultyRecordingsGroupedById map (_.recordings) flatMap identity)
-                                   .zipWithIndex map {case (stuff, index) => stuff -> (-1 - index)})  // Map with event ids over to strictly negative values to avoid collisions with the changes that are expected to work.
-                                 mergedShuffledHistoryOverLotsOfThings = random.pickAlternatelyFrom(Seq(bigShuffledHistoryOverLotsOfThings, bigShuffledFaultyHistoryOverLotsOfThings))
+                                   .zipWithIndex map { case (stuff, index) => stuff -> (-1 - index) }) // Map with event ids over to strictly negative values to avoid collisions with the changes that are expected to work.
+                                 mergedShuffledHistoryOverLotsOfThings = random.pickAlternatelyFrom(Seq(bigShuffledHistoryOverLotsOfThings, bigShuffledFaultyHistoryOverLotsOfThings zip bigShuffledHistoryOverLotsOfThings map { case (faulty, ok) => faulty ++ ok }))
                                  asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
                                  queryWhen <- unboundedInstantGenerator
     } yield (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, mergedShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
