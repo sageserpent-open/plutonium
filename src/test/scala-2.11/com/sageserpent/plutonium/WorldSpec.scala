@@ -21,8 +21,9 @@ import scala.util.Random
 
 class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
 
-  class NonExistentIdentified extends AbstractIdentified {
-    override val id: String = fail("If I am not supposed to exist, why is something asking for my id?")
+  class NonExistentIdentified extends Identified {
+    override type Id = String
+    override val id = fail("If I am not supposed to exist, why is something asking for my id?")
   }
 
   "A world with no history" should "not contain any identifiables" in {
