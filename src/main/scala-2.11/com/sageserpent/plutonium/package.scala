@@ -1,6 +1,6 @@
 package com.sageserpent
 
-import scalaz.{Equal, MonadPlus}
+import scalaz.MonadPlus
 
 /**
  * Created by Gerard on 30/07/2015.
@@ -15,9 +15,5 @@ package object plutonium {
     override def empty[A]: Bitemporal[A] = Bitemporal.none
 
     override def plus[A](a: Bitemporal[A], b: => Bitemporal[A]): Bitemporal[A] = a join b
-  }
-
-  implicit def equal[Raw]: Equal[Bitemporal[Raw]] = new Equal[Bitemporal[Raw]] {
-    override def equal(a1: Bitemporal[Raw], a2: Bitemporal[Raw]): Boolean = true
   }
 }

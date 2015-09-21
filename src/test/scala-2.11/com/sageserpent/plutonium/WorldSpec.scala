@@ -11,140 +11,19 @@ import com.sageserpent.americium
 import com.sageserpent.americium._
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.seqEnrichment$._
-import com.sageserpent.plutonium.World.Revision
 import org.scalacheck.Prop.BooleanOperators
-import org.scalacheck.{Arbitrary, Gen, Prop}
+import org.scalacheck.{Gen, Prop}
 import org.scalatest.FlatSpec
 import org.scalatest.prop.Checkers
 
 import scala.collection.immutable.{::, TreeMap}
-import scala.reflect.runtime.universe._
-import scala.spores._
 import scala.util.Random
 
-abstract class History extends Identified {
-  private val _datums = scala.collection.mutable.MutableList.empty[Any]
+class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
 
-  protected def recordDatum(datum: Any): Unit = {
-    _datums += datum
-  }
-
-  val datums: scala.collection.Seq[Any] = _datums
-}
-
-class FooHistory(val id: FooHistory#Id) extends History {
-  type Id = String
-
-  def property1 = ???
-
-  def property1_=(data: String): Unit = {
-    recordDatum(data)
-  }
-
-  def property2 = ???
-
-  def property2_=(data: Boolean): Unit = {
-    recordDatum(data)
-  }
-}
-
-
-class BarHistory(val id: BarHistory#Id) extends History {
-  type Id = Int
-
-  def property1 = ???
-
-  def property1_=(data: Double): Unit = {
-    recordDatum(data)
-  }
-
-  def method1(data1: String, data2: Int): Unit = {
-    recordDatum((data1, data2))
-  }
-
-  def method2(data1: Int, data2: String, data3: Boolean): Unit = {
-    recordDatum((data1, data2, data3))
-  }
-}
-
-
-class WorldSpec extends FlatSpec with Checkers {
-  val seedGenerator = Arbitrary.arbitrary[Long]
-
-  val instantGenerator = Arbitrary.arbitrary[Long] map Instant.ofEpochMilli
-
-  val unboundedInstantGenerator = Gen.frequency(1 -> Gen.oneOf(NegativeInfinity[Instant], americium.PositiveInfinity[Instant]), 10 -> (instantGenerator map Finite.apply))
-
-  val changeWhenGenerator: Gen[Unbounded[Instant]] = Gen.frequency(1 -> Gen.oneOf(Seq(americium.NegativeInfinity[Instant])), 10 -> (instantGenerator map (americium.Finite(_))))
-
-  val fooHistoryIdGenerator = Arbitrary.arbitrary[FooHistory#Id]
-
-  val barHistoryIdGenerator = Arbitrary.arbitrary[BarHistory#Id]
-
-  lazy val changeError = new Error("Error in making a change.")
-
-  def dataSampleGenerator1(faulty: Boolean) = for {data <- Arbitrary.arbitrary[String]} yield (data, (when: americium.Unbounded[Instant], fooHistoryId: FooHistory#Id) => Change[FooHistory](when)(fooHistoryId, (fooHistory: FooHistory) => {
-    if (capture(faulty)) throw changeError // Modelling a precondition failure.
-    fooHistory.property1 = capture(data)
-  }))
-
-  def dataSampleGenerator2(faulty: Boolean) = for {data <- Arbitrary.arbitrary[Boolean]} yield (data, (when: Unbounded[Instant], fooHistoryId: FooHistory#Id) => Change[FooHistory](when)(fooHistoryId, (fooHistory: FooHistory) => {
-    fooHistory.property2 = capture(data)
-    if (capture(faulty)) throw changeError // Modelling an admissible postcondition failure.
-  }))
-
-  def dataSampleGenerator3(faulty: Boolean) = for {data <- Arbitrary.arbitrary[Double]} yield (data, (when: Unbounded[Instant], barHistoryId: BarHistory#Id) => Change[BarHistory](when)(barHistoryId, (barHistory: BarHistory) => {
-    if (capture(faulty)) throw changeError
-    barHistory.property1 = capture(data) // Modelling a precondition failure.
-  }))
-
-  def dataSampleGenerator4(faulty: Boolean) = for {data1 <- Arbitrary.arbitrary[String]
-                                                   data2 <- Arbitrary.arbitrary[Int]} yield (data1 -> data2, (when: americium.Unbounded[Instant], barHistoryId: BarHistory#Id) => Change[BarHistory](when)(barHistoryId, (barHistory: BarHistory) => {
-    barHistory.method1(capture(data1), capture(data2))
-    if (capture(faulty)) throw changeError // Modelling an admissible postcondition failure.
-  }))
-
-  def dataSampleGenerator5(faulty: Boolean) = for {data1 <- Arbitrary.arbitrary[Int]
-                                                   data2 <- Arbitrary.arbitrary[String]
-                                                   data3 <- Arbitrary.arbitrary[Boolean]} yield ((data1, data2, data3), (when: Unbounded[Instant], barHistoryId: BarHistory#Id) => Change[BarHistory](when)(barHistoryId, (barHistory: BarHistory) => {
-    if (capture(faulty)) throw changeError // Modelling an admissible postcondition failure.
-    barHistory.method2(capture(data1), capture(data2), capture(data3))
-  }))
-
-  def dataSamplesForAnIdGenerator_[AHistory <: History : TypeTag](dataSampleGenerator: Gen[(_, (Unbounded[Instant], AHistory#Id) => Change)], historyIdGenerator: Gen[AHistory#Id]) = {
-    val dataSamplesGenerator = Gen.nonEmptyListOf(dataSampleGenerator) // It makes no sense to have an id without associated data samples - the act of recording a data sample
-    // via a change is what introduces an id into the world.
-
-    for {dataSamples <- dataSamplesGenerator
-         historyId <- historyIdGenerator} yield (historyId, (scope: Scope) => scope.render(Bitemporal.zeroOrOneOf[AHistory](historyId)): Seq[History], for {(data, changeFor: ((Unbounded[Instant], AHistory#Id) => Change)) <- dataSamples} yield (data, changeFor(_: Unbounded[Instant], historyId)))
-  }
-
-  def dataSamplesForAnIdGenerator_(faulty: Boolean = false) = Gen.frequency(Seq(dataSamplesForAnIdGenerator_[FooHistory](dataSampleGenerator1(faulty), fooHistoryIdGenerator),
-    dataSamplesForAnIdGenerator_[FooHistory](dataSampleGenerator2(faulty), fooHistoryIdGenerator),
-    dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator3(faulty), barHistoryIdGenerator),
-    dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator4(faulty), barHistoryIdGenerator),
-    dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator5(faulty), barHistoryIdGenerator)) map (1 -> _): _*)
-
-  val dataSamplesForAnIdGenerator = dataSamplesForAnIdGenerator_()
-
-  val faultyDataSamplesForAnIdGenerator = dataSamplesForAnIdGenerator_(faulty = true)
-
-  case class RecordingsForAnId(historyId: Any, whenEarliestChangeHappened: Unbounded[Instant], historiesFrom: Scope => Seq[History], recordings: List[(Any, Unbounded[Instant], Change)])
-
-  def recordingsGroupedByIdGenerator_(dataSamplesForAnIdGenerator: Gen[(Any, (Scope) => Seq[History], List[(Any, (Unbounded[Instant]) => Change)])], changeWhenGenerator: Gen[Unbounded[Instant]]) = {
-    val recordingsForAnIdGenerator = for {(historyId, historiesFrom, dataSamples) <- dataSamplesForAnIdGenerator
-                                          sampleWhens <- Gen.listOfN(dataSamples.length, changeWhenGenerator) map (_ sorted)} yield RecordingsForAnId(historyId, sampleWhens.min, historiesFrom, for {((data, changeFor), when) <- dataSamples zip sampleWhens} yield (data, when, changeFor(when)))
-    def idsAreNotRepeated(recordings: List[RecordingsForAnId]) = recordings.size == (recordings map (_.historyId) distinct).size
-    Gen.nonEmptyListOf(recordingsForAnIdGenerator) retryUntil idsAreNotRepeated
-  }
-
-  val recordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(dataSamplesForAnIdGenerator, changeWhenGenerator)
-
-  val faultyRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(faultyDataSamplesForAnIdGenerator, changeWhenGenerator)
-
-
-  class NonExistentIdentified extends AbstractIdentified {
-    override val id: String = fail("If I am not supposed to exist, why is something asking for my id?")
+  class NonExistentIdentified extends Identified {
+    override type Id = String
+    override val id = fail("If I am not supposed to exist, why is something asking for my id?")
   }
 
   "A world with no history" should "not contain any identifiables" in {
@@ -167,6 +46,21 @@ class WorldSpec extends FlatSpec with Checkers {
 
     World.initialRevision === world.nextRevision
   }
+
+  def mixedDataSamplesForAnIdGenerator(faulty: Boolean = false) = Gen.frequency(Seq(dataSamplesForAnIdGenerator_[FooHistory](dataSampleGenerator1(faulty), fooHistoryIdGenerator),
+    dataSamplesForAnIdGenerator_[FooHistory](dataSampleGenerator2(faulty), fooHistoryIdGenerator),
+    dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator3(faulty), barHistoryIdGenerator),
+    dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator4(faulty), barHistoryIdGenerator),
+    dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator5(faulty), barHistoryIdGenerator)) map (1 -> _): _*)
+
+  val dataSamplesForAnIdGenerator = mixedDataSamplesForAnIdGenerator()
+
+  val faultyDataSamplesForAnIdGenerator = mixedDataSamplesForAnIdGenerator(faulty = true)
+
+
+  val recordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(dataSamplesForAnIdGenerator, changeWhenGenerator)
+
+  val faultyRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(faultyDataSamplesForAnIdGenerator, changeWhenGenerator)
 
   private def eventWhenFrom(recording: ((Any, Unbounded[Instant], Change), Int)) = recording match {
     case ((_, eventWhen, _), _) => eventWhen
@@ -210,12 +104,6 @@ class WorldSpec extends FlatSpec with Checkers {
         Prop.all((actualHistory zip expectedHistory zipWithIndex) map { case ((actual, expected), step) => (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}" }: _*)
       }: _*)
     })
-  }
-
-
-  private def shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random: Random, recordings: List[(Any, Unbounded[Instant], Change)]) = {
-    val recordingsGroupedByWhen = recordings groupBy (_._2)
-    random.shuffle(recordingsGroupedByWhen) flatMap (_._2)
   }
 
   "A world revealing no history from a scope with a 'revision' limit" should "reveal the same lack of history from a scope with an 'asOf' limit that comes at or after that revision but before the following revision" in {
@@ -626,7 +514,7 @@ class WorldSpec extends FlatSpec with Checkers {
                                  bigShuffledHistoryOverLotsOfThings = (random.splitIntoNonEmptyPieces(shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, recordingsGroupedById map (_.recordings) flatMap identity)
                                    .zipWithIndex)).force
                                  bigShuffledFaultyHistoryOverLotsOfThings = (random.splitIntoNonEmptyPieces(shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, faultyRecordingsGroupedById map (_.recordings) flatMap identity)
-                                   .zipWithIndex map {case (stuff, index) => stuff -> (-1 - index)})).force  // Map with event ids over to strictly negative values to avoid collisions with the changes that are expected to work.
+                                   .zipWithIndex map { case (stuff, index) => stuff -> (-1 - index) })).force // Map with event ids over to strictly negative values to avoid collisions with the changes that are expected to work.
                                  asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
                                  faultyAsOfs <- Gen.listOfN(bigShuffledFaultyHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
                                  queryWhen <- unboundedInstantGenerator
@@ -680,25 +568,5 @@ class WorldSpec extends FlatSpec with Checkers {
 
       ((historyOneWay.length == historyAnotherWay.length) :| s"${historyOneWay.length} == historyAnotherWay.length") && Prop.all(historyOneWay zip historyAnotherWay map { case (utopianCase, distopianCase) => (utopianCase === distopianCase) :| s"${utopianCase} === historyAnotherWay" }: _*)
     })
-  }
-
-
-  def recordEventsInWorld(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[((Any, Unbounded[Instant], Change), Int)]], asOfs: List[Instant], world: WorldReferenceImplementation) = {
-    revisionActions(bigShuffledHistoryOverLotsOfThings, asOfs, world) map (_.apply) force // Actually a piece of imperative code that looks functional - 'world' is being mutated as a side-effect; but the revisions are harvested functionally.
-  }
-
-  def recordEventsInWorldWithoutGivingUpOnFailure(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[((Any, Unbounded[Instant], Change), Int)]], asOfs: List[Instant], world: WorldReferenceImplementation) = {
-    for (revisionAction <- revisionActions(bigShuffledHistoryOverLotsOfThings, asOfs, world)) try {
-      revisionAction()
-    } catch {
-      case error if changeError == error =>
-    }
-  }
-
-  def revisionActions(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[((Any, Unbounded[Instant], Change), Int)]], asOfs: List[Instant], world: WorldReferenceImplementation): Stream[() => Revision] = {
-    for {(pieceOfHistory, asOf) <- bigShuffledHistoryOverLotsOfThings zip asOfs
-         events = pieceOfHistory map { case ((_, _, change), eventId) => eventId -> Some(change)
-         } toSeq} yield
-    () => world.revise(TreeMap(events: _*), asOf)
   }
 }
