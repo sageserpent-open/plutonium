@@ -11,7 +11,6 @@ import com.sageserpent.americium
 import com.sageserpent.americium._
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.seqEnrichment$._
-import com.sageserpent.plutonium.World.Revision
 import org.scalacheck.Prop.BooleanOperators
 import org.scalacheck.{Gen, Prop}
 import org.scalatest.FlatSpec
@@ -46,6 +45,21 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
 
     World.initialRevision === world.nextRevision
   }
+
+  def mixedDataSamplesForAnIdGenerator(faulty: Boolean = false) = Gen.frequency(Seq(dataSamplesForAnIdGenerator_[FooHistory](dataSampleGenerator1(faulty), fooHistoryIdGenerator),
+    dataSamplesForAnIdGenerator_[FooHistory](dataSampleGenerator2(faulty), fooHistoryIdGenerator),
+    dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator3(faulty), barHistoryIdGenerator),
+    dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator4(faulty), barHistoryIdGenerator),
+    dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator5(faulty), barHistoryIdGenerator)) map (1 -> _): _*)
+
+  val dataSamplesForAnIdGenerator = mixedDataSamplesForAnIdGenerator()
+
+  val faultyDataSamplesForAnIdGenerator = mixedDataSamplesForAnIdGenerator(faulty = true)
+
+
+  val recordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(dataSamplesForAnIdGenerator, changeWhenGenerator)
+
+  val faultyRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(faultyDataSamplesForAnIdGenerator, changeWhenGenerator)
 
   private def eventWhenFrom(recording: ((Any, Unbounded[Instant], Change), Int)) = recording match {
     case ((_, eventWhen, _), _) => eventWhen
@@ -89,12 +103,6 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
         Prop.all((actualHistory zip expectedHistory zipWithIndex) map { case ((actual, expected), step) => (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}" }: _*)
       }: _*)
     })
-  }
-
-
-  private def shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random: Random, recordings: List[(Any, Unbounded[Instant], Change)]) = {
-    val recordingsGroupedByWhen = recordings groupBy (_._2)
-    random.shuffle(recordingsGroupedByWhen) flatMap (_._2)
   }
 
   "A world revealing no history from a scope with a 'revision' limit" should "reveal the same lack of history from a scope with an 'asOf' limit that comes at or after that revision but before the following revision" in {
@@ -559,25 +567,5 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
 
       ((historyOneWay.length == historyAnotherWay.length) :| s"${historyOneWay.length} == historyAnotherWay.length") && Prop.all(historyOneWay zip historyAnotherWay map { case (utopianCase, distopianCase) => (utopianCase === distopianCase) :| s"${utopianCase} === historyAnotherWay" }: _*)
     })
-  }
-
-
-  def recordEventsInWorld(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[((Any, Unbounded[Instant], Change), Int)]], asOfs: List[Instant], world: WorldReferenceImplementation) = {
-    revisionActions(bigShuffledHistoryOverLotsOfThings, asOfs, world) map (_.apply) force // Actually a piece of imperative code that looks functional - 'world' is being mutated as a side-effect; but the revisions are harvested functionally.
-  }
-
-  def recordEventsInWorldWithoutGivingUpOnFailure(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[((Any, Unbounded[Instant], Change), Int)]], asOfs: List[Instant], world: WorldReferenceImplementation) = {
-    for (revisionAction <- revisionActions(bigShuffledHistoryOverLotsOfThings, asOfs, world)) try {
-      revisionAction()
-    } catch {
-      case error if changeError == error =>
-    }
-  }
-
-  def revisionActions(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[((Any, Unbounded[Instant], Change), Int)]], asOfs: List[Instant], world: WorldReferenceImplementation): Stream[() => Revision] = {
-    for {(pieceOfHistory, asOf) <- bigShuffledHistoryOverLotsOfThings zip asOfs
-         events = pieceOfHistory map { case ((_, _, change), eventId) => eventId -> Some(change)
-         } toSeq} yield
-    () => world.revise(TreeMap(events: _*), asOf)
   }
 }

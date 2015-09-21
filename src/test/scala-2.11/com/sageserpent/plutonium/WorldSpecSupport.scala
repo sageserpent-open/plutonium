@@ -7,10 +7,13 @@ import java.time.Instant
 
 import com.sageserpent.americium
 import com.sageserpent.americium._
+import com.sageserpent.plutonium.World._
 import org.scalacheck.{Arbitrary, Gen}
 
+import scala.collection.immutable.TreeMap
 import scala.reflect.runtime.universe._
 import scala.spores._
+import scala.util.Random
 
 
 trait WorldSpecSupport {
@@ -64,16 +67,6 @@ trait WorldSpecSupport {
          historyId <- historyIdGenerator} yield (historyId, (scope: Scope) => scope.render(Bitemporal.zeroOrOneOf[AHistory](historyId)): Seq[History], for {(data, changeFor: ((Unbounded[Instant], AHistory#Id) => Change)) <- dataSamples} yield (data, changeFor(_: Unbounded[Instant], historyId)))
   }
 
-  def dataSamplesForAnIdGenerator_(faulty: Boolean = false) = Gen.frequency(Seq(dataSamplesForAnIdGenerator_[FooHistory](dataSampleGenerator1(faulty), fooHistoryIdGenerator),
-    dataSamplesForAnIdGenerator_[FooHistory](dataSampleGenerator2(faulty), fooHistoryIdGenerator),
-    dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator3(faulty), barHistoryIdGenerator),
-    dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator4(faulty), barHistoryIdGenerator),
-    dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator5(faulty), barHistoryIdGenerator)) map (1 -> _): _*)
-
-  val dataSamplesForAnIdGenerator = dataSamplesForAnIdGenerator_()
-
-  val faultyDataSamplesForAnIdGenerator = dataSamplesForAnIdGenerator_(faulty = true)
-
   case class RecordingsForAnId(historyId: Any, whenEarliestChangeHappened: Unbounded[Instant], historiesFrom: Scope => Seq[History], recordings: List[(Any, Unbounded[Instant], Change)])
 
   def recordingsGroupedByIdGenerator_(dataSamplesForAnIdGenerator: Gen[(Any, (Scope) => Seq[History], List[(Any, (Unbounded[Instant]) => Change)])], changeWhenGenerator: Gen[Unbounded[Instant]]) = {
@@ -83,7 +76,29 @@ trait WorldSpecSupport {
     Gen.nonEmptyListOf(recordingsForAnIdGenerator) retryUntil idsAreNotRepeated
   }
 
-  val recordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(dataSamplesForAnIdGenerator, changeWhenGenerator)
+  def shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random: Random, recordings: List[(Any, Unbounded[Instant], Change)]) = {
+    val recordingsGroupedByWhen = recordings groupBy (_._2)
+    random.shuffle(recordingsGroupedByWhen) flatMap (_._2)
+  }
 
-  val faultyRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(faultyDataSamplesForAnIdGenerator, changeWhenGenerator)
+
+
+  def recordEventsInWorld(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[((Any, Unbounded[Instant], Change), Int)]], asOfs: List[Instant], world: WorldReferenceImplementation) = {
+    revisionActions(bigShuffledHistoryOverLotsOfThings, asOfs, world) map (_.apply) force // Actually a piece of imperative code that looks functional - 'world' is being mutated as a side-effect; but the revisions are harvested functionally.
+  }
+
+  def recordEventsInWorldWithoutGivingUpOnFailure(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[((Any, Unbounded[Instant], Change), Int)]], asOfs: List[Instant], world: WorldReferenceImplementation) = {
+    for (revisionAction <- revisionActions(bigShuffledHistoryOverLotsOfThings, asOfs, world)) try {
+      revisionAction()
+    } catch {
+      case error if changeError == error =>
+    }
+  }
+
+  def revisionActions(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[((Any, Unbounded[Instant], Change), Int)]], asOfs: List[Instant], world: WorldReferenceImplementation): Stream[() => Revision] = {
+    for {(pieceOfHistory, asOf) <- bigShuffledHistoryOverLotsOfThings zip asOfs
+         events = pieceOfHistory map { case ((_, _, change), eventId) => eventId -> Some(change)
+         } toSeq} yield
+    () => world.revise(TreeMap(events: _*), asOf)
+  }
 }
