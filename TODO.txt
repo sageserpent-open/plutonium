@@ -12,7 +12,7 @@ Do this with both the history ids used to generate the expected results, plus in
 
 3. Do we need to show that chunking the same histories in different ways yields the same result as long as scope cutoffs are set appropriately?
 Can do this by replaying the random chunking in the test case set up.
-(WON'T DO FOR NOW - IT IS IMPLIED BY THE ARBITRARY CHUNKING IN THE EXISTING TESTS)
+(DONE)
 
 4. Correction testing could be handled by generalising the existing tests so as to start with one set of histories for various ids and then cutover to a completely different set, which is what would be tested against.
 
