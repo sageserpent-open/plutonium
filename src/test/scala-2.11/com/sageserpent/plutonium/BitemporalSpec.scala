@@ -33,7 +33,11 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
 
       val scope = world.scopeFor(queryWhen, world.nextRevision)
 
-      val ids = recordingsGroupedById map { case RecordingsForAnId(historyId, _, _, _) => historyId.asInstanceOf[FooHistory#Id] }
+      val idsToWhenDefinedMap = recordingsGroupedById map { case RecordingsForAnId(historyId, whenEarliestChangeHappened, _, _) => historyId.asInstanceOf[FooHistory#Id] -> whenEarliestChangeHappened } toMap
+
+      val ids = idsToWhenDefinedMap.keys toSeq
+
+      val idsInExistence = (idsToWhenDefinedMap filter {case (_, whenDefined) => queryWhen >= whenDefined} keys) toSeq
 
       implicit def arbitraryGenericBitemporal[Raw](implicit rawArbitrary: Arbitrary[Raw]): Arbitrary[Bitemporal[Raw]] = Arbitrary {
         Arbitrary.arbitrary[Raw] map (MonadPlus[Bitemporal].point(_))
@@ -44,8 +48,8 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
         Arbitrary(
           Gen.frequency(5 -> (Arbitrary.arbitrary[Int] map (MonadPlus[Bitemporal].point(_))),
             10 -> (Gen.oneOf(ids) map (Bitemporal.zeroOrOneOf[FooHistory](_) map intFrom)),
-            10 -> (Gen.oneOf(ids) map (Bitemporal.singleOneOf[FooHistory](_) map intFrom)),
-            10 -> (Gen.oneOf(ids) map (Bitemporal.withId[FooHistory](_) map intFrom)),
+            10 -> (Gen.oneOf(idsInExistence) map (Bitemporal.singleOneOf[FooHistory](_) map intFrom)),
+            10 -> (Gen.oneOf(idsInExistence) map (Bitemporal.withId[FooHistory](_) map intFrom)),
             3 -> Gen.const(Bitemporal.wildcard[FooHistory] map intFrom),
             1 -> Gen.const(Bitemporal.none[Int]))
         )
