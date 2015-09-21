@@ -1,18 +1,18 @@
 package com.sageserpent.plutonium
 
-import org.scalacheck.{Gen, Arbitrary, Prop}
+import com.sageserpent.americium.randomEnrichment._
+import org.scalacheck.{Arbitrary, Gen, Prop}
 import org.scalatest.FlatSpec
 import org.scalatest.prop.Checkers
 
 import scala.util.Random
-import scalaz.{MonadPlus, Equal}
 import scalaz.scalacheck._
-
-import com.sageserpent.americium.randomEnrichment._
+import scalaz.{Equal, MonadPlus}
 
 /**
  * Created by Gerard on 29/07/2015.
  */
+
 class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
   val dataSamplesForAnIdGenerator = dataSamplesForAnIdGenerator_[FooHistory](dataSampleGenerator1(faulty = false), fooHistoryIdGenerator)
 
@@ -33,11 +33,23 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
 
       val scope = world.scopeFor(queryWhen, world.nextRevision)
 
-      // TODO: Harvest ids so that the arbitrary bitemporal generator can make some 'interesting' bitemporals that refer to them.
+      val ids = recordingsGroupedById map { case RecordingsForAnId(historyId, _, _, _) => historyId.asInstanceOf[FooHistory#Id] }
 
-      implicit def arbitraryBitemporal[Raw](implicit rawArbitrary: Arbitrary[Raw]): Arbitrary[Bitemporal[Raw]] = Arbitrary {
+      implicit def arbitraryGenericBitemporal[Raw](implicit rawArbitrary: Arbitrary[Raw]): Arbitrary[Bitemporal[Raw]] = Arbitrary {
         Arbitrary.arbitrary[Raw] map (MonadPlus[Bitemporal].point(_))
-      } // TODO - add in 'Bitemporal.None'.
+      }
+
+      implicit def arbitraryBitemporalOfInt(implicit rawArbitrary: Arbitrary[Int]): Arbitrary[Bitemporal[Int]] = {
+        def intFrom(item: FooHistory) = item.datums.hashCode()
+        Arbitrary(
+          Gen.frequency(5 -> (Arbitrary.arbitrary[Int] map (MonadPlus[Bitemporal].point(_))),
+            10 -> (Gen.oneOf(ids) map (Bitemporal.zeroOrOneOf[FooHistory](_) map intFrom)),
+            10 -> (Gen.oneOf(ids) map (Bitemporal.singleOneOf[FooHistory](_) map intFrom)),
+            10 -> (Gen.oneOf(ids) map (Bitemporal.withId[FooHistory](_) map intFrom)),
+            3 -> Gen.const(Bitemporal.wildcard[FooHistory] map intFrom),
+            1 -> Gen.const(Bitemporal.none[Int]))
+        )
+      }
 
       implicit def equal[Raw]: Equal[Bitemporal[Raw]] = new Equal[Bitemporal[Raw]] {
         override def equal(lhs: Bitemporal[Raw], rhs: Bitemporal[Raw]): Boolean = scope.render(lhs) == scope.render(rhs)

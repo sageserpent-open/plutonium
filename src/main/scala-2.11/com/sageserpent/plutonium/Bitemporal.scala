@@ -41,6 +41,8 @@ object Bitemporal {
 
   def none[Raw]: Bitemporal[Raw] = new DefaultBitemporalReferenceImplementation[Raw]
 
+  def numberOf[Raw <: Identified : TypeTag](id: Raw#Id): Bitemporal[Int] = ???  // TODO
+
   // TODO - something that makes Bitemporal[Instant] to provide a way of snooping into the scope's 'when' from within the monad.
 
   // TODO - something that takes a bitemporal and then makes a time-shifted bitemporal from within the monad - for PnL.
