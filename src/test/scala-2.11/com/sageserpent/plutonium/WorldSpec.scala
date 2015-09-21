@@ -614,6 +614,9 @@ class WorldSpec extends FlatSpec with Checkers {
     })
   }
 
+  private def historyFrom(world: World, recordingsGroupedById: List[RecordingsForAnId])(scope: world.Scope): List[(Any, Any)] = (for (RecordingsForAnId(historyId, _, historiesFrom, _) <- recordingsGroupedById)
+    yield historiesFrom(scope) flatMap (_.datums) map (historyId -> _)) flatMap identity
+
   it should "create revisions with the strong exception-safety guarantee" in {
     // TODO - should mix in some 'good' changes into the faulty revisions - currently this test makes its faulty revisions entirely with faulty changes.
     val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
@@ -634,9 +637,6 @@ class WorldSpec extends FlatSpec with Checkers {
       val utopia = new WorldReferenceImplementation()
       val distopia = new WorldReferenceImplementation()
 
-      def historyFrom(world: World)(scope: world.Scope) = (for (RecordingsForAnId(historyId, _, historiesFrom, _) <- recordingsGroupedById)
-        yield historiesFrom(scope) flatMap (_.datums) map (historyId -> _)) flatMap identity
-
       recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, utopia)
       recordEventsInWorldWithoutGivingUpOnFailure(mergedShuffledHistoryOverLotsOfThings.toStream, mergedAsOfs.toList, distopia)
 
@@ -646,10 +646,39 @@ class WorldSpec extends FlatSpec with Checkers {
       val utopianScope = utopia.scopeFor(queryWhen, utopia.nextRevision)
       val distopianScope = distopia.scopeFor(queryWhen, distopia.nextRevision)
 
-      val utopianHistory = historyFrom(utopia)(utopianScope)
-      val distopianHistory = historyFrom(distopia)(distopianScope)
+      val utopianHistory = historyFrom(utopia, recordingsGroupedById)(utopianScope)
+      val distopianHistory = historyFrom(distopia, recordingsGroupedById)(distopianScope)
 
       ((utopianHistory.length == distopianHistory.length) :| s"${utopianHistory.length} == distopianHistory.length") && Prop.all(utopianHistory zip distopianHistory map { case (utopianCase, distopianCase) => (utopianCase === distopianCase) :| s"${utopianCase} === distopianCase" }: _*)
+    })
+  }
+
+  it should "yield the same histories for scopes including all changes at the latest revision, regardless of how changes are grouped into revisions" in {
+    val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
+                                 faultyRecordingsGroupedById <- faultyRecordingsGroupedByIdGenerator
+                                 seed <- seedGenerator
+                                 random = new Random(seed)
+                                 shuffledRecordings = (shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, recordingsGroupedById map (_.recordings) flatMap identity).zipWithIndex).toList
+                                 bigShuffledHistoryOverLotsOfThingsOneWay = (random.splitIntoNonEmptyPieces(shuffledRecordings)).force
+                                 bigShuffledFaultyHistoryOverLotsOfThingsAnotherWay = (random.splitIntoNonEmptyPieces(shuffledRecordings)).force
+                                 asOfsOneWay <- Gen.listOfN(bigShuffledHistoryOverLotsOfThingsOneWay.length, instantGenerator) map (_.sorted)
+                                 asOfsAnotherWay <- Gen.listOfN(bigShuffledFaultyHistoryOverLotsOfThingsAnotherWay.length, instantGenerator) map (_.sorted)
+                                 queryWhen <- unboundedInstantGenerator
+    } yield (recordingsGroupedById, bigShuffledHistoryOverLotsOfThingsOneWay, bigShuffledFaultyHistoryOverLotsOfThingsAnotherWay, asOfsOneWay, asOfsAnotherWay, queryWhen)
+    check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigShuffledHistoryOverLotsOfThingsOneWay, bigShuffledFaultyHistoryOverLotsOfThingsAnotherWay, asOfsOneWay, asOfsAnotherWay, queryWhen) =>
+      val worldOneWay = new WorldReferenceImplementation()
+      val worldAnotherWay = new WorldReferenceImplementation()
+
+      recordEventsInWorld(bigShuffledHistoryOverLotsOfThingsOneWay, asOfsOneWay, worldOneWay)
+      recordEventsInWorld(bigShuffledFaultyHistoryOverLotsOfThingsAnotherWay, asOfsAnotherWay, worldAnotherWay)
+
+      val scopeOneWay = worldOneWay.scopeFor(queryWhen, worldOneWay.nextRevision)
+      val scopeAnotherWay = worldAnotherWay.scopeFor(queryWhen, worldAnotherWay.nextRevision)
+
+      val historyOneWay = historyFrom(worldOneWay, recordingsGroupedById)(scopeOneWay)
+      val historyAnotherWay = historyFrom(worldAnotherWay, recordingsGroupedById)(scopeAnotherWay)
+
+      ((historyOneWay.length == historyAnotherWay.length) :| s"${historyOneWay.length} == historyAnotherWay.length") && Prop.all(historyOneWay zip historyAnotherWay map { case (utopianCase, distopianCase) => (utopianCase === distopianCase) :| s"${utopianCase} === historyAnotherWay" }: _*)
     })
   }
 
