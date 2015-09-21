@@ -11,6 +11,7 @@ Do this with both the history ids used to generate the expected results, plus in
 (DONE)
 
 3. Do we need to show that chunking the same histories in different ways yields the same result as long as scope cutoffs are set appropriately?
+Can do this by replaying the random chunking in the test case set up.
 (WON'T DO FOR NOW - IT IS IMPLIED BY THE ARBITRARY CHUNKING IN THE EXISTING TESTS)
 
 4. Correction testing could be handled by generalising the existing tests so as to start with one set of histories for various ids and then cutover to a completely different set, which is what would be tested against.
@@ -22,6 +23,8 @@ Could do this by having a mixture of throwaway histories on the ids under test, 
 5. Need tests on the read / write access to raw objects in changes and rendered from query scopes.
 
 ---------------------------------------------------------------------------------------------------------------------------
+
+Actually, need to implement the support for equality the 'MonadPlus' typeclass - presumably with a scope made on the fly so that the lhs and rhs bitemporals can both be rendered against it.
 
 6. Are there tests for wildcards, plus the various flavours of id-matching? What about the 'none' case? What about having several items of different type sharing the same id? What about attempting to book in a revision that would lead to a new item sharing the same id as one with a sub- or -supertype?
 
