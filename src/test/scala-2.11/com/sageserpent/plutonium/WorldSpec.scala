@@ -548,17 +548,17 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
                                  random = new Random(seed)
                                  shuffledRecordings = (shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, recordingsGroupedById map (_.recordings) flatMap identity).zipWithIndex).toList
                                  bigShuffledHistoryOverLotsOfThingsOneWay = (random.splitIntoNonEmptyPieces(shuffledRecordings)).force
-                                 bigShuffledFaultyHistoryOverLotsOfThingsAnotherWay = (random.splitIntoNonEmptyPieces(shuffledRecordings)).force
+                                 bigShuffledHistoryOverLotsOfThingsAnotherWay = (random.splitIntoNonEmptyPieces(shuffledRecordings)).force
                                  asOfsOneWay <- Gen.listOfN(bigShuffledHistoryOverLotsOfThingsOneWay.length, instantGenerator) map (_.sorted)
-                                 asOfsAnotherWay <- Gen.listOfN(bigShuffledFaultyHistoryOverLotsOfThingsAnotherWay.length, instantGenerator) map (_.sorted)
+                                 asOfsAnotherWay <- Gen.listOfN(bigShuffledHistoryOverLotsOfThingsAnotherWay.length, instantGenerator) map (_.sorted)
                                  queryWhen <- unboundedInstantGenerator
-    } yield (recordingsGroupedById, bigShuffledHistoryOverLotsOfThingsOneWay, bigShuffledFaultyHistoryOverLotsOfThingsAnotherWay, asOfsOneWay, asOfsAnotherWay, queryWhen)
-    check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigShuffledHistoryOverLotsOfThingsOneWay, bigShuffledFaultyHistoryOverLotsOfThingsAnotherWay, asOfsOneWay, asOfsAnotherWay, queryWhen) =>
+    } yield (recordingsGroupedById, bigShuffledHistoryOverLotsOfThingsOneWay, bigShuffledHistoryOverLotsOfThingsAnotherWay, asOfsOneWay, asOfsAnotherWay, queryWhen)
+    check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigShuffledHistoryOverLotsOfThingsOneWay, bigShuffledHistoryOverLotsOfThingsAnotherWay, asOfsOneWay, asOfsAnotherWay, queryWhen) =>
       val worldOneWay = new WorldReferenceImplementation()
       val worldAnotherWay = new WorldReferenceImplementation()
 
       recordEventsInWorld(bigShuffledHistoryOverLotsOfThingsOneWay, asOfsOneWay, worldOneWay)
-      recordEventsInWorld(bigShuffledFaultyHistoryOverLotsOfThingsAnotherWay, asOfsAnotherWay, worldAnotherWay)
+      recordEventsInWorld(bigShuffledHistoryOverLotsOfThingsAnotherWay, asOfsAnotherWay, worldAnotherWay)
 
       val scopeOneWay = worldOneWay.scopeFor(queryWhen, worldOneWay.nextRevision)
       val scopeAnotherWay = worldAnotherWay.scopeFor(queryWhen, worldAnotherWay.nextRevision)
@@ -566,7 +566,7 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
       val historyOneWay = historyFrom(worldOneWay, recordingsGroupedById)(scopeOneWay)
       val historyAnotherWay = historyFrom(worldAnotherWay, recordingsGroupedById)(scopeAnotherWay)
 
-      ((historyOneWay.length == historyAnotherWay.length) :| s"${historyOneWay.length} == historyAnotherWay.length") && Prop.all(historyOneWay zip historyAnotherWay map { case (utopianCase, distopianCase) => (utopianCase === distopianCase) :| s"${utopianCase} === historyAnotherWay" }: _*)
+      ((historyOneWay.length == historyAnotherWay.length) :| s"${historyOneWay.length} == historyAnotherWay.length") && Prop.all(historyOneWay zip historyAnotherWay map { case (caseOneWay, caseAnotherWay) => (caseOneWay === caseAnotherWay) :| s"${caseOneWay} === caseAnotherWay" }: _*)
     })
   }
 }
