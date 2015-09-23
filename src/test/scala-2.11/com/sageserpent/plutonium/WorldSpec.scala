@@ -413,7 +413,7 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
     })
   }
 
-  it should "create a scope that captures the arguments passed to 'scopeFor'" in {
+  it should "create a scope whose properties relate to the call to 'scopeFor' when using the next revision overload" in {
     val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
                                  seed <- seedGenerator
                                  random = new Random(seed)
@@ -426,9 +426,9 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
 
       recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
 
-      val asOfBeforeInitialRevision = asOfs.head minusSeconds 10
+      val expectedAsOfBeforeInitialRevision: Unbounded[Instant] = NegativeInfinity[Instant]
 
-      def nextRevisions(nextRevisions: List[(Instant, (Int, Int))], asOf: Instant) = nextRevisions match {
+      def asOfAndNextRevisionPairs_(nextRevisions: List[(Unbounded[Instant], (Int, Int))], asOf: Unbounded[Instant]) = nextRevisions match {
         case (preceedingAsOf, (preceedingNextRevision, preceedingNextRevisionAfterFirstDuplicate)) :: tail if asOf == preceedingAsOf => (asOf -> ((1 + preceedingNextRevision) -> preceedingNextRevisionAfterFirstDuplicate)) :: tail
         case (_, (preceedingNextRevision, _)) :: _ => {
           var nextRevision = 1 + preceedingNextRevision
@@ -436,37 +436,61 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
         }
       }
 
-      val asOfAndNextRevisionPairs = (List(asOfBeforeInitialRevision -> (World.initialRevision -> World.initialRevision)) /: asOfs)(nextRevisions) reverse
-
-      val checksViaAsOf = for {(asOf, (nextRevisionAfterDuplicates, _)) <- asOfAndNextRevisionPairs
-                               scopeViaAsOf = world.scopeFor(queryWhen, asOf)
-      } yield (asOf, nextRevisionAfterDuplicates, scopeViaAsOf)
+      val asOfAndNextRevisionPairs = (List(expectedAsOfBeforeInitialRevision -> (World.initialRevision -> World.initialRevision)) /: asOfs.map(Finite(_)))(asOfAndNextRevisionPairs_) reverse
 
       val checksViaNextRevision = for {(asOf, (nextRevisionAfterDuplicates, nextRevisionAfterFirstDuplicate)) <- asOfAndNextRevisionPairs
                                        nextRevision <- nextRevisionAfterFirstDuplicate to nextRevisionAfterDuplicates
                                        scopeViaNextRevision = world.scopeFor(queryWhen, nextRevision)
       } yield (asOf, nextRevision, scopeViaNextRevision)
 
-      Prop.all(checksViaAsOf map { case (asOf, nextRevision, scopeViaAsOf) =>
-        (Finite(asOf) === scopeViaAsOf.asOf) :| s"Finite(${asOf}) === scopeViaAsOf.asOf" &&
-          (nextRevision === scopeViaAsOf.nextRevision) :| s"${nextRevision} === scopeViaAsOf.nextRevision" &&
-          (queryWhen == scopeViaAsOf.when) :| s"${queryWhen} == scopeViaAsOf.when"
-      }: _*) && (checksViaNextRevision.head match {
-        case (asOf, nextRevision, scopeViaNextRevision) =>
-          (NegativeInfinity[Instant] === scopeViaNextRevision.asOf) :| s"NegativeInfinity[Instant] === scopeViaNextRevision.asOf" &&
-            (nextRevision === scopeViaNextRevision.nextRevision) :| s"${nextRevision} === scopeViaNextRevision.nextRevision" &&
-            (queryWhen === scopeViaNextRevision.when) :| s"${queryWhen} === scopeViaNextRevision.when"
-      }) &&
-        Prop.all(checksViaNextRevision.tail map { case (asOf, nextRevision, scopeViaNextRevision) =>
-          (Finite(asOf) === scopeViaNextRevision.asOf) :| s"Finite(${asOf}) === scopeViaNextRevision.asOf" &&
-            (nextRevision === scopeViaNextRevision.nextRevision) :| s"${nextRevision} === scopeViaNextRevision.nextRevision" &&
-            (queryWhen === scopeViaNextRevision.when) :| s"${queryWhen} === scopeViaNextRevision.when"
-        }: _*)
+
+      Prop.all(checksViaNextRevision map { case (asOf, nextRevision, scopeViaNextRevision) =>
+        (asOf === scopeViaNextRevision.asOf) :| s"${asOf} === scopeViaNextRevision.asOf" &&
+          (nextRevision === scopeViaNextRevision.nextRevision) :| s"${nextRevision} === scopeViaNextRevision.nextRevision" &&
+          (queryWhen === scopeViaNextRevision.when) :| s"${queryWhen} === scopeViaNextRevision.when"
+      }: _*)
 
       // TODO - perturb the 'asOf' values so as not to go the next revision and see how that plays with the two ways of constructing a scope.
     })
   }
 
+  it should "create a scope whose properties relate to the call to 'scopeFor' when using the 'asOf' time overload" in {
+    val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
+                                 seed <- seedGenerator
+                                 random = new Random(seed)
+                                 bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, recordingsGroupedById map (_.recordings) flatMap identity).zipWithIndex)
+                                 asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
+                                 queryWhen <- unboundedInstantGenerator
+    } yield (bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen, random)
+    check(Prop.forAllNoShrink(testCaseGenerator) { case (bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen, random) =>
+      val world = new WorldReferenceImplementation()
+
+      val revisions = recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
+
+      val asOfComingAfterTheLastRevision = asOfs.last.plusSeconds(10L)
+
+      val asOfPairs = asOfs.scanRight((asOfComingAfterTheLastRevision, asOfComingAfterTheLastRevision)) { case (asOf, (laterAsOf, _)) => (asOf, laterAsOf) } init
+
+      val asOfsAndSharedRevisionTriples = (for {((earlierAsOfCorrespondingToRevision, laterAsOfComingNoLaterThanAnySucceedingRevision), revision) <- asOfPairs zip revisions
+                                                laterAsOfSharingTheSameRevisionAsTheEarlierOne = earlierAsOfCorrespondingToRevision plusSeconds random.chooseAnyNumberFromZeroToOneLessThan(earlierAsOfCorrespondingToRevision.until(laterAsOfComingNoLaterThanAnySucceedingRevision, ChronoUnit.SECONDS))}
+        yield (earlierAsOfCorrespondingToRevision, laterAsOfSharingTheSameRevisionAsTheEarlierOne, revision)) filter (PartialFunction.cond(_) { case (earlierAsOfCorrespondingToRevision, laterAsOfSharingTheSameRevisionAsTheEarlierOne, _) => earlierAsOfCorrespondingToRevision isBefore laterAsOfSharingTheSameRevisionAsTheEarlierOne })
+
+      val checksViaAsOf = for {(earlierAsOfCorrespondingToRevision, laterAsOfSharingTheSameRevisionAsTheEarlierOne, revision) <- asOfsAndSharedRevisionTriples
+                               scopeViaEarlierAsOfCorrespondingToRevision = world.scopeFor(queryWhen, earlierAsOfCorrespondingToRevision)
+                               scopeViaLaterAsOfSharingTheSameRevisionAsTheEarlierOne = world.scopeFor(queryWhen, laterAsOfSharingTheSameRevisionAsTheEarlierOne)
+                               nextRevision = 1 + revision
+      } yield (earlierAsOfCorrespondingToRevision, laterAsOfSharingTheSameRevisionAsTheEarlierOne, nextRevision, scopeViaEarlierAsOfCorrespondingToRevision, scopeViaLaterAsOfSharingTheSameRevisionAsTheEarlierOne)
+
+      Prop.all(checksViaAsOf map { case (earlierAsOfCorrespondingToRevision, laterAsOfSharingTheSameRevisionAsTheEarlierOne, nextRevision, scopeViaEarlierAsOfCorrespondingToRevision, scopeViaLaterAsOfSharingTheSameRevisionAsTheEarlierOne) =>
+        (Finite(earlierAsOfCorrespondingToRevision) === scopeViaEarlierAsOfCorrespondingToRevision.asOf) :| s"Finite(${earlierAsOfCorrespondingToRevision}) === scopeViaEarlierAsOfCorrespondingToRevision.asOf" &&
+          (Finite(laterAsOfSharingTheSameRevisionAsTheEarlierOne) === scopeViaLaterAsOfSharingTheSameRevisionAsTheEarlierOne.asOf) :| s"Finite(${laterAsOfSharingTheSameRevisionAsTheEarlierOne}) === scopeViaLaterAsOfSharingTheSameRevisionAsTheEarlierOne.asOf" &&
+          (nextRevision === scopeViaEarlierAsOfCorrespondingToRevision.nextRevision) :| s"${nextRevision} === scopeViaEarlierAsOfCorrespondingToRevision.nextRevision" &&
+          (nextRevision === scopeViaLaterAsOfSharingTheSameRevisionAsTheEarlierOne.nextRevision) :| s"${nextRevision} === scopeViaLaterAsOfSharingTheSameRevisionAsTheEarlierOne.nextRevision" &&
+          (queryWhen == scopeViaEarlierAsOfCorrespondingToRevision.when) :| s"${queryWhen} == scopeViaEarlierAsOfCorrespondingToRevision.when" &&
+          (queryWhen == scopeViaLaterAsOfSharingTheSameRevisionAsTheEarlierOne.when) :| s"${queryWhen} == scopeViaLaterAsOfSharingTheSameRevisionAsTheEarlierOne.when"
+      }: _*)
+    })
+  }
 
   it should "create a scope that is a snapshot unaffected by subsequent revisions" in {
     val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
