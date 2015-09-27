@@ -30,7 +30,7 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
   }
 
   "A world with no history" should "not contain any identifiables" in {
-    val world = new WorldReferenceImplementation()
+    val world = new WorldUnderTest()
 
 
 
@@ -45,7 +45,7 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
   }
 
   "A world with no history" should "have no current revision" in {
-    val world = new WorldReferenceImplementation()
+    val world = new WorldUnderTest()
 
     World.initialRevision === world.nextRevision
   }
@@ -86,7 +86,7 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
                                  asOfsIncludingAllEventsNoLaterThanTheQueryWhen = latestAsOfsThatMapUnambiguouslyToEventWhens takeWhile (asOf => asOfToLatestEventWhenMap(asOf) <= Finite(queryWhen))
     } yield (recordingsGroupedById, bigHistoryOverLotsOfThingsSortedInEventWhenOrder, asOfs, queryWhen, asOfToLatestEventWhenMap, asOfsIncludingAllEventsNoLaterThanTheQueryWhen)
     check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigHistoryOverLotsOfThingsSortedInEventWhenOrder, asOfs, queryWhen, asOfToLatestEventWhenMap, asOfsIncludingAllEventsNoLaterThanTheQueryWhen) =>
-      val world = new WorldReferenceImplementation()
+      val world = new WorldUnderTest()
 
       recordEventsInWorld(liftRecordings(bigHistoryOverLotsOfThingsSortedInEventWhenOrder), asOfs, world)
 
@@ -117,7 +117,7 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
                                  asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
                                  queryWhen <- unboundedInstantGenerator} yield (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen, random)
     check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen, random) =>
-      val world = new WorldReferenceImplementation()
+      val world = new WorldUnderTest()
 
       val revisions = recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfs, world)
 
@@ -148,7 +148,7 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
                                  asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
                                  queryWhen <- unboundedInstantGenerator} yield (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen, random)
     check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen, random) =>
-      val world = new WorldReferenceImplementation()
+      val world = new WorldUnderTest()
 
       val revisions = recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfs, world)
 
@@ -180,7 +180,7 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
                                  asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
                                  queryWhen <- unboundedInstantGenerator} yield (bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen, random)
     check(Prop.forAllNoShrink(testCaseGenerator) { case (bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen, random) =>
-      val world = new WorldReferenceImplementation()
+      val world = new WorldUnderTest()
 
       val revisions = recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfs, world)
 
@@ -211,7 +211,7 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
                                  queryWhen <- unboundedInstantGenerator
     } yield (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
     check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
-      val world = new WorldReferenceImplementation()
+      val world = new WorldUnderTest()
 
       recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfs, world)
 
@@ -237,7 +237,7 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
                                  queryWhen <- unboundedInstantGenerator
     } yield (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
     check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
-      val world = new WorldReferenceImplementation()
+      val world = new WorldUnderTest()
 
       recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfs, world)
 
@@ -264,7 +264,7 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
                                  queryWhen <- unboundedInstantGenerator
     } yield (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
     check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
-      val world = new WorldReferenceImplementation()
+      val world = new WorldUnderTest()
 
       recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfs, world)
 
@@ -291,7 +291,7 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
                                  queryWhen <- unboundedInstantGenerator
     } yield (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
     check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
-      val world = new WorldReferenceImplementation()
+      val world = new WorldUnderTest()
 
       recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfs, world)
 
@@ -314,7 +314,7 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
                                  asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
     } yield (bigShuffledHistoryOverLotsOfThings, asOfs)
     check(Prop.forAllNoShrink(testCaseGenerator) { case (bigShuffledHistoryOverLotsOfThings, asOfs) =>
-      val world = new WorldReferenceImplementation()
+      val world = new WorldUnderTest()
 
       val revisions = recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfs, world)
 
@@ -330,7 +330,7 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
                                  asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
     } yield (bigShuffledHistoryOverLotsOfThings, asOfs)
     check(Prop.forAllNoShrink(testCaseGenerator) { case (bigShuffledHistoryOverLotsOfThings, asOfs) =>
-      val world = new WorldReferenceImplementation()
+      val world = new WorldUnderTest()
 
       recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfs, world)
 
@@ -346,7 +346,7 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
                                  asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
     } yield (bigShuffledHistoryOverLotsOfThings, asOfs)
     check(Prop.forAllNoShrink(testCaseGenerator) { case (bigShuffledHistoryOverLotsOfThings, asOfs) =>
-      val world = new WorldReferenceImplementation()
+      val world = new WorldUnderTest()
 
       recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfs, world)
 
@@ -362,7 +362,7 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
                                  asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
     } yield (bigShuffledHistoryOverLotsOfThings, asOfs)
     check(Prop.forAllNoShrink(testCaseGenerator) { case (bigShuffledHistoryOverLotsOfThings, asOfs) =>
-      val world = new WorldReferenceImplementation()
+      val world = new WorldUnderTest()
 
       val revisions = recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfs, world)
 
@@ -378,7 +378,7 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
                                  asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
     } yield (bigShuffledHistoryOverLotsOfThings, asOfs)
     check(Prop.forAllNoShrink(testCaseGenerator) { case (bigShuffledHistoryOverLotsOfThings, asOfs) =>
-      val world = new WorldReferenceImplementation()
+      val world = new WorldUnderTest()
 
       recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfs, world)
 
@@ -407,7 +407,7 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
         case (asOfsBeforeTransposition, Seq(first, second, asOfsAfterTransposition@_*)) => asOfsBeforeTransposition ++ Seq(second, first) ++ asOfsAfterTransposition
       }
 
-      val world = new WorldReferenceImplementation()
+      val world = new WorldUnderTest()
 
       {
         intercept[IllegalArgumentException](recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfsWithIncorrectTransposition, world))
@@ -425,7 +425,7 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
                                  queryWhen <- unboundedInstantGenerator
     } yield (bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
     check(Prop.forAllNoShrink(testCaseGenerator) { case (bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
-      val world = new WorldReferenceImplementation()
+      val world = new WorldUnderTest()
 
       recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfs, world)
 
@@ -466,7 +466,7 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
                                  queryWhen <- unboundedInstantGenerator
     } yield (bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen, random)
     check(Prop.forAllNoShrink(testCaseGenerator) { case (bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen, random) =>
-      val world = new WorldReferenceImplementation()
+      val world = new WorldUnderTest()
 
       val revisions = recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfs, world)
 
@@ -504,7 +504,7 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
                                  queryWhen <- unboundedInstantGenerator
     } yield (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
     check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
-      val world = new WorldReferenceImplementation()
+      val world = new WorldUnderTest()
 
       def historyFrom(scope: world.Scope) = (for (RecordingsForAnId(historyId, _, historiesFrom, _) <- recordingsGroupedById)
         yield historiesFrom(scope) flatMap (_.datums) map (historyId -> _)) flatMap identity
@@ -551,8 +551,8 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
     check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, bigShuffledFaultyHistoryOverLotsOfThings, asOfs, faultyAsOfs, queryWhen) =>
       val (mergedShuffledHistoryOverLotsOfThings, mergedAsOfs) = ((bigShuffledHistoryOverLotsOfThings zip asOfs) ++ (bigShuffledFaultyHistoryOverLotsOfThings zip bigShuffledHistoryOverLotsOfThings map { case (faulty, ok) => faulty ++ ok } zip faultyAsOfs) groupBy (_._2)).toSeq sortBy (_._1) flatMap (_._2) unzip
 
-      val utopia = new WorldReferenceImplementation()
-      val distopia = new WorldReferenceImplementation()
+      val utopia = new WorldUnderTest()
+      val distopia = new WorldUnderTest()
 
       recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfs, utopia)
       recordEventsInWorldWithoutGivingUpOnFailure(liftRecordings(mergedShuffledHistoryOverLotsOfThings.toStream), mergedAsOfs.toList, distopia)
@@ -582,8 +582,8 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
                                  queryWhen <- unboundedInstantGenerator
     } yield (recordingsGroupedById, bigShuffledHistoryOverLotsOfThingsOneWay, bigShuffledHistoryOverLotsOfThingsAnotherWay, asOfsOneWay, asOfsAnotherWay, queryWhen)
     check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigShuffledHistoryOverLotsOfThingsOneWay, bigShuffledHistoryOverLotsOfThingsAnotherWay, asOfsOneWay, asOfsAnotherWay, queryWhen) =>
-      val worldOneWay = new WorldReferenceImplementation()
-      val worldAnotherWay = new WorldReferenceImplementation()
+      val worldOneWay = new WorldUnderTest()
+      val worldAnotherWay = new WorldUnderTest()
 
       recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThingsOneWay), asOfsOneWay, worldOneWay)
       recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThingsAnotherWay), asOfsAnotherWay, worldAnotherWay)
@@ -650,7 +650,7 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
                                  queryWhen <- unboundedInstantGenerator
     } yield (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
     check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
-      val world = new WorldReferenceImplementation()
+      val world = new WorldUnderTest()
 
       recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
 

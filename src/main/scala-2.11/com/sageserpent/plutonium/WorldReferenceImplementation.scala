@@ -161,7 +161,7 @@ class WorldReferenceImplementation extends World {  // TODO - thread safety.
 
   override val revisionAsOfs: MutableList[Instant] = MutableList.empty
 
-  def revise[EventId](events: Map[EventId, Option[Event]], asOf: Instant): Revision = {
+  def revise(events: Map[EventId, Option[Event]], asOf: Instant): Revision = {
     if (revisionAsOfs.nonEmpty && revisionAsOfs.last.isAfter(asOf)) throw new IllegalArgumentException(s"'asOf': ${asOf} should be no earlier than that of the last revision: ${revisionAsOfs.last}")
 
     // TODO: make exception safe - especially against the expected failures to apply events due to inconsistencies.
