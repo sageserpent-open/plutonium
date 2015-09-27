@@ -29,7 +29,7 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
     check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
       val world = new WorldReferenceImplementation()
 
-      recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
+      recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfs, world)
 
       val scope = world.scopeFor(queryWhen, world.nextRevision)
 

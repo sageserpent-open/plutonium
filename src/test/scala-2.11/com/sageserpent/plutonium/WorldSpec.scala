@@ -88,7 +88,7 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
     check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigHistoryOverLotsOfThingsSortedInEventWhenOrder, asOfs, queryWhen, asOfToLatestEventWhenMap, asOfsIncludingAllEventsNoLaterThanTheQueryWhen) =>
       val world = new WorldReferenceImplementation()
 
-      recordEventsInWorld(bigHistoryOverLotsOfThingsSortedInEventWhenOrder, asOfs, world)
+      recordEventsInWorld(liftRecordings(bigHistoryOverLotsOfThingsSortedInEventWhenOrder), asOfs, world)
 
       assert(asOfsIncludingAllEventsNoLaterThanTheQueryWhen.nonEmpty)
 
@@ -119,7 +119,7 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
     check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen, random) =>
       val world = new WorldReferenceImplementation()
 
-      val revisions = recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
+      val revisions = recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfs, world)
 
       val asOfComingAfterTheLastRevision = asOfs.last.plusSeconds(10L)
 
@@ -150,7 +150,7 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
     check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen, random) =>
       val world = new WorldReferenceImplementation()
 
-      val revisions = recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
+      val revisions = recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfs, world)
 
       val asOfComingAfterTheLastRevision = asOfs.last.plusSeconds(10L)
 
@@ -182,7 +182,7 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
     check(Prop.forAllNoShrink(testCaseGenerator) { case (bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen, random) =>
       val world = new WorldReferenceImplementation()
 
-      val revisions = recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
+      val revisions = recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfs, world)
 
       val asOfComingAfterTheLastRevision = asOfs.last.plusSeconds(10L)
 
@@ -213,7 +213,7 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
     check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
       val world = new WorldReferenceImplementation()
 
-      recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
+      recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfs, world)
 
       val scope = world.scopeFor(queryWhen, world.nextRevision)
 
@@ -239,7 +239,7 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
     check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
       val world = new WorldReferenceImplementation()
 
-      recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
+      recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfs, world)
 
       val scope = world.scopeFor(queryWhen, world.nextRevision)
 
@@ -266,7 +266,7 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
     check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
       val world = new WorldReferenceImplementation()
 
-      recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
+      recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfs, world)
 
       val scope = world.scopeFor(queryWhen, world.nextRevision)
 
@@ -293,7 +293,7 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
     check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
       val world = new WorldReferenceImplementation()
 
-      recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
+      recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfs, world)
 
       val scope = world.scopeFor(queryWhen, world.nextRevision)
 
@@ -316,7 +316,7 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
     check(Prop.forAllNoShrink(testCaseGenerator) { case (bigShuffledHistoryOverLotsOfThings, asOfs) =>
       val world = new WorldReferenceImplementation()
 
-      val revisions = recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
+      val revisions = recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfs, world)
 
       (1 + revisions.last === world.nextRevision) :| s"1 + ${revisions}.last === ${world.nextRevision}"
     })
@@ -332,7 +332,7 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
     check(Prop.forAllNoShrink(testCaseGenerator) { case (bigShuffledHistoryOverLotsOfThings, asOfs) =>
       val world = new WorldReferenceImplementation()
 
-      recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
+      recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfs, world)
 
       Prop.all(asOfs zip world.revisionAsOfs map { case (asOf, timelineAsOf) => (asOf === timelineAsOf) :| s"${asOf} === ${timelineAsOf}" }: _*)
     })
@@ -348,7 +348,7 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
     check(Prop.forAllNoShrink(testCaseGenerator) { case (bigShuffledHistoryOverLotsOfThings, asOfs) =>
       val world = new WorldReferenceImplementation()
 
-      recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
+      recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfs, world)
 
       Prop.all(world.revisionAsOfs zip world.revisionAsOfs.tail map { case (first, second) => !first.isAfter(second) :| s"!${first}.isAfter(${second})" }: _*)
     })
@@ -364,7 +364,7 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
     check(Prop.forAllNoShrink(testCaseGenerator) { case (bigShuffledHistoryOverLotsOfThings, asOfs) =>
       val world = new WorldReferenceImplementation()
 
-      val revisions = recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
+      val revisions = recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfs, world)
 
       Prop.all((revisions zipWithIndex) map { case (revision, index) => (index === revision) :| s"${index} === ${revision}" }: _*)
     })
@@ -380,7 +380,7 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
     check(Prop.forAllNoShrink(testCaseGenerator) { case (bigShuffledHistoryOverLotsOfThings, asOfs) =>
       val world = new WorldReferenceImplementation()
 
-      recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
+      recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfs, world)
 
       (world.nextRevision === world.revisionAsOfs.length) :| s"${world.nextRevision} === ${world.revisionAsOfs}.length"
     })
@@ -410,7 +410,7 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
       val world = new WorldReferenceImplementation()
 
       {
-        intercept[IllegalArgumentException](recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfsWithIncorrectTransposition, world))
+        intercept[IllegalArgumentException](recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfsWithIncorrectTransposition, world))
         true
       } :| s"Using ${asOfsWithIncorrectTransposition} should cause a precondition failure."
     })
@@ -427,7 +427,7 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
     check(Prop.forAllNoShrink(testCaseGenerator) { case (bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
       val world = new WorldReferenceImplementation()
 
-      recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
+      recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfs, world)
 
       val expectedAsOfBeforeInitialRevision: Unbounded[Instant] = NegativeInfinity[Instant]
 
@@ -468,7 +468,7 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
     check(Prop.forAllNoShrink(testCaseGenerator) { case (bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen, random) =>
       val world = new WorldReferenceImplementation()
 
-      val revisions = recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
+      val revisions = recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfs, world)
 
       val asOfComingAfterTheLastRevision = asOfs.last.plusSeconds(10L)
 
@@ -515,7 +515,7 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
 
       val results = scala.collection.mutable.MutableList.empty[Prop]
 
-      for (revisionAction <- revisionActions(bigShuffledHistoryOverLotsOfThings, asOfs, world)) {
+      for (revisionAction <- revisionActions(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfs, world)) {
         val revision = revisionAction()
 
         results += Prop.all(scopeViaRevisionToHistoryMap map { case (scope, history) => (history === historyFrom(scope)) :| s"history === historyFrom(scope)" } toSeq: _*)
@@ -554,8 +554,8 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
       val utopia = new WorldReferenceImplementation()
       val distopia = new WorldReferenceImplementation()
 
-      recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, utopia)
-      recordEventsInWorldWithoutGivingUpOnFailure(mergedShuffledHistoryOverLotsOfThings.toStream, mergedAsOfs.toList, distopia)
+      recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfs, utopia)
+      recordEventsInWorldWithoutGivingUpOnFailure(liftRecordings(mergedShuffledHistoryOverLotsOfThings.toStream), mergedAsOfs.toList, distopia)
 
       assert(utopia.nextRevision == distopia.nextRevision)
       assert(utopia.revisionAsOfs == distopia.revisionAsOfs)
@@ -585,8 +585,8 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
       val worldOneWay = new WorldReferenceImplementation()
       val worldAnotherWay = new WorldReferenceImplementation()
 
-      recordEventsInWorld(bigShuffledHistoryOverLotsOfThingsOneWay, asOfsOneWay, worldOneWay)
-      recordEventsInWorld(bigShuffledHistoryOverLotsOfThingsAnotherWay, asOfsAnotherWay, worldAnotherWay)
+      recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThingsOneWay), asOfsOneWay, worldOneWay)
+      recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThingsAnotherWay), asOfsAnotherWay, worldAnotherWay)
 
       val scopeOneWay = worldOneWay.scopeFor(queryWhen, worldOneWay.nextRevision)
       val scopeAnotherWay = worldAnotherWay.scopeFor(queryWhen, worldAnotherWay.nextRevision)
@@ -599,7 +599,7 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
   }
 
 
-  def intersperseObsoleteRecordings(random: Random, recordings: immutable.Iterable[(Any, Unbounded[Instant], Change)], obsoleteRecordings: immutable.Iterable[(Any, Unbounded[Instant], Change)]): Stream[((Any, Unbounded[Instant], Change), Int)] = {
+  def intersperseObsoleteRecordings(random: Random, recordings: immutable.Iterable[(Any, Unbounded[Instant], Change)], obsoleteRecordings: immutable.Iterable[(Any, Unbounded[Instant], Change)]): Stream[(Option[(Any, Unbounded[Instant], Change)], Int)] = {
     case class UnfoldState(recordings: immutable.Iterable[(Any, Unbounded[Instant], Change)],
                            obsoleteRecordings: immutable.Iterable[(Any, Unbounded[Instant], Change)],
                            eventId: Int,
@@ -607,29 +607,34 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
     def yieldEitherARecordingOrAnObsoleteRecording(unfoldState: UnfoldState) = unfoldState match {
       case unfoldState@UnfoldState(recordings, obsoleteRecordings, eventId, eventsToBeCorrected) =>
         if (recordings.isEmpty) {
-          // TODO: annul any remaining obsolete events, no need to do any more intermediate corrections at this point. Will have to split this block depending on whether 'obsoleteRecordings' is empty or not.
-          // TODO - will need to lift the type to an option to reflect the annulment in the test logic.
-          None
+          if (eventsToBeCorrected.nonEmpty) {
+            val obsoleteEventId = random.chooseOneOf(eventsToBeCorrected)
+            Some((None, obsoleteEventId) -> unfoldState.copy(eventsToBeCorrected = eventsToBeCorrected - obsoleteEventId))
+          }
+          else None
         } else if (obsoleteRecordings.nonEmpty && random.nextBoolean()) {
           val (obsoleteRecordingHeadPart, remainingObsoleteRecordings) = obsoleteRecordings.splitAt(1)
           val obsoleteRecording = obsoleteRecordingHeadPart.head
           if (eventsToBeCorrected.nonEmpty && random.nextBoolean()) {
-            Some((obsoleteRecording, random.chooseOneOf(eventsToBeCorrected)) -> unfoldState.copy(obsoleteRecordings = remainingObsoleteRecordings))
+            Some((Some(obsoleteRecording), random.chooseOneOf(eventsToBeCorrected)) -> unfoldState.copy(obsoleteRecordings = remainingObsoleteRecordings))
           } else {
-            Some((obsoleteRecording, eventId) -> unfoldState.copy(obsoleteRecordings = remainingObsoleteRecordings, eventId = 1 + eventId, eventsToBeCorrected = eventsToBeCorrected + eventId))
+            Some((Some(obsoleteRecording), eventId) -> unfoldState.copy(obsoleteRecordings = remainingObsoleteRecordings, eventId = 1 + eventId, eventsToBeCorrected = eventsToBeCorrected + eventId))
           }
+        } else if (eventsToBeCorrected.nonEmpty && random.nextBoolean()) {
+          val obsoleteEventId = random.chooseOneOf(eventsToBeCorrected)
+          Some((None, obsoleteEventId) -> unfoldState.copy(eventsToBeCorrected = eventsToBeCorrected - obsoleteEventId))
         } else {
           val (recordingHeadPart, remainingRecordings) = recordings.splitAt(1)
           val recording = recordingHeadPart.head
           if (eventsToBeCorrected.nonEmpty && random.nextBoolean()) {
             val obsoleteEventId = random.chooseOneOf(eventsToBeCorrected)
-            Some((recording, obsoleteEventId) -> unfoldState.copy(recordings = remainingRecordings, eventsToBeCorrected = eventsToBeCorrected - obsoleteEventId))
+            Some((Some(recording), obsoleteEventId) -> unfoldState.copy(recordings = remainingRecordings, eventsToBeCorrected = eventsToBeCorrected - obsoleteEventId))
           } else {
-            Some((recording, eventId) -> unfoldState.copy(recordings = remainingRecordings, eventId = 1 + eventId))
+            Some((Some(recording), eventId) -> unfoldState.copy(recordings = remainingRecordings, eventId = 1 + eventId))
           }
         }
     }
-    stream.unfold(UnfoldState(recordings, obsoleteRecordings, 0, Set.empty)) (yieldEitherARecordingOrAnObsoleteRecording)
+    stream.unfold(UnfoldState(recordings, obsoleteRecordings, 0, Set.empty))(yieldEitherARecordingOrAnObsoleteRecording)
   }
 
   "A world with events that have since been corrected" should "yield a history at the final revision based only on the latest corrections" in {
