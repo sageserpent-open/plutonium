@@ -24,9 +24,9 @@ object WorldReferenceImplementation {
     override def compare(lhs: Event, rhs: Event): Revision = lhs.when.compareTo(rhs.when)
   }
 
-  implicit val eventBagConfiguration = SortedBagConfiguration.keepAll(eventOrdering)
+  implicit val eventBagConfiguration = SortedBagConfiguration.keepAll
 
-  object IdentifiedItemsScopeImplementation{
+  object IdentifiedItemsScopeImplementation {
     def constructFrom[Raw <: Identified : TypeTag](id: Raw#Id) = {
       val reflectedType = implicitly[TypeTag[Raw]].tpe
       val constructor = reflectedType.decls.find(_.isConstructor) get
@@ -41,13 +41,13 @@ object WorldReferenceImplementation {
       items.exists(clazzOfRaw.isInstance(_))
     }
 
-    def yieldOnlyItemsOfType[Raw  <: Identified: TypeTag](items: Stream[Identified]) = {
+    def yieldOnlyItemsOfType[Raw <: Identified : TypeTag](items: Stream[Identified]) = {
       val reflectedType = implicitly[TypeTag[Raw]].tpe
       val clazzOfRaw = currentMirror.runtimeClass(reflectedType).asInstanceOf[Class[Raw]]
 
       items filter (clazzOfRaw.isInstance(_)) map (clazzOfRaw.cast(_))
-        }
     }
+  }
 
   class IdentifiedItemsScopeImplementation extends IdentifiedItemsScope {
     identifiedItemsScopeThis =>
@@ -64,7 +64,7 @@ object WorldReferenceImplementation {
             bitemporal.interpret(new IdentifiedItemsScope {
               override def allItems[Raw <: Identified : TypeTag](): Stream[Raw] = identifiedItemsScopeThis.allItems() // TODO - why doesn't this call 'IdentifiedItemsScopeImplementation.this.ensureItemExistsFor(id)'?
 
-              override def itemsFor[Raw <: Identified: TypeTag](id: Raw#Id): Stream[Raw] = {
+              override def itemsFor[Raw <: Identified : TypeTag](id: Raw#Id): Stream[Raw] = {
                 identifiedItemsScopeThis.ensureItemExistsFor(id) // NASTY HACK, which is what this anonymous class is for. Yuk.
                 identifiedItemsScopeThis.itemsFor(id)
               }
@@ -94,9 +94,8 @@ object WorldReferenceImplementation {
       }
       if (needToConstructItem) {
         idToItemsMultiMap.addBinding(id, IdentifiedItemsScopeImplementation.constructFrom(id))
+      }
     }
-    }
-
 
 
     override def itemsFor[Raw <: Identified : TypeTag](id: Raw#Id): Stream[Raw] = {
@@ -110,7 +109,8 @@ object WorldReferenceImplementation {
 
 }
 
-class WorldReferenceImplementation extends World {  // TODO - thread safety.
+class WorldReferenceImplementation extends World {
+  // TODO - thread safety.
   type Scope = ScopeImplementation
 
   type EventTimeline = TreeBag[Event]
@@ -179,7 +179,8 @@ class WorldReferenceImplementation extends World {  // TODO - thread safety.
 
     // 2. Replace any old versions of events with corrections (includes removal too). (TODO - want to see this cause a test failure somewhere if it isn't done).
 
-    val eventsMadeObsoleteByThisRevision = events.keys flatMap (eventIdToEventMap get _)
+    val (eventIdsMadeObsoleteByThisRevision, eventsMadeObsoleteByThisRevision) = (for {eventId <- events.keys
+                                                                                       obsoleteEvent <- eventIdToEventMap get eventId} yield eventId -> obsoleteEvent) unzip
 
     // 3. Add new events.
 
@@ -197,7 +198,8 @@ class WorldReferenceImplementation extends World {  // TODO - thread safety.
     // 5. Add new timeline to map.
 
     revisionToEventTimelineMap += (nextRevision -> newEventTimeline)
-    eventIdToEventMap ++= newEvents
+
+    eventIdToEventMap --= eventIdsMadeObsoleteByThisRevision ++= newEvents
 
     // 6. NOTE: - must remove asinine commentary.
 
