@@ -1,4 +1,5 @@
 package com.sageserpent.plutonium
+
 /**
  * Created by Gerard on 21/09/2015.
  */
@@ -17,13 +18,18 @@ import scala.util.Random
 
 
 trait WorldSpecSupport {
+
+  class WorldUnderTest extends com.sageserpent.plutonium.WorldReferenceImplementation {
+    type EventId = Int
+  }
+
   val seedGenerator = Arbitrary.arbitrary[Long]
 
   val instantGenerator = Arbitrary.arbitrary[Long] map Instant.ofEpochMilli
 
-  val unboundedInstantGenerator = Gen.frequency(1 -> Gen.oneOf(NegativeInfinity[Instant], americium.PositiveInfinity[Instant]), 10 -> (instantGenerator map Finite.apply))
+  val unboundedInstantGenerator = Gen.frequency(1 -> Gen.oneOf(NegativeInfinity[Instant], PositiveInfinity[Instant]), 10 -> (instantGenerator map Finite.apply))
 
-  val changeWhenGenerator: Gen[Unbounded[Instant]] = Gen.frequency(1 -> Gen.oneOf(Seq(americium.NegativeInfinity[Instant])), 10 -> (instantGenerator map (americium.Finite(_))))
+  val changeWhenGenerator: Gen[Unbounded[Instant]] = Gen.frequency(1 -> Gen.oneOf(Seq(NegativeInfinity[Instant])), 10 -> (instantGenerator map (Finite(_))))
 
   val fooHistoryIdGenerator = Arbitrary.arbitrary[FooHistory#Id]
 
@@ -82,8 +88,7 @@ trait WorldSpecSupport {
   }
 
 
-
-  def recordEventsInWorld(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[(Option[(Any, Unbounded[Instant], Change)], Int)]], asOfs: List[Instant], world: WorldReferenceImplementation) = {
+  def recordEventsInWorld(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[(Option[(Any, Unbounded[Instant], Change)], Int)]], asOfs: List[Instant], world: WorldUnderTest) = {
     revisionActions(bigShuffledHistoryOverLotsOfThings, asOfs, world) map (_.apply) force // Actually a piece of imperative code that looks functional - 'world' is being mutated as a side-effect; but the revisions are harvested functionally.
   }
 
@@ -91,7 +96,7 @@ trait WorldSpecSupport {
     bigShuffledHistoryOverLotsOfThings map (_ map { case (recording, eventId) => Some(recording) -> eventId })
   }
 
-  def recordEventsInWorldWithoutGivingUpOnFailure(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[(Option[(Any, Unbounded[Instant], Change)], Int)]], asOfs: List[Instant], world: WorldReferenceImplementation) = {
+  def recordEventsInWorldWithoutGivingUpOnFailure(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[(Option[(Any, Unbounded[Instant], Change)], Int)]], asOfs: List[Instant], world: WorldUnderTest) = {
     for (revisionAction <- revisionActions(bigShuffledHistoryOverLotsOfThings, asOfs, world)) try {
       revisionAction()
     } catch {
@@ -99,7 +104,7 @@ trait WorldSpecSupport {
     }
   }
 
-  def revisionActions(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[(Option[(Any, Unbounded[Instant], Change)], Int)]], asOfs: List[Instant], world: WorldReferenceImplementation): Stream[() => Revision] = {
+  def revisionActions(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[(Option[(Any, Unbounded[Instant], Change)], Int)]], asOfs: List[Instant], world: WorldUnderTest): Stream[() => Revision] = {
     for {(pieceOfHistory, asOf) <- bigShuffledHistoryOverLotsOfThings zip asOfs
          events = pieceOfHistory map {
            case (recording, eventId) => eventId -> (for ((_, _, change) <- recording) yield change)

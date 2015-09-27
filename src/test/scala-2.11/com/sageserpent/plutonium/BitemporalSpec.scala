@@ -27,7 +27,7 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
                                  queryWhen <- unboundedInstantGenerator
     } yield (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
     check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
-      val world = new WorldReferenceImplementation()
+      val world = new WorldUnderTest()
 
       recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfs, world)
 

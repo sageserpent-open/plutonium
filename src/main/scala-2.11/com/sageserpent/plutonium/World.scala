@@ -14,6 +14,7 @@ object World {
 }
 
 trait World {
+  type EventId
   type Scope <: com.sageserpent.plutonium.Scope
 
 
@@ -38,7 +39,7 @@ trait World {
   // reinstated by a later revision, though.
   // Supplying an event id key for the first time to the world via this method defines a brand new event. Subsequent calls that reuse this event id
   // either correct the event or annul it.
-  def revise[EventId](events: Map[EventId, Option[Event]], asOf: Instant): Revision
+  def revise(events: Map[EventId, Option[Event]], asOf: Instant): Revision
 
   // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
   // I can imagine queries being set to 'the beginning of time' and 'past the latest event'...
