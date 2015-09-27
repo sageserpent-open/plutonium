@@ -166,10 +166,6 @@ class WorldReferenceImplementation extends World {
   def revise(events: Map[EventId, Option[Event]], asOf: Instant): Revision = {
     if (revisionAsOfs.nonEmpty && revisionAsOfs.last.isAfter(asOf)) throw new IllegalArgumentException(s"'asOf': ${asOf} should be no earlier than that of the last revision: ${revisionAsOfs.last}")
 
-    // TODO: make exception safe - especially against the expected failures to apply events due to inconsistencies.
-
-    // 1. Make a copy of the latest event timeline.
-
     import WorldReferenceImplementation._
 
     val baselineEventTimeline = nextRevision match {
@@ -177,31 +173,21 @@ class WorldReferenceImplementation extends World {
       case _ => revisionToEventTimelineMap(nextRevision - 1)
     }
 
-    // 2. Replace any old versions of events with corrections (includes removal too). (TODO - want to see this cause a test failure somewhere if it isn't done).
-
     val (eventIdsMadeObsoleteByThisRevision, eventsMadeObsoleteByThisRevision) = (for {eventId <- events.keys
                                                                                        obsoleteEvent <- eventIdToEventMap get eventId} yield eventId -> obsoleteEvent) unzip
-
-    // 3. Add new events.
 
     val newEvents = for {(eventId, optionalEvent) <- events.toSeq
                          event <- optionalEvent} yield eventId -> event
 
     val newEventTimeline = baselineEventTimeline -- eventsMadeObsoleteByThisRevision ++ newEvents.map(_._2)
 
-    // 4. Dry-run for strong exception guarantee - so what about concurrency from this point on....?
-
     val nextRevisionPostThisOne = 1 + nextRevision
 
     new IdentifiedItemsScopeImplementation(PositiveInfinity[Instant], nextRevisionPostThisOne, Finite(asOf), newEventTimeline)
 
-    // 5. Add new timeline to map.
-
     revisionToEventTimelineMap += (nextRevision -> newEventTimeline)
 
     eventIdToEventMap --= eventIdsMadeObsoleteByThisRevision ++= newEvents
-
-    // 6. NOTE: - must remove asinine commentary.
 
     revisionAsOfs += asOf
     val revision = nextRevision
