@@ -117,6 +117,8 @@ class WorldReferenceImplementation extends World {  // TODO - thread safety.
 
   val revisionToEventTimelineMap = scala.collection.mutable.Map.empty[Revision, EventTimeline]
 
+  val eventIdToEventMap = scala.collection.mutable.Map.empty[EventId, Event]
+
   abstract class ScopeBasedOnNextRevision(val when: americium.Unbounded[Instant], val nextRevision: Revision) extends com.sageserpent.plutonium.Scope {
     val asOf = nextRevision match {
       case World.initialRevision => NegativeInfinity[Instant]
@@ -177,13 +179,14 @@ class WorldReferenceImplementation extends World {  // TODO - thread safety.
 
     // 2. Replace any old versions of events with corrections (includes removal too). (TODO - want to see this cause a test failure somewhere if it isn't done).
 
+    val eventsMadeObsoleteByThisRevision = events.keys flatMap (eventIdToEventMap get _)
 
     // 3. Add new events.
 
-    val newEvents = for {optionalEvent <- events.values
-                         event <- optionalEvent} yield event
+    val newEvents = for {(eventId, optionalEvent) <- events
+                         event <- optionalEvent} yield eventId -> event
 
-    val newEventTimeline = baselineEventTimeline ++ newEvents
+    val newEventTimeline = baselineEventTimeline -- eventsMadeObsoleteByThisRevision ++ newEvents.values
 
     // 4. Dry-run for strong exception guarantee - so what about concurrency from this point on....?
 
@@ -194,6 +197,7 @@ class WorldReferenceImplementation extends World {  // TODO - thread safety.
     // 5. Add new timeline to map.
 
     revisionToEventTimelineMap += (nextRevision -> newEventTimeline)
+    eventIdToEventMap ++= newEvents
 
     // 6. NOTE: - must remove asinine commentary.
 
