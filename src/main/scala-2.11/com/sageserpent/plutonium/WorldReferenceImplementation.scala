@@ -184,10 +184,10 @@ class WorldReferenceImplementation extends World {
 
     // 3. Add new events.
 
-    val newEvents = for {(eventId, optionalEvent) <- events
+    val newEvents = for {(eventId, optionalEvent) <- events.toSeq
                          event <- optionalEvent} yield eventId -> event
 
-    val newEventTimeline = baselineEventTimeline -- eventsMadeObsoleteByThisRevision ++ newEvents.values
+    val newEventTimeline = baselineEventTimeline -- eventsMadeObsoleteByThisRevision ++ newEvents.map(_._2)
 
     // 4. Dry-run for strong exception guarantee - so what about concurrency from this point on....?
 
