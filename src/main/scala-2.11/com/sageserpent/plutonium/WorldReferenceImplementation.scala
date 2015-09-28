@@ -54,7 +54,7 @@ object WorldReferenceImplementation {
 
     def this(_when: americium.Unbounded[Instant], _nextRevision: Revision, _asOf: americium.Unbounded[Instant], eventTimeline: WorldReferenceImplementation#EventTimeline) = {
       this()
-      val relevantEvents = eventTimeline.toStream takeWhile (_when >= _.when)
+      val relevantEvents = eventTimeline.bucketsIterator flatMap (_.iterator) takeWhile (_when >= _.when)
       for (event <- relevantEvents) {
         val scopeForEvent = new com.sageserpent.plutonium.Scope {
           override val when: americium.Unbounded[Instant] = event.when
