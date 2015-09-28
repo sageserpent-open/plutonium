@@ -20,8 +20,8 @@ import scala.reflect.runtime.universe._
 
 
 object WorldReferenceImplementation {
-  implicit val eventOrdering = new Ordering[Event] {
-    override def compare(lhs: Event, rhs: Event): Revision = lhs.when.compareTo(rhs.when)
+  implicit val eventOrdering = new Ordering[(Event, Revision)] {
+    override def compare(lhs: (Event, Revision), rhs: (Event, Revision)) = lhs._1.when.compareTo(rhs._1.when)
   }
 
   implicit val eventBagConfiguration = SortedBagConfiguration.keepAll
@@ -54,7 +54,7 @@ object WorldReferenceImplementation {
 
     def this(_when: americium.Unbounded[Instant], _nextRevision: Revision, _asOf: americium.Unbounded[Instant], eventTimeline: WorldReferenceImplementation#EventTimeline) = {
       this()
-      val relevantEvents = eventTimeline.bucketsIterator flatMap (_.iterator) takeWhile (_when >= _.when)
+      val relevantEvents = eventTimeline.bucketsIterator flatMap (_.toArray.sortBy(_._2) map (_._1)) takeWhile (_when >= _.when)
       for (event <- relevantEvents) {
         val scopeForEvent = new com.sageserpent.plutonium.Scope {
           override val when: americium.Unbounded[Instant] = event.when
@@ -113,11 +113,11 @@ class WorldReferenceImplementation extends World {
   // TODO - thread safety.
   type Scope = ScopeImplementation
 
-  type EventTimeline = TreeBag[Event]
+  type EventTimeline = TreeBag[(Event, Revision)]
 
   val revisionToEventTimelineMap = scala.collection.mutable.Map.empty[Revision, EventTimeline]
 
-  val eventIdToEventMap = scala.collection.mutable.Map.empty[EventId, Event]
+  val eventIdToEventMap = scala.collection.mutable.Map.empty[EventId, (Event, Revision)]
 
   abstract class ScopeBasedOnNextRevision(val when: americium.Unbounded[Instant], val nextRevision: Revision) extends com.sageserpent.plutonium.Scope {
     val asOf = nextRevision match {
@@ -169,7 +169,7 @@ class WorldReferenceImplementation extends World {
     import WorldReferenceImplementation._
 
     val baselineEventTimeline = nextRevision match {
-      case World.initialRevision => TreeBag.empty[Event]
+      case World.initialRevision => TreeBag.empty[(Event, Revision)]
       case _ => revisionToEventTimelineMap(nextRevision - 1)
     }
 
@@ -177,7 +177,10 @@ class WorldReferenceImplementation extends World {
                                                                                        obsoleteEvent <- eventIdToEventMap get eventId} yield eventId -> obsoleteEvent) unzip
 
     val newEvents = for {(eventId, optionalEvent) <- events.toSeq
-                         event <- optionalEvent} yield eventId -> event
+                         event <- optionalEvent} yield eventId ->(event, eventIdToEventMap.get(eventId) match {
+      case Some((_, originalRevision)) => originalRevision
+      case None => nextRevision
+    })
 
     val newEventTimeline = baselineEventTimeline -- eventsMadeObsoleteByThisRevision ++ newEvents.map(_._2)
 
