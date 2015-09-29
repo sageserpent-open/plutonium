@@ -177,10 +177,7 @@ class WorldReferenceImplementation extends World {
                                                                                        obsoleteEvent <- eventIdToEventMap get eventId} yield eventId -> obsoleteEvent) unzip
 
     val newEvents = for {(eventId, optionalEvent) <- events.toSeq
-                         event <- optionalEvent} yield eventId ->(event, eventIdToEventMap.get(eventId) match {
-      case Some((_, originalRevision)) => originalRevision
-      case None => nextRevision
-    })
+                         event <- optionalEvent} yield eventId ->(event, nextRevision)
 
     val newEventTimeline = baselineEventTimeline -- eventsMadeObsoleteByThisRevision ++ newEvents.map(_._2)
 
