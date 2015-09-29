@@ -20,13 +20,13 @@ import scala.reflect.runtime.universe._
 
 
 object WorldReferenceImplementation {
-  implicit val eventOrdering = new Ordering[Event] {
-    override def compare(lhs: Event, rhs: Event): Revision = lhs.when.compareTo(rhs.when)
+  implicit val eventOrdering = new Ordering[(Event, Revision)] {
+    override def compare(lhs: (Event, Revision), rhs: (Event, Revision)) = lhs._1.when.compareTo(rhs._1.when)
   }
 
-  implicit val eventBagConfiguration = SortedBagConfiguration.keepAll(eventOrdering)
+  implicit val eventBagConfiguration = SortedBagConfiguration.keepAll
 
-  object IdentifiedItemsScopeImplementation{
+  object IdentifiedItemsScopeImplementation {
     def constructFrom[Raw <: Identified : TypeTag](id: Raw#Id) = {
       val reflectedType = implicitly[TypeTag[Raw]].tpe
       val constructor = reflectedType.decls.find(_.isConstructor) get
@@ -41,20 +41,20 @@ object WorldReferenceImplementation {
       items.exists(clazzOfRaw.isInstance(_))
     }
 
-    def yieldOnlyItemsOfType[Raw  <: Identified: TypeTag](items: Stream[Identified]) = {
+    def yieldOnlyItemsOfType[Raw <: Identified : TypeTag](items: Stream[Identified]) = {
       val reflectedType = implicitly[TypeTag[Raw]].tpe
       val clazzOfRaw = currentMirror.runtimeClass(reflectedType).asInstanceOf[Class[Raw]]
 
       items filter (clazzOfRaw.isInstance(_)) map (clazzOfRaw.cast(_))
-        }
     }
+  }
 
   class IdentifiedItemsScopeImplementation extends IdentifiedItemsScope {
     identifiedItemsScopeThis =>
 
     def this(_when: americium.Unbounded[Instant], _nextRevision: Revision, _asOf: americium.Unbounded[Instant], eventTimeline: WorldReferenceImplementation#EventTimeline) = {
       this()
-      val relevantEvents = eventTimeline.toStream takeWhile (_when >= _.when)
+      val relevantEvents = eventTimeline.bucketsIterator flatMap (_.toArray.sortBy(_._2) map (_._1)) takeWhile (_when >= _.when)
       for (event <- relevantEvents) {
         val scopeForEvent = new com.sageserpent.plutonium.Scope {
           override val when: americium.Unbounded[Instant] = event.when
@@ -64,7 +64,7 @@ object WorldReferenceImplementation {
             bitemporal.interpret(new IdentifiedItemsScope {
               override def allItems[Raw <: Identified : TypeTag](): Stream[Raw] = identifiedItemsScopeThis.allItems() // TODO - why doesn't this call 'IdentifiedItemsScopeImplementation.this.ensureItemExistsFor(id)'?
 
-              override def itemsFor[Raw <: Identified: TypeTag](id: Raw#Id): Stream[Raw] = {
+              override def itemsFor[Raw <: Identified : TypeTag](id: Raw#Id): Stream[Raw] = {
                 identifiedItemsScopeThis.ensureItemExistsFor(id) // NASTY HACK, which is what this anonymous class is for. Yuk.
                 identifiedItemsScopeThis.itemsFor(id)
               }
@@ -94,9 +94,8 @@ object WorldReferenceImplementation {
       }
       if (needToConstructItem) {
         idToItemsMultiMap.addBinding(id, IdentifiedItemsScopeImplementation.constructFrom(id))
+      }
     }
-    }
-
 
 
     override def itemsFor[Raw <: Identified : TypeTag](id: Raw#Id): Stream[Raw] = {
@@ -110,12 +109,15 @@ object WorldReferenceImplementation {
 
 }
 
-class WorldReferenceImplementation extends World {  // TODO - thread safety.
+class WorldReferenceImplementation extends World {
+  // TODO - thread safety.
   type Scope = ScopeImplementation
 
-  type EventTimeline = TreeBag[Event]
+  type EventTimeline = TreeBag[(Event, Revision)]
 
   val revisionToEventTimelineMap = scala.collection.mutable.Map.empty[Revision, EventTimeline]
+
+  val eventIdToEventMap = scala.collection.mutable.Map.empty[EventId, (Event, Revision)]
 
   abstract class ScopeBasedOnNextRevision(val when: americium.Unbounded[Instant], val nextRevision: Revision) extends com.sageserpent.plutonium.Scope {
     val asOf = nextRevision match {
@@ -164,38 +166,28 @@ class WorldReferenceImplementation extends World {  // TODO - thread safety.
   def revise(events: Map[EventId, Option[Event]], asOf: Instant): Revision = {
     if (revisionAsOfs.nonEmpty && revisionAsOfs.last.isAfter(asOf)) throw new IllegalArgumentException(s"'asOf': ${asOf} should be no earlier than that of the last revision: ${revisionAsOfs.last}")
 
-    // TODO: make exception safe - especially against the expected failures to apply events due to inconsistencies.
-
-    // 1. Make a copy of the latest event timeline.
-
     import WorldReferenceImplementation._
 
     val baselineEventTimeline = nextRevision match {
-      case World.initialRevision => TreeBag.empty[Event]
+      case World.initialRevision => TreeBag.empty[(Event, Revision)]
       case _ => revisionToEventTimelineMap(nextRevision - 1)
     }
 
-    // 2. Replace any old versions of events with corrections (includes removal too). (TODO - want to see this cause a test failure somewhere if it isn't done).
+    val (eventIdsMadeObsoleteByThisRevision, eventsMadeObsoleteByThisRevision) = (for {eventId <- events.keys
+                                                                                       obsoleteEvent <- eventIdToEventMap get eventId} yield eventId -> obsoleteEvent) unzip
 
+    val newEvents = for {(eventId, optionalEvent) <- events.toSeq
+                         event <- optionalEvent} yield eventId ->(event, nextRevision)
 
-    // 3. Add new events.
-
-    val newEvents = for {optionalEvent <- events.values
-                         event <- optionalEvent} yield event
-
-    val newEventTimeline = baselineEventTimeline ++ newEvents
-
-    // 4. Dry-run for strong exception guarantee - so what about concurrency from this point on....?
+    val newEventTimeline = baselineEventTimeline -- eventsMadeObsoleteByThisRevision ++ newEvents.map(_._2)
 
     val nextRevisionPostThisOne = 1 + nextRevision
 
     new IdentifiedItemsScopeImplementation(PositiveInfinity[Instant], nextRevisionPostThisOne, Finite(asOf), newEventTimeline)
 
-    // 5. Add new timeline to map.
-
     revisionToEventTimelineMap += (nextRevision -> newEventTimeline)
 
-    // 6. NOTE: - must remove asinine commentary.
+    eventIdToEventMap --= eventIdsMadeObsoleteByThisRevision ++= newEvents
 
     revisionAsOfs += asOf
     val revision = nextRevision
