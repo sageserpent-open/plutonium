@@ -18,7 +18,7 @@ Can do this by replaying the random chunking in the test case set up.
 
 Could do this by having a mixture of throwaway histories on the ids under test, plus some throwaway ids whose changes are all eventually annulled.
 
-(FIRST TEST DONE)
+(FIRST TEST DONE)(SECOND TEST DONE, BUT ONLY USING ONE AS-OF TO QUERY AT - NEED A THIRD TEST THAT QUERIES AT SEVERAL AS-OFS IN THE SAME TEST CASE).
 
 ---------------------------------------------------------------------------------------------------------------------------
 
