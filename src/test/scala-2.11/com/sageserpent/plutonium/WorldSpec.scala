@@ -13,7 +13,7 @@ import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.seqEnrichment$._
 import org.scalacheck.Prop.BooleanOperators
 import org.scalacheck.{Gen, Prop}
-import org.scalatest.FlatSpec
+import org.scalatest.{Matchers, FlatSpec}
 import org.scalatest.prop.Checkers
 
 import scala.collection.immutable
@@ -22,7 +22,7 @@ import scala.util.Random
 
 import scalaz.std.stream
 
-class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
+class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSupport {
 
   class NonExistentIdentified extends Identified {
     override type Id = String
@@ -47,7 +47,7 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
   "A world with no history" should "have no current revision" in {
     val world = new WorldUnderTest()
 
-    World.initialRevision === world.nextRevision
+    World.initialRevision shouldBe world.nextRevision
   }
 
   def mixedDataSamplesForAnIdGenerator(faulty: Boolean = false) = Gen.frequency(Seq(dataSamplesForAnIdGenerator_[FooHistory](dataSampleGenerator1(faulty), fooHistoryIdGenerator),
