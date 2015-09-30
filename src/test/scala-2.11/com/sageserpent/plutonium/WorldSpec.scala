@@ -604,34 +604,36 @@ class WorldSpec extends FlatSpec with Checkers with WorldSpecSupport {
                            obsoleteRecordings: immutable.Iterable[(Any, Unbounded[Instant], Change)],
                            eventId: Int,
                            eventsToBeCorrected: Set[Int])
+    val maximumEventId = recordings.size
     def yieldEitherARecordingOrAnObsoleteRecording(unfoldState: UnfoldState) = unfoldState match {
       case unfoldState@UnfoldState(recordings, obsoleteRecordings, eventId, eventsToBeCorrected) =>
         if (recordings.isEmpty) {
           if (eventsToBeCorrected.nonEmpty) {
+            // Issue annulments correcting any outstanding obsolete events.
             val obsoleteEventId = random.chooseOneOf(eventsToBeCorrected)
             Some((None, obsoleteEventId) -> unfoldState.copy(eventsToBeCorrected = eventsToBeCorrected - obsoleteEventId))
           }
-          else None
+          else None // All done.
         } else if (obsoleteRecordings.nonEmpty && random.nextBoolean()) {
           val (obsoleteRecordingHeadPart, remainingObsoleteRecordings) = obsoleteRecordings.splitAt(1)
           val obsoleteRecording = obsoleteRecordingHeadPart.head
           if (eventsToBeCorrected.nonEmpty && random.nextBoolean()) {
+            // Correct an obsolete event with another obsolete event.
             Some((Some(obsoleteRecording), random.chooseOneOf(eventsToBeCorrected)) -> unfoldState.copy(obsoleteRecordings = remainingObsoleteRecordings))
           } else {
-            Some((Some(obsoleteRecording), eventId) -> unfoldState.copy(obsoleteRecordings = remainingObsoleteRecordings, eventId = 1 + eventId, eventsToBeCorrected = eventsToBeCorrected + eventId))
+            // Take some event id that denotes a subsequent non-obsolete recording and make an obsolete revision of it.
+            val anticipatedEventId = eventId + random.chooseAnyNumberFromZeroToOneLessThan(maximumEventId - eventId)
+            Some((Some(obsoleteRecording), anticipatedEventId) -> unfoldState.copy(obsoleteRecordings = remainingObsoleteRecordings, eventsToBeCorrected = eventsToBeCorrected + anticipatedEventId))
           }
         } else if (eventsToBeCorrected.nonEmpty && random.nextBoolean()) {
+          // Just annul an obsolete event for the sake of it, even though the non-obsolete correction is still yet to follow.
           val obsoleteEventId = random.chooseOneOf(eventsToBeCorrected)
           Some((None, obsoleteEventId) -> unfoldState.copy(eventsToBeCorrected = eventsToBeCorrected - obsoleteEventId))
         } else {
+          // Issue the definitive non-obsolete recording for the event; this will not be subsequently corrected.
           val (recordingHeadPart, remainingRecordings) = recordings.splitAt(1)
           val recording = recordingHeadPart.head
-          if (eventsToBeCorrected.nonEmpty && random.nextBoolean()) {
-            val obsoleteEventId = random.chooseOneOf(eventsToBeCorrected)
-            Some((Some(recording), obsoleteEventId) -> unfoldState.copy(recordings = remainingRecordings, eventsToBeCorrected = eventsToBeCorrected - obsoleteEventId))
-          } else {
-            Some((Some(recording), eventId) -> unfoldState.copy(recordings = remainingRecordings, eventId = 1 + eventId))
-          }
+          Some((Some(recording), eventId) -> unfoldState.copy(recordings = remainingRecordings, eventId = 1 + eventId, eventsToBeCorrected = eventsToBeCorrected - eventId))
         }
     }
     stream.unfold(UnfoldState(recordings, obsoleteRecordings, 0, Set.empty))(yieldEitherARecordingOrAnObsoleteRecording)
