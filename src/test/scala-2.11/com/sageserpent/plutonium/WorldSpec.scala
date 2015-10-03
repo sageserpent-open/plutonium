@@ -10,7 +10,7 @@ import java.time.temporal.ChronoUnit
 import com.sageserpent.americium
 import com.sageserpent.americium._
 import com.sageserpent.americium.randomEnrichment._
-import com.sageserpent.americium.seqEnrichment$._
+import com.sageserpent.americium.seqEnrichment._
 import org.scalacheck.Prop.BooleanOperators
 import org.scalacheck.{Gen, Prop}
 import org.scalatest.FlatSpec
