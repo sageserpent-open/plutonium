@@ -10,7 +10,7 @@ import java.time.temporal.ChronoUnit
 import com.sageserpent.americium
 import com.sageserpent.americium._
 import com.sageserpent.americium.randomEnrichment._
-import com.sageserpent.americium.seqEnrichment$._
+import com.sageserpent.americium.seqEnrichment._
 import org.scalacheck.Prop.BooleanOperators
 import org.scalacheck.{Gen, Prop}
 import org.scalatest.{Matchers, FlatSpec}
@@ -449,9 +449,9 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
 
       Prop.all(checksViaNextRevision map { case (asOf, nextRevision, scopeViaNextRevision) =>
         (asOf === scopeViaNextRevision.asOf) :| s"${asOf} === scopeViaNextRevision.asOf" &&
-          (nextRevision === scopeViaNextRevision.nextRevision) :| s"${nextRevision} === scopeViaNextRevision.nextRevision" &&
-          (queryWhen === scopeViaNextRevision.when) :| s"${queryWhen} === scopeViaNextRevision.when"
-      }: _*)
+            (nextRevision === scopeViaNextRevision.nextRevision) :| s"${nextRevision} === scopeViaNextRevision.nextRevision" &&
+            (queryWhen === scopeViaNextRevision.when) :| s"${queryWhen} === scopeViaNextRevision.when"
+        }: _*)
 
       // TODO - perturb the 'asOf' values so as not to go the next revision and see how that plays with the two ways of constructing a scope.
     })
@@ -612,8 +612,7 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
             // Issue annulments correcting any outstanding obsolete events.
             val obsoleteEventId = random.chooseOneOf(eventsToBeCorrected)
             Some((None, obsoleteEventId) -> unfoldState.copy(eventsToBeCorrected = eventsToBeCorrected - obsoleteEventId))
-          }
-          else None // All done.
+}          else None // All done.
         } else if (obsoleteRecordings.nonEmpty && random.nextBoolean()) {
           val (obsoleteRecordingHeadPart, remainingObsoleteRecordings) = obsoleteRecordings.splitAt(1)
           val obsoleteRecording = obsoleteRecordingHeadPart.head
