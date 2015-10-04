@@ -673,7 +673,11 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
                                  random = new Random(seed)
                                  bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, recordingsGroupedById map (_.recordings) flatMap identity).zipWithIndex)
                                  allEventIds = bigShuffledHistoryOverLotsOfThings flatMap (_ map (_._2))
-                                 annulmentsGalore = random.splitIntoNonEmptyPieces(allEventIds map ((None: Option[(Any, Unbounded[Instant], Change)]) -> _))
+                                 maximumEventId = allEventIds.max
+                                 eventIdsThatMayBeSpuriousAndDuplicated = allEventIds ++
+                                   random.chooseSeveralOf(allEventIds, random.chooseAnyNumberFromZeroToOneLessThan(allEventIds.length)) ++
+                                   (1 + maximumEventId to 10 + maximumEventId)
+                                 annulmentsGalore = random.splitIntoNonEmptyPieces(random.shuffle(eventIdsThatMayBeSpuriousAndDuplicated) map ((None: Option[(Any, Unbounded[Instant], Change)]) -> _))
                                  historyLength = bigShuffledHistoryOverLotsOfThings.length
                                  annulmentsLength = annulmentsGalore.length
                                  asOfs <- Gen.listOfN(2 * historyLength + annulmentsLength, instantGenerator) map (_.sorted)
