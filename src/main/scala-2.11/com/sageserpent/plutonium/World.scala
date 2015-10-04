@@ -28,7 +28,7 @@ trait World {
   // as part of the same shared revision.
   // Next question: what if two events belonging to different event groups contributed in different revisions coincide in time?
   // Hmmm - the answer is that the order of the revisions contributing the events, as seen from the point of view of some scope
-  // determines the order of the conicident events - those from earlier revisions come before those from later revisions.
+  // determines the order of the coincident events - those from earlier revisions come before those from later revisions.
 
   // NOTE: this increments 'nextRevision' if it succeeds, associating the new revision with 'revisionTime'.
   // NOTE: there is a precondition that 'asOf' must be greater than or equal 'versonTimeline.last'.
@@ -37,8 +37,12 @@ trait World {
   // - in which case a precondition or an admissible postcondition failure exception is thrown.
   // NOTE: if an optional event value associated with an event id is 'None', that event is annulled in the world revised history. It may be
   // reinstated by a later revision, though.
-  // Supplying an event id key for the first time to the world via this method defines a brand new event. Subsequent calls that reuse this event id
+  // NOTE: supplying an event id key for the first time to the world via this method defines a brand new event. Subsequent calls that reuse this event id
   // either correct the event or annul it.
+  // NOTE: an event id key may be used to annul an event that has *not* been defined in a previous revision - there is no precondition on this. The idea
+  // is to make it easy for clients to do annulments en-bloc without querying to see what events are in force in the world's current state. Furthermore,
+  // the API issues no constraints on when to define an event id key for the first time and when to use it for correction, so why not treat the annulment
+  // case the same way?
   def revise(events: Map[EventId, Option[Event]], asOf: Instant): Revision
 
   // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.

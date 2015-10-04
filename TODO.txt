@@ -20,6 +20,8 @@ Could do this by having a mixture of throwaway histories on the ids under test, 
 
 (FIRST TEST DONE)(SECOND TEST DONE, BUT ONLY USING ONE AS-OF TO QUERY AT - NEED A THIRD TEST THAT QUERIES AT SEVERAL AS-OFS IN THE SAME TEST CASE).
 
+Additional test - annulments that refer to events that have either never been defined or have already been annulled are permitted, but have no effect.
+
 ---------------------------------------------------------------------------------------------------------------------------
 
 5. Need tests on the read / write access to raw objects in changes and rendered from query scopes.
