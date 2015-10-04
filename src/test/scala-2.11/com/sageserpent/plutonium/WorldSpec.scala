@@ -763,7 +763,7 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
                                            bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(shuffledRecordingAndEventPairs)
     } yield (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings)
 
-    val testCaseGenerator = for {testCaseSubsections <- Gen.nonEmptyListOf(testCaseSubSectionGenerator)
+    val testCaseGenerator = for {testCaseSubsections <- Gen.listOfN(4, testCaseSubSectionGenerator)
                                  asOfs <- Gen.listOfN(testCaseSubsections map (_._2.length) sum, instantGenerator) map (_.sorted)
                                  asOfsForSubsections = stream.unfold(testCaseSubsections -> asOfs) {
                                    case ((testCaseSubsection :: remainingTestCaseSubsections), asOfs) => val numberOfRevisions = testCaseSubsection._2.length
@@ -777,15 +777,28 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
 
       val listOfRevisionsToCheckAtAndRecordingsGroupedById = stream.unfold((testCaseSubsections zip asOfsForSubsections) -> 0) {
         case ((((recordingsGroupedById, bigShuffledHistoryOverLotsOfThings), asOfs) :: remainingSubsections), maximumEventIdFromPreviousSubsection) =>
-          val maximumEventIdFromThisSubsection =
-            recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
-          Some((world.nextRevision -> recordingsGroupedById, remainingSubsections -> maximumEventIdFromPreviousSubsection))
+          val maximumEventIdFromThisSubsection = (bigShuffledHistoryOverLotsOfThings flatMap (_ map (_._2))).max
+          val annulmentsGalore = Stream((1 + maximumEventIdFromThisSubsection) to maximumEventIdFromPreviousSubsection map ((None: Option[(Any, Unbounded[Instant], Change)]) -> _))
+          recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
+          recordEventsInWorld(annulmentsGalore, List(world.revisionAsOfs(world.nextRevision - 1)), world)
+          Some((world.nextRevision -> recordingsGroupedById, remainingSubsections -> maximumEventIdFromThisSubsection))
         case _ => None
       }
 
-      // WORK IN PROGRESS...
+      val checks = for {(revision, recordingsGroupedById) <- listOfRevisionsToCheckAtAndRecordingsGroupedById} yield {
+        val scope = world.scopeFor(queryWhen, revision)
 
-      true
+        val checks = for {RecordingsForAnId(historyId, _, historiesFrom, recordings) <- recordingsGroupedById filter (queryWhen >= _.whenEarliestChangeHappened)
+                          pertinentRecordings = recordings takeWhile { case (_, eventWhen, _) => eventWhen <= queryWhen }
+                          Seq(history) = historiesFrom(scope)}
+          yield (historyId, history.datums, pertinentRecordings.map(_._1))
+
+        Prop.all(checks.map { case (historyId, actualHistory, expectedHistory) => ((actualHistory.length == expectedHistory.length) :| s"${actualHistory.length} == expectedHistory.length") &&
+          Prop.all((actualHistory zip expectedHistory zipWithIndex) map { case ((actual, expected), step) => (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}" }: _*)
+        }: _*)
+      }
+
+      Prop.all(checks: _*)
     })
   }
 }
