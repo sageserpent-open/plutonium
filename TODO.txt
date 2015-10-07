@@ -18,6 +18,10 @@ Can do this by replaying the random chunking in the test case set up.
 
 Could do this by having a mixture of throwaway histories on the ids under test, plus some throwaway ids whose changes are all eventually annulled.
 
+(FIRST TEST DONE)(SECOND TEST DONE, BUT ONLY USING ONE AS-OF TO QUERY AT - NEED A THIRD TEST THAT QUERIES AT SEVERAL AS-OFS IN THE SAME TEST CASE - NOW DONE).
+
+Additional test - annulments that refer to events that have either never been defined or have already been annulled are permitted, but have no effect.
+(DONE)
 ---------------------------------------------------------------------------------------------------------------------------
 
 5. Need tests on the read / write access to raw objects in changes and rendered from query scopes.
@@ -25,7 +29,7 @@ Could do this by having a mixture of throwaway histories on the ids under test, 
 ---------------------------------------------------------------------------------------------------------------------------
 
 Actually, need to implement the support for equality the 'MonadPlus' typeclass - presumably with a scope made on the fly so that the lhs and rhs bitemporals can both be rendered against it.
-(DONE - A BIT MESSY, BUT WORKS WELL - could tidy this up so as to use an indentifiable type that isn't a kind of 'History', and has a directly usable integer property.)
+(DONE - A BIT MESSY, BUT WORKS WELL - could tidy this up so as to use an identifiable type that isn't a kind of 'History', and has a directly usable integer property.)
 
 6. Are there tests for wildcards, plus the various flavours of id-matching? What about the 'none' case? What about having several items of different type sharing the same id? What about attempting to book in a revision that would lead to a new item sharing the same id as one with a sub- or -supertype?
 
@@ -33,8 +37,11 @@ Pay attention to the 'withId' case - need several items to match the same id as 
 Similarly, wildcards need zero, one or many matches.
 
 7. Does there need to be a test that shows off combinations of rendered items in a Bitemporal monad? So we can see the interaction between histories of several items. Could this be mixed in with the existing tests?
+(GOT THIS ALEADY FROM THE 'MonadPlus' TEST SUITE)
 
 8. Bolster the monad-plus generator with bitemporals made from ids / wildcard / none.
+
+(DONE)
 
 ---------------------------------------------------------------------------------------------------------------------------
 
@@ -43,6 +50,11 @@ Similarly, wildcards need zero, one or many matches.
 ---------------------------------------------------------------------------------------------------------------------------
 
 10. Is all of the commentary in the API covered by tests? OK if doing fault injection reveals a failure via existing tests?
+
+For example, is there a test that checks that a scope passed to a change's spore captures the state of the world at the event when of the change, only without that change applied (or any other subsequent events)?
+
+Could do this for one of the test data classes by imposing a precondition on the setter that the new value is, say, one greater than the previous value - if the test can guarantee this the absence of a precondition failure implies
+that the scope in a spore captures all the history up to, but not including, the change.
 
 
 
