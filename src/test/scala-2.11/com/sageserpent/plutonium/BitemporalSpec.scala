@@ -14,7 +14,7 @@ import scalaz.{Equal, MonadPlus}
  */
 
 class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
-  val dataSamplesForAnIdGenerator = dataSamplesForAnIdGenerator_[FooHistory](dataSampleGenerator1(faulty = false), fooHistoryIdGenerator)
+  val dataSamplesForAnIdGenerator = dataSamplesForAnIdGenerator_[IntegerHistory](dataSampleGenerator6(faulty = false), integerHistoryIdGenerator)
 
   val recordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(dataSamplesForAnIdGenerator, changeWhenGenerator)
 
@@ -33,7 +33,7 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
 
       val scope = world.scopeFor(queryWhen, world.nextRevision)
 
-      val idsToWhenDefinedMap = recordingsGroupedById map { case RecordingsForAnId(historyId, whenEarliestChangeHappened, _, _) => historyId.asInstanceOf[FooHistory#Id] -> whenEarliestChangeHappened } toMap
+      val idsToWhenDefinedMap = recordingsGroupedById map { case RecordingsForAnId(historyId, whenEarliestChangeHappened, _, _) => historyId.asInstanceOf[IntegerHistory#Id] -> whenEarliestChangeHappened } toMap
 
       val ids = idsToWhenDefinedMap.keys toSeq
 
@@ -44,13 +44,17 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
       }
 
       implicit def arbitraryBitemporalOfInt(implicit rawArbitrary: Arbitrary[Int]): Arbitrary[Bitemporal[Int]] = {
-        def intFrom(item: FooHistory) = item.datums.hashCode()
+        def intFrom(item: IntegerHistory) = item.datums.hashCode()
         Arbitrary(
           Gen.frequency(5 -> (Arbitrary.arbitrary[Int] map (MonadPlus[Bitemporal].point(_))),
-            10 -> (Gen.oneOf(ids) map (Bitemporal.zeroOrOneOf[FooHistory](_) map intFrom)),
-            10 -> (Gen.oneOf(idsInExistence) map (Bitemporal.singleOneOf[FooHistory](_) map intFrom)),
-            10 -> (Gen.oneOf(idsInExistence) map (Bitemporal.withId[FooHistory](_) map intFrom)),
-            3 -> Gen.const(Bitemporal.wildcard[FooHistory] map intFrom),
+            10 -> (Gen.oneOf(ids) map (Bitemporal.zeroOrOneOf[IntegerHistory](_) map (_.integerProperty))),
+            10 -> (Gen.oneOf(idsInExistence) map (Bitemporal.singleOneOf[IntegerHistory](_) map (_.integerProperty))),
+            10 -> (Gen.oneOf(idsInExistence) map (Bitemporal.withId[IntegerHistory](_) map (_.integerProperty))),
+            3 -> Gen.const(Bitemporal.wildcard[IntegerHistory] map (_.integerProperty)),
+            10 -> (Gen.oneOf(ids) map (Bitemporal.zeroOrOneOf[IntegerHistory](_) map intFrom)),
+            10 -> (Gen.oneOf(idsInExistence) map (Bitemporal.singleOneOf[IntegerHistory](_) map intFrom)),
+            10 -> (Gen.oneOf(idsInExistence) map (Bitemporal.withId[IntegerHistory](_) map intFrom)),
+            3 -> Gen.const(Bitemporal.wildcard[IntegerHistory] map intFrom),
             1 -> Gen.const(Bitemporal.none[Int]))
         )
       }

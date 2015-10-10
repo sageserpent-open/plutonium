@@ -31,7 +31,8 @@ Additional test - annulments that refer to events that have either never been de
 Actually, need to implement the support for equality the 'MonadPlus' typeclass - presumably with a scope made on the fly so that the lhs and rhs bitemporals can both be rendered against it.
 (DONE - A BIT MESSY, BUT WORKS WELL - could tidy this up so as to use an identifiable type that isn't a kind of 'History', and has a directly usable integer property.)
 
-6. Are there tests for wildcards, plus the various flavours of id-matching? What about the 'none' case? What about having several items of different type sharing the same id? What about attempting to book in a revision that would lead to a new item sharing the same id as one with a sub- or -supertype?
+6. Are there tests for wildcards, plus the various flavours of id-matching? What about the 'none' case? What about having several items of different type sharing the same id?
+What about attempting to book in a revision that would lead to a new item sharing the same id as one with a sub- or -supertype?
 
 Pay attention to the 'withId' case - need several items to match the same id as well as zero or one.
 Similarly, wildcards need zero, one or many matches.
@@ -56,7 +57,7 @@ For example, is there a test that checks that a scope passed to a change's spore
 Could do this for one of the test data classes by imposing a precondition on the setter that the new value is, say, one greater than the previous value - if the test can guarantee this the absence of a precondition failure implies
 that the scope in a spore captures all the history up to, but not including, the change.
 
-(THIS IS ALREADY TESTS INDIRECTLY - HAVE ADDED COMMENTARY TO DOCUMENT THIS)
+(THIS IS ALREADY TESTED INDIRECTLY - HAVE ADDED COMMENTARY TO DOCUMENT THIS)
 
 
 

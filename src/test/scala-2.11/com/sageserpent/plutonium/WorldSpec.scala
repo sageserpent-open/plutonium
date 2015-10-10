@@ -54,7 +54,8 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
     dataSamplesForAnIdGenerator_[FooHistory](dataSampleGenerator2(faulty), fooHistoryIdGenerator),
     dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator3(faulty), barHistoryIdGenerator),
     dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator4(faulty), barHistoryIdGenerator),
-    dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator5(faulty), barHistoryIdGenerator)) map (1 -> _): _*)
+    dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator5(faulty), barHistoryIdGenerator),
+    dataSamplesForAnIdGenerator_[IntegerHistory](dataSampleGenerator6(faulty), integerHistoryIdGenerator)) map (1 -> _): _*)
 
   val dataSamplesForAnIdGenerator = mixedDataSamplesForAnIdGenerator()
 

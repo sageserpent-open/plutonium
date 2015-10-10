@@ -34,6 +34,8 @@ trait WorldSpecSupport {
   val fooHistoryIdGenerator = Arbitrary.arbitrary[FooHistory#Id]
 
   val barHistoryIdGenerator = Arbitrary.arbitrary[BarHistory#Id]
+  
+  val integerHistoryIdGenerator = Arbitrary.arbitrary[IntegerHistory#Id]
 
   lazy val changeError = new Error("Error in making a change.")
 
@@ -63,6 +65,11 @@ trait WorldSpecSupport {
                                                    data3 <- Arbitrary.arbitrary[Boolean]} yield ((data1, data2, data3), (when: Unbounded[Instant], barHistoryId: BarHistory#Id) => Change[BarHistory](when)(barHistoryId, (barHistory: BarHistory) => {
     if (capture(faulty)) throw changeError // Modelling an admissible postcondition failure.
     barHistory.method2(capture(data1), capture(data2), capture(data3))
+  }))
+
+  def dataSampleGenerator6(faulty: Boolean) = for {data <- Arbitrary.arbitrary[Int]} yield (data, (when: americium.Unbounded[Instant], integerHistoryId: IntegerHistory#Id) => Change[IntegerHistory](when)(integerHistoryId, (integerHistory: IntegerHistory) => {
+    if (capture(faulty)) throw changeError // Modelling a precondition failure.
+    integerHistory.integerProperty = capture(data)
   }))
 
   def dataSamplesForAnIdGenerator_[AHistory <: History : TypeTag](dataSampleGenerator: Gen[(_, (Unbounded[Instant], AHistory#Id) => Change)], historyIdGenerator: Gen[AHistory#Id]) = {
