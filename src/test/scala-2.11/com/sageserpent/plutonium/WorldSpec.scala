@@ -50,20 +50,7 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
     World.initialRevision shouldBe world.nextRevision
   }
 
-  def mixedDataSamplesForAnIdGenerator(faulty: Boolean = false) = Gen.frequency(Seq(dataSamplesForAnIdGenerator_[FooHistory](dataSampleGenerator1(faulty), fooHistoryIdGenerator),
-    dataSamplesForAnIdGenerator_[FooHistory](dataSampleGenerator2(faulty), fooHistoryIdGenerator),
-    dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator3(faulty), barHistoryIdGenerator),
-    dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator4(faulty), barHistoryIdGenerator),
-    dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator5(faulty), barHistoryIdGenerator),
-    dataSamplesForAnIdGenerator_[IntegerHistory](dataSampleGenerator6(faulty), integerHistoryIdGenerator)) map (1 -> _): _*)
-
-  val dataSamplesForAnIdGenerator = mixedDataSamplesForAnIdGenerator()
-
   val faultyDataSamplesForAnIdGenerator = mixedDataSamplesForAnIdGenerator(faulty = true)
-
-
-  val recordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(dataSamplesForAnIdGenerator, changeWhenGenerator)
-
   val faultyRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(faultyDataSamplesForAnIdGenerator, changeWhenGenerator)
 
   private def eventWhenFrom(recording: ((Any, Unbounded[Instant], Change), Int)) = recording match {
