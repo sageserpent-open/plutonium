@@ -56,6 +56,8 @@ For example, is there a test that checks that a scope passed to a change's spore
 Could do this for one of the test data classes by imposing a precondition on the setter that the new value is, say, one greater than the previous value - if the test can guarantee this the absence of a precondition failure implies
 that the scope in a spore captures all the history up to, but not including, the change.
 
+(THIS IS ALREADY TESTS INDIRECTLY - HAVE ADDED COMMENTARY TO DOCUMENT THIS)
+
 
 
 
