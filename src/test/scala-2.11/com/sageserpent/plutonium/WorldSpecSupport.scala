@@ -138,4 +138,15 @@ trait WorldSpecSupport {
 
   val dataSamplesForAnIdGenerator = mixedDataSamplesForAnIdGenerator()
   val recordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(dataSamplesForAnIdGenerator, changeWhenGenerator)
+
+  // These recordings don't allow the possibility of the same id being shared by bitemporals of related types
+  // when these are plugged into tests that correct one world history into another.
+  def mixedNonConflictingDataSamplesForAnIdGenerator(faulty: Boolean = false) = Gen.frequency(
+    1 -> dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator3(faulty), barHistoryIdGenerator),
+    1 -> dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator4(faulty), barHistoryIdGenerator),
+    1 -> dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator5(faulty), barHistoryIdGenerator),
+    3 -> dataSamplesForAnIdGenerator_[IntegerHistory](integerDataSampleGenerator(faulty), integerHistoryIdGenerator))
+
+  val nonConflictingDataSamplesForAnIdGenerator = mixedNonConflictingDataSamplesForAnIdGenerator()
+  val nonConflictingRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(nonConflictingDataSamplesForAnIdGenerator, changeWhenGenerator)
 }

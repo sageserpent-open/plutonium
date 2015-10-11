@@ -627,7 +627,7 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
 
   "A world with events that have since been corrected" should "yield a history at the final revision based only on the latest corrections" in {
     val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
-                                 obsoleteRecordingsGroupedById <- recordingsGroupedByIdGenerator
+                                 obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
                                  seed <- seedGenerator
                                  random = new Random(seed)
                                  shuffledRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, recordingsGroupedById map (_.recordings) flatMap identity)
@@ -707,8 +707,8 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
 
   it should "yield a history whose versions of events reflect the revision of a scope made from it" in {
     val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
-                                 obsoleteRecordingsGroupedById <- recordingsGroupedByIdGenerator
-                                 followingRecordingsGroupedById <- recordingsGroupedByIdGenerator
+                                 obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
+                                 followingRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
                                  seed <- seedGenerator
                                  random = new Random(seed)
                                  shuffledRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, recordingsGroupedById map (_.recordings) flatMap identity)
@@ -742,7 +742,7 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
 
   it should "yield a history whose versions of events reflect arbitrary scopes made from it at varying revisions" in {
     val testCaseSubSectionGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
-                                           obsoleteRecordingsGroupedById <- recordingsGroupedByIdGenerator
+                                           obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
                                            seed <- seedGenerator
                                            random = new Random(seed)
                                            shuffledRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, recordingsGroupedById map (_.recordings) flatMap identity)
@@ -781,7 +781,7 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
               // entirely from the previous subsection and rewrite from a clean slate. We assume
               // that if there was an inconsistency between the previous history that wasn't yet
               // fully corrected and whatever attempted revision that caused the exception
-              // to be thrown, then there is obvious at least one previous revision to steal an asOf
+              // to be thrown, then there is obviously at least one previous revision to steal an asOf
               // from.
               // NOTE: annulling everything and rewriting is a bit prolix compared with flattening
               // the history and correcting in a single grand slam revisions without going through any
@@ -824,11 +824,7 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
                                  random = new Random(seed)
                                  bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, recordingsGroupedById map (_.recordings) flatMap identity).zipWithIndex)
                                  allEventIds = bigShuffledHistoryOverLotsOfThings flatMap (_ map (_._2))
-                                 maximumEventId = allEventIds.max
-                                 eventIdsThatMayBeSpuriousAndDuplicated = allEventIds ++
-                                   random.chooseSeveralOf(allEventIds, random.chooseAnyNumberFromZeroToOneLessThan(allEventIds.length)) ++
-                                   (1 + maximumEventId to 10 + maximumEventId)
-                                 annulmentsGalore = Stream(eventIdsThatMayBeSpuriousAndDuplicated map ((None: Option[(Any, Unbounded[Instant], Change)]) -> _))
+                                 annulmentsGalore = Stream(allEventIds map ((None: Option[(Any, Unbounded[Instant], Change)]) -> _))
                                  historyLength = bigShuffledHistoryOverLotsOfThings.length
                                  annulmentsLength = annulmentsGalore.length
                                  asOfs <- Gen.listOfN(historyLength, instantGenerator) map (_.sorted)
