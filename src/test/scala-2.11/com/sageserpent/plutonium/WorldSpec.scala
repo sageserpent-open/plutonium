@@ -817,4 +817,54 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
       Prop.all(checks: _*)
     })
   }
+
+  it should "allow an entire history to be completely annulled and then rewritten at the same asOf" in {
+    val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
+                                 seed <- seedGenerator
+                                 random = new Random(seed)
+                                 bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, recordingsGroupedById map (_.recordings) flatMap identity).zipWithIndex)
+                                 allEventIds = bigShuffledHistoryOverLotsOfThings flatMap (_ map (_._2))
+                                 maximumEventId = allEventIds.max
+                                 eventIdsThatMayBeSpuriousAndDuplicated = allEventIds ++
+                                   random.chooseSeveralOf(allEventIds, random.chooseAnyNumberFromZeroToOneLessThan(allEventIds.length)) ++
+                                   (1 + maximumEventId to 10 + maximumEventId)
+                                 annulmentsGalore = Stream(eventIdsThatMayBeSpuriousAndDuplicated map ((None: Option[(Any, Unbounded[Instant], Change)]) -> _))
+                                 historyLength = bigShuffledHistoryOverLotsOfThings.length
+                                 annulmentsLength = annulmentsGalore.length
+                                 asOfs <- Gen.listOfN(historyLength, instantGenerator) map (_.sorted)
+                                 queryWhen <- unboundedInstantGenerator
+    } yield (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, annulmentsGalore, asOfs, queryWhen)
+    check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, annulmentsGalore, asOfs, queryWhen) =>
+      val world = new WorldUnderTest()
+
+      // Define a history the first time around...
+
+      recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfs, world)
+
+      val scopeForFirstHistory = world.scopeFor(queryWhen, world.nextRevision)
+
+      val firstHistory = historyFrom(world, recordingsGroupedById)(scopeForFirstHistory)
+
+      // Annul that history completely...
+
+      val asOfForCorrections = asOfs.last
+
+      recordEventsInWorld(annulmentsGalore, List(asOfForCorrections), world)
+
+      val scopeAfterAnnulments = world.scopeFor(queryWhen, world.nextRevision)
+
+      val historyAfterAnnulments = historyFrom(world, recordingsGroupedById)(scopeAfterAnnulments)
+
+      // ...and then recreate what should be the same history.
+
+      recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), List.fill(asOfs.length)(asOfForCorrections), world)
+
+      val scopeForSecondHistory = world.scopeFor(queryWhen, world.nextRevision)
+
+      val secondHistory = historyFrom(world, recordingsGroupedById)(scopeForSecondHistory)
+
+      (historyAfterAnnulments.isEmpty :| s"${historyAfterAnnulments}.isEmpty") &&
+        ((firstHistory == secondHistory) :| s"firstHistory === ${secondHistory}")
+    })
+  }
 }
