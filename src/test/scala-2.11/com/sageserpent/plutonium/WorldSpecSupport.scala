@@ -7,14 +7,17 @@ package com.sageserpent.plutonium
 import java.time.Instant
 
 import com.sageserpent.americium
-import com.sageserpent.americium._
+import com.sageserpent.americium.{Finite, PositiveInfinity, NegativeInfinity, Unbounded}
+import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.plutonium.World._
 import org.scalacheck.{Arbitrary, Gen}
 
+import scala.collection.immutable
 import scala.collection.immutable.TreeMap
 import scala.reflect.runtime.universe._
 import scala.spores._
 import scala.util.Random
+import scalaz.std.stream
 
 
 trait WorldSpecSupport {
@@ -36,6 +39,8 @@ trait WorldSpecSupport {
   val barHistoryIdGenerator = Arbitrary.arbitrary[BarHistory#Id]
   
   val integerHistoryIdGenerator = Arbitrary.arbitrary[IntegerHistory#Id]
+
+  val moreSpecificFooHistoryIdGenerator = fooHistoryIdGenerator // Just making a point that both kinds of bitemporal will use the same type of ids.
 
   lazy val changeError = new Error("Error in making a change.")
 
@@ -67,9 +72,14 @@ trait WorldSpecSupport {
     barHistory.method2(capture(data1), capture(data2), capture(data3))
   }))
 
-  def dataSampleGenerator6(faulty: Boolean) = for {data <- Arbitrary.arbitrary[Int]} yield (data, (when: americium.Unbounded[Instant], integerHistoryId: IntegerHistory#Id) => Change[IntegerHistory](when)(integerHistoryId, (integerHistory: IntegerHistory) => {
+  def integerDataSampleGenerator(faulty: Boolean) = for {data <- Arbitrary.arbitrary[Int]} yield (data, (when: americium.Unbounded[Instant], integerHistoryId: IntegerHistory#Id) => Change[IntegerHistory](when)(integerHistoryId, (integerHistory: IntegerHistory) => {
     if (capture(faulty)) throw changeError // Modelling a precondition failure.
     integerHistory.integerProperty = capture(data)
+  }))
+
+  def moreSpecificFooDataSampleGenerator(faulty: Boolean) = for {data <- Arbitrary.arbitrary[String]} yield (data, (when: americium.Unbounded[Instant], fooHistoryId: MoreSpecificFooHistory#Id) => Change[MoreSpecificFooHistory](when)(fooHistoryId, (fooHistory: MoreSpecificFooHistory) => {
+    if (capture(faulty)) throw changeError // Modelling a precondition failure.
+    fooHistory.property1 = capture(data)
   }))
 
   def dataSamplesForAnIdGenerator_[AHistory <: History : TypeTag](dataSampleGenerator: Gen[(_, (Unbounded[Instant], AHistory#Id) => Change)], historyIdGenerator: Gen[AHistory#Id]) = {
@@ -112,10 +122,73 @@ trait WorldSpecSupport {
   }
 
   def revisionActions(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[(Option[(Any, Unbounded[Instant], Change)], Int)]], asOfs: List[Instant], world: WorldUnderTest): Stream[() => Revision] = {
+    assert(bigShuffledHistoryOverLotsOfThings.length == asOfs.length)
     for {(pieceOfHistory, asOf) <- bigShuffledHistoryOverLotsOfThings zip asOfs
          events = pieceOfHistory map {
            case (recording, eventId) => eventId -> (for ((_, _, change) <- recording) yield change)
          } toSeq} yield
     () => world.revise(TreeMap(events: _*), asOf)
   }
+
+  def intersperseObsoleteRecordings(random: Random, recordings: immutable.Iterable[(Any, Unbounded[Instant], Change)], obsoleteRecordings: immutable.Iterable[(Any, Unbounded[Instant], Change)]): Stream[(Option[(Any, Unbounded[Instant], Change)], Int)] = {
+    case class UnfoldState(recordings: immutable.Iterable[(Any, Unbounded[Instant], Change)],
+                           obsoleteRecordings: immutable.Iterable[(Any, Unbounded[Instant], Change)],
+                           eventId: Int,
+                           eventsToBeCorrected: Set[Int])
+    val onePastMaximumEventId = recordings.size
+    def yieldEitherARecordingOrAnObsoleteRecording(unfoldState: UnfoldState) = unfoldState match {
+      case unfoldState@UnfoldState(recordings, obsoleteRecordings, eventId, eventsToBeCorrected) =>
+        if (recordings.isEmpty) {
+          if (eventsToBeCorrected.nonEmpty) {
+            // Issue annulments correcting any outstanding obsolete events.
+            val obsoleteEventId = random.chooseOneOf(eventsToBeCorrected)
+            Some((None, obsoleteEventId) -> unfoldState.copy(eventsToBeCorrected = eventsToBeCorrected - obsoleteEventId))
+          } else None // All done.
+        } else if (obsoleteRecordings.nonEmpty && random.nextBoolean()) {
+          val (obsoleteRecordingHeadPart, remainingObsoleteRecordings) = obsoleteRecordings.splitAt(1)
+          val obsoleteRecording = obsoleteRecordingHeadPart.head
+          if (eventsToBeCorrected.nonEmpty && random.nextBoolean()) {
+            // Correct an obsolete event with another obsolete event.
+            Some((Some(obsoleteRecording), random.chooseOneOf(eventsToBeCorrected)) -> unfoldState.copy(obsoleteRecordings = remainingObsoleteRecordings))
+          } else {
+            // Take some event id that denotes a subsequent non-obsolete recording and make an obsolete revision of it.
+            val anticipatedEventId = eventId + random.chooseAnyNumberFromZeroToOneLessThan(onePastMaximumEventId - eventId)
+            Some((Some(obsoleteRecording), anticipatedEventId) -> unfoldState.copy(obsoleteRecordings = remainingObsoleteRecordings, eventsToBeCorrected = eventsToBeCorrected + anticipatedEventId))
+          }
+        } else if (eventsToBeCorrected.nonEmpty && random.nextBoolean()) {
+          // Just annul an obsolete event for the sake of it, even though the non-obsolete correction is still yet to follow.
+          val obsoleteEventId = random.chooseOneOf(eventsToBeCorrected)
+          Some((None, obsoleteEventId) -> unfoldState.copy(eventsToBeCorrected = eventsToBeCorrected - obsoleteEventId))
+        } else {
+          // Issue the definitive non-obsolete recording for the event; this will not be subsequently corrected.
+          val (recordingHeadPart, remainingRecordings) = recordings.splitAt(1)
+          val recording = recordingHeadPart.head
+          Some((Some(recording), eventId) -> unfoldState.copy(recordings = remainingRecordings, eventId = 1 + eventId, eventsToBeCorrected = eventsToBeCorrected - eventId))
+        }
+    }
+    stream.unfold(UnfoldState(recordings, obsoleteRecordings, 0, Set.empty))(yieldEitherARecordingOrAnObsoleteRecording)
+  }
+
+  def mixedDataSamplesForAnIdGenerator(faulty: Boolean = false) = Gen.frequency(Seq(
+    dataSamplesForAnIdGenerator_[FooHistory](dataSampleGenerator1(faulty), fooHistoryIdGenerator),
+    dataSamplesForAnIdGenerator_[FooHistory](dataSampleGenerator2(faulty), fooHistoryIdGenerator),
+    dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator3(faulty), barHistoryIdGenerator),
+    dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator4(faulty), barHistoryIdGenerator),
+    dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator5(faulty), barHistoryIdGenerator),
+    dataSamplesForAnIdGenerator_[IntegerHistory](integerDataSampleGenerator(faulty), integerHistoryIdGenerator),
+    dataSamplesForAnIdGenerator_[MoreSpecificFooHistory](moreSpecificFooDataSampleGenerator(faulty), moreSpecificFooHistoryIdGenerator)) map (1 -> _): _*)
+
+  val dataSamplesForAnIdGenerator = mixedDataSamplesForAnIdGenerator()
+  val recordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(dataSamplesForAnIdGenerator, changeWhenGenerator)
+
+  // These recordings don't allow the possibility of the same id being shared by bitemporals of related types
+  // when these are plugged into tests that correct one world history into another.
+  def mixedNonConflictingDataSamplesForAnIdGenerator(faulty: Boolean = false) = Gen.frequency(Seq(
+    dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator3(faulty), barHistoryIdGenerator),
+    dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator4(faulty), barHistoryIdGenerator),
+    dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator5(faulty), barHistoryIdGenerator),
+    dataSamplesForAnIdGenerator_[IntegerHistory](integerDataSampleGenerator(faulty), integerHistoryIdGenerator)) map (1 -> _): _*)
+
+  val nonConflictingDataSamplesForAnIdGenerator = mixedNonConflictingDataSamplesForAnIdGenerator()
+  val nonConflictingRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(nonConflictingDataSamplesForAnIdGenerator, changeWhenGenerator)
 }

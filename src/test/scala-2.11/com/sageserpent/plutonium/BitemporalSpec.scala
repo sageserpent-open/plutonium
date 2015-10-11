@@ -14,26 +14,30 @@ import scalaz.{Equal, MonadPlus}
  */
 
 class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
-  val dataSamplesForAnIdGenerator = dataSamplesForAnIdGenerator_[IntegerHistory](dataSampleGenerator6(faulty = false), integerHistoryIdGenerator)
+  val integerDataSamplesForAnIdGenerator = dataSamplesForAnIdGenerator_[IntegerHistory](integerDataSampleGenerator(faulty = false), integerHistoryIdGenerator)
 
-  val recordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(dataSamplesForAnIdGenerator, changeWhenGenerator)
+  val integerHistoryRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(integerDataSamplesForAnIdGenerator, changeWhenGenerator)
 
   "The class Bitemporal" should "be a monad plus instance" in {
-    val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
+    val testCaseGenerator = for {integerHistoryRecordingsGroupedById <- integerHistoryRecordingsGroupedByIdGenerator
+                                 obsoleteRecordingsGroupedById <- integerHistoryRecordingsGroupedByIdGenerator
                                  seed <- seedGenerator
                                  random = new Random(seed)
-                                 bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, recordingsGroupedById map (_.recordings) flatMap identity).zipWithIndex)
+                                 shuffledRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, integerHistoryRecordingsGroupedById map (_.recordings) flatten)
+                                 shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, obsoleteRecordingsGroupedById map (_.recordings) flatten)
+                                 shuffledRecordingAndEventPairs = intersperseObsoleteRecordings(random, shuffledRecordings, shuffledObsoleteRecordings)
+                                 bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(shuffledRecordingAndEventPairs)
                                  asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
                                  queryWhen <- unboundedInstantGenerator
-    } yield (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
-    check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
+    } yield (integerHistoryRecordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
+    check(Prop.forAllNoShrink(testCaseGenerator) { case (integerHistoryRecordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
       val world = new WorldUnderTest()
 
-      recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfs, world)
+      recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
 
       val scope = world.scopeFor(queryWhen, world.nextRevision)
 
-      val idsToWhenDefinedMap = recordingsGroupedById map { case RecordingsForAnId(historyId, whenEarliestChangeHappened, _, _) => historyId.asInstanceOf[IntegerHistory#Id] -> whenEarliestChangeHappened } toMap
+      val idsToWhenDefinedMap = integerHistoryRecordingsGroupedById map { case RecordingsForAnId(historyId, whenEarliestChangeHappened, _, _) => historyId.asInstanceOf[IntegerHistory#Id] -> whenEarliestChangeHappened } toMap
 
       val ids = idsToWhenDefinedMap.keys toSeq
 

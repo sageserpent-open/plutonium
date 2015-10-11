@@ -29,7 +29,7 @@ Additional test - annulments that refer to events that have either never been de
 ---------------------------------------------------------------------------------------------------------------------------
 
 Actually, need to implement the support for equality the 'MonadPlus' typeclass - presumably with a scope made on the fly so that the lhs and rhs bitemporals can both be rendered against it.
-(DONE - A BIT MESSY, BUT WORKS WELL - could tidy this up so as to use an identifiable type that isn't a kind of 'History', and has a directly usable integer property.)
+(DONE - A BIT MESSY, BUT WORKS WELL - could tidy this up so as to use an identifiable type that isn't a kind of 'History', and has a directly usable integer property - DONE.)
 
 6. Are there tests for wildcards, plus the various flavours of id-matching? What about the 'none' case? What about having several items of different type sharing the same id?
 What about attempting to book in a revision that would lead to a new item sharing the same id as one with a sub- or -supertype?
