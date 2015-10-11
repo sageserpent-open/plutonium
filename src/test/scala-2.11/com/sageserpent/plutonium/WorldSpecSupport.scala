@@ -7,14 +7,17 @@ package com.sageserpent.plutonium
 import java.time.Instant
 
 import com.sageserpent.americium
-import com.sageserpent.americium._
+import com.sageserpent.americium.{Finite, PositiveInfinity, NegativeInfinity, Unbounded}
+import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.plutonium.World._
 import org.scalacheck.{Arbitrary, Gen}
 
+import scala.collection.immutable
 import scala.collection.immutable.TreeMap
 import scala.reflect.runtime.universe._
 import scala.spores._
 import scala.util.Random
+import scalaz.std.stream
 
 
 trait WorldSpecSupport {
@@ -125,6 +128,45 @@ trait WorldSpecSupport {
            case (recording, eventId) => eventId -> (for ((_, _, change) <- recording) yield change)
          } toSeq} yield
     () => world.revise(TreeMap(events: _*), asOf)
+  }
+
+  def intersperseObsoleteRecordings(random: Random, recordings: immutable.Iterable[(Any, Unbounded[Instant], Change)], obsoleteRecordings: immutable.Iterable[(Any, Unbounded[Instant], Change)]): Stream[(Option[(Any, Unbounded[Instant], Change)], Int)] = {
+    case class UnfoldState(recordings: immutable.Iterable[(Any, Unbounded[Instant], Change)],
+                           obsoleteRecordings: immutable.Iterable[(Any, Unbounded[Instant], Change)],
+                           eventId: Int,
+                           eventsToBeCorrected: Set[Int])
+    val onePastMaximumEventId = recordings.size
+    def yieldEitherARecordingOrAnObsoleteRecording(unfoldState: UnfoldState) = unfoldState match {
+      case unfoldState@UnfoldState(recordings, obsoleteRecordings, eventId, eventsToBeCorrected) =>
+        if (recordings.isEmpty) {
+          if (eventsToBeCorrected.nonEmpty) {
+            // Issue annulments correcting any outstanding obsolete events.
+            val obsoleteEventId = random.chooseOneOf(eventsToBeCorrected)
+            Some((None, obsoleteEventId) -> unfoldState.copy(eventsToBeCorrected = eventsToBeCorrected - obsoleteEventId))
+          } else None // All done.
+        } else if (obsoleteRecordings.nonEmpty && random.nextBoolean()) {
+          val (obsoleteRecordingHeadPart, remainingObsoleteRecordings) = obsoleteRecordings.splitAt(1)
+          val obsoleteRecording = obsoleteRecordingHeadPart.head
+          if (eventsToBeCorrected.nonEmpty && random.nextBoolean()) {
+            // Correct an obsolete event with another obsolete event.
+            Some((Some(obsoleteRecording), random.chooseOneOf(eventsToBeCorrected)) -> unfoldState.copy(obsoleteRecordings = remainingObsoleteRecordings))
+          } else {
+            // Take some event id that denotes a subsequent non-obsolete recording and make an obsolete revision of it.
+            val anticipatedEventId = eventId + random.chooseAnyNumberFromZeroToOneLessThan(onePastMaximumEventId - eventId)
+            Some((Some(obsoleteRecording), anticipatedEventId) -> unfoldState.copy(obsoleteRecordings = remainingObsoleteRecordings, eventsToBeCorrected = eventsToBeCorrected + anticipatedEventId))
+          }
+        } else if (eventsToBeCorrected.nonEmpty && random.nextBoolean()) {
+          // Just annul an obsolete event for the sake of it, even though the non-obsolete correction is still yet to follow.
+          val obsoleteEventId = random.chooseOneOf(eventsToBeCorrected)
+          Some((None, obsoleteEventId) -> unfoldState.copy(eventsToBeCorrected = eventsToBeCorrected - obsoleteEventId))
+        } else {
+          // Issue the definitive non-obsolete recording for the event; this will not be subsequently corrected.
+          val (recordingHeadPart, remainingRecordings) = recordings.splitAt(1)
+          val recording = recordingHeadPart.head
+          Some((Some(recording), eventId) -> unfoldState.copy(recordings = remainingRecordings, eventId = 1 + eventId, eventsToBeCorrected = eventsToBeCorrected - eventId))
+        }
+    }
+    stream.unfold(UnfoldState(recordings, obsoleteRecordings, 0, Set.empty))(yieldEitherARecordingOrAnObsoleteRecording)
   }
 
   def mixedDataSamplesForAnIdGenerator(faulty: Boolean = false) = Gen.frequency(Seq(
