@@ -591,7 +591,7 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
                            obsoleteRecordings: immutable.Iterable[(Any, Unbounded[Instant], Change)],
                            eventId: Int,
                            eventsToBeCorrected: Set[Int])
-    val maximumEventId = recordings.size
+    val onePastMaximumEventId = recordings.size
     def yieldEitherARecordingOrAnObsoleteRecording(unfoldState: UnfoldState) = unfoldState match {
       case unfoldState@UnfoldState(recordings, obsoleteRecordings, eventId, eventsToBeCorrected) =>
         if (recordings.isEmpty) {
@@ -608,7 +608,7 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
             Some((Some(obsoleteRecording), random.chooseOneOf(eventsToBeCorrected)) -> unfoldState.copy(obsoleteRecordings = remainingObsoleteRecordings))
           } else {
             // Take some event id that denotes a subsequent non-obsolete recording and make an obsolete revision of it.
-            val anticipatedEventId = eventId + random.chooseAnyNumberFromZeroToOneLessThan(maximumEventId - eventId)
+            val anticipatedEventId = eventId + random.chooseAnyNumberFromZeroToOneLessThan(onePastMaximumEventId - eventId)
             Some((Some(obsoleteRecording), anticipatedEventId) -> unfoldState.copy(obsoleteRecordings = remainingObsoleteRecordings, eventsToBeCorrected = eventsToBeCorrected + anticipatedEventId))
           }
         } else if (eventsToBeCorrected.nonEmpty && random.nextBoolean()) {
@@ -763,12 +763,40 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
     check(Prop.forAllNoShrink(testCaseGenerator) { case (testCaseSubsections, asOfsForSubsections, queryWhen) =>
       val world = new WorldUnderTest()
 
-      val listOfRevisionsToCheckAtAndRecordingsGroupedById = stream.unfold((testCaseSubsections zip asOfsForSubsections) -> 0) {
+      val listOfRevisionsToCheckAtAndRecordingsGroupedById = stream.unfold((testCaseSubsections zip asOfsForSubsections) -> -1) {
         case ((((recordingsGroupedById, bigShuffledHistoryOverLotsOfThings), asOfs) :: remainingSubsections), maximumEventIdFromPreviousSubsection) =>
-          val maximumEventIdFromThisSubsection = (bigShuffledHistoryOverLotsOfThings flatMap (_ map (_._2))).max
-          val annulmentsGalore = Stream((1 + maximumEventIdFromThisSubsection) to maximumEventIdFromPreviousSubsection map ((None: Option[(Any, Unbounded[Instant], Change)]) -> _))
-          recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
-          recordEventsInWorld(annulmentsGalore, List(world.revisionAsOfs(world.nextRevision - 1)), world)
+          val sortedEventIds = (bigShuffledHistoryOverLotsOfThings flatMap (_ map (_._2))).sorted.distinct
+          assert((sortedEventIds zip sortedEventIds.tail).forall {case (first, second) => 1 + first == second})
+          val maximumEventIdFromThisSubsection = sortedEventIds.last
+          val annulmentsForExtraEventIdsNotCorrectedInThisSubsection = Stream((1 + maximumEventIdFromThisSubsection) to maximumEventIdFromPreviousSubsection map ((None: Option[(Any, Unbounded[Instant], Change)]) -> _))
+          val asOfForAnnulments = asOfs.head
+          recordEventsInWorld(annulmentsForExtraEventIdsNotCorrectedInThisSubsection, List(asOfForAnnulments), world)
+          try {
+            recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
+          }
+          catch {
+            case _ :RuntimeException =>
+              // The assumption is that our brute-force rewriting of history made what would be
+              // an inconsistent revision as an intermediate step. In this case, annul the history
+              // entirely from the previous subsection and rewrite from a clean slate. We assume
+              // that if there was an inconsistency between the previous history that wasn't yet
+              // fully corrected and whatever attempted revision that caused the exception
+              // to be thrown, then there is obvious at least one previous revision to steal an asOf
+              // from.
+              // NOTE: annulling everything and rewriting is a bit prolix compared with flattening
+              // the history and correcting in a single grand slam revisions without going through any
+              // intermediate steps. However, the prolix way happens to expose a bug not observed
+              // when doing a grand slam revision, so we'll stick with it for now.
+              assert(World.initialRevision != world.nextRevision)
+              val asOfForAllCorrections = asOfs.last
+              /*recordEventsInWorld(Stream(bigShuffledHistoryOverLotsOfThings.flatten), List.fill(asOfs.length)(asOfForGrandSlamCorrection), world) // Grand slam approach.*/
+
+              val annulmentsGalore = Stream((0 to maximumEventIdFromThisSubsection) map ((None: Option[(Any, Unbounded[Instant], Change)]) -> _))
+
+              recordEventsInWorld(annulmentsGalore, List(asOfForAllCorrections), world)
+              recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, List.fill(asOfs.length)(asOfForAllCorrections), world)
+          }
+
           Some((world.nextRevision -> recordingsGroupedById, remainingSubsections -> maximumEventIdFromThisSubsection))
         case _ => None
       }
