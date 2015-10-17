@@ -2,6 +2,7 @@ package com.sageserpent.plutonium
 
 import com.sageserpent.americium.randomEnrichment._
 import org.scalacheck.{Arbitrary, Gen, Prop}
+import Prop.BooleanOperators
 import org.scalatest.FlatSpec
 import org.scalatest.prop.Checkers
 
@@ -72,7 +73,37 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
   }
 
   "A bitemporal wildcard" should "match all items of compatible type relevant to a scope" in {
+    val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
+                                 obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
+                                 seed <- seedGenerator
+                                 random = new Random(seed)
+                                 shuffledRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, recordingsGroupedById map (_.recordings) flatten)
+                                 shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, obsoleteRecordingsGroupedById map (_.recordings) flatten)
+                                 shuffledRecordingAndEventPairs = intersperseObsoleteRecordings(random, shuffledRecordings, shuffledObsoleteRecordings)
+                                 bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(shuffledRecordingAndEventPairs)
+                                 asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
+                                 queryWhen <- unboundedInstantGenerator
+    } yield (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
+    check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
+      val world = new WorldUnderTest()
 
+      recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
+
+      val scope = world.scopeFor(queryWhen, world.nextRevision)
+
+      val idsToWhenDefinedMap = recordingsGroupedById map
+        { case RecordingsForAnId(historyId, whenEarliestChangeHappened, _, _) => historyId -> whenEarliestChangeHappened } groupBy (_._1) map (_._2 minBy (_._2))
+
+      val ids = idsToWhenDefinedMap.keys toSeq
+
+      val idsInExistence = (idsToWhenDefinedMap filter { case (_, whenDefined) => queryWhen >= whenDefined } keys) toSet
+
+      val allItemsFromQuery = scope.render(Bitemporal.wildcard[History]) toList
+
+      val allIdsFromQuery = allItemsFromQuery map (_.id) toSet
+
+      (idsInExistence == allIdsFromQuery) :| s"${idsInExistence} == allIdsFromQuery"
+    })
   }
 
   "A bitemporal query using an id" should "match a subset of the corresponding wildcard query." in {
