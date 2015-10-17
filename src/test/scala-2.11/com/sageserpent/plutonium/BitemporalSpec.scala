@@ -41,7 +41,7 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
 
       val ids = idsToWhenDefinedMap.keys toSeq
 
-      val idsInExistence = (idsToWhenDefinedMap filter {case (_, whenDefined) => queryWhen >= whenDefined} keys) toSeq
+      val idsInExistence = (idsToWhenDefinedMap filter { case (_, whenDefined) => queryWhen >= whenDefined } keys) toSeq
 
       implicit def arbitraryGenericBitemporal[Raw](implicit rawArbitrary: Arbitrary[Raw]): Arbitrary[Bitemporal[Raw]] = Arbitrary {
         Arbitrary.arbitrary[Raw] map (MonadPlus[Bitemporal].point(_))
@@ -69,5 +69,25 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
 
       ScalazProperties.monadPlus.laws[Bitemporal]
     })
+  }
+
+  "A bitemporal wildcard" should "match all items of compatible type relevant to a scope" in {
+
+  }
+
+  "A bitemporal query using an id" should "match a subset of the corresponding wildcard query." in {
+
+  }
+
+  it should "have alternate forms that correctly relate to each other" in {
+
+  }
+
+  "The bitemporal 'none'" should "not match anything" in {
+
+  }
+
+  "Bitemporal queries" should "include subtypes of instances" in {
+
   }
 }
