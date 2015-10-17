@@ -48,8 +48,7 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
     World.initialRevision shouldBe world.nextRevision
   }
 
-  val faultyDataSamplesForAnIdGenerator = mixedDataSamplesForAnIdGenerator(faulty = true)
-  val faultyRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(faultyDataSamplesForAnIdGenerator, changeWhenGenerator)
+  val faultyRecordingsGroupedByIdGenerator = mixedRecordingsGroupedByIdGenerator(faulty = true)
 
   private def eventWhenFrom(recording: ((Any, Unbounded[Instant], Change), Int)) = recording match {
     case ((_, eventWhen, _), _) => eventWhen
