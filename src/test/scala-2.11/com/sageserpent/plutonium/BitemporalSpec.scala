@@ -96,18 +96,44 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
 
       val ids = idsToWhenDefinedMap.keys toSeq
 
-      val idsInExistence = (idsToWhenDefinedMap filter { case (_, whenDefined) => queryWhen >= whenDefined } keys) toSet
+      val idsInExistence = (idsToWhenDefinedMap filter { case (_, whenDefined) => queryWhen >= whenDefined } keys) groupBy identity map {case (id, group) => id -> group.size} toSet
 
-      val allItemsFromQuery = scope.render(Bitemporal.wildcard[History]) toList
+      val itemsFromWildcardQuery = scope.render(Bitemporal.wildcard[History]) toList
 
-      val allIdsFromQuery = allItemsFromQuery map (_.id) toSet
+      val idsFromWildcardQuery = itemsFromWildcardQuery map (_.id) groupBy identity map {case (id, group) => id -> group.size} toSet
 
-      (idsInExistence == allIdsFromQuery) :| s"${idsInExistence} == allIdsFromQuery"
+      (idsInExistence == idsFromWildcardQuery) :| s"${idsInExistence} == idsFromWildcardQuery"
     })
   }
 
   "A bitemporal query using an id" should "match a subset of the corresponding wildcard query." in {
+    val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
+                                 obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
+                                 seed <- seedGenerator
+                                 random = new Random(seed)
+                                 shuffledRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, recordingsGroupedById map (_.recordings) flatten)
+                                 shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, obsoleteRecordingsGroupedById map (_.recordings) flatten)
+                                 shuffledRecordingAndEventPairs = intersperseObsoleteRecordings(random, shuffledRecordings, shuffledObsoleteRecordings)
+                                 bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(shuffledRecordingAndEventPairs)
+                                 asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
+                                 queryWhen <- unboundedInstantGenerator
+    } yield (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
+    check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
+      val world = new WorldUnderTest()
 
+      recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
+
+      val scope = world.scopeFor(queryWhen, world.nextRevision)
+
+      val ids = (recordingsGroupedById map { case RecordingsForAnId(historyId, _, _, _) => historyId.asInstanceOf[History#Id] }).toSet
+
+      val itemsFromWildcardQuery = scope.render(Bitemporal.wildcard[History]) toSet
+
+      Prop.all(ids.toSeq map (id => {
+        val itemsFromSpecificQuery = scope.render(Bitemporal.withId[History](id)).toSet
+        itemsFromSpecificQuery.subsetOf(itemsFromWildcardQuery) :| s"itemsFromSpecificQuery.subsetOf(${itemsFromWildcardQuery})"
+      }): _*)
+    })
   }
 
   it should "have alternate forms that correctly relate to each other" in {
