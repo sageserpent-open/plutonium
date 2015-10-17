@@ -91,16 +91,15 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
 
       val scope = world.scopeFor(queryWhen, world.nextRevision)
 
-      val idsToWhenDefinedMap = recordingsGroupedById map
-        { case RecordingsForAnId(historyId, whenEarliestChangeHappened, _, _) => historyId -> whenEarliestChangeHappened } groupBy (_._1) map (_._2 minBy (_._2))
+      val idsToWhenDefinedMap = recordingsGroupedById map { case RecordingsForAnId(historyId, whenEarliestChangeHappened, _, _) => historyId -> whenEarliestChangeHappened } groupBy (_._1) map (_._2 minBy (_._2))
 
       val ids = idsToWhenDefinedMap.keys toSeq
 
-      val idsInExistence = (idsToWhenDefinedMap filter { case (_, whenDefined) => queryWhen >= whenDefined } keys) groupBy identity map {case (id, group) => id -> group.size} toSet
+      val idsInExistence = (idsToWhenDefinedMap filter { case (_, whenDefined) => queryWhen >= whenDefined } keys) groupBy identity map { case (id, group) => id -> group.size } toSet
 
       val itemsFromWildcardQuery = scope.render(Bitemporal.wildcard[History]) toList
 
-      val idsFromWildcardQuery = itemsFromWildcardQuery map (_.id) groupBy identity map {case (id, group) => id -> group.size} toSet
+      val idsFromWildcardQuery = itemsFromWildcardQuery map (_.id) groupBy identity map { case (id, group) => id -> group.size } toSet
 
       (idsInExistence == idsFromWildcardQuery) :| s"${idsInExistence} == idsFromWildcardQuery"
     })
@@ -137,11 +136,63 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
   }
 
   it should "have alternate forms that correctly relate to each other" in {
+    val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
+                                 obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
+                                 seed <- seedGenerator
+                                 random = new Random(seed)
+                                 shuffledRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, recordingsGroupedById map (_.recordings) flatten)
+                                 shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, obsoleteRecordingsGroupedById map (_.recordings) flatten)
+                                 shuffledRecordingAndEventPairs = intersperseObsoleteRecordings(random, shuffledRecordings, shuffledObsoleteRecordings)
+                                 bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(shuffledRecordingAndEventPairs)
+                                 asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
+                                 queryWhen <- unboundedInstantGenerator
+    } yield (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
+    check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
+      val world = new WorldUnderTest()
 
+      recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
+
+      val scope = world.scopeFor(queryWhen, world.nextRevision)
+
+      val ids = (recordingsGroupedById map { case RecordingsForAnId(historyId, _, _, _) => historyId.asInstanceOf[History#Id] }).toSet
+
+      Prop.all(ids.toSeq map (id => {
+        val itemsFromGenericQuery = scope.render(Bitemporal.withId[History](id)).toSet
+        (if (2 > itemsFromGenericQuery.size) {
+          val itemsFromZeroOrOneOfQuery = scope.render(Bitemporal.zeroOrOneOf[History](id)).toSet
+          (itemsFromGenericQuery == itemsFromZeroOrOneOfQuery) :| s"${itemsFromGenericQuery} == itemsFromZeroOrOneOfQuery"
+        }
+        else Prop.proved) && (if (1 == itemsFromGenericQuery.size) {
+          val itemsFromSingleOneOfQuery = scope.render(Bitemporal.singleOneOf[History](id)).toSet
+          (itemsFromGenericQuery == itemsFromSingleOneOfQuery) :| s"${itemsFromGenericQuery} == itemsFromSingleOneOfQuery"
+        }
+        else Prop.proved)
+      }): _*)
+
+    })
   }
 
   "The bitemporal 'none'" should "not match anything" in {
+    val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
+                                 obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
+                                 seed <- seedGenerator
+                                 random = new Random(seed)
+                                 shuffledRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, recordingsGroupedById map (_.recordings) flatten)
+                                 shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, obsoleteRecordingsGroupedById map (_.recordings) flatten)
+                                 shuffledRecordingAndEventPairs = intersperseObsoleteRecordings(random, shuffledRecordings, shuffledObsoleteRecordings)
+                                 bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(shuffledRecordingAndEventPairs)
+                                 asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
+                                 queryWhen <- unboundedInstantGenerator
+    } yield (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
+    check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
+      val world = new WorldUnderTest()
 
+      recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
+
+      val scope = world.scopeFor(queryWhen, world.nextRevision)
+
+      scope.render(Bitemporal.none).isEmpty :| "scope.render(Bitemporal.none).isEmpty"
+    })
   }
 
   "Bitemporal queries" should "include subtypes of instances" in {
