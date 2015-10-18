@@ -173,14 +173,14 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
         val ids = (recordingsGroupedById map { case RecordingsForAnId(historyId, _, _, _) => historyId } filter (_.isInstanceOf[AHistory#Id]) map (_.asInstanceOf[AHistory#Id])).toSet
 
         Prop.all(ids.toSeq map (id => {
-          val itemsFromGenericQuery = scope.render(Bitemporal.withId[History](id)).toSet
-          (if (2 > itemsFromGenericQuery.size) {
+          val itemsFromGenericQueryById = scope.render(Bitemporal.withId[History](id)).toSet
+          (if (2 > itemsFromGenericQueryById.size) {
             val itemsFromZeroOrOneOfQuery = scope.render(Bitemporal.zeroOrOneOf[History](id)).toSet
-            (itemsFromGenericQuery == itemsFromZeroOrOneOfQuery) :| s"${itemsFromGenericQuery} == itemsFromZeroOrOneOfQuery"
+            (itemsFromGenericQueryById == itemsFromZeroOrOneOfQuery) :| s"${itemsFromGenericQueryById} == itemsFromZeroOrOneOfQuery"
           }
-          else Prop.proved) && (if (1 == itemsFromGenericQuery.size) {
+          else Prop.proved) && (if (1 == itemsFromGenericQueryById.size) {
             val itemsFromSingleOneOfQuery = scope.render(Bitemporal.singleOneOf[History](id)).toSet
-            (itemsFromGenericQuery == itemsFromSingleOneOfQuery) :| s"${itemsFromGenericQuery} == itemsFromSingleOneOfQuery"
+            (itemsFromGenericQueryById == itemsFromSingleOneOfQuery) :| s"${itemsFromGenericQueryById} == itemsFromSingleOneOfQuery"
           }
           else Prop.proved)
         }): _*)
@@ -234,10 +234,21 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
 
       val scope = world.scopeFor(queryWhen, world.nextRevision)
 
-      def itemsViaWildcard[AHistory <: History: TypeTag] = scope.render(Bitemporal.wildcard[AHistory]) toSet
+      def itemsFromWildcardQuery[AHistory <: History: TypeTag] = scope.render(Bitemporal.wildcard[AHistory]) toSet
 
-      Prop((itemsViaWildcard[MoreSpecificFooHistory] map (_.asInstanceOf[FooHistory])).subsetOf(itemsViaWildcard[FooHistory])) &&
-        Prop((itemsViaWildcard[FooHistory] map (_.asInstanceOf[History])).subsetOf(itemsViaWildcard[History]))
+      val wildcardProperty = Prop((itemsFromWildcardQuery[MoreSpecificFooHistory] map (_.asInstanceOf[FooHistory])).subsetOf(itemsFromWildcardQuery[FooHistory])) &&
+        Prop((itemsFromWildcardQuery[FooHistory] map (_.asInstanceOf[History])).subsetOf(itemsFromWildcardQuery[History]))
+
+      val ids = (recordingsGroupedById map { case RecordingsForAnId(historyId, _, _, _) => historyId } filter (_.isInstanceOf[MoreSpecificFooHistory#Id]) map (_.asInstanceOf[MoreSpecificFooHistory#Id])).toSet
+
+      val genericQueryByIdProperty = Prop.all(ids.toSeq map (id => {
+        def itemsFromGenericQueryById[AHistory >: MoreSpecificFooHistory <: History: TypeTag] = scope.render(Bitemporal.withId[AHistory](id.asInstanceOf[AHistory#Id])).toSet
+        println(itemsFromGenericQueryById[History] map (_.getClass))
+        Prop((itemsFromGenericQueryById[MoreSpecificFooHistory] map (_.asInstanceOf[FooHistory])).subsetOf(itemsFromGenericQueryById[FooHistory])) &&
+          Prop((itemsFromGenericQueryById[FooHistory] map (_.asInstanceOf[History])).subsetOf(itemsFromGenericQueryById[History]))
+      }): _*)
+
+      wildcardProperty && genericQueryByIdProperty
     })
   }
 }
