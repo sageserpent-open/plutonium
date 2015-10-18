@@ -93,11 +93,8 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
 
       val scope = world.scopeFor(queryWhen, world.nextRevision)
 
-      val idsToWhenDefinedMap = recordingsGroupedById map { case RecordingsForAnId(historyId, whenEarliestChangeHappened, _, _) => historyId -> whenEarliestChangeHappened } groupBy (_._1) map (_._2 minBy (_._2))
-
-      val ids = idsToWhenDefinedMap.keys toSeq
-
-      val idsInExistence = (idsToWhenDefinedMap filter { case (_, whenDefined) => queryWhen >= whenDefined } keys) groupBy identity map { case (id, group) => id -> group.size } toSet
+      val idsInExistence = (recordingsGroupedById filter { case RecordingsForAnId(historyId, whenEarliestChangeHappened, _, _) => queryWhen >= whenEarliestChangeHappened } map
+        { case RecordingsForAnId(historyId, _, _, _) => historyId } ) groupBy identity map { case (id, group) => id -> group.size } toSet
 
       val itemsFromWildcardQuery = scope.render(Bitemporal.wildcard[History]) toList
 
@@ -243,7 +240,6 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
 
       val genericQueryByIdProperty = Prop.all(ids.toSeq map (id => {
         def itemsFromGenericQueryById[AHistory >: MoreSpecificFooHistory <: History: TypeTag] = scope.render(Bitemporal.withId[AHistory](id.asInstanceOf[AHistory#Id])).toSet
-        println(itemsFromGenericQueryById[History] map (_.getClass))
         Prop((itemsFromGenericQueryById[MoreSpecificFooHistory] map (_.asInstanceOf[FooHistory])).subsetOf(itemsFromGenericQueryById[FooHistory])) &&
           Prop((itemsFromGenericQueryById[FooHistory] map (_.asInstanceOf[History])).subsetOf(itemsFromGenericQueryById[History]))
       }): _*)
