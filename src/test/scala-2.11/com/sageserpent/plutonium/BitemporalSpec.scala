@@ -11,6 +11,7 @@ import scala.util.Random
 import scalaz.scalacheck._
 import scalaz.{Equal, MonadPlus}
 
+
 /**
  * Created by Gerard on 29/07/2015.
  */
@@ -215,6 +216,28 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
   }
 
   "Bitemporal queries" should "include subtypes of instances" in {
+    val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
+                                 obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
+                                 seed <- seedGenerator
+                                 random = new Random(seed)
+                                 shuffledRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, recordingsGroupedById map (_.recordings) flatten)
+                                 shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, obsoleteRecordingsGroupedById map (_.recordings) flatten)
+                                 shuffledRecordingAndEventPairs = intersperseObsoleteRecordings(random, shuffledRecordings, shuffledObsoleteRecordings)
+                                 bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(shuffledRecordingAndEventPairs)
+                                 asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
+                                 queryWhen <- unboundedInstantGenerator
+    } yield (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
+    check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
+      val world = new WorldUnderTest()
 
+      recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
+
+      val scope = world.scopeFor(queryWhen, world.nextRevision)
+
+      def itemsViaWildcard[AHistory <: History: TypeTag] = scope.render(Bitemporal.wildcard[AHistory]) toSet
+
+      Prop((itemsViaWildcard[MoreSpecificFooHistory] map (_.asInstanceOf[FooHistory])).subsetOf(itemsViaWildcard[FooHistory])) &&
+        Prop((itemsViaWildcard[FooHistory] map (_.asInstanceOf[History])).subsetOf(itemsViaWildcard[History]))
+    })
   }
 }
