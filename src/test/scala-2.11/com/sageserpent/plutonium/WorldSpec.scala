@@ -582,6 +582,35 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
     })
   }
 
+
+  val inconsistentlyTypedDataSamplesForAnIdGenerator = dataSamplesForAnIdGenerator_[FooHistory](moreSpecificFooDataSampleGenerator(faulty = false), fooHistoryIdGenerator, Some(dataSampleGenerator1(faulty = false)))
+
+  val inconsistentlyTypedRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(inconsistentlyTypedDataSamplesForAnIdGenerator, changeWhenGenerator)
+
+  it should "not permit subsequent events to demand that the type of an item referenced by an id become more specific than the one used by the initial defining event" in {
+    {
+      val testCaseGenerator = for {recordingsGroupedById <- inconsistentlyTypedRecordingsGroupedByIdGenerator
+                                   obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
+                                   seed <- seedGenerator
+                                   random = new Random(seed)
+                                   shuffledRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, recordingsGroupedById map (_.recordings) flatten)
+                                   shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, obsoleteRecordingsGroupedById map (_.recordings) flatten)
+                                   shuffledRecordingAndEventPairs = intersperseObsoleteRecordings(random, shuffledRecordings, shuffledObsoleteRecordings)
+                                   bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(shuffledRecordingAndEventPairs)
+                                   asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
+                                   queryWhen <- unboundedInstantGenerator
+      } yield (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
+      check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
+        val world = new WorldUnderTest()
+
+        {
+          intercept[Exception](recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world))
+          true
+        } :| s"Should have rejected the attempt to demand that an existing item in a subsequent event has a more specific type than when it was first defined."
+      })
+    }
+  }
+
   "A world with events that have since been corrected" should "yield a history at the final revision based only on the latest corrections" in {
     val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
                                  obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator

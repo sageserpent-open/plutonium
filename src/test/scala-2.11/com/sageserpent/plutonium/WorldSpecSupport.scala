@@ -86,9 +86,16 @@ trait WorldSpecSupport {
     fooHistory.property1 = capture(data)
   }))
 
-  def dataSamplesForAnIdGenerator_[AHistory <: History : TypeTag](dataSampleGenerator: Gen[(_, (Unbounded[Instant], AHistory#Id) => Change)], historyIdGenerator: Gen[AHistory#Id]) = {
-    val dataSamplesGenerator = Gen.nonEmptyListOf(dataSampleGenerator) // It makes no sense to have an id without associated data samples - the act of recording a data sample
-    // via a change is what introduces an id into the world.
+  def dataSamplesForAnIdGenerator_[AHistory <: History : TypeTag](dataSampleGenerator: Gen[(_, (Unbounded[Instant], AHistory#Id) => Change)], historyIdGenerator: Gen[AHistory#Id], leadingSpecialDataSampleGenerator: Option[Gen[(_, (Unbounded[Instant], AHistory#Id) => Change)]] = None) = {
+    // It makes no sense to have an id without associated data samples - the act of
+    // recording a data sample via a change is what introduces an id into the world.
+    val dataSamplesGenerator = leadingSpecialDataSampleGenerator match {
+      case Some(initialSpecialDataSampleGenerator) => for {
+        trailingDataSample <- dataSampleGenerator
+        leadingDataSamples <- Gen.nonEmptyListOf(initialSpecialDataSampleGenerator, dataSampleGenerator)
+      } yield leadingDataSamples :+ trailingDataSample
+      case None => Gen.nonEmptyListOf(dataSampleGenerator)
+    }
 
     for {dataSamples <- dataSamplesGenerator
          historyId <- historyIdGenerator} yield (historyId, (scope: Scope) => scope.render(Bitemporal.zeroOrOneOf[AHistory](historyId)): Seq[History], for {(data, changeFor: ((Unbounded[Instant], AHistory#Id) => Change)) <- dataSamples} yield (data, changeFor(_: Unbounded[Instant], historyId)))
@@ -176,7 +183,7 @@ trait WorldSpecSupport {
 
   def mixedRecordingsGroupedByIdGenerator(faulty: Boolean = false) = {
     val mixedDisjointLeftHandDataSamplesForAnIdGenerator = Gen.frequency(Seq(
-      dataSamplesForAnIdGenerator_[FooHistory](dataSampleGenerator1(faulty), fooHistoryIdGenerator),
+      dataSamplesForAnIdGenerator_[FooHistory](dataSampleGenerator1(faulty), fooHistoryIdGenerator, Some(moreSpecificFooDataSampleGenerator(faulty))),
       dataSamplesForAnIdGenerator_[FooHistory](dataSampleGenerator2(faulty), fooHistoryIdGenerator),
       dataSamplesForAnIdGenerator_[MoreSpecificFooHistory](moreSpecificFooDataSampleGenerator(faulty), moreSpecificFooHistoryIdGenerator)) map (1 -> _): _*)
 
