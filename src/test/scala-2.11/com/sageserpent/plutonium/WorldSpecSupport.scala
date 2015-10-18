@@ -90,9 +90,9 @@ trait WorldSpecSupport {
     // It makes no sense to have an id without associated data samples - the act of
     // recording a data sample via a change is what introduces an id into the world.
     val dataSamplesGenerator = leadingSpecialDataSampleGenerator match {
-      case Some(initialSpecialDataSampleGenerator) => for {
+      case Some(leadingSpecialDataSampleGenerator) => for {
         trailingDataSample <- dataSampleGenerator
-        leadingDataSamples <- Gen.nonEmptyListOf(initialSpecialDataSampleGenerator, dataSampleGenerator)
+        leadingDataSamples <- Gen.nonEmptyListOf(leadingSpecialDataSampleGenerator)
       } yield leadingDataSamples :+ trailingDataSample
       case None => Gen.nonEmptyListOf(dataSampleGenerator)
     }
