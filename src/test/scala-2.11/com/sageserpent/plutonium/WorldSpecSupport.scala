@@ -34,11 +34,15 @@ trait WorldSpecSupport {
 
   val changeWhenGenerator: Gen[Unbounded[Instant]] = Gen.frequency(1 -> Gen.oneOf(Seq(NegativeInfinity[Instant])), 10 -> (instantGenerator map (Finite(_))))
 
-  val fooHistoryIdGenerator = Arbitrary.arbitrary[FooHistory#Id]
+  val stringIdGenerator = Gen.chooseNum(50, 100) map ("Name: " + _.toString)
 
-  val barHistoryIdGenerator = Arbitrary.arbitrary[BarHistory#Id]
+  val integerIdGenerator = Gen.chooseNum(-20, 20)
 
-  val integerHistoryIdGenerator = Arbitrary.arbitrary[IntegerHistory#Id]
+  val fooHistoryIdGenerator = stringIdGenerator
+
+  val barHistoryIdGenerator = integerIdGenerator
+
+  val integerHistoryIdGenerator = stringIdGenerator
 
   val moreSpecificFooHistoryIdGenerator = fooHistoryIdGenerator // Just making a point that both kinds of bitemporal will use the same type of ids.
 
@@ -192,8 +196,7 @@ trait WorldSpecSupport {
                                                                             rightHandRecordingsGroupedById <- disjointRightHandRecordingsGroupedByIdGenerator} yield leftHandRecordingsGroupedById -> rightHandRecordingsGroupedById
 
     // Force at least one id to be shared across disjoint types.
-    recordingsWithPotentialSharingOfIdsAcrossTheTwoDisjointHands retryUntil
-      { case (leftHand, rightHand) => (leftHand map (_.historyId) toSet).intersect(rightHand map (_.historyId) toSet).nonEmpty } map
+    recordingsWithPotentialSharingOfIdsAcrossTheTwoDisjointHands map
       { case (leftHand, rightHand) => leftHand ++ rightHand }
   }
 
