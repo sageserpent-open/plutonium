@@ -35,6 +35,14 @@ object WorldReferenceImplementation {
       constructorFunction(id).asInstanceOf[Raw]
     }
 
+    def hasItemOfSupertypeOf[Raw <: Identified : TypeTag](items: scala.collection.mutable.Set[Identified]) = {
+      val reflectedType = implicitly[TypeTag[Raw]].tpe
+      val clazzOfRaw = currentMirror.runtimeClass(reflectedType)
+      items.exists{item =>
+        val itemClazz = item.getClass
+        itemClazz.isAssignableFrom(clazzOfRaw) && itemClazz != clazzOfRaw}
+    }
+
     def hasItemOfType[Raw <: Identified : TypeTag](items: scala.collection.mutable.Set[Identified]) = {
       val reflectedType = implicitly[TypeTag[Raw]].tpe
       val clazzOfRaw = currentMirror.runtimeClass(reflectedType)
@@ -62,7 +70,7 @@ object WorldReferenceImplementation {
           // NOTE: this should return proxies to raw values, rather than the raw values themselves. Depending on the kind of the scope (created by client using 'World', or implicitly in an event),
           override def render[Raw](bitemporal: Bitemporal[Raw]): Stream[Raw] = {
             bitemporal.interpret(new IdentifiedItemsScope {
-              override def allItems[Raw <: Identified : TypeTag](): Stream[Raw] = identifiedItemsScopeThis.allItems() // TODO - why doesn't this call 'IdentifiedItemsScopeImplementation.this.ensureItemExistsFor(id)'?
+              override def allItems[Raw <: Identified : TypeTag](): Stream[Raw] = identifiedItemsScopeThis.allItems()
 
               override def itemsFor[Raw <: Identified : TypeTag](id: Raw#Id): Stream[Raw] = {
                 identifiedItemsScopeThis.ensureItemExistsFor(id) // NASTY HACK, which is what this anonymous class is for. Yuk.
@@ -90,7 +98,11 @@ object WorldReferenceImplementation {
     private def ensureItemExistsFor[Raw <: Identified : TypeTag](id: Raw#Id): Unit = {
       val needToConstructItem = idToItemsMultiMap.get(id) match {
         case None => true
-        case Some(items) => !IdentifiedItemsScopeImplementation.hasItemOfType(items)
+        case Some(items) => {
+          if (IdentifiedItemsScopeImplementation.hasItemOfSupertypeOf[Raw](items))
+            throw new Exception("An event coming later than the first event defining an item may not attempt to narrow the item's type to something more specific.")
+          !IdentifiedItemsScopeImplementation.hasItemOfType[Raw](items)
+        }
       }
       if (needToConstructItem) {
         idToItemsMultiMap.addBinding(id, IdentifiedItemsScopeImplementation.constructFrom(id))
