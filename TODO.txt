@@ -32,11 +32,12 @@ Actually, need to implement the support for equality the 'MonadPlus' typeclass -
 (DONE - A BIT MESSY, BUT WORKS WELL - could tidy this up so as to use an identifiable type that isn't a kind of 'History', and has a directly usable integer property - DONE.)
 
 6. Are there tests for wildcards, plus the various flavours of id-matching? What about the 'none' case? What about having several items of different type sharing the same id?
+(DONE)
 
 (**** REMEMBER ****) What about attempting to book in a revision that would lead to a new item sharing the same id as one with a sub- or -supertype?
 
 Pay attention to the 'withId' case - need several items to match the same id as well as zero or one.
-Similarly, wildcards need zero, one or many matches.
+Similarly, wildcards need zero, one or many matches. (DONE)
 
 7. Does there need to be a test that shows off combinations of rendered items in a Bitemporal monad? So we can see the interaction between histories of several items. Could this be mixed in with the existing tests?
 (GOT THIS ALEADY FROM THE 'MonadPlus' TEST SUITE)

@@ -212,7 +212,7 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
     })
   }
 
-  "Bitemporal queries" should "include subtypes of instances" in {
+  "Bitemporal queries" should "include instances of subtypes" in {
     val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
                                  obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
                                  seed <- seedGenerator
