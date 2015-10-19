@@ -100,7 +100,7 @@ object WorldReferenceImplementation {
         case None => true
         case Some(items) => {
           if (IdentifiedItemsScopeImplementation.hasItemOfSupertypeOf[Raw](items))
-            throw new Exception("An event coming later than the first event defining an item may not attempt to narrow the item's type to something more specific.")
+            throw new RuntimeException("An event coming later than the first event defining an item may not attempt to narrow the item's type to something more specific.")
           !IdentifiedItemsScopeImplementation.hasItemOfType[Raw](items)
         }
       }
