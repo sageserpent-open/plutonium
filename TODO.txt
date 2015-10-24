@@ -35,6 +35,7 @@ Actually, need to implement the support for equality the 'MonadPlus' typeclass -
 (DONE)
 
 (**** REMEMBER ****) What about attempting to book in a revision that would lead to a new item sharing the same id as one with a sub- or -supertype?
+(DONE)
 
 Pay attention to the 'withId' case - need several items to match the same id as well as zero or one.
 Similarly, wildcards need zero, one or many matches. (DONE)

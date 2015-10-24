@@ -93,8 +93,7 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
 
       val scope = world.scopeFor(queryWhen, world.nextRevision)
 
-      val idsInExistence = (recordingsGroupedById filter { case RecordingsForAnId(historyId, whenEarliestChangeHappened, _, _) => queryWhen >= whenEarliestChangeHappened } map
-        { case RecordingsForAnId(historyId, _, _, _) => historyId } ) groupBy identity map { case (id, group) => id -> group.size } toSet
+      val idsInExistence = (recordingsGroupedById filter { case RecordingsForAnId(historyId, whenEarliestChangeHappened, _, _) => queryWhen >= whenEarliestChangeHappened } map { case RecordingsForAnId(historyId, _, _, _) => historyId }) groupBy identity map { case (id, group) => id -> group.size } toSet
 
       val itemsFromWildcardQuery = scope.render(Bitemporal.wildcard[History]) toList
 
@@ -212,7 +211,7 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
     })
   }
 
-  "Bitemporal queries" should "include instances of subtypes" in {
+  "A bitemporal query" should "include instances of subtypes" in {
     val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
                                  obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
                                  seed <- seedGenerator
@@ -231,7 +230,7 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
 
       val scope = world.scopeFor(queryWhen, world.nextRevision)
 
-      def itemsFromWildcardQuery[AHistory <: History: TypeTag] = scope.render(Bitemporal.wildcard[AHistory]) toSet
+      def itemsFromWildcardQuery[AHistory <: History : TypeTag] = scope.render(Bitemporal.wildcard[AHistory]) toSet
 
       val wildcardProperty = Prop((itemsFromWildcardQuery[MoreSpecificFooHistory] map (_.asInstanceOf[FooHistory])).subsetOf(itemsFromWildcardQuery[FooHistory])) &&
         Prop((itemsFromWildcardQuery[FooHistory] map (_.asInstanceOf[History])).subsetOf(itemsFromWildcardQuery[History]))
@@ -239,12 +238,59 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
       val ids = (recordingsGroupedById map { case RecordingsForAnId(historyId, _, _, _) => historyId } filter (_.isInstanceOf[MoreSpecificFooHistory#Id]) map (_.asInstanceOf[MoreSpecificFooHistory#Id])).toSet
 
       val genericQueryByIdProperty = Prop.all(ids.toSeq map (id => {
-        def itemsFromGenericQueryById[AHistory >: MoreSpecificFooHistory <: History: TypeTag] = scope.render(Bitemporal.withId[AHistory](id.asInstanceOf[AHistory#Id])).toSet
+        def itemsFromGenericQueryById[AHistory >: MoreSpecificFooHistory <: History : TypeTag] = scope.render(Bitemporal.withId[AHistory](id.asInstanceOf[AHistory#Id])).toSet
         Prop((itemsFromGenericQueryById[MoreSpecificFooHistory] map (_.asInstanceOf[FooHistory])).subsetOf(itemsFromGenericQueryById[FooHistory])) &&
           Prop((itemsFromGenericQueryById[FooHistory] map (_.asInstanceOf[History])).subsetOf(itemsFromGenericQueryById[History]))
       }): _*)
 
       wildcardProperty && genericQueryByIdProperty
+    })
+  }
+
+  it should "result in read-only items" in {
+    val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
+                                 obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
+                                 seed <- seedGenerator
+                                 random = new Random(seed)
+                                 shuffledRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, recordingsGroupedById map (_.recordings) flatten)
+                                 shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, obsoleteRecordingsGroupedById map (_.recordings) flatten)
+                                 shuffledRecordingAndEventPairs = intersperseObsoleteRecordings(random, shuffledRecordings, shuffledObsoleteRecordings)
+                                 bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(shuffledRecordingAndEventPairs)
+                                 asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
+                                 queryWhen <- unboundedInstantGenerator
+    } yield (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
+    check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
+      val world = new WorldUnderTest()
+
+      recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
+
+      val scope = world.scopeFor(queryWhen, world.nextRevision)
+
+      val allItemsFromWildcard = scope.render(Bitemporal.wildcard[History])
+
+      val allIdsFromWildcard = allItemsFromWildcard map (_.id) distinct
+
+      def isReadonly(item: History) = {
+        intercept[UnsupportedOperationException]{
+            item.shouldBeUnchanged = false
+          }
+        intercept[UnsupportedOperationException]{
+            item match {
+            case integerHistory: IntegerHistory =>
+              integerHistory.integerProperty = integerHistory.integerProperty + 1
+            case fooHistory: FooHistory =>
+              fooHistory.property1 = "Prohibited"
+            case barHistory: BarHistory =>
+              barHistory.method1("No", 0)
+            }
+          }
+        !item.shouldBeUnchanged :| s"!${item}.shouldNotHaveBeenChanged"
+      }
+
+      Prop.all(allItemsFromWildcard map isReadonly: _*) && Prop.all(allIdsFromWildcard map { id =>
+        val item = scope.render(Bitemporal.singleOneOf(id))
+        isReadonly(item.head)
+      }: _*)
     })
   }
 }
