@@ -1,5 +1,6 @@
 package com.sageserpent.plutonium
 
+import java.lang.reflect.Method
 import java.time.Instant
 
 import com.sageserpent.americium
@@ -7,6 +8,7 @@ import com.sageserpent.americium.{PositiveInfinity, Unbounded, Finite, NegativeI
 import com.sageserpent.plutonium.Bitemporal.IdentifiedItemsScope
 import com.sageserpent.plutonium.World.Revision
 import com.sageserpent.plutonium.WorldReferenceImplementation.IdentifiedItemsScopeImplementation
+import net.sf.cglib.proxy.{MethodProxy, MethodInterceptor, Enhancer, InvocationHandler}
 
 import scala.collection.Searching._
 import scala.collection.immutable.{SortedBagConfiguration, TreeBag}
@@ -28,15 +30,18 @@ object WorldReferenceImplementation {
 
   object IdentifiedItemsScopeImplementation {
     def constructFrom[Raw <: Identified : TypeTag](id: Raw#Id) = {
-      val reflectedType = implicitly[TypeTag[Raw]].tpe
-      val constructor = reflectedType.decls.find(_.isConstructor) get
-      val classMirror = currentMirror.reflectClass(reflectedType.typeSymbol.asClass)
-      val constructorFunction = classMirror.reflectConstructor(constructor.asMethod)
-      val underlyingItem = constructorFunction(id).asInstanceOf[Raw]
+      val clazz = currentMirror.runtimeClass(implicitly[TypeTag[Raw]].tpe.typeSymbol.asClass)
       // NOTE: this should return items that are proxies to raw values, rather than the raw values themselves. Depending on the
       // context (using a scope created by a client from a world, or a scope created implicitly for an event's spore), the items
       // may forbid certain operations on them - e.g. for rendering from a client's scope, the items should be read-only.
-      underlyingItem
+      val enhancer = new Enhancer
+      enhancer.setSuperclass(clazz)
+      enhancer.setCallback(new MethodInterceptor {
+        override def intercept(o: scala.Any, method: Method, objects: Array[AnyRef], methodProxy: MethodProxy): AnyRef = {
+          methodProxy.invokeSuper(o, objects)
+        }
+      })
+      enhancer.create().asInstanceOf[Raw]
     }
 
     def hasItemOfSupertypeOf[Raw <: Identified : TypeTag](items: scala.collection.mutable.Set[Identified]) = {
