@@ -275,6 +275,9 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
             item.shouldBeUnchanged = false
           }
         intercept[UnsupportedOperationException]{
+            item.propertyAllowingSecondOrderMutation :+ "Fred"
+          }
+        intercept[UnsupportedOperationException]{
             item match {
             case integerHistory: IntegerHistory =>
               integerHistory.integerProperty = integerHistory.integerProperty + 1
