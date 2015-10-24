@@ -32,7 +32,11 @@ object WorldReferenceImplementation {
       val constructor = reflectedType.decls.find(_.isConstructor) get
       val classMirror = currentMirror.reflectClass(reflectedType.typeSymbol.asClass)
       val constructorFunction = classMirror.reflectConstructor(constructor.asMethod)
-      constructorFunction(id).asInstanceOf[Raw]
+      val underlyingItem = constructorFunction(id).asInstanceOf[Raw]
+      // NOTE: this should return items that are proxies to raw values, rather than the raw values themselves. Depending on the
+      // context (using a scope created by a client from a world, or a scope created implicitly for an event's spore), the items
+      // may forbid certain operations on them - e.g. for rendering from a client's scope, the items should be read-only.
+      underlyingItem
     }
 
     def hasItemOfSupertypeOf[Raw <: Identified : TypeTag](items: scala.collection.mutable.Set[Identified]) = {
@@ -67,7 +71,6 @@ object WorldReferenceImplementation {
         val scopeForEvent = new com.sageserpent.plutonium.Scope {
           override val when: americium.Unbounded[Instant] = event.when
 
-          // NOTE: this should return proxies to raw values, rather than the raw values themselves. Depending on the kind of the scope (created by client using 'World', or implicitly in an event),
           override def render[Raw](bitemporal: Bitemporal[Raw]): Stream[Raw] = {
             bitemporal.interpret(new IdentifiedItemsScope {
               override def allItems[Raw <: Identified : TypeTag](): Stream[Raw] = identifiedItemsScopeThis.allItems()
