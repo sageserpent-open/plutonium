@@ -313,9 +313,9 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
         intercept[UnsupportedOperationException]{
             item.shouldBeUnchanged = false
           }
-        intercept[UnsupportedOperationException]{
+/*        intercept[UnsupportedOperationException]{
             item.propertyAllowingSecondOrderMutation :+ "Fred"
-          }
+          }*/
         intercept[UnsupportedOperationException]{
             item match {
             case integerHistory: IntegerHistory =>
@@ -326,12 +326,12 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
               barHistory.method1("No", 0)
             }
           }
-        !item.shouldBeUnchanged :| s"!${item}.shouldNotHaveBeenChanged"
+        item.shouldBeUnchanged :| s"${item}.shouldBeUnchanged"
       }
 
-      Prop.all(allItemsFromWildcard map isReadonly: _*) && Prop.all(allIdsFromWildcard map { id =>
-        val item = scope.render(Bitemporal.singleOneOf(id))
-        isReadonly(item.head)
+      Prop.all(allItemsFromWildcard map isReadonly: _*) && Prop.all(allIdsFromWildcard flatMap { id =>
+        val items = scope.render(Bitemporal.withId(id))
+        items map isReadonly
       }: _*)
     })
   }
