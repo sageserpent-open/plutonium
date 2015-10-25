@@ -28,11 +28,15 @@ object WorldReferenceImplementation {
 
   implicit val eventBagConfiguration = SortedBagConfiguration.keepAll
 
+  var itemsAreLocked = false
+
   object IdentifiedItemsScopeImplementation {
     val cachedProxyConstructors = scala.collection.mutable.Map.empty[Type, universe.MethodMirror]
 
     class LocalMethodInterceptor extends MethodInterceptor {
       override def intercept(target: scala.Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy): AnyRef = {
+        if (itemsAreLocked && method.getReturnType == classOf[Unit])
+          throw new UnsupportedOperationException("Attempt to write to an item rendered from a bitemporal query.")
         methodProxy.invokeSuper(target, arguments)
       }
     }
@@ -98,30 +102,35 @@ object WorldReferenceImplementation {
 
     def this(_when: americium.Unbounded[Instant], _nextRevision: Revision, _asOf: americium.Unbounded[Instant], eventTimeline: WorldReferenceImplementation#EventTimeline) = {
       this()
-      val relevantEvents = eventTimeline.bucketsIterator flatMap (_.toArray.sortBy(_._2) map (_._1)) takeWhile (_when >= _.when)
-      for (event <- relevantEvents) {
-        val scopeForEvent = new com.sageserpent.plutonium.Scope {
-          override val when: americium.Unbounded[Instant] = event.when
+      try {
+        itemsAreLocked = false
+        val relevantEvents = eventTimeline.bucketsIterator flatMap (_.toArray.sortBy(_._2) map (_._1)) takeWhile (_when >= _.when)
+        for (event <- relevantEvents) {
+          val scopeForEvent = new com.sageserpent.plutonium.Scope {
+            override val when: americium.Unbounded[Instant] = event.when
 
-          override def render[Raw](bitemporal: Bitemporal[Raw]): Stream[Raw] = {
-            bitemporal.interpret(new IdentifiedItemsScope {
-              override def allItems[Raw <: Identified : TypeTag](): Stream[Raw] = identifiedItemsScopeThis.allItems()
+            override def render[Raw](bitemporal: Bitemporal[Raw]): Stream[Raw] = {
+              bitemporal.interpret(new IdentifiedItemsScope {
+                override def allItems[Raw <: Identified : TypeTag](): Stream[Raw] = identifiedItemsScopeThis.allItems()
 
-              override def itemsFor[Raw <: Identified : TypeTag](id: Raw#Id): Stream[Raw] = {
-                identifiedItemsScopeThis.ensureItemExistsFor(id) // NASTY HACK, which is what this anonymous class is for. Yuk.
-                identifiedItemsScopeThis.itemsFor(id)
-              }
-            })
+                override def itemsFor[Raw <: Identified : TypeTag](id: Raw#Id): Stream[Raw] = {
+                  identifiedItemsScopeThis.ensureItemExistsFor(id) // NASTY HACK, which is what this anonymous class is for. Yuk.
+                  identifiedItemsScopeThis.itemsFor(id)
+                }
+              })
+            }
+
+            override val nextRevision: Revision = _nextRevision
+            override val asOf: americium.Unbounded[Instant] = _asOf
           }
 
-          override val nextRevision: Revision = _nextRevision
-          override val asOf: americium.Unbounded[Instant] = _asOf
-        }
-
-        event match {
-          case Change(_, update) => update(scopeForEvent)
+          event match {
+            case Change(_, update) => update(scopeForEvent)
+          }
         }
       }
+      finally
+        itemsAreLocked = true
     }
 
     class MultiMap[Key, Value] extends scala.collection.mutable.HashMap[Key, scala.collection.mutable.Set[Value]] with scala.collection.mutable.MultiMap[Key, Value] {
