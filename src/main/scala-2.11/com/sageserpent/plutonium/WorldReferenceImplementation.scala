@@ -28,10 +28,36 @@ object WorldReferenceImplementation {
 
   implicit val eventBagConfiguration = SortedBagConfiguration.keepAll
 
-  var itemsAreLocked = false
-
   object IdentifiedItemsScopeImplementation {
-    val cachedProxyConstructors = scala.collection.mutable.Map.empty[Type, universe.MethodMirror]
+    def hasItemOfSupertypeOf[Raw <: Identified : TypeTag](items: scala.collection.mutable.Set[Identified]) = {
+      val reflectedType = implicitly[TypeTag[Raw]].tpe
+      val clazzOfRaw = currentMirror.runtimeClass(reflectedType)
+      items.exists { item =>
+        // HACK: in reality, everything with an id is actually
+        // an instance of a proxy subclass of 'Raw'.
+        val itemClazz = item.getClass.getSuperclass
+        itemClazz.isAssignableFrom(clazzOfRaw) && itemClazz != clazzOfRaw
+      }
+    }
+
+    def hasItemOfType[Raw <: Identified : TypeTag](items: scala.collection.mutable.Set[Identified]) = {
+      val reflectedType = implicitly[TypeTag[Raw]].tpe
+      val clazzOfRaw = currentMirror.runtimeClass(reflectedType)
+      items.exists(clazzOfRaw.isInstance(_))
+    }
+
+    def yieldOnlyItemsOfType[Raw <: Identified : TypeTag](items: Stream[Identified]) = {
+      val reflectedType = implicitly[TypeTag[Raw]].tpe
+      val clazzOfRaw = currentMirror.runtimeClass(reflectedType).asInstanceOf[Class[Raw]]
+
+      items filter (clazzOfRaw.isInstance(_)) map (clazzOfRaw.cast(_))
+    }
+  }
+
+  class IdentifiedItemsScopeImplementation extends IdentifiedItemsScope {
+    identifiedItemsScopeThis =>
+
+    var itemsAreLocked = false
 
     class LocalMethodInterceptor extends MethodInterceptor {
       override def intercept(target: scala.Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy): AnyRef = {
@@ -40,6 +66,8 @@ object WorldReferenceImplementation {
         methodProxy.invokeSuper(target, arguments)
       }
     }
+
+    val cachedProxyConstructors = scala.collection.mutable.Map.empty[Type, universe.MethodMirror]
 
     def constructFrom[Raw <: Identified : TypeTag](id: Raw#Id) = {
       // NOTE: this returns items that are proxies to raw values, rather than the raw values themselves. Depending on the
@@ -72,33 +100,6 @@ object WorldReferenceImplementation {
       proxy
     }
 
-    def hasItemOfSupertypeOf[Raw <: Identified : TypeTag](items: scala.collection.mutable.Set[Identified]) = {
-      val reflectedType = implicitly[TypeTag[Raw]].tpe
-      val clazzOfRaw = currentMirror.runtimeClass(reflectedType)
-      items.exists { item =>
-        // HACK: in reality, everything with an id is actually
-        // an instance of a proxy subclass of 'Raw'.
-        val itemClazz = item.getClass.getSuperclass
-        itemClazz.isAssignableFrom(clazzOfRaw) && itemClazz != clazzOfRaw
-      }
-    }
-
-    def hasItemOfType[Raw <: Identified : TypeTag](items: scala.collection.mutable.Set[Identified]) = {
-      val reflectedType = implicitly[TypeTag[Raw]].tpe
-      val clazzOfRaw = currentMirror.runtimeClass(reflectedType)
-      items.exists(clazzOfRaw.isInstance(_))
-    }
-
-    def yieldOnlyItemsOfType[Raw <: Identified : TypeTag](items: Stream[Identified]) = {
-      val reflectedType = implicitly[TypeTag[Raw]].tpe
-      val clazzOfRaw = currentMirror.runtimeClass(reflectedType).asInstanceOf[Class[Raw]]
-
-      items filter (clazzOfRaw.isInstance(_)) map (clazzOfRaw.cast(_))
-    }
-  }
-
-  class IdentifiedItemsScopeImplementation extends IdentifiedItemsScope {
-    identifiedItemsScopeThis =>
 
     def this(_when: americium.Unbounded[Instant], _nextRevision: Revision, _asOf: americium.Unbounded[Instant], eventTimeline: WorldReferenceImplementation#EventTimeline) = {
       this()
@@ -149,7 +150,7 @@ object WorldReferenceImplementation {
         }
       }
       if (needToConstructItem) {
-        idToItemsMultiMap.addBinding(id, IdentifiedItemsScopeImplementation.constructFrom(id))
+        idToItemsMultiMap.addBinding(id, constructFrom(id))
       }
     }
 
