@@ -29,31 +29,41 @@ object WorldReferenceImplementation {
   implicit val eventBagConfiguration = SortedBagConfiguration.keepAll
 
   object IdentifiedItemsScopeImplementation {
-    def constructFrom[Raw <: Identified : TypeTag](id: Raw#Id) = {
-      val reflectedType = typeOf[Raw]
-      val clazz = currentMirror.runtimeClass(reflectedType.typeSymbol.asClass)
-      val enhancer = new Enhancer
-      enhancer.setInterceptDuringConstruction(false)
-      enhancer.setSuperclass(clazz)
+    val cachedProxyConstructors = scala.collection.mutable.Map.empty[Type, universe.MethodMirror]
 
-      class LocalMethodInterceptor extends MethodInterceptor{
-        override def intercept(target: scala.Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy): AnyRef = {
-          methodProxy.invokeSuper(target, arguments)
-        }
+    class LocalMethodInterceptor extends MethodInterceptor {
+      override def intercept(target: scala.Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy): AnyRef = {
+        methodProxy.invokeSuper(target, arguments)
       }
+    }
 
-      enhancer.setCallbackType(classOf[LocalMethodInterceptor])
-
-      val proxyClazz = enhancer.createClass()
-
-      val proxyClassType = currentMirror.classSymbol(proxyClazz)
-      val classMirror = currentMirror.reflectClass(proxyClassType.asClass)
-      val constructor = proxyClassType.toType.decls.find(_.isConstructor) get
-      val constructorFunction = classMirror.reflectConstructor(constructor.asMethod)
-      val proxy = constructorFunction(id).asInstanceOf[Raw]
-      // NOTE: this should return items that are proxies to raw values, rather than the raw values themselves. Depending on the
+    def constructFrom[Raw <: Identified : TypeTag](id: Raw#Id) = {
+      // NOTE: this returns items that are proxies to raw values, rather than the raw values themselves. Depending on the
       // context (using a scope created by a client from a world, or a scope created implicitly for an event's spore), the items
       // may forbid certain operations on them - e.g. for rendering from a client's scope, the items should be read-only.
+      def constructorFor(identifiableType: Type) = {
+        val clazz = currentMirror.runtimeClass(identifiableType.typeSymbol.asClass)
+        val enhancer = new Enhancer
+        enhancer.setInterceptDuringConstruction(false)
+        enhancer.setSuperclass(clazz)
+
+        enhancer.setCallbackType(classOf[LocalMethodInterceptor])
+
+        val proxyClazz = enhancer.createClass()
+
+        val proxyClassType = currentMirror.classSymbol(proxyClazz)
+        val classMirror = currentMirror.reflectClass(proxyClassType.asClass)
+        val constructor = (proxyClassType.toType.decls.find(_.isConstructor)).get
+        classMirror.reflectConstructor(constructor.asMethod)
+      }
+      val typeOfRaw = typeOf[Raw]
+      val constructor = cachedProxyConstructors.get(typeOfRaw) match {
+        case Some(constructor) => constructor
+        case None => val constructor = constructorFor(typeOfRaw)
+          cachedProxyConstructors += (typeOfRaw -> constructor)
+          constructor
+      }
+      val proxy = constructor(id).asInstanceOf[Raw]
       proxy.asInstanceOf[Factory].setCallback(0, new LocalMethodInterceptor)
       proxy
     }
@@ -61,9 +71,10 @@ object WorldReferenceImplementation {
     def hasItemOfSupertypeOf[Raw <: Identified : TypeTag](items: scala.collection.mutable.Set[Identified]) = {
       val reflectedType = implicitly[TypeTag[Raw]].tpe
       val clazzOfRaw = currentMirror.runtimeClass(reflectedType)
-      items.exists{item =>
+      items.exists { item =>
         val itemClazz = item.getClass
-        itemClazz.isAssignableFrom(clazzOfRaw) && itemClazz != clazzOfRaw}
+        itemClazz.isAssignableFrom(clazzOfRaw) && itemClazz != clazzOfRaw
+      }
     }
 
     def hasItemOfType[Raw <: Identified : TypeTag](items: scala.collection.mutable.Set[Identified]) = {
