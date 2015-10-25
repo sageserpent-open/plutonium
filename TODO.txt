@@ -26,6 +26,8 @@ Additional test - annulments that refer to events that have either never been de
 
 5. Need tests on the read / write access to raw objects in changes and rendered from query scopes.
 
+(PARTIALLY DONE - need to handle the second-order cases. Also need to refactor the cache so it belongs to a world, rather than as a global thing.)
+
 ---------------------------------------------------------------------------------------------------------------------------
 
 Actually, need to implement the support for equality the 'MonadPlus' typeclass - presumably with a scope made on the fly so that the lhs and rhs bitemporals can both be rendered against it.
