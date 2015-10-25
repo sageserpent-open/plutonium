@@ -72,7 +72,9 @@ object WorldReferenceImplementation {
       val reflectedType = implicitly[TypeTag[Raw]].tpe
       val clazzOfRaw = currentMirror.runtimeClass(reflectedType)
       items.exists { item =>
-        val itemClazz = item.getClass
+        // HACK: in reality, everything with an id is actually
+        // an instance of a proxy subclass of 'Raw'.
+        val itemClazz = item.getClass.getSuperclass
         itemClazz.isAssignableFrom(clazzOfRaw) && itemClazz != clazzOfRaw
       }
     }
