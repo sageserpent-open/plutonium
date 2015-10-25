@@ -24,7 +24,7 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
 
   class NonExistentIdentified extends Identified {
     override type Id = String
-    override val id = fail("If I am not supposed to exist, why is something asking for my id?")
+    override var id: Id = fail("If I am not supposed to exist, why is something asking for my id?")
   }
 
   "A world with no history" should "not contain any identifiables" in {

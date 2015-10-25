@@ -3,8 +3,10 @@ package com.sageserpent.plutonium
 /**
  * Created by Gerard on 21/09/2015.
  */
-class BarHistory(val id: BarHistory#Id) extends History {
+class BarHistory extends History {
   type Id = Int
+
+  var id = 0
 
   def property1 = ???
 
