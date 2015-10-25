@@ -143,6 +143,45 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
     })
   }
 
+  it should "yield items whose id matches the query" in {
+    val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
+                                 obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
+                                 seed <- seedGenerator
+                                 random = new Random(seed)
+                                 shuffledRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, recordingsGroupedById map (_.recordings) flatten)
+                                 shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, obsoleteRecordingsGroupedById map (_.recordings) flatten)
+                                 shuffledRecordingAndEventPairs = intersperseObsoleteRecordings(random, shuffledRecordings, shuffledObsoleteRecordings)
+                                 bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(shuffledRecordingAndEventPairs)
+                                 asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
+                                 queryWhen <- unboundedInstantGenerator
+    } yield (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
+
+    check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
+      val world = new WorldUnderTest()
+
+      recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
+
+      val scope = world.scopeFor(queryWhen, world.nextRevision)
+
+      def holdsFor[AHistory <: History : TypeTag]: Prop = {
+        // The filtering of idsInExistence here is hokey - disjoint history types can (actually, they do) share the same id type, so we'll
+        // end up with idsInExistence that may be irrelevant to the flavour of 'AHistory' we are checking against. This doesn't matter, though,
+        // because the queries we are checking allow the possibility that there are no items of the specific type to match them.
+        val idsInExistence = (recordingsGroupedById filter { case RecordingsForAnId(historyId, whenEarliestChangeHappened, _, _) => queryWhen >= whenEarliestChangeHappened} map { case RecordingsForAnId(historyId, _, _, _) => historyId } filter (_.isInstanceOf[AHistory#Id]) map (_.asInstanceOf[AHistory#Id])).toSet
+
+        Prop.all(idsInExistence.toSeq map (id => {
+          val itemsFromSpecificQuery = scope.render(Bitemporal.withId[AHistory](id)).toSet
+          val idsFromItems = itemsFromSpecificQuery map (_.id)
+          (idsFromItems.isEmpty || id == idsFromItems.head) :| s"idsFromItems.isEmpty || ${id} == idsFromItems.head"
+        }): _*)
+      }
+
+      holdsFor[History] && holdsFor[BarHistory] &&
+        holdsFor[FooHistory] && holdsFor[IntegerHistory] &&
+        holdsFor[MoreSpecificFooHistory]
+    })
+  }
+
   it should "have alternate forms that correctly relate to each other" in {
     val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
                                  obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
