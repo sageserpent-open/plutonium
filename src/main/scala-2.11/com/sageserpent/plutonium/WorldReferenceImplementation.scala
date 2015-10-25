@@ -1,5 +1,6 @@
 package com.sageserpent.plutonium
 
+import java.lang.reflect.Method
 import java.time.Instant
 
 import com.sageserpent.americium
@@ -7,6 +8,7 @@ import com.sageserpent.americium.{PositiveInfinity, Unbounded, Finite, NegativeI
 import com.sageserpent.plutonium.Bitemporal.IdentifiedItemsScope
 import com.sageserpent.plutonium.World.Revision
 import com.sageserpent.plutonium.WorldReferenceImplementation.IdentifiedItemsScopeImplementation
+import net.sf.cglib.proxy._
 
 import scala.collection.Searching._
 import scala.collection.immutable.{SortedBagConfiguration, TreeBag}
@@ -26,21 +28,59 @@ object WorldReferenceImplementation {
 
   implicit val eventBagConfiguration = SortedBagConfiguration.keepAll
 
+  var itemsAreLocked = false
+
   object IdentifiedItemsScopeImplementation {
+    val cachedProxyConstructors = scala.collection.mutable.Map.empty[Type, universe.MethodMirror]
+
+    class LocalMethodInterceptor extends MethodInterceptor {
+      override def intercept(target: scala.Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy): AnyRef = {
+        if (itemsAreLocked && method.getReturnType == classOf[Unit])
+          throw new UnsupportedOperationException("Attempt to write to an item rendered from a bitemporal query.")
+        methodProxy.invokeSuper(target, arguments)
+      }
+    }
+
     def constructFrom[Raw <: Identified : TypeTag](id: Raw#Id) = {
-      val reflectedType = implicitly[TypeTag[Raw]].tpe
-      val constructor = reflectedType.decls.find(_.isConstructor) get
-      val classMirror = currentMirror.reflectClass(reflectedType.typeSymbol.asClass)
-      val constructorFunction = classMirror.reflectConstructor(constructor.asMethod)
-      constructorFunction(id).asInstanceOf[Raw]
+      // NOTE: this returns items that are proxies to raw values, rather than the raw values themselves. Depending on the
+      // context (using a scope created by a client from a world, or a scope created implicitly for an event's spore), the items
+      // may forbid certain operations on them - e.g. for rendering from a client's scope, the items should be read-only.
+      def constructorFor(identifiableType: Type) = {
+        val clazz = currentMirror.runtimeClass(identifiableType.typeSymbol.asClass)
+        val enhancer = new Enhancer
+        enhancer.setInterceptDuringConstruction(false)
+        enhancer.setSuperclass(clazz)
+
+        enhancer.setCallbackType(classOf[LocalMethodInterceptor])
+
+        val proxyClazz = enhancer.createClass()
+
+        val proxyClassType = currentMirror.classSymbol(proxyClazz)
+        val classMirror = currentMirror.reflectClass(proxyClassType.asClass)
+        val constructor = (proxyClassType.toType.decls.find(_.isConstructor)).get
+        classMirror.reflectConstructor(constructor.asMethod)
+      }
+      val typeOfRaw = typeOf[Raw]
+      val constructor = cachedProxyConstructors.get(typeOfRaw) match {
+        case Some(constructor) => constructor
+        case None => val constructor = constructorFor(typeOfRaw)
+          cachedProxyConstructors += (typeOfRaw -> constructor)
+          constructor
+      }
+      val proxy = constructor(id).asInstanceOf[Raw]
+      proxy.asInstanceOf[Factory].setCallback(0, new LocalMethodInterceptor)
+      proxy
     }
 
     def hasItemOfSupertypeOf[Raw <: Identified : TypeTag](items: scala.collection.mutable.Set[Identified]) = {
       val reflectedType = implicitly[TypeTag[Raw]].tpe
       val clazzOfRaw = currentMirror.runtimeClass(reflectedType)
-      items.exists{item =>
-        val itemClazz = item.getClass
-        itemClazz.isAssignableFrom(clazzOfRaw) && itemClazz != clazzOfRaw}
+      items.exists { item =>
+        // HACK: in reality, everything with an id is actually
+        // an instance of a proxy subclass of 'Raw'.
+        val itemClazz = item.getClass.getSuperclass
+        itemClazz.isAssignableFrom(clazzOfRaw) && itemClazz != clazzOfRaw
+      }
     }
 
     def hasItemOfType[Raw <: Identified : TypeTag](items: scala.collection.mutable.Set[Identified]) = {
@@ -62,31 +102,35 @@ object WorldReferenceImplementation {
 
     def this(_when: americium.Unbounded[Instant], _nextRevision: Revision, _asOf: americium.Unbounded[Instant], eventTimeline: WorldReferenceImplementation#EventTimeline) = {
       this()
-      val relevantEvents = eventTimeline.bucketsIterator flatMap (_.toArray.sortBy(_._2) map (_._1)) takeWhile (_when >= _.when)
-      for (event <- relevantEvents) {
-        val scopeForEvent = new com.sageserpent.plutonium.Scope {
-          override val when: americium.Unbounded[Instant] = event.when
+      try {
+        itemsAreLocked = false
+        val relevantEvents = eventTimeline.bucketsIterator flatMap (_.toArray.sortBy(_._2) map (_._1)) takeWhile (_when >= _.when)
+        for (event <- relevantEvents) {
+          val scopeForEvent = new com.sageserpent.plutonium.Scope {
+            override val when: americium.Unbounded[Instant] = event.when
 
-          // NOTE: this should return proxies to raw values, rather than the raw values themselves. Depending on the kind of the scope (created by client using 'World', or implicitly in an event),
-          override def render[Raw](bitemporal: Bitemporal[Raw]): Stream[Raw] = {
-            bitemporal.interpret(new IdentifiedItemsScope {
-              override def allItems[Raw <: Identified : TypeTag](): Stream[Raw] = identifiedItemsScopeThis.allItems()
+            override def render[Raw](bitemporal: Bitemporal[Raw]): Stream[Raw] = {
+              bitemporal.interpret(new IdentifiedItemsScope {
+                override def allItems[Raw <: Identified : TypeTag](): Stream[Raw] = identifiedItemsScopeThis.allItems()
 
-              override def itemsFor[Raw <: Identified : TypeTag](id: Raw#Id): Stream[Raw] = {
-                identifiedItemsScopeThis.ensureItemExistsFor(id) // NASTY HACK, which is what this anonymous class is for. Yuk.
-                identifiedItemsScopeThis.itemsFor(id)
-              }
-            })
+                override def itemsFor[Raw <: Identified : TypeTag](id: Raw#Id): Stream[Raw] = {
+                  identifiedItemsScopeThis.ensureItemExistsFor(id) // NASTY HACK, which is what this anonymous class is for. Yuk.
+                  identifiedItemsScopeThis.itemsFor(id)
+                }
+              })
+            }
+
+            override val nextRevision: Revision = _nextRevision
+            override val asOf: americium.Unbounded[Instant] = _asOf
           }
 
-          override val nextRevision: Revision = _nextRevision
-          override val asOf: americium.Unbounded[Instant] = _asOf
-        }
-
-        event match {
-          case Change(_, update) => update(scopeForEvent)
+          event match {
+            case Change(_, update) => update(scopeForEvent)
+          }
         }
       }
+      finally
+        itemsAreLocked = true
     }
 
     class MultiMap[Key, Value] extends scala.collection.mutable.HashMap[Key, scala.collection.mutable.Set[Value]] with scala.collection.mutable.MultiMap[Key, Value] {
