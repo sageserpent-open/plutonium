@@ -8,7 +8,7 @@ import com.sageserpent.americium.{PositiveInfinity, Unbounded, Finite, NegativeI
 import com.sageserpent.plutonium.Bitemporal.IdentifiedItemsScope
 import com.sageserpent.plutonium.World.Revision
 import com.sageserpent.plutonium.WorldReferenceImplementation.IdentifiedItemsScopeImplementation
-import net.sf.cglib.proxy.{MethodProxy, MethodInterceptor, Enhancer, InvocationHandler}
+import net.sf.cglib.proxy._
 
 import scala.collection.Searching._
 import scala.collection.immutable.{SortedBagConfiguration, TreeBag}
@@ -33,22 +33,17 @@ object WorldReferenceImplementation {
       val reflectedType = typeOf[Raw]
       val clazz = currentMirror.runtimeClass(reflectedType.typeSymbol.asClass)
       val enhancer = new Enhancer
+      enhancer.setInterceptDuringConstruction(false)
       enhancer.setSuperclass(clazz)
 
       class LocalMethodInterceptor extends MethodInterceptor{
-        override def intercept(o: scala.Any, method: Method, objects: Array[AnyRef], methodProxy: MethodProxy): AnyRef = {
-          println("Intercepting.... $method")
-          methodProxy.invokeSuper(o, objects)
+        override def intercept(target: scala.Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy): AnyRef = {
+          methodProxy.invokeSuper(target, arguments)
         }
       }
 
       enhancer.setCallbackType(classOf[LocalMethodInterceptor])
 
-/*      enhancer.setCallback(new MethodInterceptor {
-        override def intercept(o: scala.Any, method: Method, objects: Array[AnyRef], methodProxy: MethodProxy): AnyRef = {
-          methodProxy.invokeSuper(o, objects)
-        }
-      })*/
       val proxyClazz = enhancer.createClass()
 
       val proxyClassType = currentMirror.classSymbol(proxyClazz)
@@ -59,6 +54,7 @@ object WorldReferenceImplementation {
       // NOTE: this should return items that are proxies to raw values, rather than the raw values themselves. Depending on the
       // context (using a scope created by a client from a world, or a scope created implicitly for an event's spore), the items
       // may forbid certain operations on them - e.g. for rendering from a client's scope, the items should be read-only.
+      proxy.asInstanceOf[Factory].setCallback(0, new LocalMethodInterceptor)
       proxy
     }
 
