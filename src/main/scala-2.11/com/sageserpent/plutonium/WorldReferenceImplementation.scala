@@ -28,7 +28,7 @@ object WorldReferenceImplementation {
 
   object IdentifiedItemsScopeImplementation {
     def constructFrom[Raw <: Identified : TypeTag](id: Raw#Id) = {
-      val reflectedType = implicitly[TypeTag[Raw]].tpe
+      val reflectedType = typeOf[Raw]
       val constructor = reflectedType.decls.find(_.isConstructor) get
       val classMirror = currentMirror.reflectClass(reflectedType.typeSymbol.asClass)
       val constructorFunction = classMirror.reflectConstructor(constructor.asMethod)
