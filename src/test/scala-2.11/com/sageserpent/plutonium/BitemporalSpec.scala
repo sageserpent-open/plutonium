@@ -167,7 +167,7 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
         // The filtering of idsInExistence here is hokey - disjoint history types can (actually, they do) share the same id type, so we'll
         // end up with idsInExistence that may be irrelevant to the flavour of 'AHistory' we are checking against. This doesn't matter, though,
         // because the queries we are checking allow the possibility that there are no items of the specific type to match them.
-        val idsInExistence = (recordingsGroupedById filter { case RecordingsForAnId(historyId, whenEarliestChangeHappened, _, _) => queryWhen >= whenEarliestChangeHappened} map { case RecordingsForAnId(historyId, _, _, _) => historyId } filter (_.isInstanceOf[AHistory#Id]) map (_.asInstanceOf[AHistory#Id])).toSet
+        val idsInExistence = (recordingsGroupedById filter (_.isRelevantFor(queryWhen)) map { case RecordingsForAnId(historyId, _, _, _) => historyId } filter (_.isInstanceOf[AHistory#Id]) map (_.asInstanceOf[AHistory#Id])).toSet
 
         Prop.all(idsInExistence.toSeq map (id => {
           val itemsFromSpecificQuery = scope.render(Bitemporal.withId[AHistory](id)).toSet

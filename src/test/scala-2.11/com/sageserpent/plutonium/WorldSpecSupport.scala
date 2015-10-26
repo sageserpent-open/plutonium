@@ -101,7 +101,9 @@ trait WorldSpecSupport {
          historyId <- historyIdGenerator} yield (historyId, (scope: Scope) => scope.render(Bitemporal.zeroOrOneOf[AHistory](historyId)): Seq[History], for {(data, changeFor: ((Unbounded[Instant], AHistory#Id) => Change)) <- dataSamples} yield (data, changeFor(_: Unbounded[Instant], historyId)))
   }
 
-  case class RecordingsForAnId(historyId: Any, whenEarliestChangeHappened: Unbounded[Instant], historiesFrom: Scope => Seq[History], recordings: List[(Any, Unbounded[Instant], Change)])
+  case class RecordingsForAnId(historyId: Any, whenEarliestChangeHappened: Unbounded[Instant], historiesFrom: Scope => Seq[History], recordings: List[(Any, Unbounded[Instant], Change)]){
+    def isRelevantFor(queryWhen: Unbounded[Instant]) = queryWhen >= whenEarliestChangeHappened
+  }
 
   def recordingsGroupedByIdGenerator_(dataSamplesForAnIdGenerator: Gen[(Any, (Scope) => Seq[History], List[(Any, (Unbounded[Instant]) => Change)])], changeWhenGenerator: Gen[Unbounded[Instant]]) = {
     val recordingsForAnIdGenerator = for {(historyId, historiesFrom, dataSamples) <- dataSamplesForAnIdGenerator
