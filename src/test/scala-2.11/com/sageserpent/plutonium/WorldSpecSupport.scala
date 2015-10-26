@@ -102,7 +102,15 @@ trait WorldSpecSupport {
   }
 
   case class RecordingsForAnId(historyId: Any, whenEarliestChangeHappened: Unbounded[Instant], historiesFrom: Scope => Seq[History], recordings: List[(Any, Unbounded[Instant], Change)]){
-    def isRelevantFor(queryWhen: Unbounded[Instant]) = queryWhen >= whenEarliestChangeHappened
+    def thePartNoLaterThan(when: Unbounded[Instant]) = if (when >= whenEarliestChangeHappened)
+      Some(this.copy(recordings = recordings takeWhile { case (_, eventWhen, _) => eventWhen <= when }))
+    else
+      None
+
+    def entirelyAfter(when: Unbounded[Instant]) = if (when < whenEarliestChangeHappened)
+      Some(this)
+    else
+      None
   }
 
   def recordingsGroupedByIdGenerator_(dataSamplesForAnIdGenerator: Gen[(Any, (Scope) => Seq[History], List[(Any, (Unbounded[Instant]) => Change)])], changeWhenGenerator: Gen[Unbounded[Instant]]) = {
