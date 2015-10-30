@@ -40,7 +40,7 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
 
       val scope = world.scopeFor(queryWhen, world.nextRevision)
 
-      val idsToWhenDefinedMap = integerHistoryRecordingsGroupedById map { case RecordingsForAnId(historyId, whenEarliestChangeHappened, _, _) => historyId.asInstanceOf[IntegerHistory#Id] -> whenEarliestChangeHappened } toMap
+      val idsToWhenDefinedMap = integerHistoryRecordingsGroupedById map { case recordingsForAnId@RecordingsForAnId(historyId, _, _) => historyId.asInstanceOf[IntegerHistory#Id] -> recordingsForAnId.whenEarliestChangeHappened } toMap
 
       val ids = idsToWhenDefinedMap.keys toSeq
 
@@ -93,7 +93,7 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
 
       val scope = world.scopeFor(queryWhen, world.nextRevision)
 
-      val idsInExistence = (recordingsGroupedById flatMap (_.thePartNoLaterThan(queryWhen)) map { case RecordingsForAnId(historyId, _, _, _) => historyId }) groupBy identity map { case (id, group) => id -> group.size } toSet
+      val idsInExistence = (recordingsGroupedById flatMap (_.thePartNoLaterThan(queryWhen)) map { case RecordingsForAnId(historyId, _, _) => historyId }) groupBy identity map { case (id, group) => id -> group.size } toSet
 
       val itemsFromWildcardQuery = scope.render(Bitemporal.wildcard[History]) toList
 
@@ -127,7 +127,7 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
         // The filtering of ids here is hokey - disjoint history types can (actually, they do) share the same id type, so we'll
         // end up with ids that may be irrelevant to the flavour of 'AHistory' we are checking against. This doesn't matter, though,
         // because the queries we are cross checking allow the possibility that there are no items of the specific type to match them.
-        val ids = (recordingsGroupedById map { case RecordingsForAnId(historyId, _, _, _) => historyId } filter (_.isInstanceOf[AHistory#Id]) map (_.asInstanceOf[AHistory#Id])).toSet
+        val ids = (recordingsGroupedById map { case RecordingsForAnId(historyId, _, _) => historyId } filter (_.isInstanceOf[AHistory#Id]) map (_.asInstanceOf[AHistory#Id])).toSet
 
         val itemsFromWildcardQuery = scope.render(Bitemporal.wildcard[AHistory]) toSet
 
@@ -167,7 +167,7 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
         // The filtering of idsInExistence here is hokey - disjoint history types can (actually, they do) share the same id type, so we'll
         // end up with idsInExistence that may be irrelevant to the flavour of 'AHistory' we are checking against. This doesn't matter, though,
         // because the queries we are checking allow the possibility that there are no items of the specific type to match them.
-        val idsInExistence = (recordingsGroupedById flatMap (_.thePartNoLaterThan(queryWhen)) map { case RecordingsForAnId(historyId, _, _, _) => historyId } filter (_.isInstanceOf[AHistory#Id]) map (_.asInstanceOf[AHistory#Id])).toSet
+        val idsInExistence = (recordingsGroupedById flatMap (_.thePartNoLaterThan(queryWhen)) map { case RecordingsForAnId(historyId, _, _) => historyId } filter (_.isInstanceOf[AHistory#Id]) map (_.asInstanceOf[AHistory#Id])).toSet
 
         Prop.all(idsInExistence.toSeq map (id => {
           val itemsFromSpecificQuery = scope.render(Bitemporal.withId[AHistory](id)).toSet
@@ -205,7 +205,7 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
         // The filtering of ids here is hokey - disjoint history types can (actually, they do) share the same id type, so we'll
         // end up with ids that may be irrelevant to the flavour of 'AHistory' we are checking against. This doesn't matter, though,
         // because the queries we are cross checking allow the possibility that there are no items of the specific type to match them.
-        val ids = (recordingsGroupedById map { case RecordingsForAnId(historyId, _, _, _) => historyId } filter (_.isInstanceOf[AHistory#Id]) map (_.asInstanceOf[AHistory#Id])).toSet
+        val ids = (recordingsGroupedById map { case RecordingsForAnId(historyId, _, _) => historyId } filter (_.isInstanceOf[AHistory#Id]) map (_.asInstanceOf[AHistory#Id])).toSet
 
         Prop.all(ids.toSeq map (id => {
           val itemsFromGenericQueryById = scope.render(Bitemporal.withId[History](id)).toSet
@@ -274,7 +274,7 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
       val wildcardProperty = Prop((itemsFromWildcardQuery[MoreSpecificFooHistory] map (_.asInstanceOf[FooHistory])).subsetOf(itemsFromWildcardQuery[FooHistory])) &&
         Prop((itemsFromWildcardQuery[FooHistory] map (_.asInstanceOf[History])).subsetOf(itemsFromWildcardQuery[History]))
 
-      val ids = (recordingsGroupedById map { case RecordingsForAnId(historyId, _, _, _) => historyId } filter (_.isInstanceOf[MoreSpecificFooHistory#Id]) map (_.asInstanceOf[MoreSpecificFooHistory#Id])).toSet
+      val ids = (recordingsGroupedById map { case RecordingsForAnId(historyId, _, _) => historyId } filter (_.isInstanceOf[MoreSpecificFooHistory#Id]) map (_.asInstanceOf[MoreSpecificFooHistory#Id])).toSet
 
       val genericQueryByIdProperty = Prop.all(ids.toSeq map (id => {
         def itemsFromGenericQueryById[AHistory >: MoreSpecificFooHistory <: History : TypeTag] = scope.render(Bitemporal.withId[AHistory](id.asInstanceOf[AHistory#Id])).toSet
