@@ -93,7 +93,7 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
 
       val scope = world.scopeFor(queryWhen, world.nextRevision)
 
-      val idsInExistence = (recordingsGroupedById filter { case RecordingsForAnId(historyId, whenEarliestChangeHappened, _, _) => queryWhen >= whenEarliestChangeHappened } map { case RecordingsForAnId(historyId, _, _, _) => historyId }) groupBy identity map { case (id, group) => id -> group.size } toSet
+      val idsInExistence = (recordingsGroupedById flatMap (_.thePartNoLaterThan(queryWhen)) map { case RecordingsForAnId(historyId, _, _, _) => historyId }) groupBy identity map { case (id, group) => id -> group.size } toSet
 
       val itemsFromWildcardQuery = scope.render(Bitemporal.wildcard[History]) toList
 

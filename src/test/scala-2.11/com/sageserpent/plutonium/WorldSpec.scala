@@ -80,7 +80,7 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
       val checks = for {asOf <- asOfsIncludingAllEventsNoLaterThanTheQueryWhen
                         scope = world.scopeFor(Finite(queryWhen), asOf)
                         eventWhenAlignedWithAsOf = asOfToLatestEventWhenMap(asOf)
-                        RecordingsForAnId(historyId, _, historiesFrom, recordings) <- recordingsGroupedById filter (Finite(queryWhen) >= _.whenEarliestChangeHappened) filter (eventWhenAlignedWithAsOf >= _.whenEarliestChangeHappened)
+                        RecordingsForAnId(historyId, _, historiesFrom, recordings) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(Finite(queryWhen))) filter (eventWhenAlignedWithAsOf >= _.whenEarliestChangeHappened)
                         pertinentRecordings = recordings takeWhile { case (_, eventWhen, _) => eventWhen <= eventWhenAlignedWithAsOf }
                         Seq(history) = {
                           assert(pertinentRecordings.nonEmpty)
