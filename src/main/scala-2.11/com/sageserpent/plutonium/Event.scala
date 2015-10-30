@@ -85,3 +85,9 @@ object Observation {
 case class Annihilation[Raw <: Identified](definiteWhen: Instant, id: Raw#Id) extends Event {
   val when = Finite(definiteWhen)
 }
+
+object Annihilation {
+  def apply[Raw <: Identified: TypeTag](definiteWhen: Instant)(id: Raw#Id): Annihilation[Raw] = {
+    Annihilation(definiteWhen, id)
+  }
+}
