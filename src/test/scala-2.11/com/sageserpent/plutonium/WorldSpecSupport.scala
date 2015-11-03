@@ -105,9 +105,11 @@ trait WorldSpecSupport {
   }
 
   object RecordingsForAnId {
-    def unapply(recordingsForAnId: RecordingsForAnId): Option[(Any, Scope => Seq[History], List[(Any, Unbounded[Instant], Change)])] = {
+    private def stripChanges(recordings: List[(Any, Unbounded[Instant], Change)]) = recordings map {case(data, eventWhen, _) => data -> eventWhen}
+
+    def unapply(recordingsForAnId: RecordingsForAnId): Option[(Any, Scope => Seq[History], List[(Any, Unbounded[Instant])])] = {
       recordingsForAnId match {
-        case RecordingsForAnOngoingId(historyId, historiesFrom, recordings) => Some(historyId, historiesFrom, recordings)
+        case RecordingsForAnOngoingId(historyId, historiesFrom, recordings) => Some(historyId, historiesFrom, stripChanges(recordings))
       }
     }
   }
