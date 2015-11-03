@@ -117,7 +117,7 @@ trait WorldSpecSupport {
 
     val historiesFrom: Scope => Seq[History]
 
-    val recordings: List[(Any, Unbounded[Instant], Change)]
+    val events: List[(Unbounded[Instant], Event)]
 
     val whenEarliestChangeHappened: Unbounded[Instant]
 
@@ -128,7 +128,9 @@ trait WorldSpecSupport {
 
   case class RecordingsForAnOngoingId(override val historyId: Any,
                                       override val historiesFrom: Scope => Seq[History],
-                                      override val recordings: List[(Any, Unbounded[Instant], Change)]) extends RecordingsForAnId {
+                                      recordings: List[(Any, Unbounded[Instant], Change)]) extends RecordingsForAnId {
+    override val events = recordings map {case (_, eventWhen, change) => eventWhen -> change}
+
     override val whenEarliestChangeHappened: Unbounded[Instant] = recordings map { case (_, eventWhen, _) => eventWhen } min
 
     override def thePartNoLaterThan(when: Unbounded[Instant]) = if (when >= whenEarliestChangeHappened)
@@ -144,9 +146,11 @@ trait WorldSpecSupport {
 
   case class RecordingsForAnIdWithFiniteLifespan(override val historyId: Any,
                                                  override val historiesFrom: Scope => Seq[History],
-                                                 override val recordings: List[(Any, Unbounded[Instant], Change)],
+                                                 recordings: List[(Any, Unbounded[Instant], Change)],
                                                  annihilation: (Instant, Annihilation[_ <: Identified])) extends RecordingsForAnId {
     override val whenEarliestChangeHappened: Unbounded[Instant] = recordings map { case (_, eventWhen, _) => eventWhen } min
+
+    override val events = recordings map {case (_, eventWhen, change) => eventWhen -> change} // TODO - tack on annihilation!!!!
 
     override def thePartNoLaterThan(when: Unbounded[Instant]) = if (when < Finite(annihilation._1) && when >= whenEarliestChangeHappened)
       Some(RecordingsForAnOngoingId(historyId = historyId, historiesFrom = historiesFrom, recordings = recordings takeWhile { case (_, eventWhen, _) => eventWhen <= when }))
@@ -177,21 +181,21 @@ trait WorldSpecSupport {
     Gen.nonEmptyListOf(Gen.frequency(3 -> recordingsForAnOngoingIdGenerator, 1 -> recordingsForAnIdWithFiniteLifespanGenerator)) retryUntil idsAreNotRepeated
   }
 
-  def shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random: Random, recordings: List[(Any, Unbounded[Instant], Change)]) = {
-    val recordingsGroupedByWhen = recordings groupBy (_._2)
+  def shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random: Random, events: List[(Unbounded[Instant], Event)]) = {
+    val recordingsGroupedByWhen = events groupBy (_._1)
     random.shuffle(recordingsGroupedByWhen) flatMap (_._2)
   }
 
 
-  def recordEventsInWorld(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[(Option[(Any, Unbounded[Instant], Change)], Int)]], asOfs: List[Instant], world: WorldUnderTest) = {
+  def recordEventsInWorld(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[(Option[(Unbounded[Instant], Event)], Int)]], asOfs: List[Instant], world: WorldUnderTest) = {
     revisionActions(bigShuffledHistoryOverLotsOfThings, asOfs, world) map (_.apply) force // Actually a piece of imperative code that looks functional - 'world' is being mutated as a side-effect; but the revisions are harvested functionally.
   }
 
-  def liftRecordings(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[((Any, Unbounded[Instant], Change), Revision)]]): Stream[Traversable[(Some[(Any, Unbounded[Instant], Change)], Revision)]] = {
+  def liftRecordings(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[((Unbounded[Instant], Event), Revision)]]): Stream[Traversable[(Some[(Unbounded[Instant], Event)], Revision)]] = {
     bigShuffledHistoryOverLotsOfThings map (_ map { case (recording, eventId) => Some(recording) -> eventId })
   }
 
-  def recordEventsInWorldWithoutGivingUpOnFailure(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[(Option[(Any, Unbounded[Instant], Change)], Int)]], asOfs: List[Instant], world: WorldUnderTest) = {
+  def recordEventsInWorldWithoutGivingUpOnFailure(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[(Option[(Unbounded[Instant], Event)], Int)]], asOfs: List[Instant], world: WorldUnderTest) = {
     for (revisionAction <- revisionActions(bigShuffledHistoryOverLotsOfThings, asOfs, world)) try {
       revisionAction()
     } catch {
@@ -199,18 +203,18 @@ trait WorldSpecSupport {
     }
   }
 
-  def revisionActions(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[(Option[(Any, Unbounded[Instant], Change)], Int)]], asOfs: List[Instant], world: WorldUnderTest): Stream[() => Revision] = {
+  def revisionActions(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[(Option[(Unbounded[Instant], Event)], Int)]], asOfs: List[Instant], world: WorldUnderTest): Stream[() => Revision] = {
     assert(bigShuffledHistoryOverLotsOfThings.length == asOfs.length)
     for {(pieceOfHistory, asOf) <- bigShuffledHistoryOverLotsOfThings zip asOfs
          events = pieceOfHistory map {
-           case (recording, eventId) => eventId -> (for ((_, _, change) <- recording) yield change)
+           case (recording, eventId) => eventId -> (for ((_, change) <- recording) yield change)
          } toSeq} yield
     () => world.revise(TreeMap(events: _*), asOf)
   }
 
-  def intersperseObsoleteRecordings(random: Random, recordings: immutable.Iterable[(Any, Unbounded[Instant], Change)], obsoleteRecordings: immutable.Iterable[(Any, Unbounded[Instant], Change)]): Stream[(Option[(Any, Unbounded[Instant], Change)], Int)] = {
-    case class UnfoldState(recordings: immutable.Iterable[(Any, Unbounded[Instant], Change)],
-                           obsoleteRecordings: immutable.Iterable[(Any, Unbounded[Instant], Change)],
+  def intersperseObsoleteRecordings(random: Random, recordings: immutable.Iterable[(Unbounded[Instant], Event)], obsoleteRecordings: immutable.Iterable[(Unbounded[Instant], Event)]): Stream[(Option[(Unbounded[Instant], Event)], Int)] = {
+    case class UnfoldState(recordings: immutable.Iterable[(Unbounded[Instant], Event)],
+                           obsoleteRecordings: immutable.Iterable[(Unbounded[Instant], Event)],
                            eventId: Int,
                            eventsToBeCorrected: Set[Int])
     val onePastMaximumEventId = recordings.size
