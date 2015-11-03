@@ -81,7 +81,10 @@ object Observation {
 // NOTE: creation is implied by the first change or observation, so we don't bother with an explicit case class for that.
 // NOTE: annihilation has to happen at some definite time.
 // NOTE: an annihilation can only be booked in as part of a revision if the id is refers has already been defined by some
-// earlier event - this is checked as a precondition on 'World.revise'.
+// earlier event and is not already annihilated - this is checked as a precondition on 'World.revise'.
+// NOTE: it is OK to have annihilations and other events occurring at the same time: the documentation of 'World.revise'
+// covers how coincident events are resolved. So an item referred to by an id may be changed, then annihilated, then
+// recreated and so on all at the same time.
 case class Annihilation[Raw <: Identified](definiteWhen: Instant, id: Raw#Id) extends Event {
   val when = Finite(definiteWhen)
 }
