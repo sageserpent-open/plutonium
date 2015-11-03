@@ -106,6 +106,7 @@ trait WorldSpecSupport {
 
   object RecordingsForAnId {
     private def stripChanges(recordings: List[(Any, Unbounded[Instant], Change)]) = recordings map {case(data, eventWhen, _) => data -> eventWhen}
+    def stripData(recordings: List[(Any, Unbounded[Instant], Change)]) = recordings map {case(_, eventWhen, change) => eventWhen -> change}
 
     def unapply(recordingsForAnId: RecordingsForAnId): Option[(Any, Scope => Seq[History], List[(Any, Unbounded[Instant])])] = {
       recordingsForAnId match {
@@ -132,7 +133,7 @@ trait WorldSpecSupport {
   case class RecordingsForAnOngoingId(override val historyId: Any,
                                       override val historiesFrom: Scope => Seq[History],
                                       recordings: List[(Any, Unbounded[Instant], Change)]) extends RecordingsForAnId {
-    override val events = recordings map {case (_, eventWhen, change) => eventWhen -> change}
+    override val events: List[(Unbounded[Instant], Event)] = RecordingsForAnId.stripData(recordings)
 
     override val whenEarliestChangeHappened: Unbounded[Instant] = recordings map { case (_, eventWhen, _) => eventWhen } min
 
@@ -153,9 +154,9 @@ trait WorldSpecSupport {
                                                  annihilation: (Instant, Annihilation[_ <: Identified])) extends RecordingsForAnId {
     override val whenEarliestChangeHappened: Unbounded[Instant] = recordings map { case (_, eventWhen, _) => eventWhen } min
 
-    override val events = (recordings map {case (_, eventWhen, change) => eventWhen -> change}) :+ whenAnnihilated -> annihilation._2
-
     val whenAnnihilated = Finite(annihilation._1)
+
+    override val events: List[(Unbounded[Instant], Event)] = RecordingsForAnId.stripData(recordings) :+ whenAnnihilated -> annihilation._2
 
     override def thePartNoLaterThan(when: Unbounded[Instant]) = if (when < whenAnnihilated && when >= whenEarliestChangeHappened)
       Some(RecordingsForAnOngoingId(historyId = historyId, historiesFrom = historiesFrom, recordings = recordings takeWhile { case (_, eventWhen, _) => eventWhen <= when }))
@@ -172,7 +173,7 @@ trait WorldSpecSupport {
     val recordingsForAnOngoingIdGenerator = for {(historyId, historiesFrom, dataSamples, annihilationFor) <- dataSamplesForAnIdGenerator
                                                  sampleWhens <- Gen.listOfN(dataSamples.length, changeWhenGenerator) map (_ sorted)} yield RecordingsForAnOngoingId(historyId,
       historiesFrom,
-      for {((data, changeFor), when) <- dataSamples zip sampleWhens} yield (data, when, changeFor(when)))
+      for {((data, changeFor), when) <- dataSamples zip sampleWhens} yield (data, when, changeFor(when))): RecordingsForAnId
     val recordingsForAnIdWithFiniteLifespanGenerator = for {(historyId, historiesFrom, dataSamples, annihilationFor) <- dataSamplesForAnIdGenerator
                                                             sampleWhens <- Gen.listOfN(dataSamples.length, changeWhenGenerator) map (_ sorted)
                                                             whenAnnihilated <- instantGenerator retryUntil (Finite(_) >= sampleWhens.last)} yield {
@@ -180,7 +181,7 @@ trait WorldSpecSupport {
       RecordingsForAnIdWithFiniteLifespan(historyId,
         historiesFrom,
         for {((data, changeFor), when) <- dataSamples zip sampleWhens} yield (data, when, changeFor(when)),
-        whenAnnihilated -> annihilation)
+        whenAnnihilated -> annihilation): RecordingsForAnId
     }
     def idsAreNotRepeated(recordings: List[RecordingsForAnId]) = recordings.size == (recordings map (_.historyId) distinct).size
     Gen.nonEmptyListOf(Gen.frequency(2 -> recordingsForAnOngoingIdGenerator, 1 -> recordingsForAnIdWithFiniteLifespanGenerator)) retryUntil idsAreNotRepeated
