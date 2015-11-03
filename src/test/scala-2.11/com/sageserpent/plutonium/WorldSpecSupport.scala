@@ -110,6 +110,7 @@ trait WorldSpecSupport {
     def unapply(recordingsForAnId: RecordingsForAnId): Option[(Any, Scope => Seq[History], List[(Any, Unbounded[Instant])])] = {
       recordingsForAnId match {
         case RecordingsForAnOngoingId(historyId, historiesFrom, recordings) => Some(historyId, historiesFrom, stripChanges(recordings))
+        case RecordingsForAnIdWithFiniteLifespan(historyId, historiesFrom, recordings, _) => Some(historyId, historiesFrom, stripChanges(recordings))
       }
     }
   }
