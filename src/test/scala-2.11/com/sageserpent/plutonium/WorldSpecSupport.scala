@@ -97,9 +97,11 @@ trait WorldSpecSupport {
       case None => Gen.nonEmptyListOf(dataSampleGenerator)
     }
 
-    // TODO - ANNIHILATIONS: tack on a function from Instant => Annihilation[_] (or Event)
     for {dataSamples <- dataSamplesGenerator
-         historyId <- historyIdGenerator} yield (historyId, (scope: Scope) => scope.render(Bitemporal.zeroOrOneOf[AHistory](historyId)): Seq[History], for {(data, changeFor: ((Unbounded[Instant], AHistory#Id) => Change)) <- dataSamples} yield (data, changeFor(_: Unbounded[Instant], historyId)))
+         historyId <- historyIdGenerator} yield (historyId,
+      (scope: Scope) => scope.render(Bitemporal.zeroOrOneOf[AHistory](historyId)): Seq[History],
+      for {(data, changeFor: ((Unbounded[Instant], AHistory#Id) => Change)) <- dataSamples} yield (data, changeFor(_: Unbounded[Instant], historyId)),
+      Annihilation(_: Instant, historyId))
   }
 
   object RecordingsForAnId {
@@ -115,6 +117,8 @@ trait WorldSpecSupport {
 
     val historiesFrom: Scope => Seq[History]
 
+    val recordings: List[(Any, Unbounded[Instant], Change)]
+
     val whenEarliestChangeHappened: Unbounded[Instant]
 
     def thePartNoLaterThan(when: Unbounded[Instant]): Option[RecordingsForAnId]
@@ -122,7 +126,9 @@ trait WorldSpecSupport {
     def doesNotExistAt(when: Unbounded[Instant]): Option[RecordingsForAnId]
   }
 
-  case class RecordingsForAnOngoingId(override val historyId: Any, override val historiesFrom: Scope => Seq[History], recordings: List[(Any, Unbounded[Instant], Change)]) extends RecordingsForAnId {
+  case class RecordingsForAnOngoingId(override val historyId: Any,
+                                      override val historiesFrom: Scope => Seq[History],
+                                      override val recordings: List[(Any, Unbounded[Instant], Change)]) extends RecordingsForAnId {
     override val whenEarliestChangeHappened: Unbounded[Instant] = recordings map { case (_, eventWhen, _) => eventWhen } min
 
     override def thePartNoLaterThan(when: Unbounded[Instant]) = if (when >= whenEarliestChangeHappened)
@@ -136,7 +142,10 @@ trait WorldSpecSupport {
       None
   }
 
-  case class RecordingsForAnIdWithFiniteLifespan(override val historyId: Any, override val historiesFrom: Scope => Seq[History], recordings: List[(Any, Unbounded[Instant], Change)], annihilation: (Instant, Annihilation[_])) extends RecordingsForAnId {
+  case class RecordingsForAnIdWithFiniteLifespan(override val historyId: Any,
+                                                 override val historiesFrom: Scope => Seq[History],
+                                                 override val recordings: List[(Any, Unbounded[Instant], Change)],
+                                                 annihilation: (Instant, Annihilation[_ <: Identified])) extends RecordingsForAnId {
     override val whenEarliestChangeHappened: Unbounded[Instant] = recordings map { case (_, eventWhen, _) => eventWhen } min
 
     override def thePartNoLaterThan(when: Unbounded[Instant]) = if (when < Finite(annihilation._1) && when >= whenEarliestChangeHappened)
@@ -150,13 +159,22 @@ trait WorldSpecSupport {
       None
   }
 
-  def recordingsGroupedByIdGenerator_(dataSamplesForAnIdGenerator: Gen[(Any, (Scope) => Seq[History], List[(Any, (Unbounded[Instant]) => Change)])], changeWhenGenerator: Gen[Unbounded[Instant]]) = {
-    // TODO - ANNIHILATIONS: unpack the Instant => Annihilation function here...
-    val recordingsForAnIdGenerator = for {(historyId, historiesFrom, dataSamples) <- dataSamplesForAnIdGenerator
-                                          // TODO - ANNIHILATIONS: need an extra when - and it has to be unlifted, not unbounded.
-                                          sampleWhens <- Gen.listOfN(dataSamples.length, changeWhenGenerator) map (_ sorted)} yield RecordingsForAnOngoingId(historyId, historiesFrom, for {((data, changeFor), when) <- dataSamples zip sampleWhens} yield (data, when, changeFor(when)))
+  def recordingsGroupedByIdGenerator_(dataSamplesForAnIdGenerator: Gen[(Any, Scope => Seq[History], List[(Any, (Unbounded[Instant]) => Change)], Instant => Annihilation[_ <: Identified])], changeWhenGenerator: Gen[Unbounded[Instant]]) = {
+    val recordingsForAnOngoingIdGenerator = for {(historyId, historiesFrom, dataSamples, annihilationFor) <- dataSamplesForAnIdGenerator
+                                                 sampleWhens <- Gen.listOfN(dataSamples.length, changeWhenGenerator) map (_ sorted)} yield RecordingsForAnOngoingId(historyId,
+      historiesFrom,
+      for {((data, changeFor), when) <- dataSamples zip sampleWhens} yield (data, when, changeFor(when)))
+    val recordingsForAnIdWithFiniteLifespanGenerator = for {(historyId, historiesFrom, dataSamples, annihilationFor) <- dataSamplesForAnIdGenerator
+                                                            sampleWhens <- Gen.listOfN(dataSamples.length, changeWhenGenerator) map (_ sorted)
+                                                            whenAnnihilated <- instantGenerator retryUntil (Finite(_) >= sampleWhens.last)} yield {
+      val annihilation = annihilationFor(whenAnnihilated)
+      RecordingsForAnIdWithFiniteLifespan(historyId,
+        historiesFrom,
+        for {((data, changeFor), when) <- dataSamples zip sampleWhens} yield (data, when, changeFor(when)),
+        whenAnnihilated -> annihilation)
+    }
     def idsAreNotRepeated(recordings: List[RecordingsForAnId]) = recordings.size == (recordings map (_.historyId) distinct).size
-    Gen.nonEmptyListOf(recordingsForAnIdGenerator) retryUntil idsAreNotRepeated
+    Gen.nonEmptyListOf(Gen.frequency(3 -> recordingsForAnOngoingIdGenerator, 1 -> recordingsForAnIdWithFiniteLifespanGenerator)) retryUntil idsAreNotRepeated
   }
 
   def shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random: Random, recordings: List[(Any, Unbounded[Instant], Change)]) = {
@@ -252,8 +270,7 @@ trait WorldSpecSupport {
                                                                             rightHandRecordingsGroupedById <- disjointRightHandRecordingsGroupedByIdGenerator} yield leftHandRecordingsGroupedById -> rightHandRecordingsGroupedById
 
     // Force at least one id to be shared across disjoint types.
-    recordingsWithPotentialSharingOfIdsAcrossTheTwoDisjointHands map
-      { case (leftHand, rightHand) => leftHand ++ rightHand }
+    recordingsWithPotentialSharingOfIdsAcrossTheTwoDisjointHands map { case (leftHand, rightHand) => leftHand ++ rightHand }
   }
 
   val recordingsGroupedByIdGenerator = mixedRecordingsGroupedByIdGenerator()
