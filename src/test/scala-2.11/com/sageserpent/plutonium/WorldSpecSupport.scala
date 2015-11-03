@@ -152,9 +152,11 @@ trait WorldSpecSupport {
                                                  annihilation: (Instant, Annihilation[_ <: Identified])) extends RecordingsForAnId {
     override val whenEarliestChangeHappened: Unbounded[Instant] = recordings map { case (_, eventWhen, _) => eventWhen } min
 
-    override val events = recordings map {case (_, eventWhen, change) => eventWhen -> change} // TODO - tack on annihilation!!!!
+    override val events = (recordings map {case (_, eventWhen, change) => eventWhen -> change}) :+ whenAnnihilated -> annihilation._2
 
-    override def thePartNoLaterThan(when: Unbounded[Instant]) = if (when < Finite(annihilation._1) && when >= whenEarliestChangeHappened)
+    val whenAnnihilated = Finite(annihilation._1)
+
+    override def thePartNoLaterThan(when: Unbounded[Instant]) = if (when < whenAnnihilated && when >= whenEarliestChangeHappened)
       Some(RecordingsForAnOngoingId(historyId = historyId, historiesFrom = historiesFrom, recordings = recordings takeWhile { case (_, eventWhen, _) => eventWhen <= when }))
     else
       None
@@ -180,7 +182,7 @@ trait WorldSpecSupport {
         whenAnnihilated -> annihilation)
     }
     def idsAreNotRepeated(recordings: List[RecordingsForAnId]) = recordings.size == (recordings map (_.historyId) distinct).size
-    Gen.nonEmptyListOf(Gen.frequency(3 -> recordingsForAnOngoingIdGenerator, 1 -> recordingsForAnIdWithFiniteLifespanGenerator)) retryUntil idsAreNotRepeated
+    Gen.nonEmptyListOf(Gen.frequency(2 -> recordingsForAnOngoingIdGenerator, 1 -> recordingsForAnIdWithFiniteLifespanGenerator)) retryUntil idsAreNotRepeated
   }
 
   def shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random: Random, events: List[(Unbounded[Instant], Event)]) = {
