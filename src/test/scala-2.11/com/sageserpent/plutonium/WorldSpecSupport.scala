@@ -105,7 +105,7 @@ trait WorldSpecSupport {
   object RecordingsForAnId {
     def unapply(recordingsForAnId: RecordingsForAnId): Option[(Any, Scope => Seq[History], List[(Any, Unbounded[Instant], Change)])] = {
       recordingsForAnId match {
-        case RecordingsForAnIdThatIsNeverAnnihilated(historyId, historiesFrom, recordings) => Some(historyId, historiesFrom, recordings)
+        case RecordingsForAnOngoingId(historyId, historiesFrom, recordings) => Some(historyId, historiesFrom, recordings)
       }
     }
   }
@@ -119,13 +119,10 @@ trait WorldSpecSupport {
 
     def thePartNoLaterThan(when: Unbounded[Instant]): Option[RecordingsForAnId]
 
-    def entirelyAfter(when: Unbounded[Instant]): Option[RecordingsForAnId]
+    def doesNotExistAt(when: Unbounded[Instant]): Option[RecordingsForAnId]
   }
 
-
-  // TODO - ANNIHILATIONS: pass in extra annihilation and when it's supposed to happen.
-  // TODO - ANNIHILATIONS: this will be used eventually to make a composite implementation of this case class.
-  case class RecordingsForAnIdThatIsNeverAnnihilated(override val historyId: Any, override val historiesFrom: Scope => Seq[History], recordings: List[(Any, Unbounded[Instant], Change)]) extends RecordingsForAnId {
+  case class RecordingsForAnOngoingId(override val historyId: Any, override val historiesFrom: Scope => Seq[History], recordings: List[(Any, Unbounded[Instant], Change)]) extends RecordingsForAnId {
     override val whenEarliestChangeHappened: Unbounded[Instant] = recordings map { case (_, eventWhen, _) => eventWhen } min
 
     override def thePartNoLaterThan(when: Unbounded[Instant]) = if (when >= whenEarliestChangeHappened)
@@ -133,7 +130,21 @@ trait WorldSpecSupport {
     else
       None
 
-    override def entirelyAfter(when: Unbounded[Instant]) = if (when < whenEarliestChangeHappened)
+    override def doesNotExistAt(when: Unbounded[Instant]) = if (when < whenEarliestChangeHappened)
+      Some(this)
+    else
+      None
+  }
+
+  case class RecordingsForAnIdWithFiniteLifespan(override val historyId: Any, override val historiesFrom: Scope => Seq[History], recordings: List[(Any, Unbounded[Instant], Change)], annihilation: (Instant, Annihilation[_])) extends RecordingsForAnId {
+    override val whenEarliestChangeHappened: Unbounded[Instant] = recordings map { case (_, eventWhen, _) => eventWhen } min
+
+    override def thePartNoLaterThan(when: Unbounded[Instant]) = if (when < Finite(annihilation._1) && when >= whenEarliestChangeHappened)
+      Some(RecordingsForAnOngoingId(historyId = historyId, historiesFrom = historiesFrom, recordings = recordings takeWhile { case (_, eventWhen, _) => eventWhen <= when }))
+    else
+      None
+
+    override def doesNotExistAt(when: Unbounded[Instant]) = if (when >= Finite(annihilation._1) || when < whenEarliestChangeHappened)
       Some(this)
     else
       None
@@ -143,7 +154,7 @@ trait WorldSpecSupport {
     // TODO - ANNIHILATIONS: unpack the Instant => Annihilation function here...
     val recordingsForAnIdGenerator = for {(historyId, historiesFrom, dataSamples) <- dataSamplesForAnIdGenerator
                                           // TODO - ANNIHILATIONS: need an extra when - and it has to be unlifted, not unbounded.
-                                          sampleWhens <- Gen.listOfN(dataSamples.length, changeWhenGenerator) map (_ sorted)} yield RecordingsForAnIdThatIsNeverAnnihilated(historyId, historiesFrom, for {((data, changeFor), when) <- dataSamples zip sampleWhens} yield (data, when, changeFor(when)))
+                                          sampleWhens <- Gen.listOfN(dataSamples.length, changeWhenGenerator) map (_ sorted)} yield RecordingsForAnOngoingId(historyId, historiesFrom, for {((data, changeFor), when) <- dataSamples zip sampleWhens} yield (data, when, changeFor(when)))
     def idsAreNotRepeated(recordings: List[RecordingsForAnId]) = recordings.size == (recordings map (_.historyId) distinct).size
     Gen.nonEmptyListOf(recordingsForAnIdGenerator) retryUntil idsAreNotRepeated
   }
