@@ -132,13 +132,13 @@ trait WorldSpecSupport {
 
     def eventWhens(recordings: List[(Any, Unbounded[Instant], Change)]) = {
       recordings map { case (_, eventWhen, _) => eventWhen }
-    }
+  }
   }
 
   case class RecordingsForAnOngoingId(override val historyId: Any,
                                       override val historiesFrom: Scope => Seq[History],
                                       recordings: List[(Any, Unbounded[Instant], Change)]) extends RecordingsForAnId {
-    override val events: List[(Unbounded[Instant], Event)] = RecordingsForAnId.stripData(recordings)
+    override val events = RecordingsForAnId.stripData(recordings)
 
     override val whenEarliestChangeHappened: Unbounded[Instant] = eventWhens(recordings) min
 
