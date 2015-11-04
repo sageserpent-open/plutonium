@@ -133,7 +133,7 @@ trait WorldSpecSupport {
   case class RecordingsForAnOngoingId(override val historyId: Any,
                                       override val historiesFrom: Scope => Seq[History],
                                       recordings: List[(Any, Unbounded[Instant], Change)]) extends RecordingsForAnId {
-    override val events: List[(Unbounded[Instant], Event)] = RecordingsForAnId.stripData(recordings)
+    override val events = RecordingsForAnId.stripData(recordings)
 
     override val whenEarliestChangeHappened: Unbounded[Instant] = recordings map { case (_, eventWhen, _) => eventWhen } min
 
@@ -156,7 +156,7 @@ trait WorldSpecSupport {
 
     val whenAnnihilated = Finite(annihilation._1)
 
-    override val events: List[(Unbounded[Instant], Event)] = RecordingsForAnId.stripData(recordings) :+ whenAnnihilated -> annihilation._2
+    override val events = RecordingsForAnId.stripData(recordings) :+ whenAnnihilated -> annihilation._2
 
     override def thePartNoLaterThan(when: Unbounded[Instant]) = if (when < whenAnnihilated && when >= whenEarliestChangeHappened)
       Some(RecordingsForAnOngoingId(historyId = historyId, historiesFrom = historiesFrom, recordings = recordings takeWhile { case (_, eventWhen, _) => eventWhen <= when }))
