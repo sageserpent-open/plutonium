@@ -80,8 +80,7 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
       val checks = for {asOf <- asOfsIncludingAllEventsNoLaterThanTheQueryWhen
                         scope = world.scopeFor(Finite(queryWhen), asOf)
                         eventWhenAlignedWithAsOf = asOfToLatestEventWhenMap(asOf)
-                        RecordingsForAnId(historyId, historiesFrom, recordings) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(Finite(queryWhen))) filter (eventWhenAlignedWithAsOf >= _.whenEarliestChangeHappened)
-                        pertinentRecordings = recordings takeWhile { case (_, eventWhen) => eventWhen <= eventWhenAlignedWithAsOf }
+                        RecordingsForAnId(historyId, historiesFrom, pertinentRecordings) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(implicitly[Ordering[Unbounded[Instant]]].min(Finite(queryWhen), eventWhenAlignedWithAsOf)))
                         Seq(history) = {
                           assert(pertinentRecordings.nonEmpty)
                           historiesFrom(scope)
@@ -202,8 +201,7 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
 
       val scope = world.scopeFor(queryWhen, world.nextRevision)
 
-      val checks = for {RecordingsForAnId(historyId, historiesFrom, recordings) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(queryWhen))
-                        pertinentRecordings = recordings takeWhile { case (_, eventWhen) => eventWhen <= queryWhen }
+      val checks = for {RecordingsForAnId(historyId, historiesFrom, pertinentRecordings) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(queryWhen))
                         Seq(history) = historiesFrom(scope)}
         yield (historyId, history.datums, pertinentRecordings.map(_._1))
 
@@ -630,8 +628,7 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
 
       val scope = world.scopeFor(queryWhen, world.nextRevision)
 
-      val checks = for {RecordingsForAnId(historyId, historiesFrom, recordings) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(queryWhen))
-                        pertinentRecordings = recordings takeWhile { case (_, eventWhen) => eventWhen <= queryWhen }
+      val checks = for {RecordingsForAnId(historyId, historiesFrom, pertinentRecordings) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(queryWhen))
                         Seq(history) = historiesFrom(scope)}
         yield (historyId, history.datums, pertinentRecordings.map(_._1))
 
@@ -715,8 +712,7 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
 
       val scope = world.scopeFor(queryWhen, World.initialRevision + revisionOffsetToCheckAt)
 
-      val checks = for {RecordingsForAnId(historyId, historiesFrom, recordings) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(queryWhen))
-                        pertinentRecordings = recordings takeWhile { case (_, eventWhen) => eventWhen <= queryWhen }
+      val checks = for {RecordingsForAnId(historyId, historiesFrom, pertinentRecordings) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(queryWhen))
                         Seq(history) = historiesFrom(scope)}
         yield (historyId, history.datums, pertinentRecordings.map(_._1))
 
@@ -789,8 +785,7 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
       val checks = for {(revision, recordingsGroupedById) <- listOfRevisionsToCheckAtAndRecordingsGroupedById} yield {
         val scope = world.scopeFor(queryWhen, revision)
 
-        val checks = for {RecordingsForAnId(historyId, historiesFrom, recordings) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(queryWhen))
-                          pertinentRecordings = recordings takeWhile { case (_, eventWhen) => eventWhen <= queryWhen }
+        val checks = for {RecordingsForAnId(historyId, historiesFrom, pertinentRecordings) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(queryWhen))
                           Seq(history) = historiesFrom(scope)}
           yield (historyId, history.datums, pertinentRecordings.map(_._1))
 

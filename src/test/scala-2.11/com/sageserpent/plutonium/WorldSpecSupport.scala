@@ -105,15 +105,15 @@ trait WorldSpecSupport {
   }
 
   object RecordingsForAnId {
-    private def stripChanges(recordings: List[(Any, Unbounded[Instant], Change)]) = recordings map { case (data, eventWhen, _) => data -> eventWhen }
+    def stripChanges(recordings: List[(Any, Unbounded[Instant], Change)]) = recordings map { case (data, eventWhen, _) => data -> eventWhen }
 
     def stripData(recordings: List[(Any, Unbounded[Instant], Change)]) = recordings map { case (_, eventWhen, change) => eventWhen -> change }
 
-    def unapply(recordingsForAnId: RecordingsForAnId): Option[(Any, Scope => Seq[History], List[(Any, Unbounded[Instant])])] = {
-      recordingsForAnId match {
-        case RecordingsForAnOngoingId(historyId, historiesFrom, recordings) => Some(historyId, historiesFrom, stripChanges(recordings))
-      }
+    def eventWhens(recordings: List[(Any, Unbounded[Instant], Change)]) = {
+      recordings map { case (_, eventWhen, _) => eventWhen }
     }
+
+    def unapply(recordingsForAnId: RecordingsForAnId): Option[(Any, Scope => Seq[History], List[(Any, Unbounded[Instant])])] = Some(recordingsForAnId.historyId, recordingsForAnId.historiesFrom, recordingsForAnId.datums)
   }
 
   trait RecordingsForAnId {
@@ -123,15 +123,13 @@ trait WorldSpecSupport {
 
     val events: List[(Unbounded[Instant], Event)]
 
+    val datums: List[(Any, Unbounded[Instant])]
+
     val whenEarliestChangeHappened: Unbounded[Instant]
 
     def thePartNoLaterThan(when: Unbounded[Instant]): Option[RecordingsForAnId]
 
     def doesNotExistAt(when: Unbounded[Instant]): Option[RecordingsForAnId]
-
-    def eventWhens(recordings: List[(Any, Unbounded[Instant], Change)]) = {
-      recordings map { case (_, eventWhen, _) => eventWhen }
-  }
   }
 
   case class RecordingsForAnOngoingId(override val historyId: Any,
@@ -139,7 +137,9 @@ trait WorldSpecSupport {
                                       recordings: List[(Any, Unbounded[Instant], Change)]) extends RecordingsForAnId {
     override val events = RecordingsForAnId.stripData(recordings)
 
-    override val whenEarliestChangeHappened: Unbounded[Instant] = eventWhens(recordings) min
+    override val datums = RecordingsForAnId.stripChanges(recordings)
+
+    override val whenEarliestChangeHappened: Unbounded[Instant] = RecordingsForAnId.eventWhens(recordings) min
 
     override def thePartNoLaterThan(when: Unbounded[Instant]) = if (when >= whenEarliestChangeHappened)
       Some(this.copy(recordings = recordings takeWhile { case (_, eventWhen, _) => eventWhen <= when }))
