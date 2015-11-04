@@ -519,7 +519,7 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
 
 
   it should "create revisions with the strong exception-safety guarantee" in {
-    val testCaseGenerator = for {recordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator  // Use this flavour to raising unanticpated exceptions due to interspersing
+    val testCaseGenerator = for {recordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator  // Use this flavour to raising unanticipated exceptions due to interspersing
                                                                                                         // events referring to 'FooHistory' and 'MoreSpecificFooHistory' on the same id.
                                  faultyRecordingsGroupedById <- faultyRecordingsGroupedByIdGenerator
                                  seed <- seedGenerator
