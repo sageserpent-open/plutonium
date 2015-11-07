@@ -170,11 +170,14 @@ trait WorldSpecSupport {
     Gen.nonEmptyListOf(recordingsForAnOngoingIdGenerator) retryUntil idsAreNotRepeated
   }
 
-  def shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random: Random, events: List[(Unbounded[Instant], Event)]) = {
-    val recordingsGroupedByWhen = events groupBy (_._1)
-    random.shuffle(recordingsGroupedByWhen) flatMap (_._2)
-  }
+  def shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random: Random, recordingsGroupedById: List[RecordingsForAnId]) = {
+    def shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random: Random, events: List[(Unbounded[Instant], Event)]) = {
+      val recordingsGroupedByWhen = events groupBy (_._1)
+      random.shuffle(recordingsGroupedByWhen) flatMap (_._2)
+    }
 
+    shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, recordingsGroupedById flatMap (_.events))
+  }
 
   def recordEventsInWorld(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[(Option[(Unbounded[Instant], Event)], Int)]], asOfs: List[Instant], world: WorldUnderTest) = {
     revisionActions(bigShuffledHistoryOverLotsOfThings, asOfs, world) map (_.apply) force // Actually a piece of imperative code that looks functional - 'world' is being mutated as a side-effect; but the revisions are harvested functionally.
