@@ -1,8 +1,8 @@
 package com.sageserpent.plutonium
 
 /**
- * Created by Gerard on 21/09/2015.
- */
+  * Created by Gerard on 21/09/2015.
+  */
 
 import java.time.Instant
 
@@ -105,14 +105,12 @@ trait WorldSpecSupport {
   }
 
   object RecordingsForAnId {
-    private def stripChanges(recordings: List[(Any, Unbounded[Instant], Change)]) = recordings map {case(data, eventWhen, _) => data -> eventWhen}
-    def stripData(recordings: List[(Any, Unbounded[Instant], Change)]) = recordings map {case(_, eventWhen, change) => eventWhen -> change}
+    def stripChanges(recordings: List[(Any, Unbounded[Instant], Change)]) = recordings map { case (data, eventWhen, _) => data -> eventWhen }
 
-    def unapply(recordingsForAnId: RecordingsForAnId): Option[(Any, Scope => Seq[History], List[(Any, Unbounded[Instant])])] = {
-      recordingsForAnId match {
-        case RecordingsForAnOngoingId(historyId, historiesFrom, recordings) => Some(historyId, historiesFrom, stripChanges(recordings))
-        case RecordingsForAnIdWithFiniteLifespan(historyId, historiesFrom, recordings, _) => Some(historyId, historiesFrom, stripChanges(recordings))
-      }
+    def stripData(recordings: List[(Any, Unbounded[Instant], Change)]) = recordings map { case (_, eventWhen, change) => eventWhen -> change }
+
+    def eventWhens(recordings: List[(Any, Unbounded[Instant], Change)]) = {
+      recordings map { case (_, eventWhen, _) => eventWhen }
     }
   }
 
@@ -125,66 +123,51 @@ trait WorldSpecSupport {
 
     val whenEarliestChangeHappened: Unbounded[Instant]
 
-    def thePartNoLaterThan(when: Unbounded[Instant]): Option[RecordingsForAnId]
+    def thePartNoLaterThan(when: Unbounded[Instant]): Option[RecordingsNoLaterThan]
 
-    def doesNotExistAt(when: Unbounded[Instant]): Option[RecordingsForAnId]
+    def doesNotExistAt(when: Unbounded[Instant]): Option[NonExistentRecordings]
   }
 
-  case class RecordingsForAnOngoingId(override val historyId: Any,
-                                      override val historiesFrom: Scope => Seq[History],
-                                      recordings: List[(Any, Unbounded[Instant], Change)]) extends RecordingsForAnId {
+  case class RecordingsNoLaterThan(historyId: Any, historiesFrom: Scope => Seq[History], datums: List[(Any, Unbounded[Instant])])
+
+  case class NonExistentRecordings(historyId: Any, historiesFrom: Scope => Seq[History])
+
+  class RecordingsForAnOngoingId(override val historyId: Any,
+                                 override val historiesFrom: Scope => Seq[History],
+                                 recordings: List[(Any, Unbounded[Instant], Change)]) extends RecordingsForAnId {
     override val events = RecordingsForAnId.stripData(recordings)
 
-    override val whenEarliestChangeHappened: Unbounded[Instant] = recordings map { case (_, eventWhen, _) => eventWhen } min
+    override val whenEarliestChangeHappened: Unbounded[Instant] = RecordingsForAnId.eventWhens(recordings) min
 
     override def thePartNoLaterThan(when: Unbounded[Instant]) = if (when >= whenEarliestChangeHappened)
-      Some(this.copy(recordings = recordings takeWhile { case (_, eventWhen, _) => eventWhen <= when }))
+      Some(RecordingsNoLaterThan(historyId = historyId, historiesFrom = historiesFrom, datums = RecordingsForAnId.stripChanges(recordings takeWhile { case (_, eventWhen, _) => eventWhen <= when })))
     else
       None
 
     override def doesNotExistAt(when: Unbounded[Instant]) = if (when < whenEarliestChangeHappened)
-      Some(this)
+      Some(NonExistentRecordings(historyId = historyId, historiesFrom = historiesFrom))
     else
       None
   }
 
-  case class RecordingsForAnIdWithFiniteLifespan(override val historyId: Any,
-                                                 override val historiesFrom: Scope => Seq[History],
-                                                 recordings: List[(Any, Unbounded[Instant], Change)],
-                                                 annihilation: (Instant, Annihilation[_ <: Identified])) extends RecordingsForAnId {
-    override val whenEarliestChangeHappened: Unbounded[Instant] = recordings map { case (_, eventWhen, _) => eventWhen } min
-
-    val whenAnnihilated = Finite(annihilation._1)
-
-    override val events = RecordingsForAnId.stripData(recordings) :+ whenAnnihilated -> annihilation._2
-
-    override def thePartNoLaterThan(when: Unbounded[Instant]) = if (when < whenAnnihilated && when >= whenEarliestChangeHappened)
-      Some(RecordingsForAnOngoingId(historyId = historyId, historiesFrom = historiesFrom, recordings = recordings takeWhile { case (_, eventWhen, _) => eventWhen <= when }))
-    else
-      None
-
-    override def doesNotExistAt(when: Unbounded[Instant]) = if (when >= Finite(annihilation._1) || when < whenEarliestChangeHappened)
-      Some(this)
-    else
-      None
-  }
+  /*  case class RecordingsForAPhoenixId(override val historyId: Any,
+                                       override val historiesFrom: Scope => Seq[History],
+                                       finiteLifespans: List[RecordingsForAnIdWithFiniteLifespan],
+                                       latestLifespan: RecordingsForAnId) extends RecordingsForAnId {
+      require(finiteLifespans.forall(_.historyId == historyId))
+      require(finiteLifespans zip finiteLifespans.tail forall {case (earlierLifespan, laterLifespan) => earlierLifespan.whenAnnihilated <= laterLifespan.whenEarliestChangeHappened})
+      require(latestLifespan.historyId == historyId)
+      require(finiteLifespans.last.whenAnnihilated <= latestLifespan.whenEarliestChangeHappened)
+    }*/
 
   def recordingsGroupedByIdGenerator_(dataSamplesForAnIdGenerator: Gen[(Any, Scope => Seq[History], List[(Any, (Unbounded[Instant]) => Change)], Instant => Annihilation[_ <: Identified])], changeWhenGenerator: Gen[Unbounded[Instant]]) = {
     val recordingsForAnOngoingIdGenerator = for {(historyId, historiesFrom, dataSamples, annihilationFor) <- dataSamplesForAnIdGenerator
-                                                 sampleWhens <- Gen.listOfN(dataSamples.length, changeWhenGenerator) map (_ sorted)} yield RecordingsForAnOngoingId(historyId,
+                                                 sampleWhens <- Gen.listOfN(dataSamples.length, changeWhenGenerator) map (_ sorted)} yield new RecordingsForAnOngoingId(historyId,
       historiesFrom,
       for {((data, changeFor), when) <- dataSamples zip sampleWhens} yield (data, when, changeFor(when))): RecordingsForAnId
-    val recordingsForAnIdWithFiniteLifespanGenerator = for {(historyId, historiesFrom, dataSamples, annihilationFor) <- dataSamplesForAnIdGenerator
-                                                            sampleWhens <- Gen.listOfN(dataSamples.length, changeWhenGenerator) map (_ sorted)
-                                                            whenAnnihilated <- instantGenerator retryUntil (Finite(_) >= sampleWhens.last)} yield {
-      val annihilation = annihilationFor(whenAnnihilated)
-      RecordingsForAnIdWithFiniteLifespan(historyId,
-        historiesFrom,
-        for {((data, changeFor), when) <- dataSamples zip sampleWhens} yield (data, when, changeFor(when)),
-        whenAnnihilated -> annihilation): RecordingsForAnId
-    }
+
     def idsAreNotRepeated(recordings: List[RecordingsForAnId]) = recordings.size == (recordings map (_.historyId) distinct).size
-    Gen.nonEmptyListOf(Gen.frequency(2 -> recordingsForAnOngoingIdGenerator, 1 -> recordingsForAnIdWithFiniteLifespanGenerator)) retryUntil idsAreNotRepeated
+    Gen.nonEmptyListOf(recordingsForAnOngoingIdGenerator) retryUntil idsAreNotRepeated
   }
 
   def shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random: Random, events: List[(Unbounded[Instant], Event)]) = {
@@ -215,7 +198,7 @@ trait WorldSpecSupport {
          events = pieceOfHistory map {
            case (recording, eventId) => eventId -> (for ((_, change) <- recording) yield change)
          } toSeq} yield
-    () => world.revise(TreeMap(events: _*), asOf)
+      () => world.revise(TreeMap(events: _*), asOf)
   }
 
   def intersperseObsoleteRecordings(random: Random, recordings: immutable.Iterable[(Unbounded[Instant], Event)], obsoleteRecordings: immutable.Iterable[(Unbounded[Instant], Event)]): Stream[(Option[(Unbounded[Instant], Event)], Int)] = {
