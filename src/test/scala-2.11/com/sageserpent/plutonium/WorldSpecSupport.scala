@@ -173,8 +173,9 @@ trait WorldSpecSupport {
   def shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random: Random, recordingsGroupedById: List[RecordingsForAnId]) = {
     // PLAN: shuffle each lots of events on a per-id basis, keeping the annihilations out of the way. Then merge the results using random picking.
     def shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random: Random, events: List[(Unbounded[Instant], Event)]) = {
-      val recordingsGroupedByWhen = events groupBy (_._1)
-      random.shuffle(recordingsGroupedByWhen) flatMap (_._2)
+      val recordingsGroupedByWhen = events groupBy (_._1) map (_._2)
+
+      random.shuffle(recordingsGroupedByWhen) flatten
     }
 
     random.pickAlternatelyFrom(recordingsGroupedById map (_.events))
