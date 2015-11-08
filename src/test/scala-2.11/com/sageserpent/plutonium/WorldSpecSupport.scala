@@ -177,7 +177,7 @@ trait WorldSpecSupport {
     else
       None
 
-    override def doesNotExistAt(when: Unbounded[Instant]) = if (when >= whenAnnihilated && when < whenEarliestChangeHappened)
+    override def doesNotExistAt(when: Unbounded[Instant]) = if (when >= whenAnnihilated || when < whenEarliestChangeHappened)
       Some(NonExistentRecordings(historyId = historyId, historiesFrom = historiesFrom))
     else
       None
@@ -196,7 +196,12 @@ trait WorldSpecSupport {
   def recordingsGroupedByIdGenerator_(dataSamplesForAnIdGenerator: Gen[(Any, Scope => Seq[History], List[(Any, (Unbounded[Instant]) => Change)], Instant => Annihilation[_ <: Identified])], changeWhenGenerator: Gen[Unbounded[Instant]]) = {
     val recordingsForAnIdGenerator = for {(historyId, historiesFrom, dataSamples, annihilationFor) <- dataSamplesForAnIdGenerator
                                           sampleWhens <- Gen.listOfN(dataSamples.length, changeWhenGenerator) map (_ sorted)
-                                          whenAnnihilated <- Gen.option(instantGenerator retryUntil (Finite(_) >= sampleWhens.last))} yield {
+                                          lastSampleWhen = sampleWhens.last
+                                          whenAnnihilated <- lastSampleWhen match {
+                                            case NegativeInfinity() => Gen.option(instantGenerator)
+                                            case PositiveInfinity() => Gen.const(None)
+                                            case Finite(lastSampleDefiniteWhen) => Gen.option(Gen.frequency(3 -> Gen.posNum[Long], 1 -> Gen.const(0L)) map (lastSampleDefiniteWhen.plusSeconds(_)))
+                                          }} yield {
       val recordings = for {((data, changeFor), when) <- dataSamples zip sampleWhens} yield (data, when, changeFor(when))
       whenAnnihilated match {
         case Some(whenAnnihilated) =>
