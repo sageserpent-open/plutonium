@@ -9,6 +9,7 @@ import java.time.Instant
 import com.sageserpent.americium
 import com.sageserpent.americium.{Finite, PositiveInfinity, NegativeInfinity, Unbounded}
 import com.sageserpent.americium.randomEnrichment._
+import com.sageserpent.americium.seqEnrichment._
 import com.sageserpent.plutonium.World._
 import org.scalacheck.{Arbitrary, Gen}
 
@@ -171,11 +172,14 @@ trait WorldSpecSupport {
   }
 
   def shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random: Random, recordingsGroupedById: List[RecordingsForAnId]) = {
-    // PLAN: shuffle each lots of events on a per-id basis, keeping the annihilations out of the way. Then merge the results using random picking.
     def shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random: Random, events: List[(Unbounded[Instant], Event)]) = {
-      val recordingsGroupedByWhen = events groupBy (_._1) map (_._2)
+      val recordingsGroupedByWhen = events groupBy (_._1) map (_._2) toSeq
 
-      random.shuffle(recordingsGroupedByWhen) flatten
+      def groupContainsAnAnnihilation(group: List[(Unbounded[Instant], Event)]) = group.exists(PartialFunction.cond(_){case (_, _: Annihilation[_]) => true})
+
+      val groupedGroupsWithAnnihilationsIsolated = recordingsGroupedByWhen groupWhile {case (lhs, rhs) => !(groupContainsAnAnnihilation(lhs) && groupContainsAnAnnihilation(rhs))}
+
+      groupedGroupsWithAnnihilationsIsolated flatMap (random.shuffle(_)) flatten
     }
 
     random.pickAlternatelyFrom(recordingsGroupedById map (_.events) map (shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, _)))
