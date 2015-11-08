@@ -178,7 +178,7 @@ trait WorldSpecSupport {
       random.shuffle(recordingsGroupedByWhen) flatten
     }
 
-    random.pickAlternatelyFrom(recordingsGroupedById map (_.events))
+    random.pickAlternatelyFrom(recordingsGroupedById map (_.events) map (shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, _)))
   }
 
   def recordEventsInWorld(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[(Option[(Unbounded[Instant], Event)], Int)]], asOfs: List[Instant], world: WorldUnderTest) = {
