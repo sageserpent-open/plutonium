@@ -67,7 +67,12 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
                                  asOfToLatestEventWhenMap = TreeMap(asOfs zip (bigHistoryOverLotsOfThingsSortedInEventWhenOrder map (_.last) map eventWhenFrom): _*)
                                  chunksForRevisions = bigHistoryOverLotsOfThingsSortedInEventWhenOrder map (recordingAndEventIdPairs => eventWhenFrom(recordingAndEventIdPairs.head) -> eventWhenFrom(recordingAndEventIdPairs.last)) zip asOfs
                                  latestAsOfsThatMapUnambiguouslyToEventWhens = chunksForRevisions.groupWhile(chunksShareTheSameEventWhens) map (_.last._2)
-                                 queryWhen <- instantGenerator retryUntil (asOfToLatestEventWhenMap(latestAsOfsThatMapUnambiguouslyToEventWhens.head) <= americium.Finite(_))
+                                 latestEventWhenForEarliestAsOf = asOfToLatestEventWhenMap(latestAsOfsThatMapUnambiguouslyToEventWhens.head)
+                                 queryWhen <- latestEventWhenForEarliestAsOf match {
+                                   case NegativeInfinity() => instantGenerator
+                                   case PositiveInfinity() => Gen.fail
+                                   case Finite(latestDefiniteEventWhenForEarliestAsOf) => Gen.frequency(3 -> (Gen.posNum[Long] map (latestDefiniteEventWhenForEarliestAsOf.plusSeconds(_))), 1 -> Gen.const(latestDefiniteEventWhenForEarliestAsOf))
+                                 }
                                  asOfsIncludingAllEventsNoLaterThanTheQueryWhen = latestAsOfsThatMapUnambiguouslyToEventWhens takeWhile (asOf => asOfToLatestEventWhenMap(asOf) <= Finite(queryWhen))
     } yield (recordingsGroupedById, bigHistoryOverLotsOfThingsSortedInEventWhenOrder, asOfs, queryWhen, asOfToLatestEventWhenMap, asOfsIncludingAllEventsNoLaterThanTheQueryWhen)
     check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigHistoryOverLotsOfThingsSortedInEventWhenOrder, asOfs, queryWhen, asOfToLatestEventWhenMap, asOfsIncludingAllEventsNoLaterThanTheQueryWhen) =>

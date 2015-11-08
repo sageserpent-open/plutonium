@@ -200,7 +200,7 @@ trait WorldSpecSupport {
                                           whenAnnihilated <- lastSampleWhen match {
                                             case NegativeInfinity() => Gen.option(instantGenerator)
                                             case PositiveInfinity() => Gen.const(None)
-                                            case Finite(lastSampleDefiniteWhen) => Gen.option(Gen.frequency(3 -> Gen.posNum[Long], 1 -> Gen.const(0L)) map (lastSampleDefiniteWhen.plusSeconds(_)))
+                                            case Finite(lastSampleDefiniteWhen) => Gen.option(Gen.frequency(3 -> (Gen.posNum[Long] map (lastSampleDefiniteWhen.plusSeconds(_))), 1 -> Gen.const(lastSampleDefiniteWhen)))
                                           }} yield {
       val recordings = for {((data, changeFor), when) <- dataSamples zip sampleWhens} yield (data, when, changeFor(when))
       whenAnnihilated match {
