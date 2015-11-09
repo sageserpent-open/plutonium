@@ -106,11 +106,11 @@ trait WorldSpecSupport {
   }
 
   object RecordingsForAnId {
-    def stripChanges(recordings: List[(Any, Unbounded[Instant], Change)]) = recordings map { case (data, eventWhen, _) => data -> eventWhen }
+    def stripChanges(recordings: List[(Any, Unbounded[Instant], Event)]) = recordings map { case (data, eventWhen, _) => data -> eventWhen }
 
-    def stripData(recordings: List[(Any, Unbounded[Instant], Change)]) = recordings map { case (_, eventWhen, change) => eventWhen -> change }
+    def stripData(recordings: List[(Any, Unbounded[Instant], Event)]) = recordings map { case (_, eventWhen, change) => eventWhen -> change }
 
-    def eventWhens(recordings: List[(Any, Unbounded[Instant], Change)]) = {
+    def eventWhens(recordings: List[(Any, Unbounded[Instant], Event)]) = {
       recordings map { case (_, eventWhen, _) => eventWhen }
     }
   }
@@ -183,17 +183,40 @@ trait WorldSpecSupport {
       None
   }
 
-  /*  case class RecordingsForAPhoenixId(override val historyId: Any,
-                                       override val historiesFrom: Scope => Seq[History],
-                                       finiteLifespans: List[RecordingsForAnIdWithFiniteLifespan],
-                                       latestLifespan: RecordingsForAnId) extends RecordingsForAnId {
-      require(finiteLifespans.forall(_.historyId == historyId))
-      require(finiteLifespans zip finiteLifespans.tail forall {case (earlierLifespan, laterLifespan) => earlierLifespan.whenAnnihilated <= laterLifespan.whenEarliestChangeHappened})
-      require(latestLifespan.historyId == historyId)
-      require(finiteLifespans.last.whenAnnihilated <= latestLifespan.whenEarliestChangeHappened)
-    }*/
+  case class RecordingsForAPhoenixId(override val historyId: Any,
+                                     override val historiesFrom: Scope => Seq[History],
+                                     recordingsAndAnnihilations: List[(Any, Unbounded[Instant], Event)]) extends RecordingsForAnId {
+    require(PartialFunction.cond(recordingsAndAnnihilations.head) { case (_, _, _: Change) => true })
+
+    override val events = RecordingsForAnId.stripData(recordingsAndAnnihilations)
+
+    override val whenEarliestChangeHappened: Unbounded[Instant] = RecordingsForAnId.eventWhens(recordingsAndAnnihilations) min
+
+    private def datums(when: Unbounded[Instant]) = {
+      val relevantRecordingsAndAnnihilations = recordingsAndAnnihilations takeWhile { case (_, eventWhen, _) => eventWhen <= when }
+      val datums = RecordingsForAnId.stripChanges(relevantRecordingsAndAnnihilations.reverse takeWhile (!PartialFunction.cond(_) { case (_, _, _: Annihilation[_]) => true }) reverse)
+      datums
+    }
+
+    override def thePartNoLaterThan(when: Unbounded[Instant]): Option[RecordingsNoLaterThan] = {
+      val relevantDatums = datums(when)
+      if (relevantDatums.nonEmpty)
+        Some(RecordingsNoLaterThan(historyId = historyId, historiesFrom = historiesFrom, datums = relevantDatums))
+      else
+        None
+    }
+
+    override def doesNotExistAt(when: Unbounded[Instant]): Option[NonExistentRecordings] = {
+      val relevantDatums = datums(when)
+      if (relevantDatums.isEmpty)
+        Some(NonExistentRecordings(historyId = historyId, historiesFrom = historiesFrom))
+      else
+        None
+    }
+  }
 
   def recordingsGroupedByIdGenerator_(dataSamplesForAnIdGenerator: Gen[(Any, Scope => Seq[History], List[(Any, (Unbounded[Instant]) => Change)], Instant => Annihilation[_ <: Identified])], changeWhenGenerator: Gen[Unbounded[Instant]]) = {
+    // TODO - do the phoenix case as a completely separate generator, take the head sample, then follow by randomly picking from the remaining samples and a sequence of annihilations.
     val recordingsForAnIdGenerator = for {(historyId, historiesFrom, dataSamples, annihilationFor) <- dataSamplesForAnIdGenerator
                                           sampleWhens <- Gen.listOfN(dataSamples.length, changeWhenGenerator) map (_ sorted)
                                           lastSampleWhen = sampleWhens.last
