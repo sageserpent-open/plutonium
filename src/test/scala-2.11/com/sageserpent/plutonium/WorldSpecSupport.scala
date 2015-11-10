@@ -185,38 +185,40 @@ trait WorldSpecSupport {
   }
 
   def recordingsGroupedByIdGenerator_(dataSamplesForAnIdGenerator: Gen[(Any, Scope => Seq[History], List[(Any, (Unbounded[Instant]) => Change)], Instant => Annihilation[_ <: Identified])]) = {
-    // PLAN: split the data samples and the associated change whens into N chunks - all but the last get to be a recordings for a limited lifespan, the last is arbitrary.
+    def recordingsForAnIdGenerator_(historyId: Any, historiesFrom: Scope => Seq[History], annihilationFor: Instant => Annihilation[_ <: Identified])(dataSamples: List[(Any, (Unbounded[Instant]) => Change)], sampleWhens: List[Unbounded[Instant]]) = {
+      val lastSampleWhen = sampleWhens.last
+      for {whenAnnihilated <- lastSampleWhen match {
+        case NegativeInfinity() => Gen.option(instantGenerator)
+        case PositiveInfinity() => Gen.const(None)
+        case Finite(lastSampleDefiniteWhen) => Gen.option(Gen.frequency(3 -> (Gen.posNum[Long] map (lastSampleDefiniteWhen.plusSeconds(_))), 1 -> Gen.const(lastSampleDefiniteWhen)))
+      }} yield {
+        val recordings = for {((data, changeFor), when) <- dataSamples zip sampleWhens} yield (data, when, changeFor(when))
+        whenAnnihilated match {
+          case Some(whenAnnihilated) =>
+            val annihilation = annihilationFor(whenAnnihilated)
+            new RecordingsForAnIdWithFiniteLifespan(historyId,
+              historiesFrom,
+              recordings,
+              whenAnnihilated -> annihilation) with RecordingsForAnIdContract
+          case None =>
+            new RecordingsForAnOngoingId(historyId,
+              historiesFrom,
+              recordings) with RecordingsForAnIdContract
+        }
+      }
+    }
+
     val recordingsForAnIdGenerator = (for {(historyId, historiesFrom, dataSamples, annihilationFor) <- dataSamplesForAnIdGenerator
                                            sampleWhens <- Gen.listOfN(dataSamples.length, changeWhenGenerator) map (_ sorted)
                                            seed <- seedGenerator} yield {
-      def recordingsForAnIdGenerator_(dataSamples: List[(Any, (Unbounded[Instant]) => Change)], sampleWhens: List[Unbounded[Instant]]) = {
-        val lastSampleWhen = sampleWhens.last
-        for {whenAnnihilated <- lastSampleWhen match {
-          case NegativeInfinity() => Gen.option(instantGenerator)
-          case PositiveInfinity() => Gen.const(None)
-          case Finite(lastSampleDefiniteWhen) => Gen.option(Gen.frequency(3 -> (Gen.posNum[Long] map (lastSampleDefiniteWhen.plusSeconds(_))), 1 -> Gen.const(lastSampleDefiniteWhen)))
-        }} yield {
-          val recordings = for {((data, changeFor), when) <- dataSamples zip sampleWhens} yield (data, when, changeFor(when))
-          whenAnnihilated match {
-            case Some(whenAnnihilated) =>
-              val annihilation = annihilationFor(whenAnnihilated)
-              new RecordingsForAnIdWithFiniteLifespan(historyId,
-                historiesFrom,
-                recordings,
-                whenAnnihilated -> annihilation) with RecordingsForAnIdContract
-            case None =>
-              new RecordingsForAnOngoingId(historyId,
-                historiesFrom,
-                recordings) with RecordingsForAnIdContract
-          }
-        }
-      }
+
 
       val random = new Random(seed)
 
       val pieces = random.splitIntoNonEmptyPieces(dataSamples zip sampleWhens) map (_.toList) map (_.unzip)
 
-      Gen.sequence[List[RecordingsForAnId], RecordingsForAnId](pieces map { case (dataSamples, sampleWhens) => recordingsForAnIdGenerator_(dataSamples, sampleWhens) })
+      Gen.sequence[List[RecordingsForAnId], RecordingsForAnId](pieces map { case (dataSamples, sampleWhens) =>
+        recordingsForAnIdGenerator_(historyId, historiesFrom, annihilationFor)(dataSamples, sampleWhens) })
     }) flatMap identity
 
     def idsAreNotRepeated(recordingsInGroupsForId: List[List[RecordingsForAnId]]) = {
