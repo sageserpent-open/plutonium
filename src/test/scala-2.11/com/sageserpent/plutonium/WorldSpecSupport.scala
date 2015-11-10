@@ -5,7 +5,6 @@ package com.sageserpent.plutonium
   */
 
 import java.time.Instant
-import java.util
 
 import com.sageserpent.americium
 import com.sageserpent.americium._
@@ -208,23 +207,19 @@ trait WorldSpecSupport {
       }
     }
 
-    val recordingsForAnIdGenerator = (for {(historyId, historiesFrom, dataSamples, annihilationFor) <- dataSamplesForAnIdGenerator
-                                           sampleWhens <- Gen.listOfN(dataSamples.length, changeWhenGenerator) map (_ sorted)
-                                           seed <- seedGenerator} yield {
+    val recordingGroupsSharingTheSamePhoenixIdGenerator = for {(historyId, historiesFrom, dataSamples, annihilationFor) <- dataSamplesForAnIdGenerator
+                                                               sampleWhens <- Gen.listOfN(dataSamples.length, changeWhenGenerator) map (_ sorted)
+                                                               seed <- seedGenerator
+                                                               random = new Random(seed)
+                                                               pieces = random.splitIntoNonEmptyPieces(dataSamples zip sampleWhens) map (_.toList) map (_.unzip)
+                                                               recordingGroupsSharingTheSameId <- Gen.sequence[List[RecordingsForAnId], RecordingsForAnId](pieces map { case (dataSamples, sampleWhens) =>
+                                                                 recordingsForAnIdGenerator_(historyId, historiesFrom, annihilationFor)(dataSamples, sampleWhens)
+                                                               })} yield recordingGroupsSharingTheSameId
 
-
-      val random = new Random(seed)
-
-      val pieces = random.splitIntoNonEmptyPieces(dataSamples zip sampleWhens) map (_.toList) map (_.unzip)
-
-      Gen.sequence[List[RecordingsForAnId], RecordingsForAnId](pieces map { case (dataSamples, sampleWhens) =>
-        recordingsForAnIdGenerator_(historyId, historiesFrom, annihilationFor)(dataSamples, sampleWhens) })
-    }) flatMap identity
-
-    def idsAreNotRepeated(recordingsInGroupsForId: List[List[RecordingsForAnId]]) = {
-      recordingsInGroupsForId map (_.head.historyId) groupBy identity forall { case (_, repeatedIdGroup) => 1 == repeatedIdGroup.size }
+    def idsAreNotRepeatedBetweenPhoenixGroups(recordingsInPhoenixIdGroups: List[List[RecordingsForAnId]]) = {
+      recordingsInPhoenixIdGroups map (_.head.historyId) groupBy identity forall { case (_, repeatedIdGroup) => 1 == repeatedIdGroup.size }
     }
-    Gen.nonEmptyListOf(recordingsForAnIdGenerator) retryUntil idsAreNotRepeated map (_.flatten)
+    Gen.nonEmptyListOf(recordingGroupsSharingTheSamePhoenixIdGenerator) retryUntil idsAreNotRepeatedBetweenPhoenixGroups map (_.flatten)
   }
 
   def shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random: Random, recordingsGroupedById: List[RecordingsForAnId]) = {
