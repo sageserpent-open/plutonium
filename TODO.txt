@@ -64,6 +64,8 @@ that the scope in a spore captures all the history up to, but not including, the
 
 (THIS IS ALREADY TESTED INDIRECTLY - HAVE ADDED COMMENTARY TO DOCUMENT THIS)
 
+11. Use mixin technique to do design-by-contract precondition checking in a trait for the various bits and pieces.
+
 
 
 
