@@ -127,6 +127,7 @@ object WorldReferenceImplementation {
 
           event match {
             case Change(_, update) => update(scopeForEvent)
+            case _: Annihilation[_] =>
           }
         }
       }

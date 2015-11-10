@@ -7,8 +7,9 @@ package com.sageserpent.plutonium
 import java.time.Instant
 
 import com.sageserpent.americium
-import com.sageserpent.americium.{Finite, PositiveInfinity, NegativeInfinity, Unbounded}
+import com.sageserpent.americium._
 import com.sageserpent.americium.randomEnrichment._
+import com.sageserpent.americium.seqEnrichment._
 import com.sageserpent.plutonium.World._
 import org.scalacheck.{Arbitrary, Gen}
 
@@ -128,6 +129,11 @@ trait WorldSpecSupport {
     def doesNotExistAt(when: Unbounded[Instant]): Option[NonExistentRecordings]
   }
 
+  trait RecordingsForAnIdContract {
+    self: RecordingsForAnId =>
+    require(BargainBasement.isSorted(events map (_._1)))
+  }
+
   case class RecordingsNoLaterThan(historyId: Any, historiesFrom: Scope => Seq[History], datums: List[(Any, Unbounded[Instant])])
 
   case class NonExistentRecordings(historyId: Any, historiesFrom: Scope => Seq[History])
@@ -150,32 +156,72 @@ trait WorldSpecSupport {
       None
   }
 
-  /*  case class RecordingsForAPhoenixId(override val historyId: Any,
-                                       override val historiesFrom: Scope => Seq[History],
-                                       finiteLifespans: List[RecordingsForAnIdWithFiniteLifespan],
-                                       latestLifespan: RecordingsForAnId) extends RecordingsForAnId {
-      require(finiteLifespans.forall(_.historyId == historyId))
-      require(finiteLifespans zip finiteLifespans.tail forall {case (earlierLifespan, laterLifespan) => earlierLifespan.whenAnnihilated <= laterLifespan.whenEarliestChangeHappened})
-      require(latestLifespan.historyId == historyId)
-      require(finiteLifespans.last.whenAnnihilated <= latestLifespan.whenEarliestChangeHappened)
-    }*/
+  class RecordingsForAnIdWithFiniteLifespan(override val historyId: Any,
+                                            override val historiesFrom: Scope => Seq[History],
+                                            recordings: List[(Any, Unbounded[Instant], Change)],
+                                            annihilation: (Instant, Annihilation[_ <: Identified])) extends RecordingsForAnId {
+    val changes = RecordingsForAnId.stripData(recordings)
+
+    val whenAnnihilated = Finite(annihilation._1)
+
+    require(whenAnnihilated >= changes.last._1)
+
+    val annihilationEvent = annihilation._2
+
+    override val events = changes :+ whenAnnihilated -> annihilationEvent
+
+    override val whenEarliestChangeHappened: Unbounded[Instant] = RecordingsForAnId.eventWhens(recordings) min
+
+    override def thePartNoLaterThan(when: Unbounded[Instant]) = if (when < whenAnnihilated && when >= whenEarliestChangeHappened)
+      Some(RecordingsNoLaterThan(historyId = historyId, historiesFrom = historiesFrom, datums = RecordingsForAnId.stripChanges(recordings takeWhile { case (_, eventWhen, _) => eventWhen <= when })))
+    else
+      None
+
+    override def doesNotExistAt(when: Unbounded[Instant]) = if (when >= whenAnnihilated || when < whenEarliestChangeHappened)
+      Some(NonExistentRecordings(historyId = historyId, historiesFrom = historiesFrom))
+    else
+      None
+  }
 
   def recordingsGroupedByIdGenerator_(dataSamplesForAnIdGenerator: Gen[(Any, Scope => Seq[History], List[(Any, (Unbounded[Instant]) => Change)], Instant => Annihilation[_ <: Identified])], changeWhenGenerator: Gen[Unbounded[Instant]]) = {
-    val recordingsForAnOngoingIdGenerator = for {(historyId, historiesFrom, dataSamples, annihilationFor) <- dataSamplesForAnIdGenerator
-                                                 sampleWhens <- Gen.listOfN(dataSamples.length, changeWhenGenerator) map (_ sorted)} yield new RecordingsForAnOngoingId(historyId,
+    val recordingsForAnIdGenerator = for {(historyId, historiesFrom, dataSamples, annihilationFor) <- dataSamplesForAnIdGenerator
+                                          sampleWhens <- Gen.listOfN(dataSamples.length, changeWhenGenerator) map (_ sorted)
+                                          lastSampleWhen = sampleWhens.last
+                                          whenAnnihilated <- lastSampleWhen match {
+                                            case NegativeInfinity() => Gen.option(instantGenerator)
+                                            case PositiveInfinity() => Gen.const(None)
+                                            case Finite(lastSampleDefiniteWhen) => Gen.option(Gen.frequency(3 -> (Gen.posNum[Long] map (lastSampleDefiniteWhen.plusSeconds(_))), 1 -> Gen.const(lastSampleDefiniteWhen)))
+                                          }} yield {
+      val recordings = for {((data, changeFor), when) <- dataSamples zip sampleWhens} yield (data, when, changeFor(when))
+      whenAnnihilated match {
+        case Some(whenAnnihilated) =>
+          val annihilation = annihilationFor(whenAnnihilated)
+          new RecordingsForAnIdWithFiniteLifespan(historyId,
       historiesFrom,
-      for {((data, changeFor), when) <- dataSamples zip sampleWhens} yield (data, when, changeFor(when))): RecordingsForAnId
-
-    def idsAreNotRepeated(recordings: List[RecordingsForAnId]) = recordings.size == (recordings map (_.historyId) distinct).size
-    Gen.nonEmptyListOf(recordingsForAnOngoingIdGenerator) retryUntil idsAreNotRepeated
+            recordings,
+            whenAnnihilated -> annihilation) with RecordingsForAnIdContract
+        case None =>
+          new RecordingsForAnOngoingId(historyId,
+            historiesFrom,
+            recordings) with RecordingsForAnIdContract
+      }
+    }
+    def idsAreNotRepeated(recordings: List[RecordingsForAnId]) = {
+      recordings groupBy (_.historyId) forall {case (_, group) => 1 == group.size}
+  }
+    Gen.nonEmptyListOf(recordingsForAnIdGenerator) retryUntil idsAreNotRepeated
   }
 
   def shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random: Random, recordingsGroupedById: List[RecordingsForAnId]) = {
     // PLAN: shuffle each lots of events on a per-id basis, keeping the annihilations out of the way. Then merge the results using random picking.
     def shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random: Random, events: List[(Unbounded[Instant], Event)]) = {
-      val recordingsGroupedByWhen = events groupBy (_._1) map (_._2)
+      val recordingsGroupedByWhen = events groupBy (_._1) map (_._2) toSeq
 
-      random.shuffle(recordingsGroupedByWhen) flatten
+      def groupContainsAnAnnihilation(group: List[(Unbounded[Instant], Event)]) = group.exists(PartialFunction.cond(_) { case (_, _: Annihilation[_]) => true })
+
+      val groupedGroupsWithAnnihilationsIsolated = recordingsGroupedByWhen groupWhile { case (lhs, rhs) => !(groupContainsAnAnnihilation(lhs) && groupContainsAnAnnihilation(rhs)) }
+
+      groupedGroupsWithAnnihilationsIsolated flatMap (random.shuffle(_)) flatten
     }
 
     random.pickAlternatelyFrom(recordingsGroupedById map (_.events) map (shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, _)))
