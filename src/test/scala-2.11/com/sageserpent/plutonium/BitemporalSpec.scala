@@ -19,7 +19,7 @@ import scalaz.{Equal, MonadPlus}
 class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
   val integerDataSamplesForAnIdGenerator = dataSamplesForAnIdGenerator_[IntegerHistory](integerDataSampleGenerator(faulty = false), integerHistoryIdGenerator)
 
-  val integerHistoryRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(integerDataSamplesForAnIdGenerator, changeWhenGenerator)
+  val integerHistoryRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(integerDataSamplesForAnIdGenerator)
 
   "The class Bitemporal" should "be a monad plus instance" in {
     val testCaseGenerator = for {integerHistoryRecordingsGroupedById <- integerHistoryRecordingsGroupedByIdGenerator

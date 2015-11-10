@@ -183,7 +183,7 @@ trait WorldSpecSupport {
       None
   }
 
-  def recordingsGroupedByIdGenerator_(dataSamplesForAnIdGenerator: Gen[(Any, Scope => Seq[History], List[(Any, (Unbounded[Instant]) => Change)], Instant => Annihilation[_ <: Identified])], changeWhenGenerator: Gen[Unbounded[Instant]]) = {
+  def recordingsGroupedByIdGenerator_(dataSamplesForAnIdGenerator: Gen[(Any, Scope => Seq[History], List[(Any, (Unbounded[Instant]) => Change)], Instant => Annihilation[_ <: Identified])]) = {
     val recordingsForAnIdGenerator = for {(historyId, historiesFrom, dataSamples, annihilationFor) <- dataSamplesForAnIdGenerator
                                           sampleWhens <- Gen.listOfN(dataSamples.length, changeWhenGenerator) map (_ sorted)
                                           lastSampleWhen = sampleWhens.last
@@ -299,7 +299,7 @@ trait WorldSpecSupport {
       dataSamplesForAnIdGenerator_[MoreSpecificFooHistory](moreSpecificFooDataSampleGenerator(faulty), moreSpecificFooHistoryIdGenerator)) map (1 -> _): _*)
 
     val disjointLeftHandDataSamplesForAnIdGenerator = mixedDisjointLeftHandDataSamplesForAnIdGenerator
-    val disjointLeftHandRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(disjointLeftHandDataSamplesForAnIdGenerator, changeWhenGenerator)
+    val disjointLeftHandRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(disjointLeftHandDataSamplesForAnIdGenerator)
 
     val mixedDisjointRightHandDataSamplesForAnIdGenerator = Gen.frequency(Seq(
       dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator3(faulty), barHistoryIdGenerator),
@@ -308,7 +308,7 @@ trait WorldSpecSupport {
       dataSamplesForAnIdGenerator_[IntegerHistory](integerDataSampleGenerator(faulty), integerHistoryIdGenerator)) map (1 -> _): _*)
 
     val disjointRightHandDataSamplesForAnIdGenerator = mixedDisjointRightHandDataSamplesForAnIdGenerator
-    val disjointRightHandRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(disjointRightHandDataSamplesForAnIdGenerator, changeWhenGenerator)
+    val disjointRightHandRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(disjointRightHandDataSamplesForAnIdGenerator)
 
     val recordingsWithPotentialSharingOfIdsAcrossTheTwoDisjointHands = for {leftHandRecordingsGroupedById <- disjointLeftHandRecordingsGroupedByIdGenerator
                                                                             rightHandRecordingsGroupedById <- disjointRightHandRecordingsGroupedByIdGenerator} yield leftHandRecordingsGroupedById -> rightHandRecordingsGroupedById
@@ -330,5 +330,5 @@ trait WorldSpecSupport {
     dataSamplesForAnIdGenerator_[IntegerHistory](integerDataSampleGenerator(faulty), integerHistoryIdGenerator)) map (1 -> _): _*)
 
   val nonConflictingDataSamplesForAnIdGenerator = mixedNonConflictingDataSamplesForAnIdGenerator()
-  val nonConflictingRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(nonConflictingDataSamplesForAnIdGenerator, changeWhenGenerator)
+  val nonConflictingRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(nonConflictingDataSamplesForAnIdGenerator)
 }
