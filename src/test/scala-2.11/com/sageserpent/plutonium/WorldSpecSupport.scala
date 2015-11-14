@@ -184,6 +184,11 @@ trait WorldSpecSupport {
   }
 
   def recordingsGroupedByIdGenerator_(dataSamplesForAnIdGenerator: Gen[(Any, Scope => Seq[History], List[(Any, (Unbounded[Instant]) => Change)], Instant => Annihilation[_ <: Identified])]) = {
+    // TODO - have to make sure that the each phoenix group only gets limited lifespan recordings in its 'init'
+    // - currently ongoing lifespans can be mixed into the 'init' as well.
+    // The tail of a phoenix group on the other hand is fair game.
+
+    // TODO: pass in a flag that jemmies the generator into making a limited lifespan each time.
     def recordingsForAnIdGenerator_(historyId: Any, historiesFrom: Scope => Seq[History], annihilationFor: Instant => Annihilation[_ <: Identified])(dataSamples: List[(Any, (Unbounded[Instant]) => Change)], sampleWhens: List[Unbounded[Instant]]) = {
       val lastSampleWhen = sampleWhens.last
       for {whenAnnihilated <- lastSampleWhen match {
@@ -212,6 +217,7 @@ trait WorldSpecSupport {
                                                                seed <- seedGenerator
                                                                random = new Random(seed)
                                                                pieces = random.splitIntoNonEmptyPieces(dataSamples zip sampleWhens) map (_.toList) map (_.unzip)
+                                                               // TODO - split 'pieces' into its 'init' and tail here and do the *right thing*.
                                                                recordingGroupsSharingTheSameId <- Gen.sequence[List[RecordingsForAnId], RecordingsForAnId](pieces map { case (dataSamples, sampleWhens) =>
                                                                  recordingsForAnIdGenerator_(historyId, historiesFrom, annihilationFor)(dataSamples, sampleWhens)
                                                                })} yield recordingGroupsSharingTheSameId
