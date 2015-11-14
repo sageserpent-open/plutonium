@@ -183,49 +183,71 @@ trait WorldSpecSupport {
       None
   }
 
+  class RecordingsForAPhoenixId(override val historyId: Any,
+                                override val historiesFrom: Scope => Seq[History],
+                                annihilationFor: Instant => Annihilation[_ <: Identified],
+                                dataSamplesGroupedForLifespans: Stream[Traversable[(Any, (Unbounded[Instant]) => Change)]],
+                                sampleWhensGroupedForLifespans: Stream[List[Unbounded[Instant]]]) extends RecordingsForAnId {
+    require(dataSamplesGroupedForLifespans.size == sampleWhensGroupedForLifespans.size)
+    require({
+      val sampleWhens = sampleWhensGroupedForLifespans.flatten
+      sampleWhens zip sampleWhens.tail forall { case (lhs, rhs) => lhs <= rhs }
+    })
+
+    override val events: List[(Unbounded[Instant], Event)] = (for {
+      (dataSamples, eventWhens) <- dataSamplesGroupedForLifespans zip sampleWhensGroupedForLifespans
+    } yield {
+      val numberOfChanges = dataSamples.size
+      val changes = dataSamples.toSeq zip eventWhens map { case ((_, changeFor), eventWhen) => changeFor(eventWhen) }
+      eventWhens zip (if (numberOfChanges < eventWhens.size)
+        changes :+ annihilationFor(eventWhens.last match { case Finite(definiteWhen) => definiteWhen })
+      else
+        changes)
+    }).toList flatten
+
+    override def doesNotExistAt(when: Unbounded[Instant]): Option[NonExistentRecordings] = ???
+
+    override def thePartNoLaterThan(when: Unbounded[Instant]): Option[RecordingsNoLaterThan] = ???
+
+    override val whenEarliestChangeHappened: Unbounded[Instant] = ???
+  }
+
   def recordingsGroupedByIdGenerator_(dataSamplesForAnIdGenerator: Gen[(Any, Scope => Seq[History], List[(Any, (Unbounded[Instant]) => Change)], Instant => Annihilation[_ <: Identified])]) = {
-    // TODO - have to make sure that the each phoenix group only gets limited lifespan recordings in its 'init'
-    // - currently ongoing lifespans can be mixed into the 'init' as well.
-    // The tail of a phoenix group on the other hand is fair game.
+    val recordingsForAnIdGenerator = for {(historyId, historiesFrom, dataSamples, annihilationFor) <- dataSamplesForAnIdGenerator
+                                          seed <- seedGenerator
+                                          random = new Random(seed)
+                                          dataSamplesGroupedForLifespans = random.splitIntoNonEmptyPieces(dataSamples)
+                                          finalLifespanIsOngoing <- Arbitrary.arbitrary[Boolean]
+                                          numberOfEventsForLifespans = {
+                                            def numberOfEventsForLimitedLifespans(dataSamplesGroupedForLimitedLifespans: Stream[Traversable[(Any, (Unbounded[Instant]) => Change)]]) = {
+                                              // Add an extra when for the annihilation at the end of the lifespan...
+                                              dataSamplesGroupedForLimitedLifespans map (1 + _.size)
+                                            }
+                                            if (finalLifespanIsOngoing) {
+                                              val (dataSamplesGroupedForLimitedLifespans, dataSamplesGroupForEternalLife) = dataSamplesGroupedForLifespans splitAt (dataSamplesGroupedForLifespans.size - 1)
+                                              numberOfEventsForLimitedLifespans(dataSamplesGroupedForLimitedLifespans) :+ dataSamplesGroupForEternalLife.size
+                                            }
+                                            else
+                                              numberOfEventsForLimitedLifespans(dataSamplesGroupedForLifespans)
+                                          }
+                                          numberOfEventsOverall = numberOfEventsForLifespans.sum
+                                          sampleWhens <- Gen.listOfN(numberOfEventsOverall, changeWhenGenerator) map (_ sorted)
+                                          sampleWhensGroupedForLifespans = stream.unfold(numberOfEventsForLifespans -> sampleWhens) {
+                                            case (numberOfEvents #:: remainingNumberOfEventsForLifespans, sampleWhens) => {
+                                              val (sampleWhenGroup, remainingSampleWhens) = sampleWhens splitAt numberOfEvents
+                                              Some(sampleWhenGroup, remainingNumberOfEventsForLifespans -> remainingSampleWhens)
+                                            }
+                                            case (Stream.Empty, _) => None
+                                          }
+                                          firstAnnihilationHasBeenAlignedWithADefiniteWhen = 1 == sampleWhensGroupedForLifespans.size ||
+                                            PartialFunction.cond(sampleWhensGroupedForLifespans.head.last) { case Finite(_) => true }
+                                          if firstAnnihilationHasBeenAlignedWithADefiniteWhen
+    } yield new RecordingsForAPhoenixId(historyId, historiesFrom, annihilationFor, dataSamplesGroupedForLifespans, sampleWhensGroupedForLifespans)
 
-    // TODO: pass in a flag that jemmies the generator into making a limited lifespan each time.
-    def recordingsForAnIdGenerator_(historyId: Any, historiesFrom: Scope => Seq[History], annihilationFor: Instant => Annihilation[_ <: Identified])(dataSamples: List[(Any, (Unbounded[Instant]) => Change)], sampleWhens: List[Unbounded[Instant]]) = {
-      val lastSampleWhen = sampleWhens.last
-      for {whenAnnihilated <- lastSampleWhen match {
-        case NegativeInfinity() => Gen.option(instantGenerator)
-        case PositiveInfinity() => Gen.const(None)
-        case Finite(lastSampleDefiniteWhen) => Gen.option(Gen.frequency(3 -> (Gen.posNum[Long] map (lastSampleDefiniteWhen.plusSeconds(_))), 1 -> Gen.const(lastSampleDefiniteWhen)))
-      }} yield {
-        val recordings = for {((data, changeFor), when) <- dataSamples zip sampleWhens} yield (data, when, changeFor(when))
-        whenAnnihilated match {
-          case Some(whenAnnihilated) =>
-            val annihilation = annihilationFor(whenAnnihilated)
-            new RecordingsForAnIdWithFiniteLifespan(historyId,
-              historiesFrom,
-              recordings,
-              whenAnnihilated -> annihilation) with RecordingsForAnIdContract
-          case None =>
-            new RecordingsForAnOngoingId(historyId,
-              historiesFrom,
-              recordings) with RecordingsForAnIdContract
-        }
-      }
+    def idsAreNotRepeated(recordingsInPhoenixIdGroups: List[RecordingsForAnId]) = {
+      recordingsInPhoenixIdGroups groupBy (_.historyId) forall { case (_, repeatedIdGroup) => 1 == repeatedIdGroup.size }
     }
-
-    val recordingGroupsSharingTheSamePhoenixIdGenerator = for {(historyId, historiesFrom, dataSamples, annihilationFor) <- dataSamplesForAnIdGenerator
-                                                               sampleWhens <- Gen.listOfN(dataSamples.length, changeWhenGenerator) map (_ sorted)
-                                                               seed <- seedGenerator
-                                                               random = new Random(seed)
-                                                               pieces = random.splitIntoNonEmptyPieces(dataSamples zip sampleWhens) map (_.toList) map (_.unzip)
-                                                               // TODO - split 'pieces' into its 'init' and tail here and do the *right thing*.
-                                                               recordingGroupsSharingTheSameId <- Gen.sequence[List[RecordingsForAnId], RecordingsForAnId](pieces map { case (dataSamples, sampleWhens) =>
-                                                                 recordingsForAnIdGenerator_(historyId, historiesFrom, annihilationFor)(dataSamples, sampleWhens)
-                                                               })} yield recordingGroupsSharingTheSameId
-
-    def idsAreNotRepeatedBetweenPhoenixGroups(recordingsInPhoenixIdGroups: List[List[RecordingsForAnId]]) = {
-      recordingsInPhoenixIdGroups map (_.head.historyId) groupBy identity forall { case (_, repeatedIdGroup) => 1 == repeatedIdGroup.size }
-    }
-    Gen.nonEmptyListOf(recordingGroupsSharingTheSamePhoenixIdGenerator) retryUntil idsAreNotRepeatedBetweenPhoenixGroups map (_.flatten)
+    Gen.nonEmptyListOf(recordingsForAnIdGenerator) retryUntil idsAreNotRepeated
   }
 
   def shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random: Random, recordingsGroupedById: List[RecordingsForAnId]) = {
