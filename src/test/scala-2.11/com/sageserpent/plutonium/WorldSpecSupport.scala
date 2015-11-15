@@ -278,7 +278,9 @@ trait WorldSpecSupport {
   def shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random: Random, recordingsGroupedById: List[RecordingsForAnId]) = {
     // PLAN: shuffle each lots of events on a per-id basis, keeping the annihilations out of the way. Then merge the results using random picking.
     def shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random: Random, events: List[(Unbounded[Instant], Event)]) = {
-      val recordingsGroupedByWhen = events groupBy (_._1) map (_._2) toSeq
+      // NOTE: 'groupBy' actually destroys the sort order, so we have to sort after grouping. We have to do this to
+      // keep the annihilations after the events that define the lifespan of the items that get annihilated.
+      val recordingsGroupedByWhen = (events groupBy (_._1)).toSeq sortBy (_._1) map (_._2)
 
       def groupContainsAnAnnihilation(group: List[(Unbounded[Instant], Event)]) = group.exists(PartialFunction.cond(_) { case (_, _: Annihilation[_]) => true })
 
