@@ -230,7 +230,7 @@ trait WorldSpecSupport {
   }
 
   def recordingsGroupedByIdGenerator_(dataSamplesForAnIdGenerator: Gen[(Any, Scope => Seq[History], List[(Any, (Unbounded[Instant]) => Change)], Instant => Annihilation[_ <: Identified])]) = {
-    val recordingsForAnIdGenerator = for {(historyId, historiesFrom, dataSamples, annihilationFor) <- dataSamplesForAnIdGenerator
+    val unconstrainedParametersGenerator = for {(historyId, historiesFrom, dataSamples, annihilationFor) <- dataSamplesForAnIdGenerator
                                           seed <- seedGenerator
                                           random = new Random(seed)
                                           dataSamplesGroupedForLifespans = random.splitIntoNonEmptyPieces(dataSamples)
@@ -259,11 +259,15 @@ trait WorldSpecSupport {
                                           noAnnihilationsToWorryAbout = finalLifespanIsOngoing && 1 == sampleWhensGroupedForLifespans.size
                                           firstAnnihilationHasBeenAlignedWithADefiniteWhen = noAnnihilationsToWorryAbout ||
                                             PartialFunction.cond(sampleWhensGroupedForLifespans.head.last) { case Finite(_) => true }
-                                          if firstAnnihilationHasBeenAlignedWithADefiniteWhen
-    } yield new RecordingsForAPhoenixId(historyId, historiesFrom, annihilationFor, dataSamplesGroupedForLifespans, sampleWhensGroupedForLifespans) with RecordingsForAnIdContract
+    } yield (firstAnnihilationHasBeenAlignedWithADefiniteWhen -> (historyId, historiesFrom, annihilationFor, dataSamplesGroupedForLifespans, sampleWhensGroupedForLifespans))
 
-    def idsAreNotRepeated(recordingsInPhoenixIdGroups: List[RecordingsForAnId]) = {
-      recordingsInPhoenixIdGroups groupBy (_.historyId) forall { case (_, repeatedIdGroup) => 1 == repeatedIdGroup.size }
+    val parametersGenerator = unconstrainedParametersGenerator retryUntil {case (firstAnnihilationHasBeenAlignedWithADefiniteWhen, _) => firstAnnihilationHasBeenAlignedWithADefiniteWhen} map (_._2)
+
+    val recordingsForAnIdGenerator = for ((historyId, historiesFrom, annihilationFor, dataSamplesGroupedForLifespans, sampleWhensGroupedForLifespans) <- parametersGenerator)
+      yield new RecordingsForAPhoenixId(historyId, historiesFrom, annihilationFor, dataSamplesGroupedForLifespans, sampleWhensGroupedForLifespans) with RecordingsForAnIdContract
+
+    def idsAreNotRepeated(recordingsForVariousIds: List[RecordingsForAnId]) = {
+      recordingsForVariousIds groupBy (_.historyId) forall { case (_, repeatedIdGroup) => 1 == repeatedIdGroup.size }
     }
     Gen.nonEmptyListOf(recordingsForAnIdGenerator) retryUntil idsAreNotRepeated
   }
