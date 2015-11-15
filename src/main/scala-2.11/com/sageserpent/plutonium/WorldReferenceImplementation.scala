@@ -16,8 +16,8 @@ import scala.reflect.runtime._
 import scala.reflect.runtime.universe._
 
 /**
- * Created by Gerard on 19/07/2015.
- */
+  * Created by Gerard on 19/07/2015.
+  */
 
 
 object WorldReferenceImplementation {
@@ -126,7 +126,7 @@ object WorldReferenceImplementation {
 
           event match {
             case Change(_, update) => update(scopeForEvent)
-            case _: Annihilation[_] =>
+            case Annihilation(_, id) => identifiedItemsScopeThis.itemNoLongerExistsFor(id)
           }
         }
       }
@@ -152,6 +152,19 @@ object WorldReferenceImplementation {
       if (needToConstructItem) {
         idToItemsMultiMap.addBinding(id, constructFrom(id))
       }
+    }
+
+    private def itemNoLongerExistsFor[Raw <: Identified : TypeTag](id: Raw#Id): Unit = {
+      // TODO - suppose the item doesn't exist to start with - shouldn't this cause a precondition failure?
+
+      val items = idToItemsMultiMap.getOrElse(id, scala.collection.mutable.Set.empty[Identified])
+
+      idToItemsMultiMap.remove(id)
+
+      items --= IdentifiedItemsScopeImplementation.yieldOnlyItemsOfType(items toStream)
+
+      if (items.nonEmpty)
+        idToItemsMultiMap(id) = items
     }
 
 
