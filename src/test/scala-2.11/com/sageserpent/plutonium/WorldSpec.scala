@@ -1,8 +1,8 @@
 package com.sageserpent.plutonium
 
 /**
- * Created by Gerard on 19/07/2015.
- */
+  * Created by Gerard on 19/07/2015.
+  */
 
 import java.time.Instant
 import java.time.temporal.ChronoUnit
@@ -121,10 +121,12 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
       val checks = for {(earlierAsOfCorrespondingToRevision, laterAsOfSharingTheSameRevisionAsTheEarlierOne, revision) <- asOfsAndSharedRevisionTriples
                         baselineScope = world.scopeFor(queryWhen, earlierAsOfCorrespondingToRevision)
                         scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne = world.scopeFor(queryWhen, laterAsOfSharingTheSameRevisionAsTheEarlierOne)
-                        NonExistentRecordings(historyId, historiesFrom) <- recordingsGroupedById flatMap (_.doesNotExistAt(queryWhen))}
+                        NonExistentRecordings(historyId, historiesFrom) <- recordingsGroupedById flatMap (_.doesNotExistAt(queryWhen))
+                        if (historiesFrom(baselineScope).isEmpty) // It might not be, because we may be at an 'asOf' before the annihilation was introduced.
+      }
         yield (historyId, historiesFrom, baselineScope, scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne)
 
-      Prop.all(checks.map { case (historyId, historiesFrom, baselineScope, scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne) => (historiesFrom(baselineScope).isEmpty && historiesFrom(scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne).isEmpty) :| s"For ${historyId}, neither scope should yield a history."
+      Prop.all(checks.map { case (historyId, historiesFrom, baselineScope, scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne) => (historiesFrom(scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne).isEmpty) :| s"For ${historyId}, neither scope should yield a history."
       }: _*)
     })
   }
@@ -427,7 +429,7 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
         }
       }
 
-      val asOfAndNextRevisionPairs = (List(expectedAsOfBeforeInitialRevision -> (World.initialRevision -> World.initialRevision)) /: asOfs.map(Finite(_)))(asOfAndNextRevisionPairs_) reverse
+      val asOfAndNextRevisionPairs = (List(expectedAsOfBeforeInitialRevision -> (World.initialRevision -> World.initialRevision)) /: asOfs.map(Finite(_))) (asOfAndNextRevisionPairs_) reverse
 
       val checksViaNextRevision = for {(asOf, (nextRevisionAfterDuplicates, nextRevisionAfterFirstDuplicate)) <- asOfAndNextRevisionPairs
                                        nextRevision <- nextRevisionAfterFirstDuplicate to nextRevisionAfterDuplicates
@@ -522,8 +524,8 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
 
 
   it should "create revisions with the strong exception-safety guarantee" in {
-    val testCaseGenerator = for {recordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator  // Use this flavour to raising unanticipated exceptions due to interspersing
-                                                                                                        // events referring to 'FooHistory' and 'MoreSpecificFooHistory' on the same id.
+    val testCaseGenerator = for {recordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator // Use this flavour to raising unanticipated exceptions due to interspersing
+                                 // events referring to 'FooHistory' and 'MoreSpecificFooHistory' on the same id.
                                  faultyRecordingsGroupedById <- faultyRecordingsGroupedByIdGenerator
                                  seed <- seedGenerator
                                  random = new Random(seed)
@@ -753,7 +755,7 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
       val listOfRevisionsToCheckAtAndRecordingsGroupedById = stream.unfold((testCaseSubsections zip asOfsForSubsections) -> -1) {
         case ((((recordingsGroupedById, bigShuffledHistoryOverLotsOfThings), asOfs) :: remainingSubsections), maximumEventIdFromPreviousSubsection) =>
           val sortedEventIds = (bigShuffledHistoryOverLotsOfThings flatMap (_ map (_._2))).sorted.distinct
-          assert((sortedEventIds zip sortedEventIds.tail).forall {case (first, second) => 1 + first == second})
+          assert((sortedEventIds zip sortedEventIds.tail).forall { case (first, second) => 1 + first == second })
           val maximumEventIdFromThisSubsection = sortedEventIds.last
           val annulmentsForExtraEventIdsNotCorrectedInThisSubsection = Stream((1 + maximumEventIdFromThisSubsection) to maximumEventIdFromPreviousSubsection map ((None: Option[(Unbounded[Instant], Event)]) -> _))
           val asOfForAnnulments = asOfs.head
@@ -762,7 +764,7 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
             recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
           }
           catch {
-            case _ :RuntimeException =>
+            case _: RuntimeException =>
               // The assumption is that our brute-force rewriting of history made what would be
               // an inconsistent revision as an intermediate step. In this case, annul the history
               // entirely from the previous subsection and rewrite from a clean slate. We assume
