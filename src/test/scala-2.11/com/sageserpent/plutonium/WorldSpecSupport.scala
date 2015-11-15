@@ -139,51 +139,6 @@ trait WorldSpecSupport {
 
   case class NonExistentRecordings(historyId: Any, historiesFrom: Scope => Seq[History])
 
-  /*  class RecordingsForAnOngoingId(override val historyId: Any,
-                                   override val historiesFrom: Scope => Seq[History],
-                                   recordings: List[(Any, Unbounded[Instant], Change)]) extends RecordingsForAnId {
-      override val events = RecordingsForAnId.stripData(recordings)
-
-      override val whenEarliestChangeHappened: Unbounded[Instant] = RecordingsForAnId.eventWhens(recordings) min
-
-      override def thePartNoLaterThan(when: Unbounded[Instant]) = if (when >= whenEarliestChangeHappened)
-        Some(RecordingsNoLaterThan(historyId = historyId, historiesFrom = historiesFrom, datums = RecordingsForAnId.stripChanges(recordings takeWhile { case (_, eventWhen, _) => eventWhen <= when })))
-      else
-        None
-
-      override def doesNotExistAt(when: Unbounded[Instant]) = if (when < whenEarliestChangeHappened)
-        Some(NonExistentRecordings(historyId = historyId, historiesFrom = historiesFrom))
-      else
-        None
-    }
-
-    class RecordingsForAnIdWithFiniteLifespan(override val historyId: Any,
-                                              override val historiesFrom: Scope => Seq[History],
-                                              recordings: List[(Any, Unbounded[Instant], Change)],
-                                              annihilation: (Instant, Annihilation[_ <: Identified])) extends RecordingsForAnId {
-      val changes = RecordingsForAnId.stripData(recordings)
-
-      val whenAnnihilated = Finite(annihilation._1)
-
-      require(whenAnnihilated >= changes.last._1)
-
-      val annihilationEvent = annihilation._2
-
-      override val events = changes :+ whenAnnihilated -> annihilationEvent
-
-      override val whenEarliestChangeHappened: Unbounded[Instant] = RecordingsForAnId.eventWhens(recordings) min
-
-      override def thePartNoLaterThan(when: Unbounded[Instant]) = if (when < whenAnnihilated && when >= whenEarliestChangeHappened)
-        Some(RecordingsNoLaterThan(historyId = historyId, historiesFrom = historiesFrom, datums = RecordingsForAnId.stripChanges(recordings takeWhile { case (_, eventWhen, _) => eventWhen <= when })))
-      else
-        None
-
-      override def doesNotExistAt(when: Unbounded[Instant]) = if (when >= whenAnnihilated || when < whenEarliestChangeHappened)
-        Some(NonExistentRecordings(historyId = historyId, historiesFrom = historiesFrom))
-      else
-        None
-    }*/
-
   class RecordingsForAPhoenixId(override val historyId: Any,
                                 override val historiesFrom: Scope => Seq[History],
                                 annihilationFor: Instant => Annihilation[_ <: Identified],
@@ -215,7 +170,7 @@ trait WorldSpecSupport {
       lazy val doesNotExist = Some(NonExistentRecordings(historyId = historyId, historiesFrom = historiesFrom))
       val priorToAllLifespans = whenEarliestChangeHappened > when
       if (priorToAllLifespans)
-        Some(NonExistentRecordings(historyId = historyId, historiesFrom = historiesFrom))
+        doesNotExist
       else {
         val searchResult = sampleWhensGroupedForLifespans map (_.last) search when
         searchResult match {
@@ -237,7 +192,37 @@ trait WorldSpecSupport {
       }
     }
 
-    override def thePartNoLaterThan(when: Unbounded[Instant]): Option[RecordingsNoLaterThan] = ???
+    override def thePartNoLaterThan(when: Unbounded[Instant]): Option[RecordingsNoLaterThan] = {
+      val priorToAllLifespans = whenEarliestChangeHappened > when
+      def thePartNoLaterThan(relevantGroupIndex: Revision): Some[RecordingsNoLaterThan] = {
+        Some(RecordingsNoLaterThan(historyId = historyId,
+          historiesFrom = historiesFrom,
+          datums = dataSamplesGroupedForLifespans(relevantGroupIndex).toList zip sampleWhensGroupedForLifespans(relevantGroupIndex) takeWhile { case (_, eventWhen) => eventWhen <= when } map { case ((dataSample, _), eventWhen) => dataSample -> eventWhen }))
+      }
+      if (priorToAllLifespans)
+        None
+      else {
+        val searchResult = sampleWhensGroupedForLifespans map (_.last) search when
+        searchResult match {
+          case Found(relevantGroupIndex) => {
+            val haveLandedOnTheLastEventForAnEternalLifespan = sampleWhensGroupedForLifespans.size == 1 + relevantGroupIndex && !lastLifespanIsLimited
+            if (haveLandedOnTheLastEventForAnEternalLifespan)
+              thePartNoLaterThan(relevantGroupIndex)
+            else
+              None
+          }
+          case InsertionPoint(relevantGroupIndex) => {
+            val beyondTheFinalDemise = sampleWhensGroupedForLifespans.size == relevantGroupIndex && lastLifespanIsLimited
+            if (beyondTheFinalDemise)
+              None
+            else
+              // If 'when' comes beyond the last event (which in this case won't be an annihilation),
+              // use the last group.
+              thePartNoLaterThan(relevantGroupIndex min (sampleWhensGroupedForLifespans.size - 1))
+          }
+        }
+      }
+    }
 
     override val whenEarliestChangeHappened: Unbounded[Instant] = sampleWhensGroupedForLifespans.head.head
   }
