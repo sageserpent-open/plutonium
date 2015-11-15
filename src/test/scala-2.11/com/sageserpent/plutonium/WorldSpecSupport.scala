@@ -150,9 +150,11 @@ trait WorldSpecSupport {
       sampleWhens zip sampleWhens.tail forall { case (lhs, rhs) => lhs <= rhs }
     })
     require(dataSamplesGroupedForLifespans.init zip sampleWhensGroupedForLifespans.init forall { case (dataSamples, eventWhens) =>
-      eventWhens.size == 1 + dataSamples.size })
+      eventWhens.size == 1 + dataSamples.size
+    })
     require(dataSamplesGroupedForLifespans.last -> sampleWhensGroupedForLifespans.last match { case (dataSamples, eventWhens) =>
-      eventWhens.size <= 1 + dataSamples.size && eventWhens.size >= dataSamples.size })
+      eventWhens.size <= 1 + dataSamples.size && eventWhens.size >= dataSamples.size
+    })
 
     override val events: List[(Unbounded[Instant], Event)] = (for {
       (dataSamples, eventWhens) <- dataSamplesGroupedForLifespans zip sampleWhensGroupedForLifespans
@@ -170,57 +172,53 @@ trait WorldSpecSupport {
 
     override def doesNotExistAt(when: Unbounded[Instant]): Option[NonExistentRecordings] = {
       lazy val doesNotExist = Some(NonExistentRecordings(historyId = historyId, historiesFrom = historiesFrom))
-      val priorToAllLifespans = whenEarliestChangeHappened > when
-      if (priorToAllLifespans)
-        doesNotExist
-      else {
-        val searchResult = sampleWhensGroupedForLifespans map (_.last) search when
-        searchResult match {
-          case Found(relevantGroupIndex) => {
-            val haveLandedOnTheLastEventForAnEternalLifespan = sampleWhensGroupedForLifespans.size == 1 + relevantGroupIndex && !lastLifespanIsLimited
-            if (haveLandedOnTheLastEventForAnEternalLifespan)
-              None
-            else
-              doesNotExist
-          }
-          case InsertionPoint(relevantGroupIndex) => {
-            val beyondTheFinalDemise = sampleWhensGroupedForLifespans.size == relevantGroupIndex && lastLifespanIsLimited
-            if (beyondTheFinalDemise)
-              doesNotExist
-            else
-              None
-          }
+      val searchResult = sampleWhensGroupedForLifespans map (_.last) search when
+      searchResult match {
+        case Found(relevantGroupIndex) => {
+          val haveLandedOnTheLastEventForAnEternalLifespan = sampleWhensGroupedForLifespans.size == 1 + relevantGroupIndex && !lastLifespanIsLimited
+          if (haveLandedOnTheLastEventForAnEternalLifespan)
+            None
+          else
+            doesNotExist
+        }
+        case InsertionPoint(relevantGroupIndex) => {
+          val beyondTheFinalDemise = sampleWhensGroupedForLifespans.size == relevantGroupIndex && lastLifespanIsLimited
+          if (beyondTheFinalDemise)
+            doesNotExist
+          else if (sampleWhensGroupedForLifespans(relevantGroupIndex).head > when)
+            doesNotExist
+          else None
         }
       }
     }
 
     override def thePartNoLaterThan(when: Unbounded[Instant]): Option[RecordingsNoLaterThan] = {
-      val priorToAllLifespans = whenEarliestChangeHappened > when
       def thePartNoLaterThan(relevantGroupIndex: Revision): Some[RecordingsNoLaterThan] = {
         Some(RecordingsNoLaterThan(historyId = historyId,
           historiesFrom = historiesFrom,
           datums = dataSamplesGroupedForLifespans(relevantGroupIndex).toList zip sampleWhensGroupedForLifespans(relevantGroupIndex) takeWhile { case (_, eventWhen) => eventWhen <= when } map { case ((dataSample, _), eventWhen) => dataSample -> eventWhen }))
       }
-      if (priorToAllLifespans)
-        None
-      else {
-        val searchResult = sampleWhensGroupedForLifespans map (_.last) search when
-        searchResult match {
-          case Found(relevantGroupIndex) => {
-            val haveLandedOnTheLastEventForAnEternalLifespan = sampleWhensGroupedForLifespans.size == 1 + relevantGroupIndex && !lastLifespanIsLimited
-            if (haveLandedOnTheLastEventForAnEternalLifespan)
-              thePartNoLaterThan(relevantGroupIndex)
-            else
+
+      val searchResult = sampleWhensGroupedForLifespans map (_.last) search when
+      searchResult match {
+        case Found(relevantGroupIndex) => {
+          val haveLandedOnTheLastEventForAnEternalLifespan = sampleWhensGroupedForLifespans.size == 1 + relevantGroupIndex && !lastLifespanIsLimited
+          if (haveLandedOnTheLastEventForAnEternalLifespan)
+            thePartNoLaterThan(relevantGroupIndex)
+          else
+            None
+        }
+        case InsertionPoint(relevantGroupIndex) => {
+          val beyondTheFinalDemise = sampleWhensGroupedForLifespans.size == relevantGroupIndex && lastLifespanIsLimited
+          if (beyondTheFinalDemise)
+            None
+          else {
+            // If 'when' comes beyond the last event (which in this case won't be an annihilation),
+            // use the last group.
+            val clampedRelevantGroupIndex = relevantGroupIndex min (sampleWhensGroupedForLifespans.size - 1)
+            if (sampleWhensGroupedForLifespans(clampedRelevantGroupIndex).head > when)
               None
-          }
-          case InsertionPoint(relevantGroupIndex) => {
-            val beyondTheFinalDemise = sampleWhensGroupedForLifespans.size == relevantGroupIndex && lastLifespanIsLimited
-            if (beyondTheFinalDemise)
-              None
-            else
-              // If 'when' comes beyond the last event (which in this case won't be an annihilation),
-              // use the last group.
-              thePartNoLaterThan(relevantGroupIndex min (sampleWhensGroupedForLifespans.size - 1))
+            else thePartNoLaterThan(clampedRelevantGroupIndex)
           }
         }
       }
@@ -231,37 +229,37 @@ trait WorldSpecSupport {
 
   def recordingsGroupedByIdGenerator_(dataSamplesForAnIdGenerator: Gen[(Any, Scope => Seq[History], List[(Any, (Unbounded[Instant]) => Change)], Instant => Annihilation[_ <: Identified])]) = {
     val unconstrainedParametersGenerator = for {(historyId, historiesFrom, dataSamples, annihilationFor) <- dataSamplesForAnIdGenerator
-                                          seed <- seedGenerator
-                                          random = new Random(seed)
-                                          dataSamplesGroupedForLifespans = random.splitIntoNonEmptyPieces(dataSamples)
-                                          finalLifespanIsOngoing <- Arbitrary.arbitrary[Boolean]
-                                          numberOfEventsForLifespans = {
-                                            def numberOfEventsForLimitedLifespans(dataSamplesGroupedForLimitedLifespans: Stream[Traversable[(Any, (Unbounded[Instant]) => Change)]]) = {
-                                              // Add an extra when for the annihilation at the end of the lifespan...
-                                              dataSamplesGroupedForLimitedLifespans map (1 + _.size)
-                                            }
-                                            if (finalLifespanIsOngoing) {
-                                              val (dataSamplesGroupedForLimitedLifespans, Stream(dataSamplesGroupForEternalLife)) = dataSamplesGroupedForLifespans splitAt (dataSamplesGroupedForLifespans.size - 1)
-                                              numberOfEventsForLimitedLifespans(dataSamplesGroupedForLimitedLifespans) :+ dataSamplesGroupForEternalLife.size
-                                            }
-                                            else
-                                              numberOfEventsForLimitedLifespans(dataSamplesGroupedForLifespans)
-                                          }
-                                          numberOfEventsOverall = numberOfEventsForLifespans.sum
-                                          sampleWhens <- Gen.listOfN(numberOfEventsOverall, changeWhenGenerator) map (_ sorted)
-                                          sampleWhensGroupedForLifespans = stream.unfold(numberOfEventsForLifespans -> sampleWhens) {
-                                            case (numberOfEvents #:: remainingNumberOfEventsForLifespans, sampleWhens) => {
-                                              val (sampleWhenGroup, remainingSampleWhens) = sampleWhens splitAt numberOfEvents
-                                              Some(sampleWhenGroup, remainingNumberOfEventsForLifespans -> remainingSampleWhens)
-                                            }
-                                            case (Stream.Empty, _) => None
-                                          }
-                                          noAnnihilationsToWorryAbout = finalLifespanIsOngoing && 1 == sampleWhensGroupedForLifespans.size
-                                          firstAnnihilationHasBeenAlignedWithADefiniteWhen = noAnnihilationsToWorryAbout ||
-                                            PartialFunction.cond(sampleWhensGroupedForLifespans.head.last) { case Finite(_) => true }
-    } yield (firstAnnihilationHasBeenAlignedWithADefiniteWhen -> (historyId, historiesFrom, annihilationFor, dataSamplesGroupedForLifespans, sampleWhensGroupedForLifespans))
+                                                seed <- seedGenerator
+                                                random = new Random(seed)
+                                                dataSamplesGroupedForLifespans = random.splitIntoNonEmptyPieces(dataSamples)
+                                                finalLifespanIsOngoing <- Arbitrary.arbitrary[Boolean]
+                                                numberOfEventsForLifespans = {
+                                                  def numberOfEventsForLimitedLifespans(dataSamplesGroupedForLimitedLifespans: Stream[Traversable[(Any, (Unbounded[Instant]) => Change)]]) = {
+                                                    // Add an extra when for the annihilation at the end of the lifespan...
+                                                    dataSamplesGroupedForLimitedLifespans map (1 + _.size)
+                                                  }
+                                                  if (finalLifespanIsOngoing) {
+                                                    val (dataSamplesGroupedForLimitedLifespans, Stream(dataSamplesGroupForEternalLife)) = dataSamplesGroupedForLifespans splitAt (dataSamplesGroupedForLifespans.size - 1)
+                                                    numberOfEventsForLimitedLifespans(dataSamplesGroupedForLimitedLifespans) :+ dataSamplesGroupForEternalLife.size
+                                                  }
+                                                  else
+                                                    numberOfEventsForLimitedLifespans(dataSamplesGroupedForLifespans)
+                                                }
+                                                numberOfEventsOverall = numberOfEventsForLifespans.sum
+                                                sampleWhens <- Gen.listOfN(numberOfEventsOverall, changeWhenGenerator) map (_ sorted)
+                                                sampleWhensGroupedForLifespans = stream.unfold(numberOfEventsForLifespans -> sampleWhens) {
+                                                  case (numberOfEvents #:: remainingNumberOfEventsForLifespans, sampleWhens) => {
+                                                    val (sampleWhenGroup, remainingSampleWhens) = sampleWhens splitAt numberOfEvents
+                                                    Some(sampleWhenGroup, remainingNumberOfEventsForLifespans -> remainingSampleWhens)
+                                                  }
+                                                  case (Stream.Empty, _) => None
+                                                }
+                                                noAnnihilationsToWorryAbout = finalLifespanIsOngoing && 1 == sampleWhensGroupedForLifespans.size
+                                                firstAnnihilationHasBeenAlignedWithADefiniteWhen = noAnnihilationsToWorryAbout ||
+                                                  PartialFunction.cond(sampleWhensGroupedForLifespans.head.last) { case Finite(_) => true }
+    } yield (firstAnnihilationHasBeenAlignedWithADefiniteWhen ->(historyId, historiesFrom, annihilationFor, dataSamplesGroupedForLifespans, sampleWhensGroupedForLifespans))
 
-    val parametersGenerator = unconstrainedParametersGenerator retryUntil {case (firstAnnihilationHasBeenAlignedWithADefiniteWhen, _) => firstAnnihilationHasBeenAlignedWithADefiniteWhen} map (_._2)
+    val parametersGenerator = unconstrainedParametersGenerator retryUntil { case (firstAnnihilationHasBeenAlignedWithADefiniteWhen, _) => firstAnnihilationHasBeenAlignedWithADefiniteWhen } map (_._2)
 
     val recordingsForAnIdGenerator = for ((historyId, historiesFrom, annihilationFor, dataSamplesGroupedForLifespans, sampleWhensGroupedForLifespans) <- parametersGenerator)
       yield new RecordingsForAPhoenixId(historyId, historiesFrom, annihilationFor, dataSamplesGroupedForLifespans, sampleWhensGroupedForLifespans) with RecordingsForAnIdContract
