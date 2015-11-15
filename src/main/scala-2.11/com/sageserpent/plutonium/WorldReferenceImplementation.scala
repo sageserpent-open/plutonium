@@ -3,8 +3,7 @@ package com.sageserpent.plutonium
 import java.lang.reflect.Method
 import java.time.Instant
 
-import com.sageserpent.americium
-import com.sageserpent.americium.{PositiveInfinity, Unbounded, Finite, NegativeInfinity}
+import com.sageserpent.americium.{Finite, NegativeInfinity, PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.Bitemporal.IdentifiedItemsScope
 import com.sageserpent.plutonium.World.Revision
 import com.sageserpent.plutonium.WorldReferenceImplementation.IdentifiedItemsScopeImplementation
@@ -101,14 +100,14 @@ object WorldReferenceImplementation {
     }
 
 
-    def this(_when: americium.Unbounded[Instant], _nextRevision: Revision, _asOf: americium.Unbounded[Instant], eventTimeline: WorldReferenceImplementation#EventTimeline) = {
+    def this(_when: Unbounded[Instant], _nextRevision: Revision, _asOf: Unbounded[Instant], eventTimeline: WorldReferenceImplementation#EventTimeline) = {
       this()
       try {
         itemsAreLocked = false
         val relevantEvents = eventTimeline.bucketsIterator flatMap (_.toArray.sortBy(_._2) map (_._1)) takeWhile (_when >= _.when)
         for (event <- relevantEvents) {
           val scopeForEvent = new com.sageserpent.plutonium.Scope {
-            override val when: americium.Unbounded[Instant] = event.when
+            override val when: Unbounded[Instant] = event.when
 
             override def render[Raw](bitemporal: Bitemporal[Raw]): Stream[Raw] = {
               bitemporal.interpret(new IdentifiedItemsScope {
@@ -122,7 +121,7 @@ object WorldReferenceImplementation {
             }
 
             override val nextRevision: Revision = _nextRevision
-            override val asOf: americium.Unbounded[Instant] = _asOf
+            override val asOf: Unbounded[Instant] = _asOf
           }
 
           event match {
@@ -177,14 +176,14 @@ class WorldReferenceImplementation extends World {
 
   val eventIdToEventMap = scala.collection.mutable.Map.empty[EventId, (Event, Revision)]
 
-  abstract class ScopeBasedOnNextRevision(val when: americium.Unbounded[Instant], val nextRevision: Revision) extends com.sageserpent.plutonium.Scope {
+  abstract class ScopeBasedOnNextRevision(val when: Unbounded[Instant], val nextRevision: Revision) extends com.sageserpent.plutonium.Scope {
     val asOf = nextRevision match {
       case World.initialRevision => NegativeInfinity[Instant]
       case _ => Finite(revisionAsOfs(nextRevision - 1))
     }
   }
 
-  abstract class ScopeBasedOnAsOf(val when: americium.Unbounded[Instant], unliftedAsOf: Instant) extends com.sageserpent.plutonium.Scope {
+  abstract class ScopeBasedOnAsOf(val when: Unbounded[Instant], unliftedAsOf: Instant) extends com.sageserpent.plutonium.Scope {
     override val asOf = Finite(unliftedAsOf)
 
     override val nextRevision: Revision = {
@@ -254,8 +253,8 @@ class WorldReferenceImplementation extends World {
   }
 
   // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
-  override def scopeFor(when: americium.Unbounded[Instant], nextRevision: Revision): Scope = new ScopeBasedOnNextRevision(when, nextRevision) with ScopeImplementation
+  override def scopeFor(when: Unbounded[Instant], nextRevision: Revision): Scope = new ScopeBasedOnNextRevision(when, nextRevision) with ScopeImplementation
 
   // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
-  override def scopeFor(when: americium.Unbounded[Instant], asOf: Instant): Scope = new ScopeBasedOnAsOf(when, asOf) with ScopeImplementation
+  override def scopeFor(when: Unbounded[Instant], asOf: Instant): Scope = new ScopeBasedOnAsOf(when, asOf) with ScopeImplementation
 }
