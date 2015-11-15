@@ -149,8 +149,10 @@ trait WorldSpecSupport {
       val sampleWhens = sampleWhensGroupedForLifespans.flatten
       sampleWhens zip sampleWhens.tail forall { case (lhs, rhs) => lhs <= rhs }
     })
-    require(dataSamplesGroupedForLifespans.init zip sampleWhensGroupedForLifespans.init forall { case (dataSamples, eventWhens) => eventWhens.size == 1 + dataSamples.size })
-    require(dataSamplesGroupedForLifespans.last -> sampleWhensGroupedForLifespans.last match { case (dataSamples, eventWhens) => eventWhens.size <= 1 + dataSamples.size && eventWhens.size >= dataSamples.size })
+    require(dataSamplesGroupedForLifespans.init zip sampleWhensGroupedForLifespans.init forall { case (dataSamples, eventWhens) =>
+      eventWhens.size == 1 + dataSamples.size })
+    require(dataSamplesGroupedForLifespans.last -> sampleWhensGroupedForLifespans.last match { case (dataSamples, eventWhens) =>
+      eventWhens.size <= 1 + dataSamples.size && eventWhens.size >= dataSamples.size })
 
     override val events: List[(Unbounded[Instant], Event)] = (for {
       (dataSamples, eventWhens) <- dataSamplesGroupedForLifespans zip sampleWhensGroupedForLifespans
@@ -239,7 +241,7 @@ trait WorldSpecSupport {
                                               dataSamplesGroupedForLimitedLifespans map (1 + _.size)
                                             }
                                             if (finalLifespanIsOngoing) {
-                                              val (dataSamplesGroupedForLimitedLifespans, dataSamplesGroupForEternalLife) = dataSamplesGroupedForLifespans splitAt (dataSamplesGroupedForLifespans.size - 1)
+                                              val (dataSamplesGroupedForLimitedLifespans, Stream(dataSamplesGroupForEternalLife)) = dataSamplesGroupedForLifespans splitAt (dataSamplesGroupedForLifespans.size - 1)
                                               numberOfEventsForLimitedLifespans(dataSamplesGroupedForLimitedLifespans) :+ dataSamplesGroupForEternalLife.size
                                             }
                                             else
@@ -254,7 +256,8 @@ trait WorldSpecSupport {
                                             }
                                             case (Stream.Empty, _) => None
                                           }
-                                          firstAnnihilationHasBeenAlignedWithADefiniteWhen = 1 == sampleWhensGroupedForLifespans.size ||
+                                          noAnnihilationsToWorryAbout = finalLifespanIsOngoing && 1 == sampleWhensGroupedForLifespans.size
+                                          firstAnnihilationHasBeenAlignedWithADefiniteWhen = noAnnihilationsToWorryAbout ||
                                             PartialFunction.cond(sampleWhensGroupedForLifespans.head.last) { case Finite(_) => true }
                                           if firstAnnihilationHasBeenAlignedWithADefiniteWhen
     } yield new RecordingsForAPhoenixId(historyId, historiesFrom, annihilationFor, dataSamplesGroupedForLifespans, sampleWhensGroupedForLifespans) with RecordingsForAnIdContract
