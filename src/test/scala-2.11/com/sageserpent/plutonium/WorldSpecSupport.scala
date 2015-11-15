@@ -19,6 +19,7 @@ import scala.reflect.runtime.universe._
 import scala.spores._
 import scala.util.Random
 import scalaz.std.stream
+import scala.collection.Searching._
 
 
 trait WorldSpecSupport {
@@ -105,15 +106,15 @@ trait WorldSpecSupport {
       Annihilation(_: Instant, historyId))
   }
 
-  object RecordingsForAnId {
-    def stripChanges(recordings: List[(Any, Unbounded[Instant], Change)]) = recordings map { case (data, eventWhen, _) => data -> eventWhen }
+  /*  object RecordingsForAnId {
+      def stripChanges(recordings: List[(Any, Unbounded[Instant], Change)]) = recordings map { case (data, eventWhen, _) => data -> eventWhen }
 
-    def stripData(recordings: List[(Any, Unbounded[Instant], Change)]) = recordings map { case (_, eventWhen, change) => eventWhen -> change }
+      def stripData(recordings: List[(Any, Unbounded[Instant], Change)]) = recordings map { case (_, eventWhen, change) => eventWhen -> change }
 
-    def eventWhens(recordings: List[(Any, Unbounded[Instant], Change)]) = {
-      recordings map { case (_, eventWhen, _) => eventWhen }
-    }
-  }
+      def eventWhens(recordings: List[(Any, Unbounded[Instant], Change)]) = {
+        recordings map { case (_, eventWhen, _) => eventWhen }
+      }
+    }*/
 
   trait RecordingsForAnId {
     val historyId: Any
@@ -138,50 +139,50 @@ trait WorldSpecSupport {
 
   case class NonExistentRecordings(historyId: Any, historiesFrom: Scope => Seq[History])
 
-  class RecordingsForAnOngoingId(override val historyId: Any,
-                                 override val historiesFrom: Scope => Seq[History],
-                                 recordings: List[(Any, Unbounded[Instant], Change)]) extends RecordingsForAnId {
-    override val events = RecordingsForAnId.stripData(recordings)
+  /*  class RecordingsForAnOngoingId(override val historyId: Any,
+                                   override val historiesFrom: Scope => Seq[History],
+                                   recordings: List[(Any, Unbounded[Instant], Change)]) extends RecordingsForAnId {
+      override val events = RecordingsForAnId.stripData(recordings)
 
-    override val whenEarliestChangeHappened: Unbounded[Instant] = RecordingsForAnId.eventWhens(recordings) min
+      override val whenEarliestChangeHappened: Unbounded[Instant] = RecordingsForAnId.eventWhens(recordings) min
 
-    override def thePartNoLaterThan(when: Unbounded[Instant]) = if (when >= whenEarliestChangeHappened)
-      Some(RecordingsNoLaterThan(historyId = historyId, historiesFrom = historiesFrom, datums = RecordingsForAnId.stripChanges(recordings takeWhile { case (_, eventWhen, _) => eventWhen <= when })))
-    else
-      None
+      override def thePartNoLaterThan(when: Unbounded[Instant]) = if (when >= whenEarliestChangeHappened)
+        Some(RecordingsNoLaterThan(historyId = historyId, historiesFrom = historiesFrom, datums = RecordingsForAnId.stripChanges(recordings takeWhile { case (_, eventWhen, _) => eventWhen <= when })))
+      else
+        None
 
-    override def doesNotExistAt(when: Unbounded[Instant]) = if (when < whenEarliestChangeHappened)
-      Some(NonExistentRecordings(historyId = historyId, historiesFrom = historiesFrom))
-    else
-      None
-  }
+      override def doesNotExistAt(when: Unbounded[Instant]) = if (when < whenEarliestChangeHappened)
+        Some(NonExistentRecordings(historyId = historyId, historiesFrom = historiesFrom))
+      else
+        None
+    }
 
-  class RecordingsForAnIdWithFiniteLifespan(override val historyId: Any,
-                                            override val historiesFrom: Scope => Seq[History],
-                                            recordings: List[(Any, Unbounded[Instant], Change)],
-                                            annihilation: (Instant, Annihilation[_ <: Identified])) extends RecordingsForAnId {
-    val changes = RecordingsForAnId.stripData(recordings)
+    class RecordingsForAnIdWithFiniteLifespan(override val historyId: Any,
+                                              override val historiesFrom: Scope => Seq[History],
+                                              recordings: List[(Any, Unbounded[Instant], Change)],
+                                              annihilation: (Instant, Annihilation[_ <: Identified])) extends RecordingsForAnId {
+      val changes = RecordingsForAnId.stripData(recordings)
 
-    val whenAnnihilated = Finite(annihilation._1)
+      val whenAnnihilated = Finite(annihilation._1)
 
-    require(whenAnnihilated >= changes.last._1)
+      require(whenAnnihilated >= changes.last._1)
 
-    val annihilationEvent = annihilation._2
+      val annihilationEvent = annihilation._2
 
-    override val events = changes :+ whenAnnihilated -> annihilationEvent
+      override val events = changes :+ whenAnnihilated -> annihilationEvent
 
-    override val whenEarliestChangeHappened: Unbounded[Instant] = RecordingsForAnId.eventWhens(recordings) min
+      override val whenEarliestChangeHappened: Unbounded[Instant] = RecordingsForAnId.eventWhens(recordings) min
 
-    override def thePartNoLaterThan(when: Unbounded[Instant]) = if (when < whenAnnihilated && when >= whenEarliestChangeHappened)
-      Some(RecordingsNoLaterThan(historyId = historyId, historiesFrom = historiesFrom, datums = RecordingsForAnId.stripChanges(recordings takeWhile { case (_, eventWhen, _) => eventWhen <= when })))
-    else
-      None
+      override def thePartNoLaterThan(when: Unbounded[Instant]) = if (when < whenAnnihilated && when >= whenEarliestChangeHappened)
+        Some(RecordingsNoLaterThan(historyId = historyId, historiesFrom = historiesFrom, datums = RecordingsForAnId.stripChanges(recordings takeWhile { case (_, eventWhen, _) => eventWhen <= when })))
+      else
+        None
 
-    override def doesNotExistAt(when: Unbounded[Instant]) = if (when >= whenAnnihilated || when < whenEarliestChangeHappened)
-      Some(NonExistentRecordings(historyId = historyId, historiesFrom = historiesFrom))
-    else
-      None
-  }
+      override def doesNotExistAt(when: Unbounded[Instant]) = if (when >= whenAnnihilated || when < whenEarliestChangeHappened)
+        Some(NonExistentRecordings(historyId = historyId, historiesFrom = historiesFrom))
+      else
+        None
+    }*/
 
   class RecordingsForAPhoenixId(override val historyId: Any,
                                 override val historiesFrom: Scope => Seq[History],
@@ -193,11 +194,14 @@ trait WorldSpecSupport {
       val sampleWhens = sampleWhensGroupedForLifespans.flatten
       sampleWhens zip sampleWhens.tail forall { case (lhs, rhs) => lhs <= rhs }
     })
+    require(dataSamplesGroupedForLifespans.init zip sampleWhensGroupedForLifespans.init forall { case (dataSamples, eventWhens) => eventWhens.size == 1 + dataSamples.size })
+    require(dataSamplesGroupedForLifespans.last -> sampleWhensGroupedForLifespans.last match { case (dataSamples, eventWhens) => eventWhens.size <= 1 + dataSamples.size && eventWhens.size >= dataSamples.size })
 
     override val events: List[(Unbounded[Instant], Event)] = (for {
       (dataSamples, eventWhens) <- dataSamplesGroupedForLifespans zip sampleWhensGroupedForLifespans
     } yield {
       val numberOfChanges = dataSamples.size
+      // NOTE: we may have an extra event when - 'zip' will disregard this.
       val changes = dataSamples.toSeq zip eventWhens map { case ((_, changeFor), eventWhen) => changeFor(eventWhen) }
       eventWhens zip (if (numberOfChanges < eventWhens.size)
         changes :+ annihilationFor(eventWhens.last match { case Finite(definiteWhen) => definiteWhen })
@@ -205,11 +209,37 @@ trait WorldSpecSupport {
         changes)
     }).toList flatten
 
-    override def doesNotExistAt(when: Unbounded[Instant]): Option[NonExistentRecordings] = ???
+    private val lastLifespanIsLimited = sampleWhensGroupedForLifespans.last.size > dataSamplesGroupedForLifespans.last.size
+
+    override def doesNotExistAt(when: Unbounded[Instant]): Option[NonExistentRecordings] = {
+      lazy val doesNotExist = Some(NonExistentRecordings(historyId = historyId, historiesFrom = historiesFrom))
+      val priorToAllLifespans = whenEarliestChangeHappened > when
+      if (priorToAllLifespans)
+        Some(NonExistentRecordings(historyId = historyId, historiesFrom = historiesFrom))
+      else {
+        val searchResult = sampleWhensGroupedForLifespans map (_.last) search when
+        searchResult match {
+          case Found(relevantGroupIndex) => {
+            val haveLandedOnTheLastEventForAnEternalLifespan = sampleWhensGroupedForLifespans.size == 1 + relevantGroupIndex && !lastLifespanIsLimited
+            if (haveLandedOnTheLastEventForAnEternalLifespan)
+              None
+            else
+              doesNotExist
+          }
+          case InsertionPoint(relevantGroupIndex) => {
+            val beyondTheFinalDemise = sampleWhensGroupedForLifespans.size == relevantGroupIndex && lastLifespanIsLimited
+            if (beyondTheFinalDemise)
+              doesNotExist
+            else
+              None
+          }
+        }
+      }
+    }
 
     override def thePartNoLaterThan(when: Unbounded[Instant]): Option[RecordingsNoLaterThan] = ???
 
-    override val whenEarliestChangeHappened: Unbounded[Instant] = ???
+    override val whenEarliestChangeHappened: Unbounded[Instant] = sampleWhensGroupedForLifespans.head.head
   }
 
   def recordingsGroupedByIdGenerator_(dataSamplesForAnIdGenerator: Gen[(Any, Scope => Seq[History], List[(Any, (Unbounded[Instant]) => Change)], Instant => Annihilation[_ <: Identified])]) = {
@@ -242,7 +272,7 @@ trait WorldSpecSupport {
                                           firstAnnihilationHasBeenAlignedWithADefiniteWhen = 1 == sampleWhensGroupedForLifespans.size ||
                                             PartialFunction.cond(sampleWhensGroupedForLifespans.head.last) { case Finite(_) => true }
                                           if firstAnnihilationHasBeenAlignedWithADefiniteWhen
-    } yield new RecordingsForAPhoenixId(historyId, historiesFrom, annihilationFor, dataSamplesGroupedForLifespans, sampleWhensGroupedForLifespans)
+    } yield new RecordingsForAPhoenixId(historyId, historiesFrom, annihilationFor, dataSamplesGroupedForLifespans, sampleWhensGroupedForLifespans) with RecordingsForAnIdContract
 
     def idsAreNotRepeated(recordingsInPhoenixIdGroups: List[RecordingsForAnId]) = {
       recordingsInPhoenixIdGroups groupBy (_.historyId) forall { case (_, repeatedIdGroup) => 1 == repeatedIdGroup.size }
