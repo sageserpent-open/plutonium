@@ -185,9 +185,14 @@ trait WorldSpecSupport {
           val beyondTheFinalDemise = sampleWhensGroupedForLifespans.size == relevantGroupIndex && lastLifespanIsLimited
           if (beyondTheFinalDemise)
             doesNotExist
-          else if (sampleWhensGroupedForLifespans(relevantGroupIndex).head > when)
-            doesNotExist
-          else None
+          else {
+            // If 'when' comes beyond the last event (which in this case won't be an annihilation),
+            // use the last group.
+            val clampedRelevantGroupIndex = relevantGroupIndex min (sampleWhensGroupedForLifespans.size - 1)
+            if (sampleWhensGroupedForLifespans(clampedRelevantGroupIndex).head > when)
+              doesNotExist
+            else None
+          }
         }
       }
     }
