@@ -85,12 +85,8 @@ object Observation {
 // NOTE: it is OK to have annihilations and other events occurring at the same time: the documentation of 'World.revise'
 // covers how coincident events are resolved. So an item referred to by an id may be changed, then annihilated, then
 // recreated and so on all at the same time.
-case class Annihilation[Raw <: Identified](definiteWhen: Instant, id: Raw#Id) extends Event {
+case class Annihilation[Raw <: Identified: TypeTag](definiteWhen: Instant, id: Raw#Id) extends Event {
   val when = Finite(definiteWhen)
+  val typeTag = implicitly[TypeTag[Raw]]
 }
 
-object Annihilation {
-  def apply[Raw <: Identified: TypeTag](definiteWhen: Instant)(id: Raw#Id): Annihilation[Raw] = {
-    Annihilation(definiteWhen, id)
-  }
-}
