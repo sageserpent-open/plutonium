@@ -40,11 +40,9 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
 
       val scope = world.scopeFor(queryWhen, world.nextRevision)
 
-      val idsToWhenDefinedMap = integerHistoryRecordingsGroupedById map (recordingsForAnId => recordingsForAnId.historyId.asInstanceOf[IntegerHistory#Id] -> recordingsForAnId.whenEarliestChangeHappened) toMap
+      val ids = integerHistoryRecordingsGroupedById map (_.historyId.asInstanceOf[IntegerHistory#Id])
 
-      val ids = idsToWhenDefinedMap.keys toSeq
-
-      val idsInExistence = (idsToWhenDefinedMap filter { case (_, whenDefined) => queryWhen >= whenDefined } keys) toSeq
+      val idsInExistence = integerHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(queryWhen)) map (_.historyId.asInstanceOf[IntegerHistory#Id])
 
       implicit def arbitraryGenericBitemporal[Raw](implicit rawArbitrary: Arbitrary[Raw]): Arbitrary[Bitemporal[Raw]] = Arbitrary {
         Arbitrary.arbitrary[Raw] map (MonadPlus[Bitemporal].point(_))
@@ -205,6 +203,7 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
         // The filtering of ids here is hokey - disjoint history types can (actually, they do) share the same id type, so we'll
         // end up with ids that may be irrelevant to the flavour of 'AHistory' we are checking against. This doesn't matter, though,
         // because the queries we are cross checking allow the possibility that there are no items of the specific type to match them.
+        // TODO, HOKEY - this is garbage, need to think about lifespans, surely?
         val ids = (recordingsGroupedById map (_.historyId) filter (_.isInstanceOf[AHistory#Id]) map (_.asInstanceOf[AHistory#Id])).toSet
 
         Prop.all(ids.toSeq map (id => {
