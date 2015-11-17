@@ -106,16 +106,6 @@ trait WorldSpecSupport {
       Annihilation(_: Instant, historyId))
   }
 
-  /*  object RecordingsForAnId {
-      def stripChanges(recordings: List[(Any, Unbounded[Instant], Change)]) = recordings map { case (data, eventWhen, _) => data -> eventWhen }
-
-      def stripData(recordings: List[(Any, Unbounded[Instant], Change)]) = recordings map { case (_, eventWhen, change) => eventWhen -> change }
-
-      def eventWhens(recordings: List[(Any, Unbounded[Instant], Change)]) = {
-        recordings map { case (_, eventWhen, _) => eventWhen }
-      }
-    }*/
-
   trait RecordingsForAnId {
     val historyId: Any
 
@@ -174,9 +164,11 @@ trait WorldSpecSupport {
       lazy val doesNotExist = Some(NonExistentRecordings(historyId = historyId, historiesFrom = historiesFrom))
       val searchResult = sampleWhensGroupedForLifespans map (_.last) search when
       searchResult match {
-        case Found(relevantGroupIndex) => {
-          val haveLandedOnTheLastEventForAnEternalLifespan = sampleWhensGroupedForLifespans.size == 1 + relevantGroupIndex && !lastLifespanIsLimited
-          if (haveLandedOnTheLastEventForAnEternalLifespan)
+        case Found(foundGroupIndex) => {
+          val relevantGroupIndex = foundGroupIndex + (sampleWhensGroupedForLifespans drop foundGroupIndex lastIndexWhere (_.last == when))
+          val isTheLastEventInAnEternalLifespan = sampleWhensGroupedForLifespans.size == 1 + relevantGroupIndex && !lastLifespanIsLimited
+          val isRebornAtTheMomentOfDeath = sampleWhensGroupedForLifespans.size > 1 + relevantGroupIndex && sampleWhensGroupedForLifespans(1 + relevantGroupIndex).head == when
+          if (isTheLastEventInAnEternalLifespan || isRebornAtTheMomentOfDeath)
             None
           else
             doesNotExist
@@ -206,12 +198,15 @@ trait WorldSpecSupport {
 
       val searchResult = sampleWhensGroupedForLifespans map (_.last) search when
       searchResult match {
-        case Found(relevantGroupIndex) => {
-          val haveLandedOnTheLastEventForAnEternalLifespan = sampleWhensGroupedForLifespans.size == 1 + relevantGroupIndex && !lastLifespanIsLimited
-          if (haveLandedOnTheLastEventForAnEternalLifespan)
+        case Found(foundGroupIndex) => {
+          val relevantGroupIndex = foundGroupIndex + (sampleWhensGroupedForLifespans drop foundGroupIndex lastIndexWhere (_.last == when))
+          val isTheLastEventInAnEternalLifespan = sampleWhensGroupedForLifespans.size == 1 + relevantGroupIndex && !lastLifespanIsLimited
+          val isRebornAtTheMomentOfDeath = sampleWhensGroupedForLifespans.size > 1 + relevantGroupIndex && sampleWhensGroupedForLifespans(1 + relevantGroupIndex).head == when
+          if (isTheLastEventInAnEternalLifespan)
             thePartNoLaterThan(relevantGroupIndex)
-          else
-            None
+          else if (isRebornAtTheMomentOfDeath)
+            thePartNoLaterThan(1 + relevantGroupIndex)
+          else None
         }
         case InsertionPoint(relevantGroupIndex) => {
           val beyondTheFinalDemise = sampleWhensGroupedForLifespans.size == relevantGroupIndex && lastLifespanIsLimited
