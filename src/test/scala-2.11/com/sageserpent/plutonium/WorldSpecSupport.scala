@@ -20,6 +20,7 @@ import scala.spores._
 import scala.util.Random
 import scalaz.std.stream
 import scala.collection.Searching._
+import scala.collection.JavaConversions._
 
 
 trait WorldSpecSupport {
@@ -146,6 +147,22 @@ trait WorldSpecSupport {
       eventWhens.size <= 1 + dataSamples.size && eventWhens.size >= dataSamples.size
     })
 
+    override def toString = {
+      val body = (for {
+        (dataSamples, eventWhens) <- dataSamplesGroupedForLifespans zip sampleWhensGroupedForLifespans
+      } yield {
+        val numberOfChanges = dataSamples.size
+        // NOTE: we may have an extra event when - 'zip' will disregard this.
+        val data = dataSamples.toSeq zip eventWhens map { case ((dataSample, _), eventWhen) => dataSample.toString }
+        eventWhens zip (if (numberOfChanges < eventWhens.size)
+          data :+ ("Annihilation")
+        else
+          data)
+      }) flatten
+
+      s"Id: $historyId, body:-\n${String.join(",\n", body map (_.toString))}"
+    }
+
     override val events: List[(Unbounded[Instant], Event)] = (for {
       (dataSamples, eventWhens) <- dataSamplesGroupedForLifespans zip sampleWhensGroupedForLifespans
     } yield {
@@ -227,12 +244,13 @@ trait WorldSpecSupport {
     override val whenEarliestChangeHappened: Unbounded[Instant] = sampleWhensGroupedForLifespans.head.head
   }
 
-  def recordingsGroupedByIdGenerator_(dataSamplesForAnIdGenerator: Gen[(Any, Scope => Seq[History], List[(Any, (Unbounded[Instant]) => Change)], Instant => Annihilation[_ <: Identified])]) = {
+  def recordingsGroupedByIdGenerator_(dataSamplesForAnIdGenerator: Gen[(Any, Scope => Seq[History], List[(Any, (Unbounded[Instant]) => Change)], Instant => Annihilation[_ <: Identified])],
+                                      forbidAnnihilations: Boolean = false) = {
     val unconstrainedParametersGenerator = for {(historyId, historiesFrom, dataSamples, annihilationFor) <- dataSamplesForAnIdGenerator
                                                 seed <- seedGenerator
                                                 random = new Random(seed)
-                                                dataSamplesGroupedForLifespans = random.splitIntoNonEmptyPieces(dataSamples)
-                                                finalLifespanIsOngoing <- Arbitrary.arbitrary[Boolean]
+                                                dataSamplesGroupedForLifespans = if (forbidAnnihilations) Stream(dataSamples) else random.splitIntoNonEmptyPieces(dataSamples)
+                                                finalLifespanIsOngoing <- if (forbidAnnihilations) Gen.const(true) else Arbitrary.arbitrary[Boolean]
                                                 numberOfEventsForLifespans = {
                                                   def numberOfEventsForLimitedLifespans(dataSamplesGroupedForLimitedLifespans: Stream[Traversable[(Any, (Unbounded[Instant]) => Change)]]) = {
                                                     // Add an extra when for the annihilation at the end of the lifespan...
@@ -359,7 +377,7 @@ trait WorldSpecSupport {
       dataSamplesForAnIdGenerator_[MoreSpecificFooHistory](moreSpecificFooDataSampleGenerator(faulty), moreSpecificFooHistoryIdGenerator)) map (1 -> _): _*)
 
     val disjointLeftHandDataSamplesForAnIdGenerator = mixedDisjointLeftHandDataSamplesForAnIdGenerator
-    val disjointLeftHandRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(disjointLeftHandDataSamplesForAnIdGenerator)
+    val disjointLeftHandRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(disjointLeftHandDataSamplesForAnIdGenerator, forbidAnnihilations = faulty)
 
     val mixedDisjointRightHandDataSamplesForAnIdGenerator = Gen.frequency(Seq(
       dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator3(faulty), barHistoryIdGenerator),
@@ -368,7 +386,7 @@ trait WorldSpecSupport {
       dataSamplesForAnIdGenerator_[IntegerHistory](integerDataSampleGenerator(faulty), integerHistoryIdGenerator)) map (1 -> _): _*)
 
     val disjointRightHandDataSamplesForAnIdGenerator = mixedDisjointRightHandDataSamplesForAnIdGenerator
-    val disjointRightHandRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(disjointRightHandDataSamplesForAnIdGenerator)
+    val disjointRightHandRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(disjointRightHandDataSamplesForAnIdGenerator, forbidAnnihilations = faulty)
 
     val recordingsWithPotentialSharingOfIdsAcrossTheTwoDisjointHands = for {leftHandRecordingsGroupedById <- disjointLeftHandRecordingsGroupedByIdGenerator
                                                                             rightHandRecordingsGroupedById <- disjointRightHandRecordingsGroupedByIdGenerator} yield leftHandRecordingsGroupedById -> rightHandRecordingsGroupedById
