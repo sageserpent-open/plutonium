@@ -1,6 +1,7 @@
 package com.sageserpent.plutonium
 
 import java.time.Instant
+import java.util.UUID
 
 import com.sageserpent.americium
 import com.sageserpent.americium.{Finite, PositiveInfinity, Unbounded}
@@ -85,7 +86,7 @@ object Observation {
 // NOTE: it is OK to have annihilations and other events occurring at the same time: the documentation of 'World.revise'
 // covers how coincident events are resolved. So an item referred to by an id may be changed, then annihilated, then
 // recreated and so on all at the same time.
-case class Annihilation[Raw <: Identified: TypeTag](definiteWhen: Instant, id: Raw#Id) extends Event {
+case class Annihilation[Raw <: Identified: TypeTag](definiteWhen: Instant, id: Raw#Id, uuid: UUID = UUID.randomUUID()) extends Event {
   val when = Finite(definiteWhen)
   val typeTag = implicitly[TypeTag[Raw]]
 }

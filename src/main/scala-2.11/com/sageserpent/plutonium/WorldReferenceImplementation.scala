@@ -127,7 +127,7 @@ object WorldReferenceImplementation {
 
           event match {
             case Change(_, update) => update(scopeForEvent)
-            case annihilation@Annihilation(_, id) => {
+            case annihilation@Annihilation(_, id, _) => {
               implicit val typeTag = annihilation.typeTag
               identifiedItemsScopeThis.annihilateItemFor(id)
             }
