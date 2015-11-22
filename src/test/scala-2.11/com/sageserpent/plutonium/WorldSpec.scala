@@ -295,6 +295,30 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
     })
   }
 
+  it should "not permit the annihilation of an item at a query time coming before its first defining event" in {
+    val testCaseGenerator = for {recordingsGroupedById <- integerHistoryRecordingsGroupedByIdGenerator
+                                 seed <- seedGenerator
+                                 random = new Random(seed)
+                                 bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, recordingsGroupedById).zipWithIndex)
+                                 asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
+                                 definiteQueryWhen <- instantGenerator
+    } yield (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, definiteQueryWhen)
+    check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, definiteQueryWhen) =>
+      val world = new WorldUnderTest()
+
+      recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfs, world)
+
+      val scope = world.scopeFor(Finite(definiteQueryWhen), world.nextRevision)
+
+      Prop.all((for {NonExistentRecordings(historyId, historiesFrom) <- recordingsGroupedById flatMap (_.doesNotExistAt(Finite(definiteQueryWhen)))
+                     histories = historiesFrom(scope)}
+        yield {
+          intercept[RuntimeException](recordEventsInWorld(Stream(List(Some(Finite(definiteQueryWhen),
+            Annihilation[IntegerHistory](definiteQueryWhen, historyId.asInstanceOf[String])) -> -1)), List(asOfs.last), world))
+          true
+        } :| s"Should have rejected the attempt to annihilate an item that didn't exist at the query time."): _*)
+    })
+  }
 
   it should "have a next revision that reflects the last added revision" in {
     val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
