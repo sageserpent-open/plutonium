@@ -9,6 +9,7 @@ import com.sageserpent.plutonium.World.Revision
 import com.sageserpent.plutonium.WorldReferenceImplementation.IdentifiedItemsScopeImplementation
 import net.sf.cglib.proxy._
 
+import scala.IllegalArgumentException
 import scala.collection.Searching._
 import scala.collection.immutable.{SortedBagConfiguration, TreeBag}
 import scala.collection.mutable.MutableList
@@ -248,14 +249,7 @@ class WorldReferenceImplementation extends World {
       case _ => revisionToEventTimelineMap(nextRevision - 1)
     }
 
-    // Each event in 'eventIdToEventMap' should be in 'baselineEventTimeline' and vice-versa.
-
-    val eventsInBaselineEventTimeline = baselineEventTimeline map (_._1) toList
-    val eventsInEventIdToEventMap = eventIdToEventMap.values map (_._1) toList
-    val rogueEventsInEventIdToEventMap = eventsInEventIdToEventMap filter (!eventsInBaselineEventTimeline.contains(_))
-    val rogueEventsInBaselineEventTimeline = eventsInBaselineEventTimeline filter (!eventsInEventIdToEventMap.contains(_))
-    assert(rogueEventsInEventIdToEventMap.isEmpty)
-    assert(rogueEventsInBaselineEventTimeline.isEmpty)
+    checkInvariantWrtEventTimeline(baselineEventTimeline)
 
     val (eventIdsMadeObsoleteByThisRevision, eventsMadeObsoleteByThisRevision) = (for {eventId <- events.keys
                                                                                        obsoleteEvent <- eventIdToEventMap get eventId} yield eventId -> obsoleteEvent) unzip
@@ -273,10 +267,23 @@ class WorldReferenceImplementation extends World {
 
     eventIdToEventMap --= eventIdsMadeObsoleteByThisRevision ++= newEvents
 
+    checkInvariantWrtEventTimeline(newEventTimeline)
+
     revisionAsOfs += asOf
     val revision = nextRevision
     _nextRevision = nextRevisionPostThisOne
     revision
+  }
+
+  private def checkInvariantWrtEventTimeline(eventTimeline: EventTimeline): Unit = {
+    // Each event in 'eventIdToEventMap' should be in 'eventTimeline' and vice-versa.
+
+    val eventsInBaselineEventTimeline = eventTimeline map (_._1) toList
+    val eventsInEventIdToEventMap = eventIdToEventMap.values map (_._1) toList
+    val rogueEventsInEventIdToEventMap = eventsInEventIdToEventMap filter (!eventsInBaselineEventTimeline.contains(_))
+    val rogueEventsInBaselineEventTimeline = eventsInBaselineEventTimeline filter (!eventsInEventIdToEventMap.contains(_))
+    assert(rogueEventsInEventIdToEventMap.isEmpty)
+    assert(rogueEventsInBaselineEventTimeline.isEmpty)
   }
 
   // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
