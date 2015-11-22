@@ -147,6 +147,7 @@ object WorldReferenceImplementation {
       val needToConstructItem = idToItemsMultiMap.get(id) match {
         case None => true
         case Some(items) => {
+          assert(items.nonEmpty)
           if (IdentifiedItemsScopeImplementation.hasItemOfSupertypeOf[Raw](items))
             throw new RuntimeException("An event coming later than the first event defining an item may not attempt to narrow the item's type to something more specific.")
           !IdentifiedItemsScopeImplementation.hasItemOfType[Raw](items)
@@ -158,16 +159,17 @@ object WorldReferenceImplementation {
     }
 
     private def itemNoLongerExistsFor[Raw <: Identified : TypeTag](id: Raw#Id): Unit = {
-      // TODO - suppose the item doesn't exist to start with - shouldn't this cause a precondition failure?
+      idToItemsMultiMap.get(id) match {
+        case (Some(items)) =>
+          assert(items.nonEmpty)
 
-      val items = idToItemsMultiMap.getOrElse(id, scala.collection.mutable.Set.empty[Identified])
+          items --= IdentifiedItemsScopeImplementation.yieldOnlyItemsOfType(items toStream)
 
-      idToItemsMultiMap.remove(id)
-
-      items --= IdentifiedItemsScopeImplementation.yieldOnlyItemsOfType(items toStream)
-
-      if (items.nonEmpty)
-        idToItemsMultiMap(id) = items
+          if (items.isEmpty)
+            idToItemsMultiMap.remove(id)
+        case None =>
+          // TODO - suppose the item doesn't exist to start with - shouldn't this cause a precondition failure?
+      }
     }
 
 
