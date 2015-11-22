@@ -755,6 +755,7 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
       val listOfRevisionsToCheckAtAndRecordingsGroupedById = stream.unfold((testCaseSubsections zip asOfsForSubsections) -> -1) {
         case ((((recordingsGroupedById, bigShuffledHistoryOverLotsOfThings), asOfs) :: remainingSubsections), maximumEventIdFromPreviousSubsection) =>
           val sortedEventIds = (bigShuffledHistoryOverLotsOfThings flatMap (_ map (_._2))).sorted.distinct
+          assert(0 == sortedEventIds.head)
           assert((sortedEventIds zip sortedEventIds.tail).forall { case (first, second) => 1 + first == second })
           val maximumEventIdFromThisSubsection = sortedEventIds.last
           val annulmentsForExtraEventIdsNotCorrectedInThisSubsection = Stream((1 + maximumEventIdFromThisSubsection) to maximumEventIdFromPreviousSubsection map ((None: Option[(Unbounded[Instant], Event)]) -> _))

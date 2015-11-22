@@ -128,7 +128,7 @@ object WorldReferenceImplementation {
             case Change(_, update) => update(scopeForEvent)
             case annihilation@Annihilation(_, id) => {
               implicit val typeTag = annihilation.typeTag
-              identifiedItemsScopeThis.itemNoLongerExistsFor(id)
+              identifiedItemsScopeThis.annihilateItemFor(id)
             }
           }
         }
@@ -158,7 +158,7 @@ object WorldReferenceImplementation {
       }
     }
 
-    private def itemNoLongerExistsFor[Raw <: Identified : TypeTag](id: Raw#Id): Unit = {
+    private def annihilateItemFor[Raw <: Identified : TypeTag](id: Raw#Id): Unit = {
       idToItemsMultiMap.get(id) match {
         case (Some(items)) =>
           assert(items.nonEmpty)
@@ -247,6 +247,15 @@ class WorldReferenceImplementation extends World {
       case World.initialRevision => TreeBag.empty[(Event, Revision)]
       case _ => revisionToEventTimelineMap(nextRevision - 1)
     }
+
+    // Each event in 'eventIdToEventMap' should be in 'baselineEventTimeline' and vice-versa.
+
+    val eventsInBaselineEventTimeline = baselineEventTimeline map (_._1) toList
+    val eventsInEventIdToEventMap = eventIdToEventMap.values map (_._1) toList
+    val rogueEventsInEventIdToEventMap = eventsInEventIdToEventMap filter (!eventsInBaselineEventTimeline.contains(_))
+    val rogueEventsInBaselineEventTimeline = eventsInBaselineEventTimeline filter (!eventsInEventIdToEventMap.contains(_))
+    assert(rogueEventsInEventIdToEventMap.isEmpty)
+    assert(rogueEventsInBaselineEventTimeline.isEmpty)
 
     val (eventIdsMadeObsoleteByThisRevision, eventsMadeObsoleteByThisRevision) = (for {eventId <- events.keys
                                                                                        obsoleteEvent <- eventIdToEventMap get eventId} yield eventId -> obsoleteEvent) unzip
