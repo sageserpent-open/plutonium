@@ -615,7 +615,7 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
 
   val inconsistentlyTypedDataSamplesForAnIdGenerator = dataSamplesForAnIdGenerator_[FooHistory](moreSpecificFooDataSampleGenerator(faulty = false), fooHistoryIdGenerator, Some(dataSampleGenerator1(faulty = false)))
 
-  val inconsistentlyTypedRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(inconsistentlyTypedDataSamplesForAnIdGenerator)
+  val inconsistentlyTypedRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(inconsistentlyTypedDataSamplesForAnIdGenerator, forbidAnnihilations = true)
 
   it should "not permit subsequent events to demand that the type of an item referenced by an id become more specific than the one used by the initial defining event" in {
     {
