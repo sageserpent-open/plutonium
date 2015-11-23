@@ -297,7 +297,7 @@ trait WorldSpecSupport {
 
       def groupContainsAnAnnihilation(group: List[(Unbounded[Instant], Event)]) = group.exists(PartialFunction.cond(_) { case (_, _: Annihilation[_]) => true })
 
-      val groupedGroupsWithAnnihilationsIsolated = recordingsGroupedByWhen groupWhile { case (lhs, rhs) => !(groupContainsAnAnnihilation(lhs) && groupContainsAnAnnihilation(rhs)) }
+      val groupedGroupsWithAnnihilationsIsolated = recordingsGroupedByWhen groupWhile { case (lhs, rhs) => !(groupContainsAnAnnihilation(lhs) || groupContainsAnAnnihilation(rhs)) }
 
       groupedGroupsWithAnnihilationsIsolated flatMap (random.shuffle(_)) flatten
     }
