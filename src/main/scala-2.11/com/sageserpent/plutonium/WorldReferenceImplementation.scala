@@ -127,9 +127,9 @@ object WorldReferenceImplementation {
 
           event match {
             case Change(_, update) => update(scopeForEvent)
-            case annihilation@Annihilation(_, id, _) => {
+            case annihilation@Annihilation(when, id, _) => {
               implicit val typeTag = annihilation.typeTag
-              identifiedItemsScopeThis.annihilateItemFor(id)
+              identifiedItemsScopeThis.annihilateItemFor(id, when)
             }
           }
         }
@@ -159,7 +159,7 @@ object WorldReferenceImplementation {
       }
     }
 
-    private def annihilateItemFor[Raw <: Identified : TypeTag](id: Raw#Id): Unit = {
+    private def annihilateItemFor[Raw <: Identified : TypeTag](id: Raw#Id, when: Instant): Unit = {
       idToItemsMultiMap.get(id) match {
         case (Some(items)) =>
           assert(items.nonEmpty)
@@ -169,7 +169,7 @@ object WorldReferenceImplementation {
           if (items.isEmpty)
             idToItemsMultiMap.remove(id)
         case None =>
-          // TODO - suppose the item doesn't exist to start with - shouldn't this cause a precondition failure?
+          throw new RuntimeException("Attempt to annihilate item of id: $id that does not exist at: $when.")
       }
     }
 

@@ -19,7 +19,7 @@ import scalaz.{Equal, MonadPlus}
 class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
   "The class Bitemporal" should "be a monad plus instance" in {
     val testCaseGenerator = for {integerHistoryRecordingsGroupedById <- integerHistoryRecordingsGroupedByIdGenerator
-                                 obsoleteRecordingsGroupedById <- integerHistoryRecordingsGroupedByIdGenerator
+                                 obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
                                  seed <- seedGenerator
                                  random = new Random(seed)
                                  shuffledRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, integerHistoryRecordingsGroupedById)
@@ -69,7 +69,7 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
   }
 
   "A bitemporal wildcard" should "match all items of compatible type relevant to a scope" in {
-    val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
+    val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
                                  obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
                                  seed <- seedGenerator
                                  random = new Random(seed)
@@ -98,7 +98,7 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
   }
 
   "A bitemporal query using an id" should "match a subset of the corresponding wildcard query." in {
-    val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
+    val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
                                  obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
                                  seed <- seedGenerator
                                  random = new Random(seed)
@@ -138,7 +138,7 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
   }
 
   it should "yield items whose id matches the query" in {
-    val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
+    val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
                                  obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
                                  seed <- seedGenerator
                                  random = new Random(seed)
@@ -177,7 +177,7 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
   }
 
   it should "have alternate forms that correctly relate to each other" in {
-    val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
+    val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
                                  obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
                                  seed <- seedGenerator
                                  random = new Random(seed)
@@ -223,7 +223,7 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
   }
 
   "The bitemporal 'none'" should "not match anything" in {
-    val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
+    val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
                                  obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
                                  seed <- seedGenerator
                                  random = new Random(seed)
@@ -246,7 +246,7 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
   }
 
   "A bitemporal query" should "include instances of subtypes" in {
-    val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
+    val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
                                  obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
                                  seed <- seedGenerator
                                  random = new Random(seed)
@@ -282,7 +282,7 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
   }
 
   it should "result in read-only items" in {
-    val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator
+    val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
                                  obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
                                  seed <- seedGenerator
                                  random = new Random(seed)
