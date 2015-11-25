@@ -1,13 +1,15 @@
 package com.sageserpent.plutonium
 
+import java.lang.reflect.Method
 import java.time.Instant
 
-import com.sageserpent.americium
-import com.sageserpent.americium.{PositiveInfinity, Unbounded, Finite, NegativeInfinity}
+import com.sageserpent.americium.{Finite, NegativeInfinity, PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.Bitemporal.IdentifiedItemsScope
 import com.sageserpent.plutonium.World.Revision
 import com.sageserpent.plutonium.WorldReferenceImplementation.IdentifiedItemsScopeImplementation
+import net.sf.cglib.proxy._
 
+import scala.IllegalArgumentException
 import scala.collection.Searching._
 import scala.collection.immutable.{SortedBagConfiguration, TreeBag}
 import scala.collection.mutable.MutableList
@@ -15,8 +17,8 @@ import scala.reflect.runtime._
 import scala.reflect.runtime.universe._
 
 /**
- * Created by Gerard on 19/07/2015.
- */
+  * Created by Gerard on 19/07/2015.
+  */
 
 
 object WorldReferenceImplementation {
@@ -27,12 +29,15 @@ object WorldReferenceImplementation {
   implicit val eventBagConfiguration = SortedBagConfiguration.keepAll
 
   object IdentifiedItemsScopeImplementation {
-    def constructFrom[Raw <: Identified : TypeTag](id: Raw#Id) = {
+    def hasItemOfSupertypeOf[Raw <: Identified : TypeTag](items: scala.collection.mutable.Set[Identified]) = {
       val reflectedType = implicitly[TypeTag[Raw]].tpe
-      val constructor = reflectedType.decls.find(_.isConstructor) get
-      val classMirror = currentMirror.reflectClass(reflectedType.typeSymbol.asClass)
-      val constructorFunction = classMirror.reflectConstructor(constructor.asMethod)
-      constructorFunction(id).asInstanceOf[Raw]
+      val clazzOfRaw = currentMirror.runtimeClass(reflectedType)
+      items.exists { item =>
+        // HACK: in reality, everything with an id is actually
+        // an instance of a proxy subclass of 'Raw'.
+        val itemClazz = item.getClass.getSuperclass
+        itemClazz.isAssignableFrom(clazzOfRaw) && itemClazz != clazzOfRaw
+      }
     }
 
     def hasItemOfType[Raw <: Identified : TypeTag](items: scala.collection.mutable.Set[Identified]) = {
@@ -52,33 +57,85 @@ object WorldReferenceImplementation {
   class IdentifiedItemsScopeImplementation extends IdentifiedItemsScope {
     identifiedItemsScopeThis =>
 
-    def this(_when: americium.Unbounded[Instant], _nextRevision: Revision, _asOf: americium.Unbounded[Instant], eventTimeline: WorldReferenceImplementation#EventTimeline) = {
+    var itemsAreLocked = false
+
+    class LocalMethodInterceptor extends MethodInterceptor {
+      override def intercept(target: scala.Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy): AnyRef = {
+        if (itemsAreLocked && method.getReturnType == classOf[Unit])
+          throw new UnsupportedOperationException("Attempt to write to an item rendered from a bitemporal query.")
+        methodProxy.invokeSuper(target, arguments)
+      }
+    }
+
+    val cachedProxyConstructors = scala.collection.mutable.Map.empty[Type, universe.MethodMirror]
+
+    def constructFrom[Raw <: Identified : TypeTag](id: Raw#Id) = {
+      // NOTE: this returns items that are proxies to raw values, rather than the raw values themselves. Depending on the
+      // context (using a scope created by a client from a world, or a scope created implicitly for an event's spore), the items
+      // may forbid certain operations on them - e.g. for rendering from a client's scope, the items should be read-only.
+      def constructorFor(identifiableType: Type) = {
+        val clazz = currentMirror.runtimeClass(identifiableType.typeSymbol.asClass)
+        val enhancer = new Enhancer
+        enhancer.setInterceptDuringConstruction(false)
+        enhancer.setSuperclass(clazz)
+
+        enhancer.setCallbackType(classOf[LocalMethodInterceptor])
+
+        val proxyClazz = enhancer.createClass()
+
+        val proxyClassType = currentMirror.classSymbol(proxyClazz)
+        val classMirror = currentMirror.reflectClass(proxyClassType.asClass)
+        val constructor = (proxyClassType.toType.decls.find(_.isConstructor)).get
+        classMirror.reflectConstructor(constructor.asMethod)
+      }
+      val typeOfRaw = typeOf[Raw]
+      val constructor = cachedProxyConstructors.get(typeOfRaw) match {
+        case Some(constructor) => constructor
+        case None => val constructor = constructorFor(typeOfRaw)
+          cachedProxyConstructors += (typeOfRaw -> constructor)
+          constructor
+      }
+      val proxy = constructor(id).asInstanceOf[Raw]
+      proxy.asInstanceOf[Factory].setCallback(0, new LocalMethodInterceptor)
+      proxy
+    }
+
+
+    def this(_when: Unbounded[Instant], _nextRevision: Revision, _asOf: Unbounded[Instant], eventTimeline: WorldReferenceImplementation#EventTimeline) = {
       this()
-      val relevantEvents = eventTimeline.bucketsIterator flatMap (_.toArray.sortBy(_._2) map (_._1)) takeWhile (_when >= _.when)
-      for (event <- relevantEvents) {
-        val scopeForEvent = new com.sageserpent.plutonium.Scope {
-          override val when: americium.Unbounded[Instant] = event.when
+      try {
+        itemsAreLocked = false
+        val relevantEvents = eventTimeline.bucketsIterator flatMap (_.toArray.sortBy(_._2) map (_._1)) takeWhile (_when >= _.when)
+        for (event <- relevantEvents) {
+          val scopeForEvent = new com.sageserpent.plutonium.Scope {
+            override val when: Unbounded[Instant] = event.when
 
-          // NOTE: this should return proxies to raw values, rather than the raw values themselves. Depending on the kind of the scope (created by client using 'World', or implicitly in an event),
-          override def render[Raw](bitemporal: Bitemporal[Raw]): Stream[Raw] = {
-            bitemporal.interpret(new IdentifiedItemsScope {
-              override def allItems[Raw <: Identified : TypeTag](): Stream[Raw] = identifiedItemsScopeThis.allItems() // TODO - why doesn't this call 'IdentifiedItemsScopeImplementation.this.ensureItemExistsFor(id)'?
+            override def render[Raw](bitemporal: Bitemporal[Raw]): Stream[Raw] = {
+              bitemporal.interpret(new IdentifiedItemsScope {
+                override def allItems[Raw <: Identified : TypeTag](): Stream[Raw] = identifiedItemsScopeThis.allItems()
 
-              override def itemsFor[Raw <: Identified : TypeTag](id: Raw#Id): Stream[Raw] = {
-                identifiedItemsScopeThis.ensureItemExistsFor(id) // NASTY HACK, which is what this anonymous class is for. Yuk.
-                identifiedItemsScopeThis.itemsFor(id)
-              }
-            })
+                override def itemsFor[Raw <: Identified : TypeTag](id: Raw#Id): Stream[Raw] = {
+                  identifiedItemsScopeThis.ensureItemExistsFor(id) // NASTY HACK, which is what this anonymous class is for. Yuk.
+                  identifiedItemsScopeThis.itemsFor(id)
+                }
+              })
+            }
+
+            override val nextRevision: Revision = _nextRevision
+            override val asOf: Unbounded[Instant] = _asOf
           }
 
-          override val nextRevision: Revision = _nextRevision
-          override val asOf: americium.Unbounded[Instant] = _asOf
-        }
-
-        event match {
-          case Change(_, update) => update(scopeForEvent)
+          event match {
+            case Change(_, update) => update(scopeForEvent)
+            case annihilation@Annihilation(when, id, _) => {
+              implicit val typeTag = annihilation.typeTag
+              identifiedItemsScopeThis.annihilateItemFor(id, when)
+            }
+          }
         }
       }
+      finally
+        itemsAreLocked = true
     }
 
     class MultiMap[Key, Value] extends scala.collection.mutable.HashMap[Key, scala.collection.mutable.Set[Value]] with scala.collection.mutable.MultiMap[Key, Value] {
@@ -90,10 +147,29 @@ object WorldReferenceImplementation {
     private def ensureItemExistsFor[Raw <: Identified : TypeTag](id: Raw#Id): Unit = {
       val needToConstructItem = idToItemsMultiMap.get(id) match {
         case None => true
-        case Some(items) => !IdentifiedItemsScopeImplementation.hasItemOfType(items)
+        case Some(items) => {
+          assert(items.nonEmpty)
+          if (IdentifiedItemsScopeImplementation.hasItemOfSupertypeOf[Raw](items))
+            throw new RuntimeException("An event coming later than the first event defining an item may not attempt to narrow the item's type to something more specific.")
+          !IdentifiedItemsScopeImplementation.hasItemOfType[Raw](items)
+        }
       }
       if (needToConstructItem) {
-        idToItemsMultiMap.addBinding(id, IdentifiedItemsScopeImplementation.constructFrom(id))
+        idToItemsMultiMap.addBinding(id, constructFrom(id))
+      }
+    }
+
+    private def annihilateItemFor[Raw <: Identified : TypeTag](id: Raw#Id, when: Instant): Unit = {
+      idToItemsMultiMap.get(id) match {
+        case (Some(items)) =>
+          assert(items.nonEmpty)
+
+          items --= IdentifiedItemsScopeImplementation.yieldOnlyItemsOfType(items toStream)
+
+          if (items.isEmpty)
+            idToItemsMultiMap.remove(id)
+        case None =>
+          throw new RuntimeException("Attempt to annihilate item of id: $id that does not exist at: $when.")
       }
     }
 
@@ -119,14 +195,14 @@ class WorldReferenceImplementation extends World {
 
   val eventIdToEventMap = scala.collection.mutable.Map.empty[EventId, (Event, Revision)]
 
-  abstract class ScopeBasedOnNextRevision(val when: americium.Unbounded[Instant], val nextRevision: Revision) extends com.sageserpent.plutonium.Scope {
+  abstract class ScopeBasedOnNextRevision(val when: Unbounded[Instant], val nextRevision: Revision) extends com.sageserpent.plutonium.Scope {
     val asOf = nextRevision match {
       case World.initialRevision => NegativeInfinity[Instant]
       case _ => Finite(revisionAsOfs(nextRevision - 1))
     }
   }
 
-  abstract class ScopeBasedOnAsOf(val when: americium.Unbounded[Instant], unliftedAsOf: Instant) extends com.sageserpent.plutonium.Scope {
+  abstract class ScopeBasedOnAsOf(val when: Unbounded[Instant], unliftedAsOf: Instant) extends com.sageserpent.plutonium.Scope {
     override val asOf = Finite(unliftedAsOf)
 
     override val nextRevision: Revision = {
@@ -173,6 +249,8 @@ class WorldReferenceImplementation extends World {
       case _ => revisionToEventTimelineMap(nextRevision - 1)
     }
 
+    checkInvariantWrtEventTimeline(baselineEventTimeline)
+
     val (eventIdsMadeObsoleteByThisRevision, eventsMadeObsoleteByThisRevision) = (for {eventId <- events.keys
                                                                                        obsoleteEvent <- eventIdToEventMap get eventId} yield eventId -> obsoleteEvent) unzip
 
@@ -189,15 +267,28 @@ class WorldReferenceImplementation extends World {
 
     eventIdToEventMap --= eventIdsMadeObsoleteByThisRevision ++= newEvents
 
+    checkInvariantWrtEventTimeline(newEventTimeline)
+
     revisionAsOfs += asOf
     val revision = nextRevision
     _nextRevision = nextRevisionPostThisOne
     revision
   }
 
-  // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
-  override def scopeFor(when: americium.Unbounded[Instant], nextRevision: Revision): Scope = new ScopeBasedOnNextRevision(when, nextRevision) with ScopeImplementation
+  private def checkInvariantWrtEventTimeline(eventTimeline: EventTimeline): Unit = {
+    // Each event in 'eventIdToEventMap' should be in 'eventTimeline' and vice-versa.
+
+    val eventsInBaselineEventTimeline = eventTimeline map (_._1) toList
+    val eventsInEventIdToEventMap = eventIdToEventMap.values map (_._1) toList
+    val rogueEventsInEventIdToEventMap = eventsInEventIdToEventMap filter (!eventsInBaselineEventTimeline.contains(_))
+    val rogueEventsInBaselineEventTimeline = eventsInBaselineEventTimeline filter (!eventsInEventIdToEventMap.contains(_))
+    assert(rogueEventsInEventIdToEventMap.isEmpty)
+    assert(rogueEventsInBaselineEventTimeline.isEmpty)
+  }
 
   // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
-  override def scopeFor(when: americium.Unbounded[Instant], asOf: Instant): Scope = new ScopeBasedOnAsOf(when, asOf) with ScopeImplementation
+  override def scopeFor(when: Unbounded[Instant], nextRevision: Revision): Scope = new ScopeBasedOnNextRevision(when, nextRevision) with ScopeImplementation
+
+  // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
+  override def scopeFor(when: Unbounded[Instant], asOf: Instant): Scope = new ScopeBasedOnAsOf(when, asOf) with ScopeImplementation
 }

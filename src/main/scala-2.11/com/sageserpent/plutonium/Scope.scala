@@ -24,5 +24,9 @@ trait Scope {
 
   // NOTE: this should return proxies to raw values, rather than the raw values themselves. Depending on the kind of the scope (created by client using 'World', or implicitly in an event),
   // the proxies will be read-only or allow writes with interception to do mysterious magic.
+
+  // TODO: should there be an invariant that all identifiable items yielded from queries always have the same address for the same id and runtime type? If so,
+  // then what about non-identifiable bitemporals computed on the fly? Seems like this invariant is a sop to an imperative programming background where equality
+  // has to be done via object identity - don't want to encourage this. Let's wait and see...
   def render[Raw](bitemporal: Bitemporal[Raw]): Stream[Raw]
 }

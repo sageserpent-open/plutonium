@@ -26,15 +26,21 @@ Additional test - annulments that refer to events that have either never been de
 
 5. Need tests on the read / write access to raw objects in changes and rendered from query scopes.
 
+(DONE FOR FIRST-ORDER MUTATION, AM LEAVING IT FOR NOW THE HIGHER-ORDER DUE TO ISSUES WITH PROXIES - can only proxy interfaces or assume certain constructors on the proxied class)
+
 ---------------------------------------------------------------------------------------------------------------------------
 
 Actually, need to implement the support for equality the 'MonadPlus' typeclass - presumably with a scope made on the fly so that the lhs and rhs bitemporals can both be rendered against it.
-(DONE - A BIT MESSY, BUT WORKS WELL - could tidy this up so as to use an identifiable type that isn't a kind of 'History', and has a directly usable integer property.)
+(DONE - A BIT MESSY, BUT WORKS WELL - could tidy this up so as to use an identifiable type that isn't a kind of 'History', and has a directly usable integer property - DONE.)
 
-6. Are there tests for wildcards, plus the various flavours of id-matching? What about the 'none' case? What about having several items of different type sharing the same id? What about attempting to book in a revision that would lead to a new item sharing the same id as one with a sub- or -supertype?
+6. Are there tests for wildcards, plus the various flavours of id-matching? What about the 'none' case? What about having several items of different type sharing the same id?
+(DONE)
+
+(**** REMEMBER ****) What about attempting to book in a revision that would lead to a new item sharing the same id as one with a sub- or -supertype?
+(DONE)
 
 Pay attention to the 'withId' case - need several items to match the same id as well as zero or one.
-Similarly, wildcards need zero, one or many matches.
+Similarly, wildcards need zero, one or many matches. (DONE)
 
 7. Does there need to be a test that shows off combinations of rendered items in a Bitemporal monad? So we can see the interaction between histories of several items. Could this be mixed in with the existing tests?
 (GOT THIS ALEADY FROM THE 'MonadPlus' TEST SUITE)
@@ -55,6 +61,10 @@ For example, is there a test that checks that a scope passed to a change's spore
 
 Could do this for one of the test data classes by imposing a precondition on the setter that the new value is, say, one greater than the previous value - if the test can guarantee this the absence of a precondition failure implies
 that the scope in a spore captures all the history up to, but not including, the change.
+
+(THIS IS ALREADY TESTED INDIRECTLY - HAVE ADDED COMMENTARY TO DOCUMENT THIS)
+
+11. Use mixin technique to do design-by-contract precondition checking in a trait for the various bits and pieces.
 
 
 
