@@ -53,6 +53,8 @@ Similarly, wildcards need zero, one or many matches. (DONE)
 
 9. Tests for observations and annihilations.
 
+(ANNIHILATIONS - DONE)
+
 ---------------------------------------------------------------------------------------------------------------------------
 
 10. Is all of the commentary in the API covered by tests? OK if doing fault injection reveals a failure via existing tests?
