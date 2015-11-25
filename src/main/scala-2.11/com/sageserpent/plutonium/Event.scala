@@ -57,7 +57,7 @@ object Change {
 // public unit-returning methods from client code - and that only the top-level calls are recorded as patches, any nested calls made within
 // the execution of a top-level invocation are not recorded (actually the code isn't executed at all). Any attempt to call public property
 // getters, or public value-returning methods will result in an exception being thrown.
-// NOTE: the scope is synthetic one that has no prior history applied it to whatsoever - it is there purely to capture the effects
+// NOTE: the scope is a synthetic one that has no prior history applied it to whatsoever - it is there purely to capture the effects
 // of the recording.
 case class Observation(definiteWhen: Instant, recording: Spore[com.sageserpent.plutonium.Scope, Unit]) extends Event {
   val when = americium.Finite(definiteWhen)

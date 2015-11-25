@@ -19,7 +19,7 @@ trait Scope {
   // Why a stream for the result type? - 2 reasons that overlap - we may have no instance in force for the scope, or we might have several that share the same id, albeit with
   // different runtime subtypes of 'Raw'. What's more, if 'bitemporal' was cooked using 'Bitemporal.wildcard', we'll have every single instance of a runtime subtype of 'Raw'.
   // As an invariant (here - or on the API when recording event groups?) - it seems reasonable to forbid the possibility of two instances to share the same id if one has a runtime
-  // type that is a subtype of another (including obviously the trivial case of the types being equal). Of course, as far as this method is concerned, ids are irrelevant and the
+  // type that is a subtype of another (obviously excluding the trivial case of the types being equal). Of course, as far as this method is concerned, ids are irrelevant and the
   // raw values might have been computed on the fly without an id.
 
   // NOTE: this should return proxies to raw values, rather than the raw values themselves. Depending on the kind of the scope (created by client using 'World', or implicitly in an event),

@@ -26,8 +26,7 @@ trait World {
   // Question: does the order of appearance of the events matter, then? - Hmmm - the answer is that they take effect in order
   // of their 'when' value (obviously), using the order of appearance in 'events' as a tiebreaker if they were contributed
   // as part of the same shared revision.
-  // Next question: what if several events belonging to different event groups contributed in different revisions coincide in
-  // time?
+  // Next question: what if several events given in different revisions coincide in time?
   // Hmmm - the answer is that the order of the revisions contributing the events, as seen from the point of view of some scope
   // determines the order of the coincident events - those from earlier revisions take effect before those from later revisions.
 

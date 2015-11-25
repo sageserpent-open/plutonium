@@ -42,7 +42,7 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
     }))
   }
 
-  "A world with no history" should "have no current revision" in {
+  it should "have no current revision" in {
     val world = new WorldUnderTest()
 
     World.initialRevision shouldBe world.nextRevision
