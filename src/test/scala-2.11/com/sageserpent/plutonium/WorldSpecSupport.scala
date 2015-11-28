@@ -154,7 +154,9 @@ trait WorldSpecSupport {
     private def decisionsToMakeAChange(numberOfDataSamples: Int) = {
       val random = new Random(numberOfDataSamples)
       // TODO - remove jemmy hack.
-      true :: (List.fill(numberOfDataSamples - 1) { random.nextBoolean()})
+      List.fill(numberOfDataSamples) {
+        random.nextBoolean()
+      }
     }
 
     override def toString = {
@@ -218,10 +220,7 @@ trait WorldSpecSupport {
       def thePartNoLaterThan(relevantGroupIndex: Revision): Some[RecordingsNoLaterThan] = {
         val dataSampleAndWhenPairsForALifespan = dataSamplesGroupedForLifespans(relevantGroupIndex).toList.map(_._1) zip sampleWhensGroupedForLifespans(relevantGroupIndex)
 
-        def pickFromRunOfFollowingObservations(dataSamples: Seq[Any]) = {
-          // TODO - remove jemmy hack.
-          dataSamples.head//dataSamples.last
-        } // TODO - generalise this if and when observations progress beyond the 'latest when wins' strategy.
+        def pickFromRunOfFollowingObservations(dataSamples: Seq[Any]) = dataSamples.last // TODO - generalise this if and when observations progress beyond the 'latest when wins' strategy.
 
         val runsOfFollowingObservations = dataSampleAndWhenPairsForALifespan zip
           decisionsToMakeAChange(dataSampleAndWhenPairsForALifespan.size) groupWhile
