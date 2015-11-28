@@ -153,8 +153,8 @@ trait WorldSpecSupport {
 
     private def decisionsToMakeAChange(numberOfDataSamples: Int) = {
       val random = new Random(numberOfDataSamples)
-      // TODO - reinstate random flipping to switch on observations.
-      List.fill(numberOfDataSamples) { true /*random.nextBoolean()*/}
+      // TODO - remove jemmy hack.
+      true :: (List.fill(numberOfDataSamples - 1) { random.nextBoolean()})
     }
 
     override def toString = {
@@ -219,8 +219,8 @@ trait WorldSpecSupport {
         val dataSampleAndWhenPairsForALifespan = dataSamplesGroupedForLifespans(relevantGroupIndex).toList.map(_._1) zip sampleWhensGroupedForLifespans(relevantGroupIndex)
 
         def pickFromRunOfFollowingObservations(dataSamples: Seq[Any]) = {
-          require(dataSamples.size == 1)
-          dataSamples.last
+          // TODO - remove jemmy hack.
+          dataSamples.head//dataSamples.last
         } // TODO - generalise this if and when observations progress beyond the 'latest when wins' strategy.
 
         val runsOfFollowingObservations = dataSampleAndWhenPairsForALifespan zip
