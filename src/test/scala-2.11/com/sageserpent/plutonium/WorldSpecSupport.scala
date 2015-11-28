@@ -13,14 +13,14 @@ import com.sageserpent.americium.seqEnrichment._
 import com.sageserpent.plutonium.World._
 import org.scalacheck.{Arbitrary, Gen}
 
+import scala.collection.JavaConversions._
+import scala.collection.Searching._
 import scala.collection.immutable
 import scala.collection.immutable.TreeMap
 import scala.reflect.runtime.universe._
 import scala.spores._
 import scala.util.Random
 import scalaz.std.stream
-import scala.collection.Searching._
-import scala.collection.JavaConversions._
 
 
 trait WorldSpecSupport {
@@ -151,13 +151,19 @@ trait WorldSpecSupport {
       eventWhens.size <= 1 + dataSamples.size && eventWhens.size >= dataSamples.size
     })
 
+    private def decisionsToMakeAChange(numberOfDataSamples: Int) = {
+      val random = new Random(numberOfDataSamples)
+      // TODO - reinstate random flipping to switch on observations.
+      List.fill(numberOfDataSamples) { true /*random.nextBoolean()*/}
+    }
+
     override def toString = {
       val body = (for {
         (dataSamples, eventWhens) <- dataSamplesGroupedForLifespans zip sampleWhensGroupedForLifespans
       } yield {
         val numberOfChanges = dataSamples.size
         // NOTE: we may have an extra event when - 'zip' will disregard this.
-        val data = dataSamples.toSeq zip eventWhens map { case ((dataSample, _), eventWhen) => dataSample.toString }
+        val data = dataSamples.toSeq zip decisionsToMakeAChange(dataSamples.size) zip eventWhens map { case (((dataSample, _), makeAChange), eventWhen) => (if (makeAChange) "Change: " else "Observation: ") ++ dataSample.toString }
         eventWhens zip (if (numberOfChanges < eventWhens.size)
           data :+ "Annihilation"
         else
@@ -172,7 +178,7 @@ trait WorldSpecSupport {
     } yield {
       val numberOfChanges = dataSamples.size
       // NOTE: we may have an extra event when - 'zip' will disregard this.
-      val changes = dataSamples.toSeq zip eventWhens map { case ((_, changeFor), eventWhen) => changeFor(eventWhen, true) }
+      val changes = dataSamples.toSeq zip decisionsToMakeAChange(dataSamples.size) zip eventWhens map { case (((_, changeFor), makeAChange), eventWhen) => changeFor(eventWhen, makeAChange) }
       eventWhens zip (if (numberOfChanges < eventWhens.size)
         changes :+ annihilationFor(eventWhens.last match { case Finite(definiteWhen) => definiteWhen })
       else
@@ -210,9 +216,25 @@ trait WorldSpecSupport {
 
     override def thePartNoLaterThan(when: Unbounded[Instant]): Option[RecordingsNoLaterThan] = {
       def thePartNoLaterThan(relevantGroupIndex: Revision): Some[RecordingsNoLaterThan] = {
+        val dataSampleAndWhenPairsForALifespan = dataSamplesGroupedForLifespans(relevantGroupIndex).toList.map(_._1) zip sampleWhensGroupedForLifespans(relevantGroupIndex)
+
+        def pickFromRunOfFollowingObservations(dataSamples: Seq[Any]) = {
+          require(dataSamples.size == 1)
+          dataSamples.last
+        } // TODO - generalise this if and when observations progress beyond the 'latest when wins' strategy.
+
+        val runsOfFollowingObservations = dataSampleAndWhenPairsForALifespan zip
+          decisionsToMakeAChange(dataSampleAndWhenPairsForALifespan.size) groupWhile
+          {case (_, (_, makeAChange)) => !makeAChange} map
+          (_ map (_._1)) toList
+
+        val dataSampleAndWhenPairsForALifespanPickedFromRuns = runsOfFollowingObservations map {runOfFollowingObservations =>
+          pickFromRunOfFollowingObservations(runOfFollowingObservations map (_._1)) -> runOfFollowingObservations.head._2
+        }
+
         Some(RecordingsNoLaterThan(historyId = historyId,
           historiesFrom = historiesFrom,
-          datums = dataSamplesGroupedForLifespans(relevantGroupIndex).toList zip sampleWhensGroupedForLifespans(relevantGroupIndex) takeWhile { case (_, eventWhen) => eventWhen <= when } map { case ((dataSample, _), eventWhen) => dataSample -> eventWhen }))
+          datums = dataSampleAndWhenPairsForALifespanPickedFromRuns takeWhile { case (_, eventWhen) => eventWhen <= when }))
       }
 
       val searchResult = sampleWhensGroupedForLifespans map (_.last) search when
