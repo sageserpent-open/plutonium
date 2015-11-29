@@ -317,7 +317,7 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
         yield {
           intercept[RuntimeException](recordEventsInWorld(Stream(List(Some(Finite(definiteQueryWhen),
             Annihilation[IntegerHistory](definiteQueryWhen, historyId.asInstanceOf[String])) -> -1)), List(asOfs.last), world))
-          true
+          Prop.proved
         } :| s"Should have rejected the attempt to annihilate an item that didn't exist at the query time."): _*)
     })
   }
@@ -427,7 +427,7 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
 
       {
         intercept[IllegalArgumentException](recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfsWithIncorrectTransposition, world))
-        true
+        Prop.proved
       } :| s"Using ${asOfsWithIncorrectTransposition} should cause a precondition failure."
     })
   }
@@ -636,7 +636,7 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
 
         {
           intercept[RuntimeException](recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world))
-          true
+          Prop.proved
         } :| s"Should have rejected the attempt to demand that an existing item in a subsequent event has a more specific type than when it was first defined."
       })
     }

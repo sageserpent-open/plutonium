@@ -131,6 +131,7 @@ object WorldReferenceImplementation {
               implicit val typeTag = annihilation.typeTag
               identifiedItemsScopeThis.annihilateItemFor(id, when)
             }
+            case Observation(_, _) =>
           }
         }
       }
