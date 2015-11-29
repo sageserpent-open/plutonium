@@ -431,10 +431,12 @@ trait WorldSpecSupport {
     val recordingsWithPotentialSharingOfIdsAcrossTheTwoDisjointHands = for {leftHandRecordingsGroupedById <- disjointLeftHandRecordingsGroupedByIdGenerator
                                                                             rightHandRecordingsGroupedById <- disjointRightHandRecordingsGroupedByIdGenerator} yield leftHandRecordingsGroupedById -> rightHandRecordingsGroupedById
 
-    // Force at least one id to be shared across disjoint types.
-    recordingsWithPotentialSharingOfIdsAcrossTheTwoDisjointHands retryUntil
-      { case (leftHand, rightHand) => (leftHand.map(_.historyId).toSet intersect rightHand.map(_.historyId).toSet).nonEmpty }  map
-      { case (leftHand, rightHand) => leftHand ++ rightHand }
+    for {
+      forceSharingOfId <- Gen.frequency(1 -> true, 3 -> false)
+      (leftHand, rightHand) <- if (forceSharingOfId) recordingsWithPotentialSharingOfIdsAcrossTheTwoDisjointHands retryUntil { case (leftHand, rightHand) => (leftHand.map(_.historyId).toSet intersect rightHand.map(_.historyId).toSet).nonEmpty }
+      else recordingsWithPotentialSharingOfIdsAcrossTheTwoDisjointHands
+    }
+      yield leftHand ++ rightHand
   }
 
   def recordingsGroupedByIdGenerator(forbidAnnihilations: Boolean) = mixedRecordingsGroupedByIdGenerator(forbidAnnihilations = forbidAnnihilations)
