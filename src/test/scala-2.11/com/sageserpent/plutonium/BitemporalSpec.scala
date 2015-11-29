@@ -17,6 +17,9 @@ import scalaz.{Equal, MonadPlus}
  */
 
 class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
+  implicit override val generatorDrivenConfig =
+    PropertyCheckConfig(maxSize = 30)
+
   "The class Bitemporal" should "be a monad plus instance" in {
     val testCaseGenerator = for {integerHistoryRecordingsGroupedById <- integerHistoryRecordingsGroupedByIdGenerator
                                  obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
@@ -199,7 +202,6 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
         // The filtering of ids here is hokey - disjoint history types can (actually, they do) share the same id type, so we'll
         // end up with ids that may be irrelevant to the flavour of 'AHistory' we are checking against. This doesn't matter, though,
         // because the queries we are cross checking allow the possibility that there are no items of the specific type to match them.
-        // TODO, HOKEY - this is garbage, need to think about lifespans, surely?
         val ids = (recordingsGroupedById map (_.historyId) filter (_.isInstanceOf[AHistory#Id]) map (_.asInstanceOf[AHistory#Id])).toSet
 
         Prop.all(ids.toSeq map (id => {
@@ -208,11 +210,17 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
             val itemsFromZeroOrOneOfQuery = scope.render(Bitemporal.zeroOrOneOf[History](id)).toSet
             (itemsFromGenericQueryById == itemsFromZeroOrOneOfQuery) :| s"${itemsFromGenericQueryById} == itemsFromZeroOrOneOfQuery"
           }
-          else Prop.proved) && (if (1 == itemsFromGenericQueryById.size) {
+          else {
+            intercept[RuntimeException](scope.render(Bitemporal.zeroOrOneOf[History](id)))
+            Prop.proved
+          }) && (if (1 == itemsFromGenericQueryById.size) {
             val itemsFromSingleOneOfQuery = scope.render(Bitemporal.singleOneOf[History](id)).toSet
             (itemsFromGenericQueryById == itemsFromSingleOneOfQuery) :| s"${itemsFromGenericQueryById} == itemsFromSingleOneOfQuery"
           }
-          else Prop.proved)
+          else {
+            intercept[RuntimeException](scope.render(Bitemporal.singleOneOf[History](id)))
+            Prop.proved
+          })
         }): _*)
       }
 
