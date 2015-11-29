@@ -435,7 +435,7 @@ trait WorldSpecSupport {
       forceSharingOfId <- Gen.frequency(1 -> true, 3 -> false)
       (leftHand, rightHand) <- if (forceSharingOfId) recordingsWithPotentialSharingOfIdsAcrossTheTwoDisjointHands retryUntil { case (leftHand, rightHand) => (leftHand.map(_.historyId).toSet intersect rightHand.map(_.historyId).toSet).nonEmpty }
       else recordingsWithPotentialSharingOfIdsAcrossTheTwoDisjointHands
-    }
+  }
       yield leftHand ++ rightHand
   }
 
