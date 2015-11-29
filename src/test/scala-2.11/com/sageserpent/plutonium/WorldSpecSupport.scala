@@ -57,6 +57,17 @@ trait WorldSpecSupport {
 
   def dataSampleGenerator1(faulty: Boolean) = for {data <- Arbitrary.arbitrary[String]} yield (data, (when: americium.Unbounded[Instant], makeAChange: Boolean, fooHistoryId: FooHistory#Id) => eventConstructor[FooHistory](makeAChange)(when)(fooHistoryId, (fooHistory: FooHistory) => {
     if (capture(faulty)) throw changeError // Modelling a precondition failure.
+    if (!capture(makeAChange)) try{
+      fooHistory.id
+      fooHistory.datums
+      fooHistory.property1
+      fooHistory.property2
+      // Observations aren't allowed to read from the items they work on.
+      assert(false)
+    }
+    catch {
+      case _ :RuntimeException =>
+    }
     fooHistory.property1 = capture(data)
   }))
 
@@ -80,6 +91,16 @@ trait WorldSpecSupport {
                                                    data2 <- Arbitrary.arbitrary[String]
                                                    data3 <- Arbitrary.arbitrary[Boolean]} yield ((data1, data2, data3), (when: Unbounded[Instant], makeAChange: Boolean, barHistoryId: BarHistory#Id) => eventConstructor[BarHistory](makeAChange)(when)(barHistoryId, (barHistory: BarHistory) => {
     if (capture(faulty)) throw changeError // Modelling an admissible postcondition failure.
+    if (!capture(makeAChange)) try{
+      barHistory.id
+      barHistory.datums
+      barHistory.property1
+      // Observations aren't allowed to read from the items they work on.
+      assert(false)
+    }
+    catch {
+      case _ :RuntimeException =>
+    }
     barHistory.method2(capture(data1), capture(data2), capture(data3))
   }))
 
