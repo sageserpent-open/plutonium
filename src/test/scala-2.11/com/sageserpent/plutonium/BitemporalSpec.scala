@@ -17,6 +17,9 @@ import scalaz.{Equal, MonadPlus}
  */
 
 class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
+  implicit override val generatorDrivenConfig =
+    PropertyCheckConfig(maxSize = 30)
+
   "The class Bitemporal" should "be a monad plus instance" in {
     val testCaseGenerator = for {integerHistoryRecordingsGroupedById <- integerHistoryRecordingsGroupedByIdGenerator
                                  obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator

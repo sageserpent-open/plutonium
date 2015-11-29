@@ -21,6 +21,8 @@ import scala.util.Random
 import scalaz.std.stream
 
 class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSupport {
+  implicit override val generatorDrivenConfig =
+    PropertyCheckConfig(maxSize = 30)
 
   class NonExistentIdentified extends Identified {
     override type Id = String
