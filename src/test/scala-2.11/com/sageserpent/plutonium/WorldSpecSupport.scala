@@ -153,7 +153,6 @@ trait WorldSpecSupport {
 
     private def decisionsToMakeAChange(numberOfDataSamples: Int) = {
       val random = new Random(numberOfDataSamples)
-      // TODO - remove jemmy hack.
       List.fill(numberOfDataSamples) {
         random.nextBoolean()
       }

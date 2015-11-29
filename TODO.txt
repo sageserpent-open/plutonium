@@ -55,6 +55,8 @@ Similarly, wildcards need zero, one or many matches. (DONE)
 
 (ANNIHILATIONS - DONE)
 
+(OBSERVATIONS - got the general 'mix in observations' test support done. Need a test th prove that an observation spore cannot read from a scope.) 
+
 ---------------------------------------------------------------------------------------------------------------------------
 
 10. Is all of the commentary in the API covered by tests? OK if doing fault injection reveals a failure via existing tests?
