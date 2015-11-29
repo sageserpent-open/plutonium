@@ -155,7 +155,7 @@ trait WorldSpecSupport {
       val random = new Random(numberOfDataSamples)
       List.fill(numberOfDataSamples) {
         random.nextBoolean()
-      }
+    }
     }
 
     override def toString = {
@@ -411,7 +411,9 @@ trait WorldSpecSupport {
                                                                             rightHandRecordingsGroupedById <- disjointRightHandRecordingsGroupedByIdGenerator} yield leftHandRecordingsGroupedById -> rightHandRecordingsGroupedById
 
     // Force at least one id to be shared across disjoint types.
-    recordingsWithPotentialSharingOfIdsAcrossTheTwoDisjointHands map { case (leftHand, rightHand) => leftHand ++ rightHand }
+    recordingsWithPotentialSharingOfIdsAcrossTheTwoDisjointHands retryUntil
+      { case (leftHand, rightHand) => (leftHand.map(_.historyId).toSet intersect rightHand.map(_.historyId).toSet).nonEmpty }  map
+      { case (leftHand, rightHand) => leftHand ++ rightHand }
   }
 
   def recordingsGroupedByIdGenerator(forbidAnnihilations: Boolean) = mixedRecordingsGroupedByIdGenerator(forbidAnnihilations = forbidAnnihilations)
