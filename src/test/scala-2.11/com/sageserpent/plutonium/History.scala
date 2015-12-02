@@ -4,6 +4,8 @@ package com.sageserpent.plutonium
  * Created by Gerard on 21/09/2015.
  */
 abstract class History extends Identified {
+  override def hashCode = super.hashCode
+
   private val _datums = scala.collection.mutable.MutableList.empty[Any]
 
   // Subclasses should define properties whose updates call this method to log the update in the history.
