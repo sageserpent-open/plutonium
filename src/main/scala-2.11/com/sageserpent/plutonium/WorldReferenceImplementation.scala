@@ -63,6 +63,8 @@ object WorldReferenceImplementation {
       override def intercept(target: scala.Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy): AnyRef = {
         if (itemsAreLocked && method.getReturnType == classOf[Unit])
           throw new UnsupportedOperationException("Attempt to write to an item rendered from a bitemporal query.")
+        else if (!itemsAreLocked && method.getReturnType != classOf[Unit] && method.getDeclaringClass != classOf[AnyRef])
+          throw new UnsupportedOperationException("Attempt to read from an item rendered from a bitemporal query within a change or observation.")
         methodProxy.invokeSuper(target, arguments)
       }
     }
