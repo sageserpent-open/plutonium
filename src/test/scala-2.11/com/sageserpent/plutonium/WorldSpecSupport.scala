@@ -53,29 +53,81 @@ trait WorldSpecSupport {
 
   def dataSampleGenerator1(faulty: Boolean) = for {data <- Arbitrary.arbitrary[String]} yield (data, (when: americium.Unbounded[Instant], fooHistoryId: FooHistory#Id) => Change[FooHistory](when)(fooHistoryId, (fooHistory: FooHistory) => {
     if (capture(faulty)) throw changeError // Modelling a precondition failure.
+    try{
+      fooHistory.id
+      fooHistory.datums
+      fooHistory.property1
+      fooHistory.property2
+      // Neither changes nor observations are allowed to read from the items they work on.
+      assert(false)
+    }
+    catch {
+      case _ :RuntimeException =>
+    }
     fooHistory.property1 = capture(data)
   }))
 
   def dataSampleGenerator2(faulty: Boolean) = for {data <- Arbitrary.arbitrary[Boolean]} yield (data, (when: Unbounded[Instant], fooHistoryId: FooHistory#Id) => Change[FooHistory](when)(fooHistoryId, (fooHistory: FooHistory) => {
-    fooHistory.property2 = capture(data)
     if (capture(faulty)) throw changeError // Modelling an admissible postcondition failure.
+    try{
+      fooHistory.id
+      fooHistory.datums
+      fooHistory.property1
+      fooHistory.property2
+      // Neither changes nor observations are allowed to read from the items they work on.
+      assert(false)
+    }
+    catch {
+      case _ :RuntimeException =>
+    }
+    fooHistory.property2 = capture(data)
   }))
 
   def dataSampleGenerator3(faulty: Boolean) = for {data <- Arbitrary.arbitrary[Double]} yield (data, (when: Unbounded[Instant], barHistoryId: BarHistory#Id) => Change[BarHistory](when)(barHistoryId, (barHistory: BarHistory) => {
     if (capture(faulty)) throw changeError
+    try{
+      barHistory.id
+      barHistory.datums
+      barHistory.property1
+      // Neither changes nor observations are allowed to read from the items they work on.
+      assert(false)
+    }
+    catch {
+      case _ :RuntimeException =>
+    }
     barHistory.property1 = capture(data) // Modelling a precondition failure.
   }))
 
   def dataSampleGenerator4(faulty: Boolean) = for {data1 <- Arbitrary.arbitrary[String]
                                                    data2 <- Arbitrary.arbitrary[Int]} yield (data1 -> data2, (when: americium.Unbounded[Instant], barHistoryId: BarHistory#Id) => Change[BarHistory](when)(barHistoryId, (barHistory: BarHistory) => {
-    barHistory.method1(capture(data1), capture(data2))
     if (capture(faulty)) throw changeError // Modelling an admissible postcondition failure.
+    try{
+      barHistory.id
+      barHistory.datums
+      barHistory.property1
+      // Neither changes nor observations are allowed to read from the items they work on.
+      assert(false)
+    }
+    catch {
+      case _ :RuntimeException =>
+    }
+    barHistory.method1(capture(data1), capture(data2))
   }))
 
   def dataSampleGenerator5(faulty: Boolean) = for {data1 <- Arbitrary.arbitrary[Int]
                                                    data2 <- Arbitrary.arbitrary[String]
                                                    data3 <- Arbitrary.arbitrary[Boolean]} yield ((data1, data2, data3), (when: Unbounded[Instant], barHistoryId: BarHistory#Id) => Change[BarHistory](when)(barHistoryId, (barHistory: BarHistory) => {
     if (capture(faulty)) throw changeError // Modelling an admissible postcondition failure.
+    try{
+      barHistory.id
+      barHistory.datums
+      barHistory.property1
+      // Neither changes nor observations are allowed to read from the items they work on.
+      assert(false)
+    }
+    catch {
+      case _ :RuntimeException =>
+    }
     barHistory.method2(capture(data1), capture(data2), capture(data3))
   }))
 

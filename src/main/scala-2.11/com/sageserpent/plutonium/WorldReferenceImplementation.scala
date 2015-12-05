@@ -52,6 +52,16 @@ object WorldReferenceImplementation {
 
       items filter (clazzOfRaw.isInstance(_)) map (clazzOfRaw.cast(_))
     }
+
+    def alwaysAllowsReadAccessTo(method: Method) = nonMutableMembersThatCanAlwaysBeReadFrom.exists(exclusionMethod => {
+      exclusionMethod.getName == method.getName &&
+        exclusionMethod.getDeclaringClass.isAssignableFrom(method.getDeclaringClass) &&
+        exclusionMethod.getReturnType == method.getReturnType &&
+        exclusionMethod.getParameterCount == method.getParameterCount &&
+        exclusionMethod.getParameterTypes.toSeq == method.getParameterTypes.toSeq // What about contravariance? Hmmm...
+    })
+
+    val nonMutableMembersThatCanAlwaysBeReadFrom = classOf[Identified].getMethods ++ classOf[AnyRef].getMethods
   }
 
   class IdentifiedItemsScopeImplementation extends IdentifiedItemsScope {
@@ -59,10 +69,22 @@ object WorldReferenceImplementation {
 
     var itemsAreLocked = false
 
+    var stopInfiniteRecursiveInterception = false
+
     class LocalMethodInterceptor extends MethodInterceptor {
       override def intercept(target: scala.Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy): AnyRef = {
+        if (!stopInfiniteRecursiveInterception) {
+          try {
+            stopInfiniteRecursiveInterception = true
+
         if (itemsAreLocked && method.getReturnType == classOf[Unit])
-          throw new UnsupportedOperationException("Attempt to write to an item rendered from a bitemporal query.")
+              throw new UnsupportedOperationException("Attempt to write via: $method to an item: $target rendered from a bitemporal query.")
+            else if (!itemsAreLocked && method.getReturnType != classOf[Unit] && !IdentifiedItemsScopeImplementation.alwaysAllowsReadAccessTo(method))
+              throw new UnsupportedOperationException("Attempt to read via: $method from an item: $target rendered from a bitemporal query within a change or observation.")
+          } finally {
+            stopInfiniteRecursiveInterception = false
+          }
+        }
         methodProxy.invokeSuper(target, arguments)
       }
     }
