@@ -71,6 +71,7 @@ object WorldReferenceImplementation {
 
     var stopInfiniteRecursiveInterception = false
 
+    // TODO - split method interception between getters and setters.
     class LocalMethodInterceptor extends MethodInterceptor {
       override def intercept(target: scala.Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy): AnyRef = {
         if (!stopInfiniteRecursiveInterception) {
@@ -79,7 +80,7 @@ object WorldReferenceImplementation {
 
         if (itemsAreLocked && method.getReturnType == classOf[Unit])
               throw new UnsupportedOperationException("Attempt to write via: $method to an item: $target rendered from a bitemporal query.")
-            else if (!itemsAreLocked && method.getReturnType != classOf[Unit] && !IdentifiedItemsScopeImplementation.alwaysAllowsReadAccessTo(method))
+            else if (!itemsAreLocked && method.getReturnType != classOf[Unit])
               throw new UnsupportedOperationException("Attempt to read via: $method from an item: $target rendered from a bitemporal query within a change or observation.")
           } finally {
             stopInfiniteRecursiveInterception = false
@@ -88,6 +89,14 @@ object WorldReferenceImplementation {
         methodProxy.invokeSuper(target, arguments)
       }
     }
+
+    val localMethodInterceptor = new LocalMethodInterceptor
+
+    class RoleBasedCallbackFilter extends CallbackFilter {
+      override def accept(method: Method): Revision = if (IdentifiedItemsScopeImplementation.alwaysAllowsReadAccessTo(method)) 0 else 1
+    }
+
+    val roleBasedCallbackFilter = new RoleBasedCallbackFilter
 
     val cachedProxyConstructors = scala.collection.mutable.Map.empty[Type, universe.MethodMirror]
 
@@ -101,7 +110,8 @@ object WorldReferenceImplementation {
         enhancer.setInterceptDuringConstruction(false)
         enhancer.setSuperclass(clazz)
 
-        enhancer.setCallbackType(classOf[LocalMethodInterceptor])
+        enhancer.setCallbackTypes(Array(classOf[NoOp], classOf[LocalMethodInterceptor]))
+        enhancer.setCallbackFilter(roleBasedCallbackFilter)
 
         val proxyClazz = enhancer.createClass()
 
@@ -118,7 +128,8 @@ object WorldReferenceImplementation {
           constructor
       }
       val proxy = constructor(id).asInstanceOf[Raw]
-      proxy.asInstanceOf[Factory].setCallback(0, new LocalMethodInterceptor)
+      proxy.asInstanceOf[Factory].setCallback(0, NoOp.INSTANCE)
+      proxy.asInstanceOf[Factory].setCallback(1, localMethodInterceptor)
       proxy
     }
 
