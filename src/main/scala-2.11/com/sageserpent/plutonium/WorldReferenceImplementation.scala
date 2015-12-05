@@ -89,6 +89,8 @@ object WorldReferenceImplementation {
       }
     }
 
+    val localMethodInterceptor = new LocalMethodInterceptor
+
     val cachedProxyConstructors = scala.collection.mutable.Map.empty[Type, universe.MethodMirror]
 
     def constructFrom[Raw <: Identified : TypeTag](id: Raw#Id) = {
@@ -118,7 +120,7 @@ object WorldReferenceImplementation {
           constructor
       }
       val proxy = constructor(id).asInstanceOf[Raw]
-      proxy.asInstanceOf[Factory].setCallback(0, new LocalMethodInterceptor)
+      proxy.asInstanceOf[Factory].setCallback(0, localMethodInterceptor)
       proxy
     }
 
