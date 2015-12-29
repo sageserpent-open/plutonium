@@ -15,6 +15,7 @@ import scala.collection.immutable.{SortedBagConfiguration, TreeBag}
 import scala.collection.mutable.MutableList
 import scala.reflect.runtime._
 import scala.reflect.runtime.universe._
+import resource.makeManagedResource
 
 /**
   * Created by Gerard on 19/07/2015.
@@ -74,15 +75,13 @@ object WorldReferenceImplementation {
     class LocalMethodInterceptor extends MethodInterceptor {
       override def intercept(target: scala.Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy): AnyRef = {
         if (!stopInfiniteRecursiveInterception) {
-          try {
+          for (_ <- makeManagedResource {
             stopInfiniteRecursiveInterception = true
-
-        if (itemsAreLocked && method.getReturnType == classOf[Unit])
+          } { _ => stopInfiniteRecursiveInterception = false }(List.empty)) {
+            if (itemsAreLocked && method.getReturnType == classOf[Unit])
               throw new UnsupportedOperationException("Attempt to write via: $method to an item: $target rendered from a bitemporal query.")
             else if (!itemsAreLocked && method.getReturnType != classOf[Unit] && !IdentifiedItemsScopeImplementation.alwaysAllowsReadAccessTo(method))
               throw new UnsupportedOperationException("Attempt to read via: $method from an item: $target rendered from a bitemporal query within a change or observation.")
-          } finally {
-            stopInfiniteRecursiveInterception = false
           }
         }
         methodProxy.invokeSuper(target, arguments)
@@ -109,7 +108,7 @@ object WorldReferenceImplementation {
 
         val proxyClassType = currentMirror.classSymbol(proxyClazz)
         val classMirror = currentMirror.reflectClass(proxyClassType.asClass)
-        val constructor = (proxyClassType.toType.decls.find(_.isConstructor)).get
+        val constructor = proxyClassType.toType.decls.find(_.isConstructor).get
         classMirror.reflectConstructor(constructor.asMethod)
       }
       val typeOfRaw = typeOf[Raw]
@@ -127,8 +126,11 @@ object WorldReferenceImplementation {
 
     def this(_when: Unbounded[Instant], _nextRevision: Revision, _asOf: Unbounded[Instant], eventTimeline: WorldReferenceImplementation#EventTimeline) = {
       this()
-      try {
+      for (_ <- makeManagedResource {
         itemsAreLocked = false
+      } { _ => itemsAreLocked = true
+      }(List.empty)) {
+
         val relevantEvents = eventTimeline.bucketsIterator flatMap (_.toArray.sortBy(_._2) map (_._1)) takeWhile (_when >= _.when)
         for (event <- relevantEvents) {
           val scopeForEvent = new com.sageserpent.plutonium.Scope {
@@ -158,8 +160,6 @@ object WorldReferenceImplementation {
           }
         }
       }
-      finally
-        itemsAreLocked = true
     }
 
     class MultiMap[Key, Value] extends scala.collection.mutable.HashMap[Key, scala.collection.mutable.Set[Value]] with scala.collection.mutable.MultiMap[Key, Value] {

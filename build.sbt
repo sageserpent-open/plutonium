@@ -12,6 +12,7 @@ lazy val settings = Seq(organization := "com.sageserpent",
   libraryDependencies += "io.github.nicolasstucki" %% "multisets" % "0.3",
   libraryDependencies += "cglib" % "cglib" % "3.1",
   libraryDependencies += "com.sageserpent" %% "americium" % "SNAPSHOT",
+  libraryDependencies += "com.jsuereth" %% "scala-arm" % "1.4",
   publishMavenStyle := true)
 
 
