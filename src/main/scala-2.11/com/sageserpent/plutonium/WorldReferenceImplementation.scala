@@ -195,7 +195,7 @@ object WorldReferenceImplementation {
             val typeTag = typeOf[Raw]
             val conflictingItems = IdentifiedItemsScopeImplementation.yieldOnlyItemsOfSupertypeOf(items toStream)
             throw if (1 == conflictingItems.size) new RuntimeException("An event coming later than the first event defining an item: '${conflictingItems.head}' may not attempt to narrow the item's type to: '$typeTag', which is more specific.")
-            else new RuntimeException("An event coming later than earlier events defining items: '${conflictingItems.toList}' may not attempt to narrow the item's type to: '$typeTag', which is more specific.")
+            else new RuntimeException("An event coming later than earlier events defining items: '${conflictingItems.toList}' may not attempt to define an item's type as: '$typeTag', which is more specific than the others.")
           }
           !IdentifiedItemsScopeImplementation.hasItemOfType[Raw](items)
         }
@@ -328,8 +328,8 @@ class WorldReferenceImplementation extends World {
     val eventsInEventIdToEventMap = eventIdToEventMap.values map (_._1) toList
     val rogueEventsInEventIdToEventMap = eventsInEventIdToEventMap filter (!eventsInBaselineEventTimeline.contains(_))
     val rogueEventsInBaselineEventTimeline = eventsInBaselineEventTimeline filter (!eventsInEventIdToEventMap.contains(_))
-    assert(rogueEventsInEventIdToEventMap.isEmpty)
-    assert(rogueEventsInBaselineEventTimeline.isEmpty)
+    assert(rogueEventsInEventIdToEventMap.isEmpty, rogueEventsInEventIdToEventMap)
+    assert(rogueEventsInBaselineEventTimeline.isEmpty, rogueEventsInBaselineEventTimeline)
   }
 
   // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
