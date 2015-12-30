@@ -8,14 +8,13 @@ import com.sageserpent.plutonium.Bitemporal.IdentifiedItemsScope
 import com.sageserpent.plutonium.World.Revision
 import com.sageserpent.plutonium.WorldReferenceImplementation.IdentifiedItemsScopeImplementation
 import net.sf.cglib.proxy._
+import resource.makeManagedResource
 
-import scala.IllegalArgumentException
 import scala.collection.Searching._
 import scala.collection.immutable.{SortedBagConfiguration, TreeBag}
 import scala.collection.mutable.MutableList
 import scala.reflect.runtime._
 import scala.reflect.runtime.universe._
-import resource.makeManagedResource
 
 /**
   * Created by Gerard on 19/07/2015.
@@ -31,24 +30,43 @@ object WorldReferenceImplementation {
 
   object IdentifiedItemsScopeImplementation {
     def hasItemOfSupertypeOf[Raw <: Identified : TypeTag](items: scala.collection.mutable.Set[Identified]) = {
-      val reflectedType = implicitly[TypeTag[Raw]].tpe
+      val reflectedType = typeTag[Raw].tpe
       val clazzOfRaw = currentMirror.runtimeClass(reflectedType)
       items.exists { item =>
-        // HACK: in reality, everything with an id is actually
-        // an instance of a proxy subclass of 'Raw'.
-        val itemClazz = item.getClass.getSuperclass
+        val itemClazz = itemClass(item)
         itemClazz.isAssignableFrom(clazzOfRaw) && itemClazz != clazzOfRaw
       }
     }
 
+    def itemClass[Raw <: Identified : TypeTag](item: Identified) = {
+      if (Enhancer.isEnhanced(item.getClass))
+      // HACK: in reality, everything with an id is likely to be an
+      // an instance of a proxy subclass of 'Raw', so in this case we
+      // have to climb up one level in the class hierarchy in order
+      // to do type comparisons from the point of view of client code.
+        item.getClass.getSuperclass
+      else item.getClass
+    }
+
     def hasItemOfType[Raw <: Identified : TypeTag](items: scala.collection.mutable.Set[Identified]) = {
-      val reflectedType = implicitly[TypeTag[Raw]].tpe
+      val reflectedType = typeTag[Raw].tpe
       val clazzOfRaw = currentMirror.runtimeClass(reflectedType)
       items.exists(clazzOfRaw.isInstance(_))
     }
 
+    def yieldOnlyItemsOfSupertypeOf[Raw <: Identified : TypeTag](items: Stream[Identified]) = {
+      val reflectedType = typeTag[Raw].tpe
+      val clazzOfRaw = currentMirror.runtimeClass(reflectedType).asInstanceOf[Class[Raw]]
+
+      items filter {
+        item =>
+          val itemClazz = itemClass(item)
+          itemClazz.isAssignableFrom(clazzOfRaw) && itemClazz != clazzOfRaw
+      }
+    }
+
     def yieldOnlyItemsOfType[Raw <: Identified : TypeTag](items: Stream[Identified]) = {
-      val reflectedType = implicitly[TypeTag[Raw]].tpe
+      val reflectedType = typeTag[Raw].tpe
       val clazzOfRaw = currentMirror.runtimeClass(reflectedType).asInstanceOf[Class[Raw]]
 
       items filter (clazzOfRaw.isInstance(_)) map (clazzOfRaw.cast(_))
@@ -153,7 +171,7 @@ object WorldReferenceImplementation {
 
           event match {
             case Change(_, update) => update(scopeForEvent)
-            case annihilation@Annihilation(when, id, _) => {
+            case annihilation@Annihilation(when, id) => {
               implicit val typeTag = annihilation.typeTag
               identifiedItemsScopeThis.annihilateItemFor(id, when)
             }
@@ -173,8 +191,12 @@ object WorldReferenceImplementation {
         case None => true
         case Some(items) => {
           assert(items.nonEmpty)
-          if (IdentifiedItemsScopeImplementation.hasItemOfSupertypeOf[Raw](items))
-            throw new RuntimeException("An event coming later than the first event defining an item may not attempt to narrow the item's type to something more specific.")
+          if (IdentifiedItemsScopeImplementation.hasItemOfSupertypeOf[Raw](items)) {
+            val typeTag = typeOf[Raw]
+            val conflictingItems = IdentifiedItemsScopeImplementation.yieldOnlyItemsOfSupertypeOf(items toStream)
+            throw if (1 == conflictingItems.size) new RuntimeException("An event coming later than the first event defining an item: '${conflictingItems.head}' may not attempt to narrow the item's type to: '$typeTag', which is more specific.")
+            else new RuntimeException("An event coming later than earlier events defining items: '${conflictingItems.toList}' may not attempt to narrow the item's type to: '$typeTag', which is more specific.")
+          }
           !IdentifiedItemsScopeImplementation.hasItemOfType[Raw](items)
         }
       }
@@ -193,7 +215,7 @@ object WorldReferenceImplementation {
           if (items.isEmpty)
             idToItemsMultiMap.remove(id)
         case None =>
-          throw new RuntimeException("Attempt to annihilate item of id: $id that does not exist at: $when.")
+          throw new RuntimeException(s"Attempt to annihilate item of id: $id that does not exist at: $when.")
       }
     }
 
