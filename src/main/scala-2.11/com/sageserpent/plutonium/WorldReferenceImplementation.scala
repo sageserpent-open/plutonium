@@ -297,7 +297,12 @@ class WorldReferenceImplementation extends World {
 
     checkInvariantWrtEventTimeline(baselineEventTimeline)
 
-    val (eventIdsMadeObsoleteByThisRevision, eventsMadeObsoleteByThisRevision) = (for {eventId <- events.keys
+    // NOTE: don't use 'events.keys' here - that would result in set-like results,
+    // which will cause annihilations occurring on the same item at the same when to
+    // merge together in 'eventsMadeObsoleteByThisRevision', even though they are
+    // distinct events with distinct event ids. That in turn breaks the invariant
+    // checked by 'checkInvariantWrtEventTimeline'.
+    val (eventIdsMadeObsoleteByThisRevision, eventsMadeObsoleteByThisRevision) = (for {(eventId, _) <- events
                                                                                        obsoleteEvent <- eventIdToEventMap get eventId} yield eventId -> obsoleteEvent) unzip
 
     assert(eventIdsMadeObsoleteByThisRevision.size == eventsMadeObsoleteByThisRevision.size)
