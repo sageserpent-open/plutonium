@@ -8,8 +8,8 @@ import com.sageserpent.plutonium.Bitemporal.IdentifiedItemsScope
 import com.sageserpent.plutonium.World.Revision
 import com.sageserpent.plutonium.WorldReferenceImplementation.IdentifiedItemsScopeImplementation
 import net.sf.cglib.proxy._
+import resource.makeManagedResource
 
-import scala.IllegalArgumentException
 import scala.collection.Searching._
 import scala.collection.immutable.{SortedBagConfiguration, TreeBag}
 import scala.collection.mutable.MutableList
@@ -30,24 +30,43 @@ object WorldReferenceImplementation {
 
   object IdentifiedItemsScopeImplementation {
     def hasItemOfSupertypeOf[Raw <: Identified : TypeTag](items: scala.collection.mutable.Set[Identified]) = {
-      val reflectedType = implicitly[TypeTag[Raw]].tpe
+      val reflectedType = typeTag[Raw].tpe
       val clazzOfRaw = currentMirror.runtimeClass(reflectedType)
       items.exists { item =>
-        // HACK: in reality, everything with an id is actually
-        // an instance of a proxy subclass of 'Raw'.
-        val itemClazz = item.getClass.getSuperclass
+        val itemClazz = itemClass(item)
         itemClazz.isAssignableFrom(clazzOfRaw) && itemClazz != clazzOfRaw
       }
     }
 
+    def itemClass[Raw <: Identified : TypeTag](item: Identified) = {
+      if (Enhancer.isEnhanced(item.getClass))
+      // HACK: in reality, everything with an id is likely to be an
+      // an instance of a proxy subclass of 'Raw', so in this case we
+      // have to climb up one level in the class hierarchy in order
+      // to do type comparisons from the point of view of client code.
+        item.getClass.getSuperclass
+      else item.getClass
+    }
+
     def hasItemOfType[Raw <: Identified : TypeTag](items: scala.collection.mutable.Set[Identified]) = {
-      val reflectedType = implicitly[TypeTag[Raw]].tpe
+      val reflectedType = typeTag[Raw].tpe
       val clazzOfRaw = currentMirror.runtimeClass(reflectedType)
       items.exists(clazzOfRaw.isInstance(_))
     }
 
+    def yieldOnlyItemsOfSupertypeOf[Raw <: Identified : TypeTag](items: Stream[Identified]) = {
+      val reflectedType = typeTag[Raw].tpe
+      val clazzOfRaw = currentMirror.runtimeClass(reflectedType).asInstanceOf[Class[Raw]]
+
+      items filter {
+        item =>
+          val itemClazz = itemClass(item)
+          itemClazz.isAssignableFrom(clazzOfRaw) && itemClazz != clazzOfRaw
+      }
+    }
+
     def yieldOnlyItemsOfType[Raw <: Identified : TypeTag](items: Stream[Identified]) = {
-      val reflectedType = implicitly[TypeTag[Raw]].tpe
+      val reflectedType = typeTag[Raw].tpe
       val clazzOfRaw = currentMirror.runtimeClass(reflectedType).asInstanceOf[Class[Raw]]
 
       items filter (clazzOfRaw.isInstance(_)) map (clazzOfRaw.cast(_))
@@ -74,20 +93,20 @@ object WorldReferenceImplementation {
     class LocalMethodInterceptor extends MethodInterceptor {
       override def intercept(target: scala.Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy): AnyRef = {
         if (!stopInfiniteRecursiveInterception) {
-          try {
+          for (_ <- makeManagedResource {
             stopInfiniteRecursiveInterception = true
-
+          } { _ => stopInfiniteRecursiveInterception = false }(List.empty)) {
             if (itemsAreLocked && method.getReturnType == classOf[Unit])
               throw new UnsupportedOperationException("Attempt to write via: $method to an item: $target rendered from a bitemporal query.")
             else if (!itemsAreLocked && method.getReturnType != classOf[Unit] && !IdentifiedItemsScopeImplementation.alwaysAllowsReadAccessTo(method))
               throw new UnsupportedOperationException("Attempt to read via: $method from an item: $target rendered from a bitemporal query within a change or observation.")
-          } finally {
-            stopInfiniteRecursiveInterception = false
           }
         }
         methodProxy.invokeSuper(target, arguments)
       }
     }
+
+    val localMethodInterceptor = new LocalMethodInterceptor
 
     val cachedProxyConstructors = scala.collection.mutable.Map.empty[Type, universe.MethodMirror]
 
@@ -107,7 +126,7 @@ object WorldReferenceImplementation {
 
         val proxyClassType = currentMirror.classSymbol(proxyClazz)
         val classMirror = currentMirror.reflectClass(proxyClassType.asClass)
-        val constructor = (proxyClassType.toType.decls.find(_.isConstructor)).get
+        val constructor = proxyClassType.toType.decls.find(_.isConstructor).get
         classMirror.reflectConstructor(constructor.asMethod)
       }
       val typeOfRaw = typeOf[Raw]
@@ -118,15 +137,18 @@ object WorldReferenceImplementation {
           constructor
       }
       val proxy = constructor(id).asInstanceOf[Raw]
-      proxy.asInstanceOf[Factory].setCallback(0, new LocalMethodInterceptor)
+      proxy.asInstanceOf[Factory].setCallback(0, localMethodInterceptor)
       proxy
     }
 
 
     def this(_when: Unbounded[Instant], _nextRevision: Revision, _asOf: Unbounded[Instant], eventTimeline: WorldReferenceImplementation#EventTimeline) = {
       this()
-      try {
+      for (_ <- makeManagedResource {
         itemsAreLocked = false
+      } { _ => itemsAreLocked = true
+      }(List.empty)) {
+
         val relevantEvents = eventTimeline.bucketsIterator flatMap (_.toArray.sortBy(_._2) map (_._1)) takeWhile (_when >= _.when)
         for (event <- relevantEvents) {
           val scopeForEvent = new com.sageserpent.plutonium.Scope {
@@ -149,7 +171,7 @@ object WorldReferenceImplementation {
 
           event match {
             case Change(_, update) => update(scopeForEvent)
-            case annihilation@Annihilation(when, id, _) => {
+            case annihilation@Annihilation(when, id) => {
               implicit val typeTag = annihilation.typeTag
               identifiedItemsScopeThis.annihilateItemFor(id, when)
             }
@@ -157,8 +179,6 @@ object WorldReferenceImplementation {
           }
         }
       }
-      finally
-        itemsAreLocked = true
     }
 
     class MultiMap[Key, Value] extends scala.collection.mutable.HashMap[Key, scala.collection.mutable.Set[Value]] with scala.collection.mutable.MultiMap[Key, Value] {
@@ -172,8 +192,12 @@ object WorldReferenceImplementation {
         case None => true
         case Some(items) => {
           assert(items.nonEmpty)
-          if (IdentifiedItemsScopeImplementation.hasItemOfSupertypeOf[Raw](items))
-            throw new RuntimeException("An event coming later than the first event defining an item may not attempt to narrow the item's type to something more specific.")
+          if (IdentifiedItemsScopeImplementation.hasItemOfSupertypeOf[Raw](items)) {
+            val typeTag = typeOf[Raw]
+            val conflictingItems = IdentifiedItemsScopeImplementation.yieldOnlyItemsOfSupertypeOf(items toStream)
+            throw if (1 == conflictingItems.size) new RuntimeException("An event coming later than the first event defining an item: '${conflictingItems.head}' may not attempt to narrow the item's type to: '$typeTag', which is more specific.")
+            else new RuntimeException("An event coming later than earlier events defining items: '${conflictingItems.toList}' may not attempt to define an item's type as: '$typeTag', which is more specific than the others.")
+          }
           !IdentifiedItemsScopeImplementation.hasItemOfType[Raw](items)
         }
       }
@@ -192,7 +216,7 @@ object WorldReferenceImplementation {
           if (items.isEmpty)
             idToItemsMultiMap.remove(id)
         case None =>
-          throw new RuntimeException("Attempt to annihilate item of id: $id that does not exist at: $when.")
+          throw new RuntimeException(s"Attempt to annihilate item of id: $id that does not exist at: $when.")
       }
     }
 
@@ -274,8 +298,15 @@ class WorldReferenceImplementation extends World {
 
     checkInvariantWrtEventTimeline(baselineEventTimeline)
 
-    val (eventIdsMadeObsoleteByThisRevision, eventsMadeObsoleteByThisRevision) = (for {eventId <- events.keys
+    // NOTE: don't use 'events.keys' here - that would result in set-like results,
+    // which will cause annihilations occurring on the same item at the same when to
+    // merge together in 'eventsMadeObsoleteByThisRevision', even though they are
+    // distinct events with distinct event ids. That in turn breaks the invariant
+    // checked by 'checkInvariantWrtEventTimeline'.
+    val (eventIdsMadeObsoleteByThisRevision, eventsMadeObsoleteByThisRevision) = (for {(eventId, _) <- events
                                                                                        obsoleteEvent <- eventIdToEventMap get eventId} yield eventId -> obsoleteEvent) unzip
+
+    assert(eventIdsMadeObsoleteByThisRevision.size == eventsMadeObsoleteByThisRevision.size)
 
     val newEvents = for {(eventId, optionalEvent) <- events.toSeq
                          event <- optionalEvent} yield eventId ->(event, nextRevision)
@@ -301,12 +332,12 @@ class WorldReferenceImplementation extends World {
   private def checkInvariantWrtEventTimeline(eventTimeline: EventTimeline): Unit = {
     // Each event in 'eventIdToEventMap' should be in 'eventTimeline' and vice-versa.
 
-    val eventsInBaselineEventTimeline = eventTimeline map (_._1) toList
+    val eventsInEventTimeline = eventTimeline map (_._1) toList
     val eventsInEventIdToEventMap = eventIdToEventMap.values map (_._1) toList
-    val rogueEventsInEventIdToEventMap = eventsInEventIdToEventMap filter (!eventsInBaselineEventTimeline.contains(_))
-    val rogueEventsInBaselineEventTimeline = eventsInBaselineEventTimeline filter (!eventsInEventIdToEventMap.contains(_))
-    assert(rogueEventsInEventIdToEventMap.isEmpty)
-    assert(rogueEventsInBaselineEventTimeline.isEmpty)
+    val rogueEventsInEventIdToEventMap = eventsInEventIdToEventMap filter (!eventsInEventTimeline.contains(_))
+    val rogueEventsInEventTimeline = eventsInEventTimeline filter (!eventsInEventIdToEventMap.contains(_))
+    assert(rogueEventsInEventIdToEventMap.isEmpty, rogueEventsInEventIdToEventMap)
+    assert(rogueEventsInEventTimeline.isEmpty, rogueEventsInEventTimeline)
   }
 
   // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
