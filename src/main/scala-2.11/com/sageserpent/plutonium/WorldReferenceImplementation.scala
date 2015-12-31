@@ -300,6 +300,8 @@ class WorldReferenceImplementation extends World {
     val (eventIdsMadeObsoleteByThisRevision, eventsMadeObsoleteByThisRevision) = (for {eventId <- events.keys
                                                                                        obsoleteEvent <- eventIdToEventMap get eventId} yield eventId -> obsoleteEvent) unzip
 
+    assert(eventIdsMadeObsoleteByThisRevision.size == eventsMadeObsoleteByThisRevision.size)
+
     val newEvents = for {(eventId, optionalEvent) <- events.toSeq
                          event <- optionalEvent} yield eventId ->(event, nextRevision)
 
@@ -324,12 +326,12 @@ class WorldReferenceImplementation extends World {
   private def checkInvariantWrtEventTimeline(eventTimeline: EventTimeline): Unit = {
     // Each event in 'eventIdToEventMap' should be in 'eventTimeline' and vice-versa.
 
-    val eventsInBaselineEventTimeline = eventTimeline map (_._1) toList
+    val eventsInEventTimeline = eventTimeline map (_._1) toList
     val eventsInEventIdToEventMap = eventIdToEventMap.values map (_._1) toList
-    val rogueEventsInEventIdToEventMap = eventsInEventIdToEventMap filter (!eventsInBaselineEventTimeline.contains(_))
-    val rogueEventsInBaselineEventTimeline = eventsInBaselineEventTimeline filter (!eventsInEventIdToEventMap.contains(_))
+    val rogueEventsInEventIdToEventMap = eventsInEventIdToEventMap filter (!eventsInEventTimeline.contains(_))
+    val rogueEventsInEventTimeline = eventsInEventTimeline filter (!eventsInEventIdToEventMap.contains(_))
     assert(rogueEventsInEventIdToEventMap.isEmpty, rogueEventsInEventIdToEventMap)
-    assert(rogueEventsInBaselineEventTimeline.isEmpty, rogueEventsInBaselineEventTimeline)
+    assert(rogueEventsInEventTimeline.isEmpty, rogueEventsInEventTimeline)
   }
 
   // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
