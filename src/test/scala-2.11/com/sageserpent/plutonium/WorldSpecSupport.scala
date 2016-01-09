@@ -52,7 +52,7 @@ trait WorldSpecSupport {
   lazy val changeError = new Error("Error in making a change.")
 
   private def eventConstructor[AHistory <: History : TypeTag](makeAChange: Boolean)(when: Unbounded[Instant])(id: AHistory#Id, update: Spore[AHistory, Unit]) =
-  // Yeuch!! Why can't I just partially apply Change.apply return that, dropping the extra arguments?
+  // Yeuch!! Why can't I just partially apply Change.apply and then return that, dropping the extra arguments?
     if (makeAChange) Change(when)(id, update) else Observation(when)(id, update)
 
   def dataSampleGenerator1(faulty: Boolean) = for {data <- Arbitrary.arbitrary[String]} yield (data, (when: americium.Unbounded[Instant], makeAChange: Boolean, fooHistoryId: FooHistory#Id) => eventConstructor[FooHistory](makeAChange)(when)(fooHistoryId, (fooHistory: FooHistory) => {

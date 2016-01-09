@@ -91,7 +91,7 @@ object WorldReferenceImplementation {
     var stopInfiniteRecursiveInterception = false
 
     class LocalMethodInterceptor extends MethodInterceptor {
-      override def intercept(target: scala.Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy): AnyRef = {
+      override def intercept(target: Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy): AnyRef = {
         if (!stopInfiniteRecursiveInterception) {
           for (_ <- makeManagedResource {
             stopInfiniteRecursiveInterception = true
