@@ -162,26 +162,6 @@ object WorldReferenceImplementation {
       }(List.empty)) {
         val patchRecorder = new PatchRecorderImplementation with PatchRecorderContracts with BestPatchSelectionImplementation with BestPatchSelectionContracts
 
-        def annihilateItemFor[Raw <: Identified : TypeTag](id: Raw#Id, when: Instant): Unit = {
-          idToItemsMultiMap.get(id) match {
-            case (Some(items)) =>
-              assert(items.nonEmpty)
-
-              val itemsSelectedForAnnihilation = IdentifiedItemsScopeImplementation.yieldOnlyItemsOfType(items toStream)
-              for (itemSelectedForAnnihilation <- itemsSelectedForAnnihilation) {
-                patchRecorder.recordAnnihilation(when, itemSelectedForAnnihilation)
-              }
-              // TODO - work out how to merge this into the patch recorder implementation.
-/*              items --= itemsSelectedForAnnihilation
-
-              if (items.isEmpty)
-                idToItemsMultiMap.remove(id)*/
-            case None =>
-              throw new RuntimeException(s"Attempt to annihilate item of id: $id that does not exist at: $when.")
-          }
-        }
-
-
         val relevantEvents = eventTimeline.bucketsIterator flatMap (_.toArray.sortBy(_._2) map (_._1)) takeWhile (_when >= _.when)
         for (event <- relevantEvents) {
           val scopeForEvent = new com.sageserpent.plutonium.Scope {
@@ -221,7 +201,7 @@ object WorldReferenceImplementation {
             }
             case annihilation@Annihilation(when, id) => {
               implicit val typeTag = annihilation.typeTag
-              annihilateItemFor(id, when)
+              identifiedItemsScopeThis.annihilateItemsFor(id, when)
             }
           }
         }
@@ -252,6 +232,22 @@ object WorldReferenceImplementation {
       }
       if (needToConstructItem) {
         idToItemsMultiMap.addBinding(id, constructFrom(id))
+      }
+    }
+
+    private def annihilateItemsFor[Raw <: Identified : TypeTag](id: Raw#Id, when: Instant): Unit = {
+      idToItemsMultiMap.get(id) match {
+        case (Some(items)) =>
+          assert(items.nonEmpty)
+
+          val itemsSelectedForAnnihilation = IdentifiedItemsScopeImplementation.yieldOnlyItemsOfType(items toStream)
+
+          items --= itemsSelectedForAnnihilation
+
+          if (items.isEmpty)
+            idToItemsMultiMap.remove(id)
+        case None =>
+          throw new RuntimeException(s"Attempt to annihilate item of id: $id that does not exist at: $when.")
       }
     }
 
