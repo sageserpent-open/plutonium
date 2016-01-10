@@ -47,6 +47,10 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers {
 
   }
 
+  it should "immediately carry out the annihilation" in {
+
+  }
+
   "Noting that recording has ended" should "submit related patches taken from those recorded previously as candidates for the best related patch" in {
 
   }

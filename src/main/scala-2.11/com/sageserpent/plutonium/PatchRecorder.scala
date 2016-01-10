@@ -1,9 +1,8 @@
 package com.sageserpent.plutonium
 
-import java.lang.reflect.Method
 import java.time.Instant
 
-import net.sf.cglib.proxy.MethodProxy
+import com.sageserpent.americium.{Finite, Unbounded}
 
 import scalaz.std.option.optionSyntax._
 
@@ -12,31 +11,31 @@ import scalaz.std.option.optionSyntax._
   */
 
 trait BestPatchSelection {
-  def apply(relatedPatches: Seq[PatchRecorder#Patch]): PatchRecorder#Patch
+  def apply(relatedPatches: Seq[Patch]): Patch
 }
 
+
 trait BestPatchSelectionContracts extends BestPatchSelection {
-  abstract override def apply(relatedPatches: Seq[PatchRecorder#Patch]): PatchRecorder#Patch = {
+  abstract override def apply(relatedPatches: Seq[Patch]): Patch = {
     require(relatedPatches.nonEmpty)
     super.apply(relatedPatches)
   }
 }
 
+
 trait PatchRecorder {
   self: BestPatchSelection =>
 
-  case class Patch(target: Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy){
-    def apply(): Unit = ???
-  }
-
-  val whenEventPertainedToByLastRecordingTookPlace: Option[Instant]
+  val whenEventPertainedToByLastRecordingTookPlace: Option[Unbounded[Instant]]
 
   val allRecordingsAreCaptured: Boolean
 
-  def recordPatchFromChange(when: Instant, patch:Patch): Unit
+  def recordPatchFromChange(when: Unbounded[Instant], patch: Patch): Unit
 
-  def recordPatchFromObservation(when: Instant, patch: Patch): Unit
+  def recordPatchFromObservation(when: Unbounded[Instant], patch: Patch): Unit
 
+  // TODO - this needs to play well with 'WorldReferenceImplementation' - may need
+  // some explicit dependencies, or could fold them into the implementing subclass.
   def recordAnnihilation(when: Instant, target: Any): Unit
 
   def noteThatThereAreNoFollowingRecordings(): Unit
@@ -48,20 +47,20 @@ trait PatchRecorderContracts extends PatchRecorder {
   require(whenEventPertainedToByLastRecordingTookPlace.isEmpty)
   require(!allRecordingsAreCaptured)
 
-  abstract override def recordPatchFromChange(when: Instant, patch:Patch): Unit = {
-    require(whenEventPertainedToByLastRecordingTookPlace.cata(some = !when.isAfter(_), none = true))
+  abstract override def recordPatchFromChange(when: Unbounded[Instant], patch: Patch): Unit = {
+    require(whenEventPertainedToByLastRecordingTookPlace.cata(some = when >= _, none = true))
     require(!allRecordingsAreCaptured)
     super.recordPatchFromChange(when, patch)
   }
 
-  abstract override def recordPatchFromObservation(when: Instant, patch: Patch): Unit = {
-    require(whenEventPertainedToByLastRecordingTookPlace.cata(some = !when.isAfter(_), none = true))
+  abstract override def recordPatchFromObservation(when: Unbounded[Instant], patch: Patch): Unit = {
+    require(whenEventPertainedToByLastRecordingTookPlace.cata(some = when >= _, none = true))
     require(!allRecordingsAreCaptured)
     super.recordPatchFromObservation(when, patch)
   }
 
   abstract override def recordAnnihilation(when: Instant, target: Any): Unit = {
-    require(whenEventPertainedToByLastRecordingTookPlace.cata(some = !when.isAfter(_), none = true))
+    require(whenEventPertainedToByLastRecordingTookPlace.cata(some = Finite(when) >= _, none = true))
     require(!allRecordingsAreCaptured)
     super.recordAnnihilation(when, target)
   }
@@ -71,3 +70,4 @@ trait PatchRecorderContracts extends PatchRecorder {
     super.noteThatThereAreNoFollowingRecordings()
   }
 }
+

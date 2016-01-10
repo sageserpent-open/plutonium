@@ -12,6 +12,7 @@ import resource.makeManagedResource
 
 import scala.collection.Searching._
 import scala.collection.immutable.{SortedBagConfiguration, TreeBag}
+import scala.collection.mutable
 import scala.collection.mutable.MutableList
 import scala.reflect.runtime._
 import scala.reflect.runtime.universe._
@@ -86,7 +87,12 @@ object WorldReferenceImplementation {
   class IdentifiedItemsScopeImplementation extends IdentifiedItemsScope {
     identifiedItemsScopeThis =>
 
+    // The next two mutable fields are concerned with the proxies behaving differently depending on whether
+    // they are invoked within the context of writing a history for a revision, or just accessing the results of
+    // a query.
+    // TODO - refactor into a single 'sin-bin of mutable state for history rewriting' object?
     var itemsAreLocked = false
+    val patchesPickedUpFromAnEventBeingApplied = mutable.MutableList.empty[Patch]
 
     var stopInfiniteRecursiveInterception = false
 
@@ -102,7 +108,13 @@ object WorldReferenceImplementation {
               throw new UnsupportedOperationException("Attempt to read via: $method from an item: $target rendered from a bitemporal query within a change or observation.")
           }
         }
-        methodProxy.invokeSuper(target, arguments)
+        if (itemsAreLocked)
+          methodProxy.invokeSuper(target, arguments)
+        else
+          {
+            val patch = Patch(target, method, arguments, methodProxy)
+            patchesPickedUpFromAnEventBeingApplied += patch
+          }
       }
     }
 
@@ -148,6 +160,27 @@ object WorldReferenceImplementation {
         itemsAreLocked = false
       } { _ => itemsAreLocked = true
       }(List.empty)) {
+        val patchRecorder = new PatchRecorderImplementation with PatchRecorderContracts with BestPatchSelectionImplementation with BestPatchSelectionContracts
+
+        def annihilateItemFor[Raw <: Identified : TypeTag](id: Raw#Id, when: Instant): Unit = {
+          idToItemsMultiMap.get(id) match {
+            case (Some(items)) =>
+              assert(items.nonEmpty)
+
+              val itemsSelectedForAnnihilation = IdentifiedItemsScopeImplementation.yieldOnlyItemsOfType(items toStream)
+              for (itemSelectedForAnnihilation <- itemsSelectedForAnnihilation) {
+                patchRecorder.recordAnnihilation(when, itemSelectedForAnnihilation)
+              }
+              // TODO - work out how to merge this into the patch recorder implementation.
+/*              items --= itemsSelectedForAnnihilation
+
+              if (items.isEmpty)
+                idToItemsMultiMap.remove(id)*/
+            case None =>
+              throw new RuntimeException(s"Attempt to annihilate item of id: $id that does not exist at: $when.")
+          }
+        }
+
 
         val relevantEvents = eventTimeline.bucketsIterator flatMap (_.toArray.sortBy(_._2) map (_._1)) takeWhile (_when >= _.when)
         for (event <- relevantEvents) {
@@ -170,14 +203,30 @@ object WorldReferenceImplementation {
           }
 
           event match {
-            case Change(_, update) => update(scopeForEvent)
+            case Change(when, update) => try {
+              update(scopeForEvent)
+              for (patch <- patchesPickedUpFromAnEventBeingApplied){
+                patchRecorder.recordPatchFromChange(when, patch)
+              }
+            } finally {
+              patchesPickedUpFromAnEventBeingApplied.clear()
+            }
+            case Observation(when, update) => try {
+              update(scopeForEvent)
+              for (patch <- patchesPickedUpFromAnEventBeingApplied){
+                patchRecorder.recordPatchFromChange(when, patch)
+              }
+            } finally {
+              patchesPickedUpFromAnEventBeingApplied.clear()
+            }
             case annihilation@Annihilation(when, id) => {
               implicit val typeTag = annihilation.typeTag
-              identifiedItemsScopeThis.annihilateItemFor(id, when)
+              annihilateItemFor(id, when)
             }
-            case Observation(_, _) =>
           }
         }
+
+        patchRecorder.noteThatThereAreNoFollowingRecordings()
       }
     }
 
@@ -205,21 +254,6 @@ object WorldReferenceImplementation {
         idToItemsMultiMap.addBinding(id, constructFrom(id))
       }
     }
-
-    private def annihilateItemFor[Raw <: Identified : TypeTag](id: Raw#Id, when: Instant): Unit = {
-      idToItemsMultiMap.get(id) match {
-        case (Some(items)) =>
-          assert(items.nonEmpty)
-
-          items --= IdentifiedItemsScopeImplementation.yieldOnlyItemsOfType(items toStream)
-
-          if (items.isEmpty)
-            idToItemsMultiMap.remove(id)
-        case None =>
-          throw new RuntimeException(s"Attempt to annihilate item of id: $id that does not exist at: $when.")
-      }
-    }
-
 
     override def itemsFor[Raw <: Identified : TypeTag](id: Raw#Id): Stream[Raw] = {
       val items = idToItemsMultiMap.getOrElse(id, Set.empty[Raw])
@@ -315,6 +349,9 @@ class WorldReferenceImplementation extends World {
 
     val nextRevisionPostThisOne = 1 + nextRevision
 
+    // This does a check for consistency of the world's history as per this new revision as part of construction.
+    // We then throw away the resulting history if succcessful, the idea being for now to rebuild it as part of
+    // constructing a scope to apply queries on.
     new IdentifiedItemsScopeImplementation(PositiveInfinity[Instant], nextRevisionPostThisOne, Finite(asOf), newEventTimeline)
 
     revisionToEventTimelineMap += (nextRevision -> newEventTimeline)
