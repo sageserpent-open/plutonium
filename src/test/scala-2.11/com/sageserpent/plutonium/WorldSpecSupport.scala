@@ -177,7 +177,7 @@ trait WorldSpecSupport {
     def doesNotExistAt(when: Unbounded[Instant]): Option[NonExistentRecordings]
   }
 
-  trait RecordingsForAnIdContract {
+  trait RecordingsForAnIdContracts {
     self: RecordingsForAnId =>
     require(BargainBasement.isSorted(events map (_._1)))
   }
@@ -351,7 +351,7 @@ trait WorldSpecSupport {
     val parametersGenerator = unconstrainedParametersGenerator retryUntil { case (firstAnnihilationHasBeenAlignedWithADefiniteWhen, _) => firstAnnihilationHasBeenAlignedWithADefiniteWhen } map (_._2)
 
     val recordingsForAnIdGenerator = for ((historyId, historiesFrom, annihilationFor, dataSamplesGroupedForLifespans, sampleWhensGroupedForLifespans) <- parametersGenerator)
-      yield new RecordingsForAPhoenixId(historyId, historiesFrom, annihilationFor, dataSamplesGroupedForLifespans, sampleWhensGroupedForLifespans) with RecordingsForAnIdContract
+      yield new RecordingsForAPhoenixId(historyId, historiesFrom, annihilationFor, dataSamplesGroupedForLifespans, sampleWhensGroupedForLifespans) with RecordingsForAnIdContracts
 
     def idsAreNotRepeated(recordingsForVariousIds: List[RecordingsForAnId]) = {
       recordingsForVariousIds groupBy (_.historyId) forall { case (_, repeatedIdGroup) => 1 == repeatedIdGroup.size }

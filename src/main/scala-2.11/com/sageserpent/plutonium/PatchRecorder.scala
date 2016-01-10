@@ -11,37 +11,57 @@ import scalaz.std.option.optionSyntax._
   * Created by Gerard on 09/01/2016.
   */
 
-trait PatchRecorder {
-  case class Patch(target: Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy)
+trait BestPatchSelection {
+  def apply(relatedPatches: Seq[PatchRecorder#Patch]): PatchRecorder#Patch
+}
 
-  val whenLatestEventTookPlace: Option[Instant]
+trait BestPatchSelectionContracts extends BestPatchSelection {
+  abstract override def apply(relatedPatches: Seq[PatchRecorder#Patch]): PatchRecorder#Patch = {
+    require(relatedPatches.nonEmpty)
+    super.apply(relatedPatches)
+  }
+}
+
+trait PatchRecorder {
+  self: BestPatchSelection =>
+
+  case class Patch(target: Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy){
+    def apply(): Unit = ???
+  }
+
+  val whenEventPertainedToByLastRecordingTookPlace: Option[Instant]
 
   val allRecordingsAreCaptured: Boolean
 
   def recordPatchFromChange(when: Instant, patch:Patch): Unit
 
-  def recordPathFromObservation(when: Instant, patch: Patch): Unit
+  def recordPatchFromObservation(when: Instant, patch: Patch): Unit
 
   def recordAnnihilation(when: Instant, target: Any): Unit
 
   def noteThatThereAreNoFollowingRecordings(): Unit
 }
 
-trait PatchRecorderContract extends PatchRecorder {
+trait PatchRecorderContracts extends PatchRecorder {
+  self: BestPatchSelectionContracts =>
+
+  require(whenEventPertainedToByLastRecordingTookPlace.isEmpty)
+  require(!allRecordingsAreCaptured)
+
   abstract override def recordPatchFromChange(when: Instant, patch:Patch): Unit = {
-    require(whenLatestEventTookPlace.cata(some = !when.isAfter(_), none = true))
+    require(whenEventPertainedToByLastRecordingTookPlace.cata(some = !when.isAfter(_), none = true))
     require(!allRecordingsAreCaptured)
     super.recordPatchFromChange(when, patch)
   }
 
-  abstract override def recordPathFromObservation(when: Instant, patch: Patch): Unit = {
-    require(whenLatestEventTookPlace.cata(some = !when.isAfter(_), none = true))
+  abstract override def recordPatchFromObservation(when: Instant, patch: Patch): Unit = {
+    require(whenEventPertainedToByLastRecordingTookPlace.cata(some = !when.isAfter(_), none = true))
     require(!allRecordingsAreCaptured)
-    super.recordPathFromObservation(when, patch)
+    super.recordPatchFromObservation(when, patch)
   }
 
   abstract override def recordAnnihilation(when: Instant, target: Any): Unit = {
-    require(whenLatestEventTookPlace.cata(some = !when.isAfter(_), none = true))
+    require(whenEventPertainedToByLastRecordingTookPlace.cata(some = !when.isAfter(_), none = true))
     require(!allRecordingsAreCaptured)
     super.recordAnnihilation(when, target)
   }
