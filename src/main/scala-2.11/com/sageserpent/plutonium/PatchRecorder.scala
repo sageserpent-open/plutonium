@@ -14,30 +14,40 @@ import scalaz.std.option.optionSyntax._
 trait PatchRecorder {
   case class Patch(target: Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy)
 
-  def whenLatestEventTookPlace: Option[Instant] = ???
+  val whenLatestEventTookPlace: Option[Instant]
 
-  def recordPatchFromChange(when: Instant, patch:Patch): Unit = ???
+  val allRecordingsAreCaptured: Boolean
 
-  def recordPathFromObservation(when: Instant, patch: Patch): Unit = ???
+  def recordPatchFromChange(when: Instant, patch:Patch): Unit
 
-  def recordAnnihilation(when: Instant, target: Any): Unit = ???
+  def recordPathFromObservation(when: Instant, patch: Patch): Unit
 
-  def noteThatThereAreNoFollowingRecordings(): Unit = ???
+  def recordAnnihilation(when: Instant, target: Any): Unit
+
+  def noteThatThereAreNoFollowingRecordings(): Unit
 }
 
 trait PatchRecorderContract extends PatchRecorder {
   abstract override def recordPatchFromChange(when: Instant, patch:Patch): Unit = {
     require(whenLatestEventTookPlace.cata(some = !when.isAfter(_), none = true))
+    require(!allRecordingsAreCaptured)
     super.recordPatchFromChange(when, patch)
   }
 
   abstract override def recordPathFromObservation(when: Instant, patch: Patch): Unit = {
     require(whenLatestEventTookPlace.cata(some = !when.isAfter(_), none = true))
+    require(!allRecordingsAreCaptured)
     super.recordPathFromObservation(when, patch)
   }
 
   abstract override def recordAnnihilation(when: Instant, target: Any): Unit = {
     require(whenLatestEventTookPlace.cata(some = !when.isAfter(_), none = true))
+    require(!allRecordingsAreCaptured)
     super.recordAnnihilation(when, target)
+  }
+
+  abstract override def noteThatThereAreNoFollowingRecordings(): Unit = {
+    require(!allRecordingsAreCaptured)
+    super.noteThatThereAreNoFollowingRecordings()
   }
 }
