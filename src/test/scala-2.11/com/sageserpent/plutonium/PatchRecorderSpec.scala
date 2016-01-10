@@ -16,20 +16,24 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers {
 
   }
 
-  it should "make the patch be considered as a candidate for the best related patch at some point" in {
+  it should "ensure that the patch is considered as a candidate for the best related patch at some point" in {
 
   }
 
-  it should "ensure that patches are applied in a subsequence of the sequence they were recorded" in {
+  it should "ensure that patches are only ever applied in a subsequence of the sequence they were recorded" in {
 
   }
 
-  it should "ensure a patch is applied before any annihilations recorded after its recording" in {
+  it should "ensure a patch is only ever applied before any annihilations recorded after its recording" in {
 
   }
 
   "Candidates for the best related patch" should "only be submitted once" in {
 
+  }
+
+  they should "be submitted in chunks that when concatenated together form a subsequence of the sequence they were recorded" in {
+    
   }
 
   "The best related patch" should "be applied" in {
@@ -51,7 +55,7 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers {
 
   }
 
-  "A patch that is applied" should "only be applied once" in {
+  "A patch that is applied" should "not be applied again" in {
 
   }
 }
