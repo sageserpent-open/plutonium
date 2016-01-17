@@ -210,7 +210,9 @@ object WorldReferenceImplementation {
         case (Some(items)) =>
           assert(items.nonEmpty)
 
-          items --= IdentifiedItemsScopeImplementation.yieldOnlyItemsOfType(items toStream)
+          val itemsToBeRemoved = IdentifiedItemsScopeImplementation.yieldOnlyItemsOfType(items toStream).toList
+
+          items --= itemsToBeRemoved
 
           if (items.isEmpty)
             idToItemsMultiMap.remove(id)
