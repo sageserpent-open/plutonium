@@ -65,11 +65,11 @@ object WorldReferenceImplementation {
       }
     }
 
-    def yieldOnlyItemsOfType[Raw <: Identified : TypeTag](items: Stream[Identified]) = {
+    def yieldOnlyItemsOfType[Raw <: Identified : TypeTag](items: Traversable[Identified]) = {
       val reflectedType = typeTag[Raw].tpe
       val clazzOfRaw = currentMirror.runtimeClass(reflectedType).asInstanceOf[Class[Raw]]
 
-      items filter (clazzOfRaw.isInstance(_)) map (clazzOfRaw.cast(_))
+      items.toStream filter (clazzOfRaw.isInstance(_)) map (clazzOfRaw.cast(_))
     }
 
     def alwaysAllowsReadAccessTo(method: Method) = nonMutableMembersThatCanAlwaysBeReadFrom.exists(exclusionMethod => {
@@ -210,7 +210,10 @@ object WorldReferenceImplementation {
         case (Some(items)) =>
           assert(items.nonEmpty)
 
-          val itemsToBeRemoved = IdentifiedItemsScopeImplementation.yieldOnlyItemsOfType(items toStream).toList
+          // Have to force evaluation of the stream so that the call to '--=' below does not try to incrementally
+          // evaluate the stream as the underlying source collection, namely 'items' is being mutated. This is
+          // what you get when you go back to imperative programming after too much referential transparency.
+          val itemsToBeRemoved = IdentifiedItemsScopeImplementation.yieldOnlyItemsOfType(items).force
 
           items --= itemsToBeRemoved
 
@@ -225,10 +228,10 @@ object WorldReferenceImplementation {
     override def itemsFor[Raw <: Identified : TypeTag](id: Raw#Id): Stream[Raw] = {
       val items = idToItemsMultiMap.getOrElse(id, Set.empty[Raw])
 
-      IdentifiedItemsScopeImplementation.yieldOnlyItemsOfType(items toStream)
+      IdentifiedItemsScopeImplementation.yieldOnlyItemsOfType(items)
     }
 
-    override def allItems[Raw <: Identified : TypeTag](): Stream[Raw] = IdentifiedItemsScopeImplementation.yieldOnlyItemsOfType(idToItemsMultiMap.values.flatMap(identity) toStream)
+    override def allItems[Raw <: Identified : TypeTag](): Stream[Raw] = IdentifiedItemsScopeImplementation.yieldOnlyItemsOfType(idToItemsMultiMap.values.flatten)
   }
 
 }
