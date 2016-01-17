@@ -642,6 +642,41 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
     }
   }
 
+  it should "reflect the absence of all items of a compatible type relevant to a scope that share an id following an annihilation using that id." in {
+    val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = true)
+                                 queryWhen <- instantGenerator
+                                 possiblyEmptySetOfIdsThatEachReferToMoreThanOneItem = ((recordingsGroupedById flatMap (_.thePartNoLaterThan(Finite(queryWhen))) map (_.historyId)) groupBy identity collect { case (id, group) if 1 < group.size => id }).toSet
+                                 idsThatEachReferToMoreThanOneItem <- Gen.const(possiblyEmptySetOfIdsThatEachReferToMoreThanOneItem) if possiblyEmptySetOfIdsThatEachReferToMoreThanOneItem.nonEmpty
+                                 obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
+                                 seed <- seedGenerator
+                                 random = new Random(seed)
+                                 shuffledRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, recordingsGroupedById)
+                                 shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, obsoleteRecordingsGroupedById)
+                                 shuffledRecordingAndEventPairs = intersperseObsoleteRecordings(random, shuffledRecordings, shuffledObsoleteRecordings)
+                                 bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(shuffledRecordingAndEventPairs)
+                                 asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
+    } yield (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen, idsThatEachReferToMoreThanOneItem)
+    check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen, idsThatEachReferToMoreThanOneItem) =>
+      val world = new WorldUnderTest()
+
+      recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
+
+      val maximumEventId = bigShuffledHistoryOverLotsOfThings.flatten map (_._2) max
+
+      val annihilationEvents = idsThatEachReferToMoreThanOneItem.zipWithIndex map {case(idThatEachRefersToMoreThanOneItem, index) =>
+        (1 + maximumEventId + index, Some(Annihilation[History](queryWhen, idThatEachRefersToMoreThanOneItem.asInstanceOf[History#Id])))} toMap
+
+      world.revise(annihilationEvents, asOfs.last)
+
+      val scope = world.scopeFor(Finite(queryWhen), world.nextRevision)
+
+      Prop.all(idsThatEachReferToMoreThanOneItem.toSeq map (id => {
+        val itemsThatShouldNotExist = scope.render(Bitemporal.withId[History](id.asInstanceOf[History#Id])).toList
+        itemsThatShouldNotExist.isEmpty :| s"The items '$itemsThatShouldNotExist' for id: '$id' should not exist at the query time of: '$queryWhen'."
+      }): _*)
+    })
+  }
+
   "A world with events that have since been corrected" should "yield a history at the final revision based only on the latest corrections" in {
     val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
                                  obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
