@@ -102,9 +102,7 @@ object WorldReferenceImplementation {
             stopInfiniteRecursiveInterception = true
           } { _ => stopInfiniteRecursiveInterception = false }(List.empty)) {
             if (itemsAreLocked && method.getReturnType == classOf[Unit])
-              throw new UnsupportedOperationException("Attempt to write via: $method to an item: $target rendered from a bitemporal query.")
-            else if (!itemsAreLocked && method.getReturnType != classOf[Unit] && !IdentifiedItemsScopeImplementation.alwaysAllowsReadAccessTo(method))
-              throw new UnsupportedOperationException("Attempt to read via: $method from an item: $target rendered from a bitemporal query within a change or measurement.")
+              throw new UnsupportedOperationException("Attempt to write via: '$method' to an item: '$target' rendered from a bitemporal query.")
           }
         }
 
@@ -116,10 +114,11 @@ object WorldReferenceImplementation {
 
     val cachedProxyConstructors = scala.collection.mutable.Map.empty[Type, universe.MethodMirror]
 
-    def constructFrom[Raw <: Identified : TypeTag](id: Raw#Id) = {
+    def constructFrom[Raw <: Identified : TypeTag](id: Raw#Id, methodInterceptor: MethodInterceptor) = {
       // NOTE: this returns items that are proxies to raw values, rather than the raw values themselves. Depending on the
-      // context (using a scope created by a client from a world, or a scope created implicitly for an event's spore), the items
-      // may forbid certain operations on them - e.g. for rendering from a client's scope, the items should be read-only.
+      // context (using a scope created by a client from a world, as opposed to while building up that scope from patches),
+      // the items may forbid certain operations on them - e.g. for rendering from a client's scope, the items should be
+      // read-only.
       def constructorFor(identifiableType: Type) = {
         val clazz = currentMirror.runtimeClass(identifiableType.typeSymbol.asClass)
         val enhancer = new Enhancer
@@ -143,7 +142,7 @@ object WorldReferenceImplementation {
           constructor
       }
       val proxy = constructor(id).asInstanceOf[Raw]
-      proxy.asInstanceOf[Factory].setCallback(0, localMethodInterceptor)
+      proxy.asInstanceOf[Factory].setCallback(0, methodInterceptor)
       proxy
     }
 
@@ -154,19 +153,39 @@ object WorldReferenceImplementation {
         itemsAreLocked = false
       } { _ => itemsAreLocked = true
       }(List.empty)) {
-        val patchesPickedUpFromAnEventBeingApplied = mutable.MutableList.empty[Patch[Identified]]
-
-        // TODO - make a local RecorderFactory here that writes captured patches into 'patchesPickedUpFromAnEventBeingApplied'.
-
-        class LocalMethodInterceptor extends MethodInterceptor {
-          override def intercept(target: Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy): AnyRef = ??? // TODO - capture the id!!!
-        }
-
         val patchRecorder = new PatchRecorderImplementation with PatchRecorderContracts with BestPatchSelectionImplementation with BestPatchSelectionContracts
 
         val relevantEvents = eventTimeline.bucketsIterator flatMap (_.toArray.sortBy(_._2) map (_._1)) takeWhile (_when >= _.when)
         for (event <- relevantEvents) {
-          // This needs to go into the back end of the patch recorder.
+          val patchesPickedUpFromAnEventBeingApplied = mutable.MutableList.empty[Patch[Identified]]
+
+          class LocalRecorderFactory extends RecorderFactory{
+            override def apply[Raw <: Identified: TypeTag](id: Raw#Id): Raw = {
+              class LocalMethodInterceptor extends MethodInterceptor {
+                override def intercept(target: Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy): AnyRef = {
+                  if (method.getReturnType != classOf[Unit] && !IdentifiedItemsScopeImplementation.alwaysAllowsReadAccessTo(method))
+                    throw new UnsupportedOperationException("Attempt to call method: '$method' with a non-unit return type on a recorder proxy: '$target' while capturing a change or measurement.")
+
+                  val item = target.asInstanceOf[Raw] // Remember, the outer context is making a proxy of type 'Raw'.
+
+                  val capturedPatch = Patch[Raw](item.id, method, arguments, methodProxy)
+
+                  patchesPickedUpFromAnEventBeingApplied += capturedPatch
+
+                  null  // Representation of a unit value by a CGLIB interceptor.
+                }
+              }
+
+              val localMethodInterceptor = new LocalMethodInterceptor
+
+              constructFrom[Raw](id, localMethodInterceptor)
+            }
+          }
+
+          val recorderFactory = new LocalRecorderFactory
+
+
+/*          // This needs to go into the back end of the patch recorder.
           val scopeForEvent = new com.sageserpent.plutonium.Scope {
             override val when: Unbounded[Instant] = event.when
 
@@ -183,28 +202,24 @@ object WorldReferenceImplementation {
 
             override val nextRevision: Revision = _nextRevision
             override val asOf: Unbounded[Instant] = _asOf
-          }
+          }*/
 
           event match {
-            case Change(when, update) => try {
-              //update(scopeForEvent)
+            case Change(when, update) =>
+              update(recorderFactory)
               for (patch <- patchesPickedUpFromAnEventBeingApplied) {
                 patchRecorder.recordPatchFromChange(when, patch)
               }
-            } finally {
-              patchesPickedUpFromAnEventBeingApplied.clear()
-            }
-            case Measurement(when, update) => try {
-              //update(scopeForEvent)
+
+            case Measurement(when, reading) =>
+              reading(recorderFactory)
               for (patch <- patchesPickedUpFromAnEventBeingApplied) {
                 patchRecorder.recordPatchFromChange(when, patch)
               }
-            } finally {
-              patchesPickedUpFromAnEventBeingApplied.clear()
-            }
+
             case annihilation@Annihilation(when, id) => {
               implicit val typeTag = annihilation.typeTag
-              identifiedItemsScopeThis.annihilateItemsFor(id, when)
+              patchRecorder.recordAnnihilation(when, id)
             }
           }
         }
@@ -234,7 +249,7 @@ object WorldReferenceImplementation {
         }
       }
       if (needToConstructItem) {
-        idToItemsMultiMap.addBinding(id, constructFrom(id))
+        idToItemsMultiMap.addBinding(id, constructFrom(id, localMethodInterceptor))
       }
     }
 

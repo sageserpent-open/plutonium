@@ -6,6 +6,8 @@ import com.sageserpent.americium.{Finite, Unbounded}
 
 import scalaz.std.option.optionSyntax._
 
+import scala.reflect.runtime.universe._
+
 /**
   * Created by Gerard on 09/01/2016.
   */
@@ -38,7 +40,7 @@ trait PatchRecorder {
 
   // TODO - this needs to play well with 'WorldReferenceImplementation' - may need
   // some explicit dependencies, or could fold them into the implementing subclass.
-  def recordAnnihilation(when: Instant, target: Any): Unit
+  def recordAnnihilation[Raw <: Identified: TypeTag](when: Instant, target: Any): Unit
 
   def noteThatThereAreNoFollowingRecordings(): Unit
 }
@@ -61,7 +63,7 @@ trait PatchRecorderContracts extends PatchRecorder {
     super.recordPatchFromMeasurement(when, patch)
   }
 
-  abstract override def recordAnnihilation(when: Instant, target: Any): Unit = {
+  abstract override def recordAnnihilation[Raw <: Identified: TypeTag](when: Instant, target: Any): Unit = {
     require(whenEventPertainedToByLastRecordingTookPlace.cata(some = Finite(when) >= _, none = true))
     require(!allRecordingsAreCaptured)
     super.recordAnnihilation(when, target)

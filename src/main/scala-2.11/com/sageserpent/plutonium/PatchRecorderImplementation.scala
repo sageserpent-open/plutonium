@@ -3,6 +3,9 @@ package com.sageserpent.plutonium
 import java.time.Instant
 
 import com.sageserpent.americium.Unbounded
+import scala.reflect.runtime.universe._
+
+
 
 
 /**
@@ -17,7 +20,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
   override def recordPatchFromMeasurement(when: Unbounded[Instant], patch: Patch[Identified]): Unit = ???
 
-  override def recordAnnihilation(when: Instant, target: Any): Unit = ???
+  override def recordAnnihilation[Raw <: Identified: TypeTag](when: Instant, target: Any): Unit = ???
 
   override def noteThatThereAreNoFollowingRecordings(): Unit = ???
 }

@@ -21,20 +21,15 @@ sealed abstract class Event {
 }
 
 
-// The idea is that 'update' will set public properties and call public methods on bitemporals fetched from the scope.
-// NOTE: the scope is 'writeable' - raw values that it renders from bitemporals can be mutated. One can call any public
-// property or method, be it getter or setter, unit- or value-returning. The crux is that only top-level calls to
-// public property setters and public unit returning methods are patched.
-// NOTE: the scope initially represents the state of the world when the event is to be applied, but *without* the event having been
-// applied yet - so all previous history will have taken place.
 case class Change(val when: Unbounded[Instant], update: Spore[RecorderFactory, Unit]) extends Event {
 }
 
 object Change {
   def apply[Raw <: Identified : TypeTag](when: Unbounded[Instant])(id: Raw#Id, update: Spore[Raw, Unit]): Change = {
+    val typeTag = implicitly[TypeTag[Raw]]
     Change(when, spore {
       (recorderFactory: RecorderFactory) => {
-        val recorder = recorderFactory(capture(id))
+        val recorder = recorderFactory(capture(id))(capture(typeTag))
         capture(update)(recorder)
       }
     })
@@ -47,24 +42,16 @@ object Change {
   // etc for multiple bitemporals....
 }
 
-
-// The idea is that 'reading' will set public properties and call public methods on bitemporals fetched from the scope.
-// NOTE: the scope is 'writeable' - raw values that it renders from bitemporals can be mutated. In contrast to the situation
-// with 'Change', in an 'Measurement' the only interaction with the raw value is via setting public properties or calling
-// public unit-returning methods from client code - and that only the top-level calls are recorded as patches, any nested calls made within
-// the execution of a top-level invocation are not recorded (actually the code isn't executed at all). Any attempt to call public property
-// getters, or public value-returning methods will result in an exception being thrown.
-// NOTE: the scope is a synthetic one that has no prior history applied it to whatsoever - it is there purely to capture the effects
-// of the recording.
 case class Measurement(val when: Unbounded[Instant], reading: Spore[RecorderFactory, Unit]) extends Event {
 }
 
 
 object Measurement {
   def apply[Raw <: Identified : TypeTag](when: Unbounded[Instant])(id: Raw#Id, measurement: Spore[Raw, Unit]): Measurement = {
+    val typeTag = implicitly[TypeTag[Raw]]
     Measurement(when, spore {
       (recorderFactory: RecorderFactory) => {
-        val recorder = recorderFactory(capture(id))
+        val recorder = recorderFactory(capture(id))(capture(typeTag))
         capture(measurement)(recorder)
       }
     })
