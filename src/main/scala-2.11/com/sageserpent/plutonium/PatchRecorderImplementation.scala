@@ -15,7 +15,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
   override def recordPatchFromChange(when: Unbounded[Instant], patch: Patch): Unit = ???
 
-  override def recordPatchFromObservation(when: Unbounded[Instant], patch: Patch): Unit = ???
+  override def recordPatchFromMeasurement(when: Unbounded[Instant], patch: Patch): Unit = ???
 
   override def recordAnnihilation(when: Instant, target: Any): Unit = ???
 

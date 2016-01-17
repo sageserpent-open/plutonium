@@ -105,7 +105,7 @@ object WorldReferenceImplementation {
             if (itemsAreLocked && method.getReturnType == classOf[Unit])
               throw new UnsupportedOperationException("Attempt to write via: $method to an item: $target rendered from a bitemporal query.")
             else if (!itemsAreLocked && method.getReturnType != classOf[Unit] && !IdentifiedItemsScopeImplementation.alwaysAllowsReadAccessTo(method))
-              throw new UnsupportedOperationException("Attempt to read via: $method from an item: $target rendered from a bitemporal query within a change or observation.")
+              throw new UnsupportedOperationException("Attempt to read via: $method from an item: $target rendered from a bitemporal query within a change or measurement.")
           }
         }
         if (itemsAreLocked)
@@ -184,15 +184,15 @@ object WorldReferenceImplementation {
 
           event match {
             case Change(when, update) => try {
-              update(scopeForEvent)
+              //update(scopeForEvent)
               for (patch <- patchesPickedUpFromAnEventBeingApplied){
                 patchRecorder.recordPatchFromChange(when, patch)
               }
             } finally {
               patchesPickedUpFromAnEventBeingApplied.clear()
             }
-            case Observation(when, update) => try {
-              update(scopeForEvent)
+            case Measurement(when, update) => try {
+              //update(scopeForEvent)
               for (patch <- patchesPickedUpFromAnEventBeingApplied){
                 patchRecorder.recordPatchFromChange(when, patch)
               }

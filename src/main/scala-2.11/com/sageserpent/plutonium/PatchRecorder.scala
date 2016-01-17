@@ -32,7 +32,7 @@ trait PatchRecorder {
 
   def recordPatchFromChange(when: Unbounded[Instant], patch: Patch): Unit
 
-  def recordPatchFromObservation(when: Unbounded[Instant], patch: Patch): Unit
+  def recordPatchFromMeasurement(when: Unbounded[Instant], patch: Patch): Unit
 
   // TODO - this needs to play well with 'WorldReferenceImplementation' - may need
   // some explicit dependencies, or could fold them into the implementing subclass.
@@ -53,10 +53,10 @@ trait PatchRecorderContracts extends PatchRecorder {
     super.recordPatchFromChange(when, patch)
   }
 
-  abstract override def recordPatchFromObservation(when: Unbounded[Instant], patch: Patch): Unit = {
+  abstract override def recordPatchFromMeasurement(when: Unbounded[Instant], patch: Patch): Unit = {
     require(whenEventPertainedToByLastRecordingTookPlace.cata(some = when >= _, none = true))
     require(!allRecordingsAreCaptured)
-    super.recordPatchFromObservation(when, patch)
+    super.recordPatchFromMeasurement(when, patch)
   }
 
   abstract override def recordAnnihilation(when: Instant, target: Any): Unit = {

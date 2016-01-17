@@ -51,9 +51,9 @@ trait WorldSpecSupport {
 
   lazy val changeError = new Error("Error in making a change.")
 
-  private def eventConstructor[AHistory <: History : TypeTag](makeAChange: Boolean)(when: Unbounded[Instant])(id: AHistory#Id, update: Spore[AHistory, Unit]) =
+  private def eventConstructor[AHistory <: History : TypeTag](makeAChange: Boolean)(when: Unbounded[Instant])(id: AHistory#Id, effect: Spore[AHistory, Unit]) =
   // Yeuch!! Why can't I just partially apply Change.apply and then return that, dropping the extra arguments?
-    if (makeAChange) Change(when)(id, update) else Observation(when)(id, update)
+    if (makeAChange) Change(when)(id, effect) else Measurement(when)(id, effect)
 
   def dataSampleGenerator1(faulty: Boolean) = for {data <- Arbitrary.arbitrary[String]} yield (data, (when: americium.Unbounded[Instant], makeAChange: Boolean, fooHistoryId: FooHistory#Id) => eventConstructor[FooHistory](makeAChange)(when)(fooHistoryId, (fooHistory: FooHistory) => {
     if (capture(faulty)) throw changeError // Modelling a precondition failure.
@@ -62,7 +62,7 @@ trait WorldSpecSupport {
       fooHistory.datums
       fooHistory.property1
       fooHistory.property2
-      // Neither changes nor observations are allowed to read from the items they work on.
+      // Neither changes nor measurements are allowed to read from the items they work on.
       assert(false)
     }
     catch {
@@ -78,7 +78,7 @@ trait WorldSpecSupport {
       fooHistory.datums
       fooHistory.property1
       fooHistory.property2
-      // Neither changes nor observations are allowed to read from the items they work on.
+      // Neither changes nor measurements are allowed to read from the items they work on.
       assert(false)
     }
     catch {
@@ -93,7 +93,7 @@ trait WorldSpecSupport {
       barHistory.id
       barHistory.datums
       barHistory.property1
-      // Neither changes nor observations are allowed to read from the items they work on.
+      // Neither changes nor measurements are allowed to read from the items they work on.
       assert(false)
     }
     catch {
@@ -109,7 +109,7 @@ trait WorldSpecSupport {
       barHistory.id
       barHistory.datums
       barHistory.property1
-      // Neither changes nor observations are allowed to read from the items they work on.
+      // Neither changes nor measurements are allowed to read from the items they work on.
       assert(false)
     }
     catch {
@@ -126,7 +126,7 @@ trait WorldSpecSupport {
       barHistory.id
       barHistory.datums
       barHistory.property1
-      // Neither changes nor observations are allowed to read from the items they work on.
+      // Neither changes nor measurements are allowed to read from the items they work on.
       assert(false)
     }
     catch {
@@ -216,7 +216,7 @@ trait WorldSpecSupport {
       } yield {
         val numberOfChanges = dataSamples.size
         // NOTE: we may have an extra event when - 'zip' will disregard this.
-        val data = dataSamples.toSeq zip decisionsToMakeAChange(dataSamples.size) zip eventWhens map { case (((dataSample, _), makeAChange), eventWhen) => (if (makeAChange) "Change: " else "Observation: ") ++ dataSample.toString }
+        val data = dataSamples.toSeq zip decisionsToMakeAChange(dataSamples.size) zip eventWhens map { case (((dataSample, _), makeAChange), eventWhen) => (if (makeAChange) "Change: " else "Measurement: ") ++ dataSample.toString }
         eventWhens zip (if (numberOfChanges < eventWhens.size)
           data :+ "Annihilation"
         else
@@ -271,15 +271,15 @@ trait WorldSpecSupport {
       def thePartNoLaterThan(relevantGroupIndex: Revision): Some[RecordingsNoLaterThan] = {
         val dataSampleAndWhenPairsForALifespan = dataSamplesGroupedForLifespans(relevantGroupIndex).toList.map(_._1) zip sampleWhensGroupedForLifespans(relevantGroupIndex)
 
-        def pickFromRunOfFollowingObservations(dataSamples: Seq[Any]) = dataSamples.last // TODO - generalise this if and when observations progress beyond the 'latest when wins' strategy.
+        def pickFromRunOfFollowingMeasurements(dataSamples: Seq[Any]) = dataSamples.last // TODO - generalise this if and when measurements progress beyond the 'latest when wins' strategy.
 
-        val runsOfFollowingObservations = dataSampleAndWhenPairsForALifespan zip
+        val runsOfFollowingMeasurements = dataSampleAndWhenPairsForALifespan zip
           decisionsToMakeAChange(dataSampleAndWhenPairsForALifespan.size) groupWhile
           {case (_, (_, makeAChange)) => !makeAChange} map
           (_ map (_._1)) toList
 
-        val dataSampleAndWhenPairsForALifespanPickedFromRuns = runsOfFollowingObservations map {runOfFollowingObservations =>
-          pickFromRunOfFollowingObservations(runOfFollowingObservations map (_._1)) -> runOfFollowingObservations.head._2
+        val dataSampleAndWhenPairsForALifespanPickedFromRuns = runsOfFollowingMeasurements map {runOfFollowingMeasurements =>
+          pickFromRunOfFollowingMeasurements(runOfFollowingMeasurements map (_._1)) -> runOfFollowingMeasurements.head._2
         }
 
         Some(RecordingsNoLaterThan(historyId = historyId,
