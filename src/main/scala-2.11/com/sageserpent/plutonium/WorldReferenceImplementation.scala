@@ -92,7 +92,6 @@ object WorldReferenceImplementation {
     // a query.
     // TODO - refactor into a single 'sin-bin of mutable state for history rewriting' object?
     var itemsAreLocked = false
-    val patchesPickedUpFromAnEventBeingApplied = mutable.MutableList.empty[Patch]
 
     var stopInfiniteRecursiveInterception = false
 
@@ -108,14 +107,9 @@ object WorldReferenceImplementation {
               throw new UnsupportedOperationException("Attempt to read via: $method from an item: $target rendered from a bitemporal query within a change or measurement.")
           }
         }
-        if (itemsAreLocked)
+
         methodProxy.invokeSuper(target, arguments)
-        else
-          {
-            val patch = Patch(target, method, arguments, methodProxy)
-            patchesPickedUpFromAnEventBeingApplied += patch
       }
-    }
     }
 
     val localMethodInterceptor = new LocalMethodInterceptor
@@ -160,10 +154,19 @@ object WorldReferenceImplementation {
         itemsAreLocked = false
       } { _ => itemsAreLocked = true
       }(List.empty)) {
+        val patchesPickedUpFromAnEventBeingApplied = mutable.MutableList.empty[Patch[Identified]]
+
+        // TODO - make a local RecorderFactory here that writes captured patches into 'patchesPickedUpFromAnEventBeingApplied'.
+
+        class LocalMethodInterceptor extends MethodInterceptor {
+          override def intercept(target: Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy): AnyRef = ??? // TODO - capture the id!!!
+        }
+
         val patchRecorder = new PatchRecorderImplementation with PatchRecorderContracts with BestPatchSelectionImplementation with BestPatchSelectionContracts
 
         val relevantEvents = eventTimeline.bucketsIterator flatMap (_.toArray.sortBy(_._2) map (_._1)) takeWhile (_when >= _.when)
         for (event <- relevantEvents) {
+          // This needs to go into the back end of the patch recorder.
           val scopeForEvent = new com.sageserpent.plutonium.Scope {
             override val when: Unbounded[Instant] = event.when
 
@@ -185,7 +188,7 @@ object WorldReferenceImplementation {
           event match {
             case Change(when, update) => try {
               //update(scopeForEvent)
-              for (patch <- patchesPickedUpFromAnEventBeingApplied){
+              for (patch <- patchesPickedUpFromAnEventBeingApplied) {
                 patchRecorder.recordPatchFromChange(when, patch)
               }
             } finally {
@@ -193,7 +196,7 @@ object WorldReferenceImplementation {
             }
             case Measurement(when, update) => try {
               //update(scopeForEvent)
-              for (patch <- patchesPickedUpFromAnEventBeingApplied){
+              for (patch <- patchesPickedUpFromAnEventBeingApplied) {
                 patchRecorder.recordPatchFromChange(when, patch)
               }
             } finally {

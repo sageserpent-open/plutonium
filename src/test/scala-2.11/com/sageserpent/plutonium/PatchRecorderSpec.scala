@@ -32,7 +32,7 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers {
 
   }
 
-  they should "be submitted in chunks that when concatenated together form a subsequence of the sequence they were recorded" in {
+  they should "be submitted in chunks that when concatenated together form a subsequence of the sequence they were recorded in" in {
     
   }
 
