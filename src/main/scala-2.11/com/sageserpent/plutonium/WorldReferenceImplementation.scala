@@ -49,13 +49,7 @@ object WorldReferenceImplementation {
       else item.getClass
     }
 
-    def hasItemOfType[Raw <: Identified : TypeTag](items: scala.collection.mutable.Set[Identified]) = {
-      val reflectedType = typeTag[Raw].tpe
-      val clazzOfRaw = currentMirror.runtimeClass(reflectedType)
-      items.exists(clazzOfRaw.isInstance(_))
-    }
-
-    def yieldOnlyItemsOfSupertypeOf[Raw <: Identified : TypeTag](items: Stream[Identified]) = {
+    def yieldOnlyItemsOfSupertypeOf[Raw <: Identified : TypeTag](items: Traversable[Identified]) = {
       val reflectedType = typeTag[Raw].tpe
       val clazzOfRaw = currentMirror.runtimeClass(reflectedType).asInstanceOf[Class[Raw]]
 
@@ -153,7 +147,11 @@ object WorldReferenceImplementation {
         itemsAreLocked = false
       } { _ => itemsAreLocked = true
       }(List.empty)) {
-        val patchRecorder = new PatchRecorderImplementation with PatchRecorderContracts with BestPatchSelectionImplementation with BestPatchSelectionContracts
+        val patchRecorder = new PatchRecorderImplementation with PatchRecorderContracts with BestPatchSelectionImplementation with BestPatchSelectionContracts with IdentifiedItemFactory{
+          override def apply[Raw <: Identified : universe.TypeTag](id: Raw#Id): Raw = {
+            identifiedItemsScopeThis.itemFor[Raw](id)
+          }
+        }
 
         val relevantEvents = eventTimeline.bucketsIterator flatMap (_.toArray.sortBy(_._2) map (_._1)) takeWhile (_when >= _.when)
         for (event <- relevantEvents) {
@@ -183,26 +181,6 @@ object WorldReferenceImplementation {
           }
 
           val recorderFactory = new LocalRecorderFactory
-
-
-/*          // This needs to go into the back end of the patch recorder.
-          val scopeForEvent = new com.sageserpent.plutonium.Scope {
-            override val when: Unbounded[Instant] = event.when
-
-            override def render[Raw](bitemporal: Bitemporal[Raw]): Stream[Raw] = {
-              bitemporal.interpret(new IdentifiedItemsScope {
-                override def allItems[Raw <: Identified : TypeTag](): Stream[Raw] = identifiedItemsScopeThis.allItems()
-
-                override def itemsFor[Raw <: Identified : TypeTag](id: Raw#Id): Stream[Raw] = {
-                  identifiedItemsScopeThis.ensureItemExistsFor(id) // NASTY HACK, which is what this anonymous class is for. Yuk.
-                  identifiedItemsScopeThis.itemsFor(id)
-                }
-              })
-            }
-
-            override val nextRevision: Revision = _nextRevision
-            override val asOf: Unbounded[Instant] = _asOf
-          }*/
 
           event match {
             case Change(when, update) =>
@@ -234,22 +212,31 @@ object WorldReferenceImplementation {
 
     val idToItemsMultiMap = new MultiMap[Identified#Id, Identified]
 
-    private def ensureItemExistsFor[Raw <: Identified : TypeTag](id: Raw#Id): Unit = {
-      val needToConstructItem = idToItemsMultiMap.get(id) match {
-        case None => true
+    private def itemFor[Raw <: Identified : TypeTag](id: Raw#Id): Raw = {
+      def constructAndCacheItem(): Raw = {
+        val item = constructFrom(id, localMethodInterceptor)
+        idToItemsMultiMap.addBinding(id, item)
+        item
+      }
+      idToItemsMultiMap.get(id) match {
+        case None =>
+          constructAndCacheItem()
         case Some(items) => {
           assert(items.nonEmpty)
-          if (IdentifiedItemsScopeImplementation.hasItemOfSupertypeOf[Raw](items)) {
+          val conflictingItems = IdentifiedItemsScopeImplementation.yieldOnlyItemsOfSupertypeOf(items)
+          if (conflictingItems.nonEmpty) {
             val typeTag = typeOf[Raw]
-            val conflictingItems = IdentifiedItemsScopeImplementation.yieldOnlyItemsOfSupertypeOf(items toStream)
             throw if (1 == conflictingItems.size) new RuntimeException("An event coming later than the first event defining an item: '${conflictingItems.head}' may not attempt to narrow the item's type to: '$typeTag', which is more specific.")
             else new RuntimeException("An event coming later than earlier events defining items: '${conflictingItems.toList}' may not attempt to define an item's type as: '$typeTag', which is more specific than the others.")
           }
-          !IdentifiedItemsScopeImplementation.hasItemOfType[Raw](items)
+          val itemsOfDesiredType = IdentifiedItemsScopeImplementation.yieldOnlyItemsOfType[Raw](items).force
+          if (itemsOfDesiredType.isEmpty)
+            constructAndCacheItem()
+          else if (1 == itemsOfDesiredType.size)
+            itemsOfDesiredType.head
+          else
+            throw new RuntimeException("There is more than one item of id: '$id' compatible with type '$typeTag', these are: ${itemsOfDesiredType.toList}.")
         }
-      }
-      if (needToConstructItem) {
-        idToItemsMultiMap.addBinding(id, constructFrom(id, localMethodInterceptor))
       }
     }
 

@@ -28,7 +28,7 @@ trait BestPatchSelectionContracts extends BestPatchSelection {
 
 
 trait PatchRecorder {
-  self: BestPatchSelection =>
+  self: BestPatchSelection with IdentifiedItemFactory =>
 
   val whenEventPertainedToByLastRecordingTookPlace: Option[Unbounded[Instant]]
 
@@ -46,7 +46,7 @@ trait PatchRecorder {
 }
 
 trait PatchRecorderContracts extends PatchRecorder {
-  self: BestPatchSelectionContracts =>
+  self: BestPatchSelectionContracts with IdentifiedItemFactory =>
 
   require(whenEventPertainedToByLastRecordingTookPlace.isEmpty)
   require(!allRecordingsAreCaptured)

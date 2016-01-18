@@ -12,7 +12,7 @@ import scala.reflect.runtime.universe._
   * Created by Gerard on 10/01/2016.
   */
 trait PatchRecorderImplementation extends PatchRecorder {
-  self: BestPatchSelection =>
+  self: BestPatchSelection with IdentifiedItemFactory =>
   override val whenEventPertainedToByLastRecordingTookPlace: Option[Unbounded[Instant]] = None
   override val allRecordingsAreCaptured: Boolean = true
 
