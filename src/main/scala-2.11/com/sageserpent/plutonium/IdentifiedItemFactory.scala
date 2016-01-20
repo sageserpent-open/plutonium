@@ -1,5 +1,7 @@
 package com.sageserpent.plutonium
 
+import java.time.Instant
+
 import scala.reflect.runtime.universe._
 
 /**
@@ -11,5 +13,7 @@ import scala.reflect.runtime.universe._
 // this in mind, it is also possible that an admissible precondition failure is thrown due to there being more
 // than one item sharing the same id that would conform to the requested type 'Raw'.
 trait IdentifiedItemFactory {
-  def apply[Raw <: Identified: TypeTag](id: Raw#Id): Raw
+  def itemFor[Raw <: Identified: TypeTag](id: Raw#Id): Raw
+
+  def annihilateItemsFor[Raw <: Identified : TypeTag](id: Raw#Id, when: Instant): Unit
 }

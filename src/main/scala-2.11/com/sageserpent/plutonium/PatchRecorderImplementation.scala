@@ -20,7 +20,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
   override def recordPatchFromMeasurement(when: Unbounded[Instant], patch: Patch[Identified]): Unit = ???
 
-  override def recordAnnihilation[Raw <: Identified: TypeTag](when: Instant, target: Any): Unit = ???
+  override def recordAnnihilation[Raw <: Identified: TypeTag](when: Instant, id: Raw#Id): Unit = ???
 
   override def noteThatThereAreNoFollowingRecordings(): Unit = ???
 }

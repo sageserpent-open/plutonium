@@ -148,8 +148,12 @@ object WorldReferenceImplementation {
       } { _ => itemsAreLocked = true
       }(List.empty)) {
         val patchRecorder = new PatchRecorderImplementation with PatchRecorderContracts with BestPatchSelectionImplementation with BestPatchSelectionContracts with IdentifiedItemFactory{
-          override def apply[Raw <: Identified : universe.TypeTag](id: Raw#Id): Raw = {
+          override def itemFor[Raw <: Identified : universe.TypeTag](id: Raw#Id): Raw = {
             identifiedItemsScopeThis.itemFor[Raw](id)
+          }
+
+          override def annihilateItemsFor[Raw <: Identified : universe.TypeTag](id: Raw#Id, when: Instant): Unit = {
+            identifiedItemsScopeThis.annihilateItemsFor[Raw](id, when)
           }
         }
 
