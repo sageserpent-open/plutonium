@@ -12,10 +12,6 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers {
 
   }
 
-  it should "not immediately apply the patch" in {
-
-  }
-
   it should "ensure that the patch is considered as a candidate for the best related patch at some point" in {
 
   }
@@ -37,6 +33,10 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers {
   }
 
   "The best related patch" should "be applied" in {
+
+  }
+
+  it should "be the only one of the candidates to be applied" in {
 
   }
 
