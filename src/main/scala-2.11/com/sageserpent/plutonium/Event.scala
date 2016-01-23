@@ -72,8 +72,6 @@ object Measurement {
 // NOTE: it is OK to have annihilations and other events occurring at the same time: the documentation of 'World.revise'
 // covers how coincident events are resolved. So an item referred to by an id may be changed, then annihilated, then
 // recreated and so on all at the same time.
-// TODO: currently it is possible to annihilate multiple items sharing the same id - simply use a common upper bound type.
-// Should this be allowed? There aren't any tests to say one way or another, are there?
 case class Annihilation[Raw <: Identified: TypeTag](definiteWhen: Instant, id: Raw#Id) extends Event {
   val when = Finite(definiteWhen)
   val typeTag = implicitly[TypeTag[Raw]]
