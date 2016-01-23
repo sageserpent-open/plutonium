@@ -22,6 +22,8 @@ trait BestPatchSelection {
 trait BestPatchSelectionContracts extends BestPatchSelection {
   abstract override def apply(relatedPatches: Seq[Patch[Identified]]): Patch[Identified] = {
     require(relatedPatches.nonEmpty)
+    require(1 == (relatedPatches map (_.id) distinct).size)
+    // TODO - how do I capture the similarity of the types of the items referred to by the patches?
     super.apply(relatedPatches)
   }
 }

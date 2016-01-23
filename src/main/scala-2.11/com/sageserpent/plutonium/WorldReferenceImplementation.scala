@@ -119,7 +119,7 @@ object WorldReferenceImplementation {
         enhancer.setInterceptDuringConstruction(false)
         enhancer.setSuperclass(clazz)
 
-        enhancer.setCallbackType(classOf[LocalMethodInterceptor])
+        enhancer.setCallbackType(classOf[MethodInterceptor])
 
         val proxyClazz = enhancer.createClass()
 
@@ -170,7 +170,7 @@ object WorldReferenceImplementation {
 
                   val item = target.asInstanceOf[Raw] // Remember, the outer context is making a proxy of type 'Raw'.
 
-                  val capturedPatch = Patch[Raw](item.id, method, arguments, methodProxy)
+                  val capturedPatch = Patch[Raw](id, method, arguments, methodProxy)
 
                   patchesPickedUpFromAnEventBeingApplied += capturedPatch
 

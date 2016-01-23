@@ -14,7 +14,7 @@ import scala.reflect.runtime.universe._
 trait PatchRecorderImplementation extends PatchRecorder {
   self: BestPatchSelection with IdentifiedItemFactory =>
   override val whenEventPertainedToByLastRecordingTookPlace: Option[Unbounded[Instant]] = None
-  override val allRecordingsAreCaptured: Boolean = true
+  override val allRecordingsAreCaptured: Boolean = false
 
   override def recordPatchFromChange(when: Unbounded[Instant], patch: Patch[Identified]): Unit = ???
 
