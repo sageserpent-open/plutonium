@@ -15,12 +15,12 @@ import scala.reflect.runtime.universe._
 trait BestPatchSelection {
   // The tacit assumption is that 'relatedPatches' contains patches
   // in the order they are picked up by the patch recorder.
-  def apply(relatedPatches: Seq[Patch[Identified]]): Patch[Identified]
+  def apply(relatedPatches: Seq[AbstractPatch[Identified]]): AbstractPatch[Identified]
 }
 
 
 trait BestPatchSelectionContracts extends BestPatchSelection {
-  abstract override def apply(relatedPatches: Seq[Patch[Identified]]): Patch[Identified] = {
+  abstract override def apply(relatedPatches: Seq[AbstractPatch[Identified]]): AbstractPatch[Identified] = {
     require(relatedPatches.nonEmpty)
     require(1 == (relatedPatches map (_.id) distinct).size)
     // TODO - how do I capture the similarity of the types of the items referred to by the patches?
@@ -36,9 +36,9 @@ trait PatchRecorder {
 
   val allRecordingsAreCaptured: Boolean
 
-  def recordPatchFromChange(when: Unbounded[Instant], patch: Patch[Identified]): Unit
+  def recordPatchFromChange(when: Unbounded[Instant], patch: AbstractPatch[Identified]): Unit
 
-  def recordPatchFromMeasurement(when: Unbounded[Instant], patch: Patch[Identified]): Unit
+  def recordPatchFromMeasurement(when: Unbounded[Instant], patch: AbstractPatch[Identified]): Unit
 
   // TODO - this needs to play well with 'WorldReferenceImplementation' - may need
   // some explicit dependencies, or could fold them into the implementing subclass.
@@ -53,13 +53,13 @@ trait PatchRecorderContracts extends PatchRecorder {
   require(whenEventPertainedToByLastRecordingTookPlace.isEmpty)
   require(!allRecordingsAreCaptured)
 
-  abstract override def recordPatchFromChange(when: Unbounded[Instant], patch: Patch[Identified]): Unit = {
+  abstract override def recordPatchFromChange(when: Unbounded[Instant], patch: AbstractPatch[Identified]): Unit = {
     require(whenEventPertainedToByLastRecordingTookPlace.cata(some = when >= _, none = true))
     require(!allRecordingsAreCaptured)
     super.recordPatchFromChange(when, patch)
   }
 
-  abstract override def recordPatchFromMeasurement(when: Unbounded[Instant], patch: Patch[Identified]): Unit = {
+  abstract override def recordPatchFromMeasurement(when: Unbounded[Instant], patch: AbstractPatch[Identified]): Unit = {
     require(whenEventPertainedToByLastRecordingTookPlace.cata(some = when >= _, none = true))
     require(!allRecordingsAreCaptured)
     super.recordPatchFromMeasurement(when, patch)

@@ -159,7 +159,7 @@ object WorldReferenceImplementation {
 
         val relevantEvents = eventTimeline.bucketsIterator flatMap (_.toArray.sortBy(_._2) map (_._1)) takeWhile (_when >= _.when)
         for (event <- relevantEvents) {
-          val patchesPickedUpFromAnEventBeingApplied = mutable.MutableList.empty[Patch[Identified]]
+          val patchesPickedUpFromAnEventBeingApplied = mutable.MutableList.empty[AbstractPatch[Identified]]
 
           class LocalRecorderFactory extends RecorderFactory{
             override def apply[Raw <: Identified: TypeTag](id: Raw#Id): Raw = {
@@ -170,7 +170,7 @@ object WorldReferenceImplementation {
 
                   val item = target.asInstanceOf[Raw] // Remember, the outer context is making a proxy of type 'Raw'.
 
-                  val capturedPatch = Patch[Raw](id, method, arguments, methodProxy)
+                  val capturedPatch = new Patch[Raw](id, method, arguments, methodProxy)
 
                   patchesPickedUpFromAnEventBeingApplied += capturedPatch
 

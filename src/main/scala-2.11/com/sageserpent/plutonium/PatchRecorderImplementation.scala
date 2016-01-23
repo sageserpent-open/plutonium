@@ -16,9 +16,9 @@ trait PatchRecorderImplementation extends PatchRecorder {
   override val whenEventPertainedToByLastRecordingTookPlace: Option[Unbounded[Instant]] = None
   override val allRecordingsAreCaptured: Boolean = false
 
-  override def recordPatchFromChange(when: Unbounded[Instant], patch: Patch[Identified]): Unit = ???
+  override def recordPatchFromChange(when: Unbounded[Instant], patch: AbstractPatch[Identified]): Unit = ???
 
-  override def recordPatchFromMeasurement(when: Unbounded[Instant], patch: Patch[Identified]): Unit = ???
+  override def recordPatchFromMeasurement(when: Unbounded[Instant], patch: AbstractPatch[Identified]): Unit = ???
 
   override def recordAnnihilation[Raw <: Identified: TypeTag](when: Instant, id: Raw#Id): Unit = ???
 
