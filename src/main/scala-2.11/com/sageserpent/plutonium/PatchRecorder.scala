@@ -23,7 +23,8 @@ trait BestPatchSelectionContracts extends BestPatchSelection {
   abstract override def apply(relatedPatches: Seq[AbstractPatch[Identified]]): AbstractPatch[Identified] = {
     require(relatedPatches.nonEmpty)
     require(1 == (relatedPatches map (_.id) distinct).size)
-    // TODO - how do I capture the similarity of the types of the items referred to by the patches?
+    require((for {lhs <- relatedPatches;
+                  rhs <- relatedPatches if lhs != rhs} yield AbstractPatch.bothPatchesReferToTheSameItem(lhs, rhs)).forall(identity))
     super.apply(relatedPatches)
   }
 }
@@ -42,7 +43,7 @@ trait PatchRecorder {
 
   // TODO - this needs to play well with 'WorldReferenceImplementation' - may need
   // some explicit dependencies, or could fold them into the implementing subclass.
-  def recordAnnihilation[Raw <: Identified: TypeTag](when: Instant, id: Raw#Id): Unit
+  def recordAnnihilation[Raw <: Identified : TypeTag](when: Instant, id: Raw#Id): Unit
 
   def noteThatThereAreNoFollowingRecordings(): Unit
 }
@@ -65,7 +66,7 @@ trait PatchRecorderContracts extends PatchRecorder {
     super.recordPatchFromMeasurement(when, patch)
   }
 
-  abstract override def recordAnnihilation[Raw <: Identified: TypeTag](when: Instant, id: Raw#Id): Unit = {
+  abstract override def recordAnnihilation[Raw <: Identified : TypeTag](when: Instant, id: Raw#Id): Unit = {
     require(whenEventPertainedToByLastRecordingTookPlace.cata(some = Finite(when) >= _, none = true))
     require(!allRecordingsAreCaptured)
     super.recordAnnihilation(when, id)
