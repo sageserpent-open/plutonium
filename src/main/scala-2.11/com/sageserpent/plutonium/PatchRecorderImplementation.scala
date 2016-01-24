@@ -2,7 +2,7 @@ package com.sageserpent.plutonium
 
 import java.time.Instant
 
-import com.sageserpent.americium.Unbounded
+import com.sageserpent.americium.{Finite, Unbounded}
 import scala.reflect.runtime.universe._
 
 
@@ -13,14 +13,23 @@ import scala.reflect.runtime.universe._
   */
 trait PatchRecorderImplementation extends PatchRecorder {
   self: BestPatchSelection with IdentifiedItemFactory =>
-  override val whenEventPertainedToByLastRecordingTookPlace: Option[Unbounded[Instant]] = None
+  override val whenEventPertainedToByLastRecordingTookPlace: Option[Unbounded[Instant]] = _whenEventPertainedToByLastRecordingTookPlace
+
+  private var _whenEventPertainedToByLastRecordingTookPlace: Option[Unbounded[Instant]] = None
+
   override val allRecordingsAreCaptured: Boolean = false
 
-  override def recordPatchFromChange(when: Unbounded[Instant], patch: AbstractPatch[Identified]): Unit = ???
+  override def recordPatchFromChange(when: Unbounded[Instant], patch: AbstractPatch[Identified]): Unit = {
+    _whenEventPertainedToByLastRecordingTookPlace = Some(when)
+  }
 
-  override def recordPatchFromMeasurement(when: Unbounded[Instant], patch: AbstractPatch[Identified]): Unit = ???
+  override def recordPatchFromMeasurement(when: Unbounded[Instant], patch: AbstractPatch[Identified]): Unit = {
+    _whenEventPertainedToByLastRecordingTookPlace = Some(when)
+  }
 
-  override def recordAnnihilation[Raw <: Identified: TypeTag](when: Instant, id: Raw#Id): Unit = ???
+  override def recordAnnihilation[Raw <: Identified: TypeTag](when: Instant, id: Raw#Id): Unit = {
+    _whenEventPertainedToByLastRecordingTookPlace = Some(Finite(when))
+  }
 
   override def noteThatThereAreNoFollowingRecordings(): Unit = ???
 }
