@@ -13,8 +13,6 @@ import scala.reflect.runtime.universe._
   */
 
 trait BestPatchSelection {
-  // The tacit assumption is that 'relatedPatches' contains patches
-  // in the order they are picked up by the patch recorder.
   def apply(relatedPatches: Seq[AbstractPatch[Identified]]): AbstractPatch[Identified]
 }
 
