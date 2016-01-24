@@ -6,8 +6,6 @@ import com.sageserpent.americium.{Finite, Unbounded}
 import scala.reflect.runtime.universe._
 
 
-
-
 /**
   * Created by Gerard on 10/01/2016.
   */
@@ -15,9 +13,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
   self: BestPatchSelection with IdentifiedItemFactory =>
   override val whenEventPertainedToByLastRecordingTookPlace: Option[Unbounded[Instant]] = _whenEventPertainedToByLastRecordingTookPlace
 
-  private var _whenEventPertainedToByLastRecordingTookPlace: Option[Unbounded[Instant]] = None
-
-  override val allRecordingsAreCaptured: Boolean = false
+  override val allRecordingsAreCaptured: Boolean = _allRecordingsAreCaptured
 
   override def recordPatchFromChange(when: Unbounded[Instant], patch: AbstractPatch[Identified]): Unit = {
     _whenEventPertainedToByLastRecordingTookPlace = Some(when)
@@ -27,9 +23,15 @@ trait PatchRecorderImplementation extends PatchRecorder {
     _whenEventPertainedToByLastRecordingTookPlace = Some(when)
   }
 
-  override def recordAnnihilation[Raw <: Identified: TypeTag](when: Instant, id: Raw#Id): Unit = {
+  override def recordAnnihilation[Raw <: Identified : TypeTag](when: Instant, id: Raw#Id): Unit = {
     _whenEventPertainedToByLastRecordingTookPlace = Some(Finite(when))
   }
 
-  override def noteThatThereAreNoFollowingRecordings(): Unit = ???
+  override def noteThatThereAreNoFollowingRecordings(): Unit = {
+    _allRecordingsAreCaptured = true
+  }
+
+  private var _whenEventPertainedToByLastRecordingTookPlace: Option[Unbounded[Instant]] = None
+
+  private var _allRecordingsAreCaptured = false
 }
