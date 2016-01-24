@@ -16,7 +16,7 @@ import scala.reflect.runtime.universe._
 
 class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFactory with WorldSpecSupport {
 
-  class TestPatch[+Raw <: Identified](override val id: Raw#Id, val index: Int) extends AbstractPatch[Raw](id) {
+  class TestPatch[+Raw <: Identified: TypeTag](override val id: Raw#Id) extends AbstractPatch[Raw](id) {
     override def apply(identifiedItemFactory: IdentifiedItemFactory): Unit = ???
   }
 
@@ -45,33 +45,38 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
     (patchRecorder.hookForMockingApplyAfterContractsCheckingHasTakenPlace _).expects(relatedPatches).once.returning(bestPatch)
   }
 
-  val maximumPatchIndexOffset = 10
+  val maximumNumberOfCandidatesForBestRelatedPatch = 10
 
-  val runOfPatchIndexOffsetsGenerator = Gen.choose(1, maximumPatchIndexOffset).map(Seq.tabulate(_)(identity[Int]))
-
-  def patchesGeneratorForId[Raw <: Identified](id: Raw#Id, patchIndexBase: Int, patchRecorder: TestPatchRecorder) = for {patchIndexOffsets <- runOfPatchIndexOffsetsGenerator
-                                                                                                                         bestPatchIndexOffset <- Gen.oneOf(patchIndexOffsets)} yield {
-    val patches = patchIndexOffsets.map(patchIndexOffset => new TestPatch[Raw](id, patchIndexOffset + patchIndexBase))
+  def relatedPatchesGeneratorForId[Raw <: Identified: TypeTag](id: Raw#Id) = for {numberOfPatches <- Gen.choose(1, maximumNumberOfCandidatesForBestRelatedPatch)
+                                                                         bestPatchIndexOffset <- Gen.choose(1, maximumNumberOfCandidatesForBestRelatedPatch) map (_ - 1)} yield {
+    val patches = Seq.fill(numberOfPatches) {
+      new TestPatch[Raw](id)
+    }
 
     val bestPatch = patches(bestPatchIndexOffset)
 
-    inSequence {
-      expectThatPatchesAreSubmittedAsCandidatesForTheBestRelatedPatch(patches, bestPatch, patchRecorder)
+    patchRecorder: TestPatchRecorder => {
+      inSequence {
+        expectThatPatchesAreSubmittedAsCandidatesForTheBestRelatedPatch(patches, bestPatch, patchRecorder)
 
-      for (patchIndexOffset <- patchIndexOffsets) {
-        if (bestPatchIndexOffset == patchIndexOffset)
-          expectThatAPatchIsApplied(patches(bestPatchIndexOffset))
-        else
-          expectThatAPatchIsNotApplied(patches(bestPatchIndexOffset))
+        for (patchIndexOffset <- 0 until numberOfPatches) {
+          if (bestPatchIndexOffset == patchIndexOffset)
+            expectThatAPatchIsApplied(patches(bestPatchIndexOffset))
+          else
+            expectThatAPatchIsNotApplied(patches(bestPatchIndexOffset))
+        }
       }
+
+      patches
     }
-
-    patches
   }
 
-  "I have no idea what this test" should "be called" in {
+  val relatedPatchesForIntegerHistoryGenerator = integerHistoryIdGenerator flatMap (id => relatedPatchesGeneratorForId[IntegerHistory](id))
 
-  }
+  val relatedPatchesForFooHistoryGenerator = fooHistoryIdGenerator flatMap (id => relatedPatchesGeneratorForId[FooHistory](id))
+
+  val runsOfRelatedPatchesGenerator = Gen.someOf(relatedPatchesForIntegerHistoryGenerator, relatedPatchesForFooHistoryGenerator)
+
 
   "Recording a patch" should "be reflected in the property 'whenEventPertainedToByLastRecordingTookPlace'" in {
 
