@@ -2,8 +2,7 @@ package com.sageserpent.plutonium
 
 import java.time.Instant
 
-import com.sageserpent.americium.{Finite, NegativeInfinity, Unbounded}
-import org.scalacheck.{Arbitrary, Gen}
+import org.scalacheck.Gen
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.prop.Checkers
 import org.scalatest.{FlatSpec, Matchers}
@@ -15,7 +14,7 @@ import scala.reflect.runtime.universe._
   * Created by Gerard on 10/01/2016.
   */
 
-class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFactory {
+class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFactory with WorldSpecSupport {
 
   class TestPatch[+Raw <: Identified](override val id: Raw#Id, val index: Int) extends AbstractPatch[Raw](id) {
     override def apply(identifiedItemFactory: IdentifiedItemFactory): Unit = ???
@@ -46,13 +45,9 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
     (patchRecorder.hookForMockingApplyAfterContractsCheckingHasTakenPlace _).expects(relatedPatches).once.returning(bestPatch)
   }
 
-  val instantGenerator = Arbitrary.arbitrary[Long] map Instant.ofEpochMilli
-
-  val changeWhenGenerator: Gen[Unbounded[Instant]] = Gen.frequency(1 -> Gen.oneOf(Seq(NegativeInfinity[Instant])), 10 -> (instantGenerator map (Finite(_))))
-
   val maximumPatchIndexOffset = 10
 
-  val runOfPatchIndexOffsetsGenerator = Gen.chooseNum(1, maximumPatchIndexOffset).map(Seq.tabulate(_)(identity[Int]))
+  val runOfPatchIndexOffsetsGenerator = Gen.choose(1, maximumPatchIndexOffset).map(Seq.tabulate(_)(identity[Int]))
 
   def patchesGeneratorForId[Raw <: Identified](id: Raw#Id, patchIndexBase: Int, patchRecorder: TestPatchRecorder) = for {patchIndexOffsets <- runOfPatchIndexOffsetsGenerator
                                                                                                                          bestPatchIndexOffset <- Gen.oneOf(patchIndexOffsets)} yield {
