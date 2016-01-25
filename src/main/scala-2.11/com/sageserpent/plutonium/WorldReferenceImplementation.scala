@@ -123,9 +123,9 @@ object WorldReferenceImplementation {
 
         val proxyClazz = enhancer.createClass()
 
-        val proxyClassType = currentMirror.classSymbol(proxyClazz)
-        val classMirror = currentMirror.reflectClass(proxyClassType.asClass)
-        val constructor = proxyClassType.toType.decls.find(_.isConstructor).get
+        val proxyClassSymbol = currentMirror.classSymbol(proxyClazz)
+        val classMirror = currentMirror.reflectClass(proxyClassSymbol.asClass)
+        val constructor = proxyClassSymbol.toType.decls.find(_.isConstructor).get
         classMirror.reflectConstructor(constructor.asMethod)
       }
       val typeOfRaw = typeOf[Raw]
