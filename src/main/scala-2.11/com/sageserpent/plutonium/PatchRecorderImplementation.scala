@@ -12,6 +12,7 @@ import scala.reflect.runtime.universe._
   * Created by Gerard on 10/01/2016.
   */
 trait PatchRecorderImplementation extends PatchRecorder {
+  // TODO: this implementation is a disaster regarding exception safety!
   self: BestPatchSelection with IdentifiedItemFactory =>
   override val whenEventPertainedToByLastRecordingTookPlace: Option[Unbounded[Instant]] = _whenEventPertainedToByLastRecordingTookPlace
 
@@ -19,41 +20,99 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
   override def recordPatchFromChange(when: Unbounded[Instant], patch: AbstractPatch[Identified]): Unit = {
     _whenEventPertainedToByLastRecordingTookPlace = Some(when)
+
+    val itemState = relevantItemStateFor(patch)
+
+    submitCandidatePatches(itemState)
+
+    itemState._2 += patch
   }
 
   override def recordPatchFromMeasurement(when: Unbounded[Instant], patch: AbstractPatch[Identified]): Unit = {
     _whenEventPertainedToByLastRecordingTookPlace = Some(when)
 
-    val itemStates = idToItemStatesMap.getOrElseUpdate(patch.id, scala.collection.mutable.Set.empty)
-
-    // TODO - linear search through item states, looking for either no matches or a single match.
+    relevantItemStateFor(patch)._2 += patch
   }
 
   override def recordAnnihilation[Raw <: Identified : TypeTag](when: Instant, id: Raw#Id): Unit = {
     _whenEventPertainedToByLastRecordingTookPlace = Some(Finite(when))
+
+    idToItemStatesMap.get(id) match {
+      case Some(itemStates) => {
+        val compatibleItemStates = itemStates filter { case (itemType, _) => itemType <:< typeOf[Raw] }
+
+        for (itemState <- compatibleItemStates){
+          submitCandidatePatches(itemState)
+        }
+
+        itemStates --= compatibleItemStates
+      }
+      case None => throw new RuntimeException(s"Attempt to annihilate item of id: $id that does not exist at: $when.")
+    }
   }
 
   override def noteThatThereAreNoFollowingRecordings(): Unit = {
     _allRecordingsAreCaptured = true
+
+    for (itemState <- idToItemStatesMap.values.flatten){
+      submitCandidatePatches(itemState)
+    }
+
+    idToItemStatesMap.clear()
   }
 
   private var _whenEventPertainedToByLastRecordingTookPlace: Option[Unbounded[Instant]] = None
 
   private var _allRecordingsAreCaptured = false
 
-  private type ItemState = (Type, List[AbstractPatch[Identified]])
+  private type ItemState = (Type, mutable.MutableList[AbstractPatch[Identified]])
 
   private val idToItemStatesMap = scala.collection.mutable.Map.empty[Any, scala.collection.mutable.Set[ItemState]]
 
-  private val nextActionIndex = 0L;
-  private val highestActionExecuted = -1L;
+  private var nextActionIndex = 0L;
+  private var highestActionExecuted = -1L;
 
-  private type IndexedAction = (Int, Unit => Unit)
+  private type IndexedAction = (Long, Unit => Unit)
 
-  implicit val indexedActionOrdering = Ordering.by[IndexedAction, Int](_._1)
+  implicit val indexedActionOrdering = Ordering.by[IndexedAction, Long](_._1)
 
   private val actionQueue = mutable.PriorityQueue[IndexedAction]()
 
+
+  private def relevantItemStateFor(patch: AbstractPatch[Identified]) = {
+    val itemStates = idToItemStatesMap.getOrElseUpdate(patch.id, scala.collection.mutable.Set.empty)
+
+    val compatibleItemStates = itemStates filter { case (itemType, _) => itemType <:< patch.itemType }
+
+    if (compatibleItemStates.nonEmpty) if (1 < compatibleItemStates.size) {
+      throw new scala.RuntimeException("There is more than one item of id: '${patch.id}' compatible with type '${patch.itemType}', these have types: '${compatibleItemStates map (_._1)}'.")
+    } else {
+      compatibleItemStates.head
+    }
+    else {
+      val itemState = patch.itemType -> mutable.MutableList.empty[AbstractPatch[Identified]]
+      itemStates += itemState
+      itemState
+    }
+  }
+
+  private def submitCandidatePatches(itemState: (universe.Type, mutable.MutableList[AbstractPatch[Identified]])): Unit = {
+    val candidatePatches = itemState._2
+
+    val bestPatch = self(candidatePatches)
+
+    val actionIndex = nextActionIndex
+
+    nextActionIndex += 1
+
+    actionQueue.enqueue(actionIndex -> (Unit => {
+      bestPatch(self)
+    }))
+
+    itemState._2.clear()
+  }
+
+  // TODO - this is for the future...
   def createItemOfType(itemType: Type, id: Any): Any = {
     val clazz = currentMirror.runtimeClass(itemType.typeSymbol.asClass)
     val proxyClassSymbol = currentMirror.classSymbol(clazz)
