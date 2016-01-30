@@ -14,9 +14,13 @@ import scala.reflect.runtime.universe._
 trait PatchRecorderImplementation extends PatchRecorder {
   // TODO: this implementation is a disaster regarding exception safety!
   self: BestPatchSelection with IdentifiedItemFactory =>
-  override val whenEventPertainedToByLastRecordingTookPlace: Option[Unbounded[Instant]] = _whenEventPertainedToByLastRecordingTookPlace
+  private var _whenEventPertainedToByLastRecordingTookPlace: Option[Unbounded[Instant]] = None
 
-  override val allRecordingsAreCaptured: Boolean = _allRecordingsAreCaptured
+  private var _allRecordingsAreCaptured = false
+
+  override def whenEventPertainedToByLastRecordingTookPlace: Option[Unbounded[Instant]] = _whenEventPertainedToByLastRecordingTookPlace
+
+  override def allRecordingsAreCaptured: Boolean = _allRecordingsAreCaptured
 
   override def recordPatchFromChange(when: Unbounded[Instant], patch: AbstractPatch[Identified]): Unit = {
     _whenEventPertainedToByLastRecordingTookPlace = Some(when)
@@ -60,10 +64,6 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
     idToItemStatesMap.clear()
   }
-
-  private var _whenEventPertainedToByLastRecordingTookPlace: Option[Unbounded[Instant]] = None
-
-  private var _allRecordingsAreCaptured = false
 
   private type ItemState = (Type, mutable.MutableList[AbstractPatch[Identified]])
 

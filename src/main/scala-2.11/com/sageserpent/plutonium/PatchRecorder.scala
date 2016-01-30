@@ -31,9 +31,9 @@ trait BestPatchSelectionContracts extends BestPatchSelection {
 trait PatchRecorder {
   self: BestPatchSelection with IdentifiedItemFactory =>
 
-  val whenEventPertainedToByLastRecordingTookPlace: Option[Unbounded[Instant]]
+  def whenEventPertainedToByLastRecordingTookPlace: Option[Unbounded[Instant]]
 
-  val allRecordingsAreCaptured: Boolean
+  def allRecordingsAreCaptured: Boolean
 
   def recordPatchFromChange(when: Unbounded[Instant], patch: AbstractPatch[Identified]): Unit
 
