@@ -25,11 +25,11 @@ trait PatchRecorderImplementation extends PatchRecorder {
   override def recordPatchFromChange(when: Unbounded[Instant], patch: AbstractPatch[Identified]): Unit = {
     _whenEventPertainedToByLastRecordingTookPlace = Some(when)
 
-    val itemState = relevantItemStateFor(patch)
+    val (_, candidatePatches) = relevantItemStateFor(patch)
 
-    submitCandidatePatches(itemState)
+    submitCandidatePatches(candidatePatches)
 
-    itemState._2 += patch
+    candidatePatches += patch
   }
 
   override def recordPatchFromMeasurement(when: Unbounded[Instant], patch: AbstractPatch[Identified]): Unit = {
@@ -46,7 +46,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
         val compatibleItemStates = itemStates filter { case (itemType, _) => itemType <:< typeOf[Raw] }
 
         for (itemState <- compatibleItemStates){
-          submitCandidatePatches(itemState)
+          submitCandidatePatches(itemState._2)
         }
 
         itemStates --= compatibleItemStates
@@ -59,7 +59,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
     _allRecordingsAreCaptured = true
 
     for (itemState <- idToItemStatesMap.values.flatten){
-      submitCandidatePatches(itemState)
+      submitCandidatePatches(itemState._2)
     }
 
     idToItemStatesMap.clear()
@@ -96,26 +96,26 @@ trait PatchRecorderImplementation extends PatchRecorder {
     }
   }
 
-  private def submitCandidatePatches(itemState: (universe.Type, mutable.MutableList[AbstractPatch[Identified]])): Unit = {
-    val candidatePatches = itemState._2
+  private def submitCandidatePatches(candidatePatches: mutable.MutableList[AbstractPatch[Identified]]): Unit = {
+    if (candidatePatches.nonEmpty) {
+      val bestPatch = self(candidatePatches)
 
-    val bestPatch = self(candidatePatches)
+      val actionIndex = nextActionIndex
 
-    val actionIndex = nextActionIndex
+      nextActionIndex += 1
 
-    nextActionIndex += 1
+      actionQueue.enqueue(actionIndex -> (Unit => {
+        bestPatch(self)
+      }))
 
-    actionQueue.enqueue(actionIndex -> (Unit => {
-      bestPatch(self)
-    }))
+      candidatePatches.clear()
 
-    itemState._2.clear()
-
-    // So given that the best patch has been added, does this permit the action queue to be drained?
-    while (1 + highestActionExecuted == actionQueue.head._1){
-      val (index, actionToBeExecuted) = actionQueue.dequeue()
-      actionToBeExecuted()
-      highestActionExecuted = index
+      // So given that the best patch has been added, does this permit the action queue to be drained?
+      while (1 + highestActionExecuted == actionQueue.head._1) {
+        val (index, actionToBeExecuted) = actionQueue.dequeue()
+        actionToBeExecuted()
+        highestActionExecuted = index
+      }
     }
   }
 
