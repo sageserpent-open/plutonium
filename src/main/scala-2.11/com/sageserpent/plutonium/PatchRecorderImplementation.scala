@@ -110,6 +110,13 @@ trait PatchRecorderImplementation extends PatchRecorder {
     }))
 
     itemState._2.clear()
+
+    // So given that the best patch has been added, does this permit the action queue to be drained?
+    while (1 + highestActionExecuted == actionQueue.head._1){
+      val (index, actionToBeExecuted) = actionQueue.dequeue()
+      actionToBeExecuted()
+      highestActionExecuted = index
+    }
   }
 
   // TODO - this is for the future...
