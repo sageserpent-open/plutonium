@@ -78,7 +78,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
     }
   }
 
-  private type CandidatePatches = mutable.Map[SequenceIndex, AbstractPatch[Identified]]
+  private type CandidatePatches = mutable.MutableList[(SequenceIndex, AbstractPatch[Identified])]
 
   private type ItemState = (Type, CandidatePatches)
 
@@ -106,7 +106,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
       compatibleItemStates.head
     }
     else {
-      val itemState = patch.itemType -> mutable.Map.empty[SequenceIndex, AbstractPatch[Identified]]
+      val itemState = patch.itemType -> mutable.MutableList.empty[(SequenceIndex, AbstractPatch[Identified])]
       itemStates += itemState
       itemState
     }
@@ -114,7 +114,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
   private def submitCandidatePatches(candidatePatches: CandidatePatches): Unit = {
     if (candidatePatches.nonEmpty) {
-      val bestPatch = self(candidatePatches.values.toSeq)
+      val bestPatch = self(candidatePatches.map (_._2))
 
       // The best patch has to be applied as if it occurred when the original
       // patch would have taken place - so it steals the latter's sequence index.
