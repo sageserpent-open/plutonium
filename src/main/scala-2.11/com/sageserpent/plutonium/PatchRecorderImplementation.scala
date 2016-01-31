@@ -84,20 +84,40 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
   private type CandidatePatches = mutable.MutableList[(SequenceIndex, AbstractPatch[Identified], Unbounded[Instant])]
 
-  private class ItemState(val itemType: Type) {
+  private class ItemState(val itemType: Type) extends IdentifiedItemFactory {
     def isCompatibleWith(itemType: Type) = this.itemType <:< itemType
 
     def addPatch(when: Unbounded[Instant], patch: AbstractPatch[Identified]) = {
       candidatePatches += ((nextSequenceIndex(), patch, when))
     }
 
-    def submitCandidatePatches(): Unit = {
-      PatchRecorderImplementation.this.submitCandidatePatches(candidatePatches)
+    def submitCandidatePatches(): Unit =
+      if (candidatePatches.nonEmpty) {
+        val bestPatch = self(candidatePatches.map(_._2))
 
-      candidatePatches.clear()
-    }
+        // The best patch has to be applied as if it occurred when the original
+        // patch would have taken place - so it steals the latter's sequence index.
+        // TODO: is there a test that demonstrates the need for this? Come to think
+        // of it though, I'm not sure if a mutator could legitimately make bitemporal
+        // queries of other bitemporal items; the only way an inter-item relationship
+        // makes a difference is when a query is executed - and that doesn't care about
+        // the precise interleaving of events on related items, only that the correct
+        // ones have been applied to each item. So does this mean that the action queue
+        // can be split across items?
+        val (sequenceIndex, _, when) = candidatePatches.head
+
+        actionQueue.enqueue((sequenceIndex, Unit => {
+          bestPatch(self)
+        }, when))
+
+        candidatePatches.clear()
+      }
 
     private val candidatePatches: CandidatePatches = mutable.MutableList.empty[(SequenceIndex, AbstractPatch[Identified], Unbounded[Instant])]
+
+    override def itemFor[Raw <: Identified : universe.TypeTag](id: Raw#Id): Raw = PatchRecorderImplementation.this.itemFor(id)
+
+    override def annihilateItemsFor[Raw <: Identified : universe.TypeTag](id: Raw#Id, when: Instant): Unit = PatchRecorderImplementation.this.annihilateItemsFor(id, when)
   }
 
   private val idToItemStatesMap = mutable.Map.empty[Any, mutable.Set[ItemState]]
@@ -127,27 +147,6 @@ trait PatchRecorderImplementation extends PatchRecorder {
       val itemState = new ItemState(patch.itemType)
       itemStates += itemState
       itemState
-    }
-  }
-
-  private def submitCandidatePatches(candidatePatches: CandidatePatches): Unit = {
-    if (candidatePatches.nonEmpty) {
-      val bestPatch = self(candidatePatches.map(_._2))
-
-      // The best patch has to be applied as if it occurred when the original
-      // patch would have taken place - so it steals the latter's sequence index.
-      // TODO: is there a test that demonstrates the need for this? Come to think
-      // of it though, I'm not sure if a mutator could legitimately make bitemporal
-      // queries of other bitemporal items; the only way an inter-item relationship
-      // makes a difference is when a query is executed - and that doesn't care about
-      // the precise interleaving of events on related items, only that the correct
-      // ones have been applied to each item. So does this mean that the action queue
-      // can be split across items?
-      val (sequenceIndex, _, when) = candidatePatches.head
-
-      actionQueue.enqueue((sequenceIndex, Unit => {
-        bestPatch(self)
-      }, when))
     }
   }
 
