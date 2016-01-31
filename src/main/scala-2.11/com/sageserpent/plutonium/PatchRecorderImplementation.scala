@@ -29,13 +29,13 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
     submitCandidatePatches(candidatePatches)
 
-    candidatePatches += nextSequenceIndex() -> patch
+    candidatePatches += ((nextSequenceIndex(), patch, when))
   }
 
   override def recordPatchFromMeasurement(when: Unbounded[Instant], patch: AbstractPatch[Identified]): Unit = {
     _whenEventPertainedToByLastRecordingTookPlace = Some(when)
 
-    relevantItemStateFor(patch)._2 += nextSequenceIndex() -> patch
+    relevantItemStateFor(patch)._2 += ((nextSequenceIndex(), patch, when))
   }
 
   override def recordAnnihilation[Raw <: Identified : TypeTag](when: Instant, id: Raw#Id): Unit = {
@@ -54,9 +54,9 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
           val sequenceIndex = nextSequenceIndex()
 
-          actionQueue.enqueue(sequenceIndex -> (Unit => {
+          actionQueue.enqueue((sequenceIndex, (Unit => {
             annihilateItemsFor(id, when)
-          }))
+          }), Finite(when)))
         } else throw new RuntimeException(s"Attempt to annihilate item of id: $id that does not exist at: $when.")
       }
       case None => throw new RuntimeException(s"Attempt to annihilate item of id: $id that does not exist at: $when.")
@@ -66,37 +66,41 @@ trait PatchRecorderImplementation extends PatchRecorder {
   override def noteThatThereAreNoFollowingRecordings(): Unit = {
     _allRecordingsAreCaptured = true
 
-    for (itemState <- idToItemStatesMap.values.flatten){
+    for (itemState <- idToItemStatesMap.values.flatten) {
       submitCandidatePatches(itemState._2)
     }
 
     idToItemStatesMap.clear()
+  }
 
-    while (actionQueue.nonEmpty) {
-      val (_, actionToBeExecuted) = actionQueue.dequeue()
+  override def playPatchesUntil(when: Unbounded[Instant]): Unit = {
+    while (actionQueue.nonEmpty && (actionQueue.head match {
+      case (_, _, whenForAction) => whenForAction <= when
+    })) {
+      val (_, actionToBeExecuted, _) = actionQueue.dequeue()
       actionToBeExecuted()
     }
   }
 
-  private type CandidatePatches = mutable.MutableList[(SequenceIndex, AbstractPatch[Identified])]
+  private type CandidatePatches = mutable.MutableList[(SequenceIndex, AbstractPatch[Identified], Unbounded[Instant])]
 
   private type ItemState = (Type, CandidatePatches)
 
-  private val idToItemStatesMap = scala.collection.mutable.Map.empty[Any, scala.collection.mutable.Set[ItemState]]
+  private val idToItemStatesMap = mutable.Map.empty[Any, mutable.Set[ItemState]]
 
   private type SequenceIndex = Long
 
   private var _nextSequenceIndex: SequenceIndex = 0L;
 
-  private type IndexedAction = (SequenceIndex, Unit => Unit)
+  private type IndexedAction = (SequenceIndex, Unit => Unit, Unbounded[Instant])
 
-  implicit val indexedActionOrdering = Ordering.by[IndexedAction, SequenceIndex](- _._1)
+  implicit val indexedActionOrdering = Ordering.by[IndexedAction, SequenceIndex](-_._1)
 
   private val actionQueue = mutable.PriorityQueue[IndexedAction]()
 
 
   private def relevantItemStateFor(patch: AbstractPatch[Identified]) = {
-    val itemStates = idToItemStatesMap.getOrElseUpdate(patch.id, scala.collection.mutable.Set.empty)
+    val itemStates = idToItemStatesMap.getOrElseUpdate(patch.id, mutable.Set.empty)
 
     val compatibleItemStates = itemStates filter { case (itemType, _) => itemType <:< patch.itemType }
 
@@ -106,7 +110,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
       compatibleItemStates.head
     }
     else {
-      val itemState = patch.itemType -> mutable.MutableList.empty[(SequenceIndex, AbstractPatch[Identified])]
+      val itemState = patch.itemType -> mutable.MutableList.empty[(SequenceIndex, AbstractPatch[Identified], Unbounded[Instant])]
       itemStates += itemState
       itemState
     }
@@ -114,7 +118,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
   private def submitCandidatePatches(candidatePatches: CandidatePatches): Unit = {
     if (candidatePatches.nonEmpty) {
-      val bestPatch = self(candidatePatches.map (_._2))
+      val bestPatch = self(candidatePatches.map(_._2))
 
       // The best patch has to be applied as if it occurred when the original
       // patch would have taken place - so it steals the latter's sequence index.
@@ -125,11 +129,11 @@ trait PatchRecorderImplementation extends PatchRecorder {
       // the precise interleaving of events on related items, only that the correct
       // ones have been applied to each item. So does this mean that the action queue
       // can be split across items?
-      val sequenceIndex = candidatePatches.head._1
+      val (sequenceIndex, _, when) = candidatePatches.head
 
-      actionQueue.enqueue(sequenceIndex -> (Unit => {
+      actionQueue.enqueue((sequenceIndex, (Unit => {
         bestPatch(self)
-      }))
+      }), when))
 
       candidatePatches.clear()
     }

@@ -21,7 +21,7 @@ trait BestPatchSelectionContracts extends BestPatchSelection {
   abstract override def apply(relatedPatches: Seq[AbstractPatch[Identified]]): AbstractPatch[Identified] = {
     require(relatedPatches.nonEmpty)
     require(1 == (relatedPatches map (_.id) distinct).size)
-    require((for {lhs <- relatedPatches;
+    require((for {lhs <- relatedPatches
                   rhs <- relatedPatches if lhs != rhs} yield AbstractPatch.bothPatchesReferToTheSameItem(lhs, rhs)).forall(identity))
     super.apply(relatedPatches)
   }
@@ -39,11 +39,11 @@ trait PatchRecorder {
 
   def recordPatchFromMeasurement(when: Unbounded[Instant], patch: AbstractPatch[Identified]): Unit
 
-  // TODO - this needs to play well with 'WorldReferenceImplementation' - may need
-  // some explicit dependencies, or could fold them into the implementing subclass.
   def recordAnnihilation[Raw <: Identified : TypeTag](when: Instant, id: Raw#Id): Unit
 
   def noteThatThereAreNoFollowingRecordings(): Unit
+
+  def playPatchesUntil(when: Unbounded[Instant])
 }
 
 trait PatchRecorderContracts extends PatchRecorder {
@@ -73,6 +73,11 @@ trait PatchRecorderContracts extends PatchRecorder {
   abstract override def noteThatThereAreNoFollowingRecordings(): Unit = {
     require(!allRecordingsAreCaptured)
     super.noteThatThereAreNoFollowingRecordings()
+  }
+
+  abstract override def playPatchesUntil(when: Unbounded[Instant]): Unit = {
+    require(allRecordingsAreCaptured)
+    super.playPatchesUntil(when)
   }
 }
 

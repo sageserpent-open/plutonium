@@ -157,7 +157,7 @@ object WorldReferenceImplementation {
           }
         }
 
-        val relevantEvents = eventTimeline.bucketsIterator flatMap (_.toArray.sortBy(_._2) map (_._1)) takeWhile (_when >= _.when)
+        val relevantEvents = eventTimeline.bucketsIterator flatMap (_.toArray.sortBy(_._2) map (_._1))
         for (event <- relevantEvents) {
           val patchesPickedUpFromAnEventBeingApplied = mutable.MutableList.empty[AbstractPatch[Identified]]
 
@@ -207,6 +207,8 @@ object WorldReferenceImplementation {
         }
 
         patchRecorder.noteThatThereAreNoFollowingRecordings()
+
+        patchRecorder.playPatchesUntil(_when)
       }
     }
 
