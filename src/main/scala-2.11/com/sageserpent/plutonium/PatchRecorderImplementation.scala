@@ -51,6 +51,12 @@ trait PatchRecorderImplementation extends PatchRecorder {
           }
 
           itemStates --= compatibleItemStates
+
+          val sequenceIndex = nextSequenceIndex()
+
+          actionQueue.enqueue(sequenceIndex -> (Unit => {
+            annihilateItemsFor(id, when)
+          }))
         } else throw new RuntimeException(s"Attempt to annihilate item of id: $id that does not exist at: $when.")
       }
       case None => throw new RuntimeException(s"Attempt to annihilate item of id: $id that does not exist at: $when.")
