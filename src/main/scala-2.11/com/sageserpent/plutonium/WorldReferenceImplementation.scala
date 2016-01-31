@@ -196,7 +196,7 @@ object WorldReferenceImplementation {
             case Measurement(when, reading) =>
               reading(recorderFactory)
               for (patch <- patchesPickedUpFromAnEventBeingApplied) {
-                patchRecorder.recordPatchFromChange(when, patch)
+                patchRecorder.recordPatchFromMeasurement(when, patch)
               }
 
             case annihilation@Annihilation(when, id) => {
