@@ -45,11 +45,13 @@ trait PatchRecorderImplementation extends PatchRecorder {
       case Some(itemStates) => {
         val compatibleItemStates = itemStates filter { case (itemType, _) => itemType <:< typeOf[Raw] }
 
-        for (itemState <- compatibleItemStates){
-          submitCandidatePatches(itemState._2)
-        }
+        if (compatibleItemStates.nonEmpty) {
+          for (itemState <- compatibleItemStates) {
+            submitCandidatePatches(itemState._2)
+          }
 
-        itemStates --= compatibleItemStates
+          itemStates --= compatibleItemStates
+        } else throw new RuntimeException(s"Attempt to annihilate item of id: $id that does not exist at: $when.")
       }
       case None => throw new RuntimeException(s"Attempt to annihilate item of id: $id that does not exist at: $when.")
     }
@@ -63,6 +65,8 @@ trait PatchRecorderImplementation extends PatchRecorder {
     }
 
     idToItemStatesMap.clear()
+
+    assert(actionQueue.isEmpty)
   }
 
   private type ItemState = (Type, mutable.MutableList[AbstractPatch[Identified]])
