@@ -25,17 +25,17 @@ trait PatchRecorderImplementation extends PatchRecorder {
   override def recordPatchFromChange(when: Unbounded[Instant], patch: AbstractPatch[Identified]): Unit = {
     _whenEventPertainedToByLastRecordingTookPlace = Some(when)
 
-    val (_, candidatePatches) = relevantItemStateFor(patch)
+    val itemState = relevantItemStateFor(patch)
 
-    submitCandidatePatches(candidatePatches)
+    itemState.submitCandidatePatches()
 
-    candidatePatches += ((nextSequenceIndex(), patch, when))
+    itemState.addPatch(when, patch)
   }
 
   override def recordPatchFromMeasurement(when: Unbounded[Instant], patch: AbstractPatch[Identified]): Unit = {
     _whenEventPertainedToByLastRecordingTookPlace = Some(when)
 
-    relevantItemStateFor(patch)._2 += ((nextSequenceIndex(), patch, when))
+    relevantItemStateFor(patch).addPatch(when, patch)
   }
 
   override def recordAnnihilation[Raw <: Identified : TypeTag](when: Instant, id: Raw#Id): Unit = {
@@ -43,11 +43,11 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
     idToItemStatesMap.get(id) match {
       case Some(itemStates) => {
-        val compatibleItemStates = itemStates filter { case (itemType, _) => itemType <:< typeOf[Raw] }
+        val compatibleItemStates = itemStates filter (_.isCompatibleWith(typeOf[Raw]))
 
         if (compatibleItemStates.nonEmpty) {
           for (itemState <- compatibleItemStates) {
-            submitCandidatePatches(itemState._2)
+            itemState.submitCandidatePatches()
           }
 
           itemStates --= compatibleItemStates
@@ -67,7 +67,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
     _allRecordingsAreCaptured = true
 
     for (itemState <- idToItemStatesMap.values.flatten) {
-      submitCandidatePatches(itemState._2)
+      itemState.submitCandidatePatches()
     }
 
     idToItemStatesMap.clear()
@@ -84,7 +84,21 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
   private type CandidatePatches = mutable.MutableList[(SequenceIndex, AbstractPatch[Identified], Unbounded[Instant])]
 
-  private type ItemState = (Type, CandidatePatches)
+  private class ItemState(val itemType: Type) {
+    def isCompatibleWith(itemType: Type) = this.itemType <:< itemType
+
+    def addPatch(when: Unbounded[Instant], patch: AbstractPatch[Identified]) = {
+      candidatePatches += ((nextSequenceIndex(), patch, when))
+    }
+
+    def submitCandidatePatches(): Unit = {
+      PatchRecorderImplementation.this.submitCandidatePatches(candidatePatches)
+
+      candidatePatches.clear()
+    }
+
+    private val candidatePatches: CandidatePatches = mutable.MutableList.empty[(SequenceIndex, AbstractPatch[Identified], Unbounded[Instant])]
+  }
 
   private val idToItemStatesMap = mutable.Map.empty[Any, mutable.Set[ItemState]]
 
@@ -102,15 +116,15 @@ trait PatchRecorderImplementation extends PatchRecorder {
   private def relevantItemStateFor(patch: AbstractPatch[Identified]) = {
     val itemStates = idToItemStatesMap.getOrElseUpdate(patch.id, mutable.Set.empty)
 
-    val compatibleItemStates = itemStates filter { case (itemType, _) => itemType <:< patch.itemType }
+    val compatibleItemStates = itemStates filter (_.isCompatibleWith(patch.itemType))
 
     if (compatibleItemStates.nonEmpty) if (1 < compatibleItemStates.size) {
-      throw new scala.RuntimeException(s"There is more than one item of id: '${patch.id}' compatible with type '${patch.itemType}', these have types: '${compatibleItemStates map (_._1)}'.")
+      throw new scala.RuntimeException(s"There is more than one item of id: '${patch.id}' compatible with type '${patch.itemType}', these have types: '${compatibleItemStates map (_.itemType)}'.")
     } else {
       compatibleItemStates.head
     }
     else {
-      val itemState = patch.itemType -> mutable.MutableList.empty[(SequenceIndex, AbstractPatch[Identified], Unbounded[Instant])]
+      val itemState = new ItemState(patch.itemType)
       itemStates += itemState
       itemState
     }
@@ -134,8 +148,6 @@ trait PatchRecorderImplementation extends PatchRecorder {
       actionQueue.enqueue((sequenceIndex, (Unit => {
         bestPatch(self)
       }), when))
-
-      candidatePatches.clear()
     }
   }
 
