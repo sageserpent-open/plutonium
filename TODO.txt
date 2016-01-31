@@ -51,9 +51,11 @@ Similarly, wildcards need zero, one or many matches. (DONE)
 
 ---------------------------------------------------------------------------------------------------------------------------
 
-9. Tests for observations and annihilations.
+9. Tests for measurements and annihilations.
 
 (ANNIHILATIONS - DONE)
+
+(OBSERVATIONS - got the general 'mix in measurements' test support done. Need a test th prove that an measurement spore cannot read from a scope.)
 
 ---------------------------------------------------------------------------------------------------------------------------
 

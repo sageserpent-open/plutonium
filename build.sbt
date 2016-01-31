@@ -13,6 +13,7 @@ lazy val settings = Seq(organization := "com.sageserpent",
   libraryDependencies += "cglib" % "cglib" % "3.1",
   libraryDependencies += "com.sageserpent" %% "americium" % "SNAPSHOT",
   libraryDependencies += "com.jsuereth" %% "scala-arm" % "1.4",
+  libraryDependencies += "org.scalamock" %% "scalamock-scalatest-support" % "3.2" % "test",
   publishMavenStyle := true)
 
 

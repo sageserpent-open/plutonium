@@ -12,6 +12,7 @@ import resource.makeManagedResource
 
 import scala.collection.Searching._
 import scala.collection.immutable.{SortedBagConfiguration, TreeBag}
+import scala.collection.mutable
 import scala.collection.mutable.MutableList
 import scala.reflect.runtime._
 import scala.reflect.runtime.universe._
@@ -48,13 +49,7 @@ object WorldReferenceImplementation {
       else item.getClass
     }
 
-    def hasItemOfType[Raw <: Identified : TypeTag](items: scala.collection.mutable.Set[Identified]) = {
-      val reflectedType = typeTag[Raw].tpe
-      val clazzOfRaw = currentMirror.runtimeClass(reflectedType)
-      items.exists(clazzOfRaw.isInstance(_))
-    }
-
-    def yieldOnlyItemsOfSupertypeOf[Raw <: Identified : TypeTag](items: Stream[Identified]) = {
+    def yieldOnlyItemsOfSupertypeOf[Raw <: Identified : TypeTag](items: Traversable[Identified]) = {
       val reflectedType = typeTag[Raw].tpe
       val clazzOfRaw = currentMirror.runtimeClass(reflectedType).asInstanceOf[Class[Raw]]
 
@@ -86,22 +81,25 @@ object WorldReferenceImplementation {
   class IdentifiedItemsScopeImplementation extends IdentifiedItemsScope {
     identifiedItemsScopeThis =>
 
+    // The next two mutable fields are concerned with the proxies behaving differently depending on whether
+    // they are invoked within the context of writing a history for a revision, or just accessing the results of
+    // a query.
+    // TODO - refactor into a single 'sin-bin of mutable state for history rewriting' object?
     var itemsAreLocked = false
 
     var stopInfiniteRecursiveInterception = false
 
     class LocalMethodInterceptor extends MethodInterceptor {
-      override def intercept(target: scala.Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy): AnyRef = {
+      override def intercept(target: Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy): AnyRef = {
         if (!stopInfiniteRecursiveInterception) {
           for (_ <- makeManagedResource {
             stopInfiniteRecursiveInterception = true
           } { _ => stopInfiniteRecursiveInterception = false }(List.empty)) {
             if (itemsAreLocked && method.getReturnType == classOf[Unit])
-              throw new UnsupportedOperationException("Attempt to write via: $method to an item: $target rendered from a bitemporal query.")
-            else if (!itemsAreLocked && method.getReturnType != classOf[Unit] && !IdentifiedItemsScopeImplementation.alwaysAllowsReadAccessTo(method))
-              throw new UnsupportedOperationException("Attempt to read via: $method from an item: $target rendered from a bitemporal query within a change or observation.")
+              throw new UnsupportedOperationException("Attempt to write via: '$method' to an item: '$target' rendered from a bitemporal query.")
           }
         }
+
         methodProxy.invokeSuper(target, arguments)
       }
     }
@@ -110,23 +108,24 @@ object WorldReferenceImplementation {
 
     val cachedProxyConstructors = scala.collection.mutable.Map.empty[Type, universe.MethodMirror]
 
-    def constructFrom[Raw <: Identified : TypeTag](id: Raw#Id) = {
+    def constructFrom[Raw <: Identified : TypeTag](id: Raw#Id, methodInterceptor: MethodInterceptor) = {
       // NOTE: this returns items that are proxies to raw values, rather than the raw values themselves. Depending on the
-      // context (using a scope created by a client from a world, or a scope created implicitly for an event's spore), the items
-      // may forbid certain operations on them - e.g. for rendering from a client's scope, the items should be read-only.
+      // context (using a scope created by a client from a world, as opposed to while building up that scope from patches),
+      // the items may forbid certain operations on them - e.g. for rendering from a client's scope, the items should be
+      // read-only.
       def constructorFor(identifiableType: Type) = {
         val clazz = currentMirror.runtimeClass(identifiableType.typeSymbol.asClass)
         val enhancer = new Enhancer
         enhancer.setInterceptDuringConstruction(false)
         enhancer.setSuperclass(clazz)
 
-        enhancer.setCallbackType(classOf[LocalMethodInterceptor])
+        enhancer.setCallbackType(classOf[MethodInterceptor])
 
         val proxyClazz = enhancer.createClass()
 
-        val proxyClassType = currentMirror.classSymbol(proxyClazz)
-        val classMirror = currentMirror.reflectClass(proxyClassType.asClass)
-        val constructor = proxyClassType.toType.decls.find(_.isConstructor).get
+        val proxyClassSymbol = currentMirror.classSymbol(proxyClazz)
+        val classMirror = currentMirror.reflectClass(proxyClassSymbol.asClass)
+        val constructor = proxyClassSymbol.toType.decls.find(_.isConstructor).get
         classMirror.reflectConstructor(constructor.asMethod)
       }
       val typeOfRaw = typeOf[Raw]
@@ -137,7 +136,7 @@ object WorldReferenceImplementation {
           constructor
       }
       val proxy = constructor(id).asInstanceOf[Raw]
-      proxy.asInstanceOf[Factory].setCallback(0, localMethodInterceptor)
+      proxy.asInstanceOf[Factory].setCallback(0, methodInterceptor)
       proxy
     }
 
@@ -148,35 +147,68 @@ object WorldReferenceImplementation {
         itemsAreLocked = false
       } { _ => itemsAreLocked = true
       }(List.empty)) {
-
-        val relevantEvents = eventTimeline.bucketsIterator flatMap (_.toArray.sortBy(_._2) map (_._1)) takeWhile (_when >= _.when)
-        for (event <- relevantEvents) {
-          val scopeForEvent = new com.sageserpent.plutonium.Scope {
-            override val when: Unbounded[Instant] = event.when
-
-            override def render[Raw](bitemporal: Bitemporal[Raw]): Stream[Raw] = {
-              bitemporal.interpret(new IdentifiedItemsScope {
-                override def allItems[Raw <: Identified : TypeTag](): Stream[Raw] = identifiedItemsScopeThis.allItems()
-
-                override def itemsFor[Raw <: Identified : TypeTag](id: Raw#Id): Stream[Raw] = {
-                  identifiedItemsScopeThis.ensureItemExistsFor(id) // NASTY HACK, which is what this anonymous class is for. Yuk.
-                  identifiedItemsScopeThis.itemsFor(id)
-                }
-              })
-            }
-
-            override val nextRevision: Revision = _nextRevision
-            override val asOf: Unbounded[Instant] = _asOf
+        val patchRecorder = new PatchRecorderImplementation with PatchRecorderContracts with BestPatchSelectionImplementation with BestPatchSelectionContracts with IdentifiedItemFactory{
+          override def itemFor[Raw <: Identified : universe.TypeTag](id: Raw#Id): Raw = {
+            identifiedItemsScopeThis.itemFor[Raw](id)
           }
 
+          override def annihilateItemsFor[Raw <: Identified : universe.TypeTag](id: Raw#Id, when: Instant): Unit = {
+            identifiedItemsScopeThis.annihilateItemsFor[Raw](id, when)
+          }
+        }
+
+        val relevantEvents = eventTimeline.bucketsIterator flatMap (_.toArray.sortBy(_._2) map (_._1))
+        for (event <- relevantEvents) {
+          val patchesPickedUpFromAnEventBeingApplied = mutable.MutableList.empty[AbstractPatch[Identified]]
+
+          class LocalRecorderFactory extends RecorderFactory{
+            override def apply[Raw <: Identified: TypeTag](id: Raw#Id): Raw = {
+              class LocalMethodInterceptor extends MethodInterceptor {
+                override def intercept(target: Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy): AnyRef = {
+                  if (method.getReturnType != classOf[Unit] && !IdentifiedItemsScopeImplementation.alwaysAllowsReadAccessTo(method))
+                    throw new UnsupportedOperationException("Attempt to call method: '$method' with a non-unit return type on a recorder proxy: '$target' while capturing a change or measurement.")
+
+                  val item = target.asInstanceOf[Raw] // Remember, the outer context is making a proxy of type 'Raw'.
+
+                  val capturedPatch = new Patch[Raw](id, method, arguments, methodProxy)
+
+                  patchesPickedUpFromAnEventBeingApplied += capturedPatch
+
+                  null  // Representation of a unit value by a CGLIB interceptor.
+                }
+              }
+
+              val localMethodInterceptor = new LocalMethodInterceptor
+
+              constructFrom[Raw](id, localMethodInterceptor)
+            }
+          }
+
+          val recorderFactory = new LocalRecorderFactory
+
           event match {
-            case Change(_, update) => update(scopeForEvent)
+            case Change(when, update) =>
+              update(recorderFactory)
+              for (patch <- patchesPickedUpFromAnEventBeingApplied) {
+                patchRecorder.recordPatchFromChange(when, patch)
+              }
+
+            case Measurement(when, reading) =>
+              reading(recorderFactory)
+              for (patch <- patchesPickedUpFromAnEventBeingApplied) {
+                patchRecorder.recordPatchFromMeasurement(when, patch)
+              }
+
             case annihilation@Annihilation(when, id) => {
               implicit val typeTag = annihilation.typeTag
-              identifiedItemsScopeThis.annihilateItemFor(id, when)
+              patchRecorder.recordAnnihilation(when, id)
             }
           }
         }
+
+        patchRecorder.noteThatThereAreNoFollowingRecordings()
+
+        patchRecorder.playPatchesUntil(_when)
       }
     }
 
@@ -186,26 +218,35 @@ object WorldReferenceImplementation {
 
     val idToItemsMultiMap = new MultiMap[Identified#Id, Identified]
 
-    private def ensureItemExistsFor[Raw <: Identified : TypeTag](id: Raw#Id): Unit = {
-      val needToConstructItem = idToItemsMultiMap.get(id) match {
-        case None => true
+    private def itemFor[Raw <: Identified : TypeTag](id: Raw#Id): Raw = {
+      def constructAndCacheItem(): Raw = {
+        val item = constructFrom(id, localMethodInterceptor)
+        idToItemsMultiMap.addBinding(id, item)
+        item
+      }
+      idToItemsMultiMap.get(id) match {
+        case None =>
+          constructAndCacheItem()
         case Some(items) => {
           assert(items.nonEmpty)
-          if (IdentifiedItemsScopeImplementation.hasItemOfSupertypeOf[Raw](items)) {
+          val conflictingItems = IdentifiedItemsScopeImplementation.yieldOnlyItemsOfSupertypeOf(items)
+          if (conflictingItems.nonEmpty) {
             val typeTag = typeOf[Raw]
-            val conflictingItems = IdentifiedItemsScopeImplementation.yieldOnlyItemsOfSupertypeOf(items toStream)
-            throw if (1 == conflictingItems.size) new RuntimeException("An event coming later than the first event defining an item: '${conflictingItems.head}' may not attempt to narrow the item's type to: '$typeTag', which is more specific.")
-            else new RuntimeException("An event coming later than earlier events defining items: '${conflictingItems.toList}' may not attempt to define an item's type as: '$typeTag', which is more specific than the others.")
+            throw if (1 == conflictingItems.size) new RuntimeException(s"An event coming later than the first event defining an item: '${conflictingItems.head}' may not attempt to narrow the item's type to: '$typeTag', which is more specific.")
+            else new RuntimeException(s"An event coming later than earlier events defining items: '${conflictingItems.toList}' may not attempt to define an item's type as: '$typeTag', which is more specific than the others.")
           }
-          !IdentifiedItemsScopeImplementation.hasItemOfType[Raw](items)
+          val itemsOfDesiredType = IdentifiedItemsScopeImplementation.yieldOnlyItemsOfType[Raw](items).force
+          if (itemsOfDesiredType.isEmpty)
+            constructAndCacheItem()
+          else if (1 == itemsOfDesiredType.size)
+            itemsOfDesiredType.head
+          else
+            throw new RuntimeException(s"There is more than one item of id: '$id' compatible with type '$typeTag', these are: ${itemsOfDesiredType.toList}.")
         }
-      }
-      if (needToConstructItem) {
-        idToItemsMultiMap.addBinding(id, constructFrom(id))
       }
     }
 
-    private def annihilateItemFor[Raw <: Identified : TypeTag](id: Raw#Id, when: Instant): Unit = {
+    private def annihilateItemsFor[Raw <: Identified : TypeTag](id: Raw#Id, when: Instant): Unit = {
       idToItemsMultiMap.get(id) match {
         case (Some(items)) =>
           assert(items.nonEmpty)
@@ -213,9 +254,9 @@ object WorldReferenceImplementation {
           // Have to force evaluation of the stream so that the call to '--=' below does not try to incrementally
           // evaluate the stream as the underlying source collection, namely 'items' is being mutated. This is
           // what you get when you go back to imperative programming after too much referential transparency.
-          val itemsToBeRemoved = IdentifiedItemsScopeImplementation.yieldOnlyItemsOfType(items).force
+          val itemsSelectedForAnnihilation = IdentifiedItemsScopeImplementation.yieldOnlyItemsOfType(items).force
 
-          items --= itemsToBeRemoved
+          items --= itemsSelectedForAnnihilation
 
           if (items.isEmpty)
             idToItemsMultiMap.remove(id)
@@ -223,7 +264,6 @@ object WorldReferenceImplementation {
           throw new RuntimeException(s"Attempt to annihilate item of id: $id that does not exist at: $when.")
       }
     }
-
 
     override def itemsFor[Raw <: Identified : TypeTag](id: Raw#Id): Stream[Raw] = {
       val items = idToItemsMultiMap.getOrElse(id, Set.empty[Raw])
@@ -319,6 +359,9 @@ class WorldReferenceImplementation extends World {
 
     val nextRevisionPostThisOne = 1 + nextRevision
 
+    // This does a check for consistency of the world's history as per this new revision as part of construction.
+    // We then throw away the resulting history if succcessful, the idea being for now to rebuild it as part of
+    // constructing a scope to apply queries on.
     new IdentifiedItemsScopeImplementation(PositiveInfinity[Instant], nextRevisionPostThisOne, Finite(asOf), newEventTimeline)
 
     revisionToEventTimelineMap += (nextRevision -> newEventTimeline)
