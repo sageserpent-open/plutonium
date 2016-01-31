@@ -12,7 +12,8 @@ import scala.reflect.runtime.universe._
   * Created by Gerard on 10/01/2016.
   */
 trait PatchRecorderImplementation extends PatchRecorder {
-  // TODO: this implementation is a disaster regarding exception safety!
+  // This class makes no pretence at exception safety - it doesn't need to in the context
+  // of the client 'WorldReferenceImplementation', which provides exception safety at a higher level.
   self: BestPatchSelection with IdentifiedItemFactory =>
   private var _whenEventPertainedToByLastRecordingTookPlace: Option[Unbounded[Instant]] = None
 
@@ -42,7 +43,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
     _whenEventPertainedToByLastRecordingTookPlace = Some(Finite(when))
 
     idToItemStatesMap.get(id) match {
-      case Some(itemStates) => {
+      case Some(itemStates) =>
         val compatibleItemStates = itemStates filter (_.isCompatibleWith(typeOf[Raw]))
 
         if (compatibleItemStates.nonEmpty) {
@@ -54,11 +55,10 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
           val sequenceIndex = nextSequenceIndex()
 
-          actionQueue.enqueue((sequenceIndex, (Unit => {
+          actionQueue.enqueue((sequenceIndex, Unit => {
             annihilateItemsFor(id, when)
-          }), Finite(when)))
+          }, Finite(when)))
         } else throw new RuntimeException(s"Attempt to annihilate item of id: $id that does not exist at: $when.")
-      }
       case None => throw new RuntimeException(s"Attempt to annihilate item of id: $id that does not exist at: $when.")
     }
   }
@@ -104,7 +104,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
   private type SequenceIndex = Long
 
-  private var _nextSequenceIndex: SequenceIndex = 0L;
+  private var _nextSequenceIndex: SequenceIndex = 0L
 
   private type IndexedAction = (SequenceIndex, Unit => Unit, Unbounded[Instant])
 
@@ -145,9 +145,9 @@ trait PatchRecorderImplementation extends PatchRecorder {
       // can be split across items?
       val (sequenceIndex, _, when) = candidatePatches.head
 
-      actionQueue.enqueue((sequenceIndex, (Unit => {
+      actionQueue.enqueue((sequenceIndex, Unit => {
         bestPatch(self)
-      }), when))
+      }, when))
     }
   }
 
