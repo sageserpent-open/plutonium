@@ -108,14 +108,6 @@ object WorldReferenceImplementation {
 
     val cachedProxyConstructors = scala.collection.mutable.Map.empty[Type, universe.MethodMirror]
 
-    val callbackFilter = new CallbackFilter {
-      override def accept(method: Method): Int = {
-        val theMethodIsTheFinaliser = method.getName == "finalize" && method.getParameterCount == 0 && method.getReturnType == classOf[Unit]
-
-        if (theMethodIsTheFinaliser) 0 else 1
-      }
-    }
-
     def constructFrom[Raw <: Identified : TypeTag](id: Raw#Id, methodInterceptor: MethodInterceptor) = {
       // NOTE: this returns items that are proxies to raw values, rather than the raw values themselves. Depending on the
       // context (using a scope created by a client from a world, as opposed to while building up that scope from patches),
@@ -127,8 +119,7 @@ object WorldReferenceImplementation {
         enhancer.setInterceptDuringConstruction(false)
         enhancer.setSuperclass(clazz)
 
-        enhancer.setCallbackTypes(Array(classOf[NoOp], classOf[MethodInterceptor]))
-        enhancer.setCallbackFilter(callbackFilter)
+        enhancer.setCallbackType(classOf[MethodInterceptor])
 
         val proxyClazz = enhancer.createClass()
 
@@ -146,8 +137,7 @@ object WorldReferenceImplementation {
       }
       val proxy = constructor(id).asInstanceOf[Raw]
       val proxyFactoryApi = proxy.asInstanceOf[Factory]
-      proxyFactoryApi.setCallback(0, NoOp.INSTANCE)
-      proxyFactoryApi.setCallback(1, methodInterceptor)
+      proxyFactoryApi.setCallback(0, methodInterceptor)
       proxy
     }
 
@@ -176,7 +166,11 @@ object WorldReferenceImplementation {
             override def apply[Raw <: Identified : TypeTag](id: Raw#Id): Raw = {
               class LocalMethodInterceptor extends MethodInterceptor {
                 override def intercept(target: Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy): AnyRef = {
-                  if (!IdentifiedItemsScopeImplementation.alwaysAllowsReadAccessTo(method)) {
+                  val theMethodIsTheFinaliser = method.getName == "finalize" && method.getParameterCount == 0 && method.getReturnType == classOf[Unit]
+
+                  if (theMethodIsTheFinaliser || IdentifiedItemsScopeImplementation.alwaysAllowsReadAccessTo(method)) {
+                    methodProxy.invokeSuper(target, arguments)
+                  } else {
                     if (method.getReturnType != classOf[Unit])
                       throw new UnsupportedOperationException("Attempt to call method: '$method' with a non-unit return type on a recorder proxy: '$target' while capturing a change or measurement.")
 
@@ -187,8 +181,6 @@ object WorldReferenceImplementation {
                     patchesPickedUpFromAnEventBeingApplied += capturedPatch
 
                     null // Representation of a unit value by a CGLIB interceptor.
-                  } else {
-                    methodProxy.invokeSuper(target, arguments)
                   }
                 }
               }
