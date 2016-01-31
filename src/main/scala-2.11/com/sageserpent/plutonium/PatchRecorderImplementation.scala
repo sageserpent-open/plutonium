@@ -90,7 +90,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
   private type IndexedAction = (SequenceIndex, Unit => Unit)
 
-  implicit val indexedActionOrdering = Ordering.by[IndexedAction, SequenceIndex](_._1)
+  implicit val indexedActionOrdering = Ordering.by[IndexedAction, SequenceIndex](- _._1)
 
   private val actionQueue = mutable.PriorityQueue[IndexedAction]()
 
