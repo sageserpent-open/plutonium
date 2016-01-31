@@ -108,6 +108,14 @@ object WorldReferenceImplementation {
 
     val cachedProxyConstructors = scala.collection.mutable.Map.empty[Type, universe.MethodMirror]
 
+    val callbackFilter = new CallbackFilter {
+      override def accept(method: Method): Int = {
+        val theMethodIsTheFinaliser = method.getName == "finalize" && method.getParameterCount == 0 && method.getReturnType == classOf[Unit]
+
+        if (theMethodIsTheFinaliser) 0 else 1
+      }
+    }
+
     def constructFrom[Raw <: Identified : TypeTag](id: Raw#Id, methodInterceptor: MethodInterceptor) = {
       // NOTE: this returns items that are proxies to raw values, rather than the raw values themselves. Depending on the
       // context (using a scope created by a client from a world, as opposed to while building up that scope from patches),
@@ -119,7 +127,8 @@ object WorldReferenceImplementation {
         enhancer.setInterceptDuringConstruction(false)
         enhancer.setSuperclass(clazz)
 
-        enhancer.setCallbackType(classOf[MethodInterceptor])
+        enhancer.setCallbackTypes(Array(classOf[NoOp], classOf[MethodInterceptor]))
+        enhancer.setCallbackFilter(callbackFilter)
 
         val proxyClazz = enhancer.createClass()
 
@@ -136,7 +145,9 @@ object WorldReferenceImplementation {
           constructor
       }
       val proxy = constructor(id).asInstanceOf[Raw]
-      proxy.asInstanceOf[Factory].setCallback(0, methodInterceptor)
+      val proxyFactoryApi = proxy.asInstanceOf[Factory]
+      proxyFactoryApi.setCallback(0, NoOp.INSTANCE)
+      proxyFactoryApi.setCallback(1, methodInterceptor)
       proxy
     }
 
@@ -147,7 +158,7 @@ object WorldReferenceImplementation {
         itemsAreLocked = false
       } { _ => itemsAreLocked = true
       }(List.empty)) {
-        val patchRecorder = new PatchRecorderImplementation with PatchRecorderContracts with BestPatchSelectionImplementation with BestPatchSelectionContracts with IdentifiedItemFactory{
+        val patchRecorder = new PatchRecorderImplementation with PatchRecorderContracts with BestPatchSelectionImplementation with BestPatchSelectionContracts with IdentifiedItemFactory {
           override def itemFor[Raw <: Identified : universe.TypeTag](id: Raw#Id): Raw = {
             identifiedItemsScopeThis.itemFor[Raw](id)
           }
@@ -161,20 +172,24 @@ object WorldReferenceImplementation {
         for (event <- relevantEvents) {
           val patchesPickedUpFromAnEventBeingApplied = mutable.MutableList.empty[AbstractPatch[Identified]]
 
-          class LocalRecorderFactory extends RecorderFactory{
-            override def apply[Raw <: Identified: TypeTag](id: Raw#Id): Raw = {
+          class LocalRecorderFactory extends RecorderFactory {
+            override def apply[Raw <: Identified : TypeTag](id: Raw#Id): Raw = {
               class LocalMethodInterceptor extends MethodInterceptor {
                 override def intercept(target: Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy): AnyRef = {
-                  if (method.getReturnType != classOf[Unit] && !IdentifiedItemsScopeImplementation.alwaysAllowsReadAccessTo(method))
-                    throw new UnsupportedOperationException("Attempt to call method: '$method' with a non-unit return type on a recorder proxy: '$target' while capturing a change or measurement.")
+                  if (!IdentifiedItemsScopeImplementation.alwaysAllowsReadAccessTo(method)) {
+                    if (method.getReturnType != classOf[Unit])
+                      throw new UnsupportedOperationException("Attempt to call method: '$method' with a non-unit return type on a recorder proxy: '$target' while capturing a change or measurement.")
 
-                  val item = target.asInstanceOf[Raw] // Remember, the outer context is making a proxy of type 'Raw'.
+                    val item = target.asInstanceOf[Raw] // Remember, the outer context is making a proxy of type 'Raw'.
 
-                  val capturedPatch = new Patch[Raw](id, method, arguments, methodProxy)
+                    val capturedPatch = new Patch[Raw](id, method, arguments, methodProxy)
 
-                  patchesPickedUpFromAnEventBeingApplied += capturedPatch
+                    patchesPickedUpFromAnEventBeingApplied += capturedPatch
 
-                  null  // Representation of a unit value by a CGLIB interceptor.
+                    null // Representation of a unit value by a CGLIB interceptor.
+                  } else {
+                    methodProxy.invokeSuper(target, arguments)
+                  }
                 }
               }
 
