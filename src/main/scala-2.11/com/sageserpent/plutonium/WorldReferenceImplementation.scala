@@ -230,8 +230,8 @@ object WorldReferenceImplementation {
           val conflictingItems = IdentifiedItemsScopeImplementation.yieldOnlyItemsOfSupertypeOf(items)
           if (conflictingItems.nonEmpty) {
             val typeTag = typeOf[Raw]
-            throw if (1 == conflictingItems.size) new RuntimeException("An event coming later than the first event defining an item: '${conflictingItems.head}' may not attempt to narrow the item's type to: '$typeTag', which is more specific.")
-            else new RuntimeException("An event coming later than earlier events defining items: '${conflictingItems.toList}' may not attempt to define an item's type as: '$typeTag', which is more specific than the others.")
+            throw if (1 == conflictingItems.size) new RuntimeException(s"An event coming later than the first event defining an item: '${conflictingItems.head}' may not attempt to narrow the item's type to: '$typeTag', which is more specific.")
+            else new RuntimeException(s"An event coming later than earlier events defining items: '${conflictingItems.toList}' may not attempt to define an item's type as: '$typeTag', which is more specific than the others.")
           }
           val itemsOfDesiredType = IdentifiedItemsScopeImplementation.yieldOnlyItemsOfType[Raw](items).force
           if (itemsOfDesiredType.isEmpty)
@@ -239,7 +239,7 @@ object WorldReferenceImplementation {
           else if (1 == itemsOfDesiredType.size)
             itemsOfDesiredType.head
           else
-            throw new RuntimeException("There is more than one item of id: '$id' compatible with type '$typeTag', these are: ${itemsOfDesiredType.toList}.")
+            throw new RuntimeException(s"There is more than one item of id: '$id' compatible with type '$typeTag', these are: ${itemsOfDesiredType.toList}.")
         }
       }
     }

@@ -29,13 +29,13 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
     submitCandidatePatches(candidatePatches)
 
-    candidatePatches += patch
+    candidatePatches += nextSequenceIndex() -> patch
   }
 
   override def recordPatchFromMeasurement(when: Unbounded[Instant], patch: AbstractPatch[Identified]): Unit = {
     _whenEventPertainedToByLastRecordingTookPlace = Some(when)
 
-    relevantItemStateFor(patch)._2 += patch
+    relevantItemStateFor(patch)._2 += nextSequenceIndex() -> patch
   }
 
   override def recordAnnihilation[Raw <: Identified : TypeTag](when: Instant, id: Raw#Id): Unit = {
@@ -66,19 +66,25 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
     idToItemStatesMap.clear()
 
-    assert(actionQueue.isEmpty)
+    while (actionQueue.nonEmpty) {
+      val (_, actionToBeExecuted) = actionQueue.dequeue()
+      actionToBeExecuted()
+    }
   }
 
-  private type ItemState = (Type, mutable.MutableList[AbstractPatch[Identified]])
+  private type CandidatePatches = mutable.Map[SequenceIndex, AbstractPatch[Identified]]
+
+  private type ItemState = (Type, CandidatePatches)
 
   private val idToItemStatesMap = scala.collection.mutable.Map.empty[Any, scala.collection.mutable.Set[ItemState]]
 
-  private var nextActionIndex = 0L;
-  private var highestActionExecuted = -1L;
+  private type SequenceIndex = Long
 
-  private type IndexedAction = (Long, Unit => Unit)
+  private var _nextSequenceIndex: SequenceIndex = 0L;
 
-  implicit val indexedActionOrdering = Ordering.by[IndexedAction, Long](_._1)
+  private type IndexedAction = (SequenceIndex, Unit => Unit)
+
+  implicit val indexedActionOrdering = Ordering.by[IndexedAction, SequenceIndex](_._1)
 
   private val actionQueue = mutable.PriorityQueue[IndexedAction]()
 
@@ -89,38 +95,36 @@ trait PatchRecorderImplementation extends PatchRecorder {
     val compatibleItemStates = itemStates filter { case (itemType, _) => itemType <:< patch.itemType }
 
     if (compatibleItemStates.nonEmpty) if (1 < compatibleItemStates.size) {
-      throw new scala.RuntimeException("There is more than one item of id: '${patch.id}' compatible with type '${patch.itemType}', these have types: '${compatibleItemStates map (_._1)}'.")
+      throw new scala.RuntimeException(s"There is more than one item of id: '${patch.id}' compatible with type '${patch.itemType}', these have types: '${compatibleItemStates map (_._1)}'.")
     } else {
       compatibleItemStates.head
     }
     else {
-      val itemState = patch.itemType -> mutable.MutableList.empty[AbstractPatch[Identified]]
+      val itemState = patch.itemType -> mutable.Map.empty[SequenceIndex, AbstractPatch[Identified]]
       itemStates += itemState
       itemState
     }
   }
 
-  private def submitCandidatePatches(candidatePatches: mutable.MutableList[AbstractPatch[Identified]]): Unit = {
+  private def submitCandidatePatches(candidatePatches: CandidatePatches): Unit = {
     if (candidatePatches.nonEmpty) {
-      val bestPatch = self(candidatePatches)
+      val bestPatch = self(candidatePatches.values.toSeq)
 
-      val actionIndex = nextActionIndex
+      // Ugh...
+      val sequenceIndex = candidatePatches.find({case (_, patch) => patch == bestPatch}).get._1
 
-      nextActionIndex += 1
-
-      actionQueue.enqueue(actionIndex -> (Unit => {
+      actionQueue.enqueue(sequenceIndex -> (Unit => {
         bestPatch(self)
       }))
 
       candidatePatches.clear()
-
-      // So given that the best patch has been added, does this permit the action queue to be drained?
-      while (actionQueue.nonEmpty && 1 + highestActionExecuted == actionQueue.head._1) {
-        val (index, actionToBeExecuted) = actionQueue.dequeue()
-        actionToBeExecuted()
-        highestActionExecuted = index
-      }
     }
+  }
+
+  private def nextSequenceIndex() = {
+    val result = _nextSequenceIndex
+    _nextSequenceIndex += 1
+    result
   }
 
   // TODO - this is for the future...
