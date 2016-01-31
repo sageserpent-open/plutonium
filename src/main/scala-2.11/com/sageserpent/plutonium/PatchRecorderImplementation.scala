@@ -116,8 +116,16 @@ trait PatchRecorderImplementation extends PatchRecorder {
     if (candidatePatches.nonEmpty) {
       val bestPatch = self(candidatePatches.values.toSeq)
 
-      // Ugh...
-      val sequenceIndex = candidatePatches.find({case (_, patch) => patch == bestPatch}).get._1
+      // The best patch has to be applied as if it occurred when the original
+      // patch would have taken place - so it steals the latter's sequence index.
+      // TODO: is there a test that demonstrates the need for this? Come to think
+      // of it though, I'm not sure if a mutator could legitimately make bitemporal
+      // queries of other bitemporal items; the only way an inter-item relationship
+      // makes a difference is when a query is executed - and that doesn't care about
+      // the precise interleaving of events on related items, only that the correct
+      // ones have been applied to each item. So does this mean that the action queue
+      // can be split across items?
+      val sequenceIndex = candidatePatches.head._1
 
       actionQueue.enqueue(sequenceIndex -> (Unit => {
         bestPatch(self)
