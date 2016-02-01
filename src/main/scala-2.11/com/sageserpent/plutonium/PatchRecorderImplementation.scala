@@ -89,7 +89,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
     def addPatch(when: Unbounded[Instant], patch: AbstractPatch[Identified]) = {
       candidatePatches += ((nextSequenceIndex(), patch, when))
-      if (patch.itemType <:< itemType){
+      if (patch.itemType <:< itemType) {
         itemType = patch.itemType
       }
     }
@@ -110,15 +110,26 @@ trait PatchRecorderImplementation extends PatchRecorder {
         val (sequenceIndex, _, when) = candidatePatches.head
 
         actionQueue.enqueue((sequenceIndex, Unit => {
-          bestPatch(self)
+          bestPatch(this)
         }, when))
 
         candidatePatches.clear()
       }
 
+    private var cachedItem: Option[Any] = None
+
     private val candidatePatches: CandidatePatches = mutable.MutableList.empty[(SequenceIndex, AbstractPatch[Identified], Unbounded[Instant])]
 
-    override def itemFor[Raw <: Identified : universe.TypeTag](id: Raw#Id): Raw = PatchRecorderImplementation.this.itemFor(id)
+    override def itemFor[Raw <: Identified : universe.TypeTag](id: Raw#Id): Raw = {
+      cachedItem match {
+        case None =>
+          val result = PatchRecorderImplementation.this.itemFor(id)
+          cachedItem = Some(result)
+          result
+        case Some(item) =>
+          item.asInstanceOf[Raw]
+      }
+    }
 
     override def annihilateItemsFor[Raw <: Identified : universe.TypeTag](id: Raw#Id, when: Instant): Unit = PatchRecorderImplementation.this.annihilateItemsFor(id, when)
   }
