@@ -84,11 +84,14 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
   private type CandidatePatches = mutable.MutableList[(SequenceIndex, AbstractPatch[Identified], Unbounded[Instant])]
 
-  private class ItemState(val itemType: Type) extends IdentifiedItemFactory {
-    def isCompatibleWith(itemType: Type) = this.itemType <:< itemType
+  private class ItemState(var itemType: Type) extends IdentifiedItemFactory {
+    def isCompatibleWith(itemType: Type) = this.itemType <:< itemType || itemType <:< this.itemType
 
     def addPatch(when: Unbounded[Instant], patch: AbstractPatch[Identified]) = {
       candidatePatches += ((nextSequenceIndex(), patch, when))
+      if (patch.itemType <:< itemType){
+        itemType = patch.itemType
+      }
     }
 
     def submitCandidatePatches(): Unit =
