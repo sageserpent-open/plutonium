@@ -592,7 +592,7 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
 
   val inconsistentlyTypedRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(inconsistentlyTypedDataSamplesForAnIdGenerator, forbidAnnihilations = true)
 
-  it should "not permit subsequent events to demand that the type of an item referenced by an id become more specific than the one used by the initial defining event" in {
+  it should "events to vary in their view of the type of an item referenced by an id" in {
     {
       val testCaseGenerator = for {recordingsGroupedById <- inconsistentlyTypedRecordingsGroupedByIdGenerator
                                    obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
@@ -607,10 +607,19 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
       check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs) =>
         val world = new WorldUnderTest()
 
-        {
-          intercept[RuntimeException](recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world))
-          Prop.proved
-        } :| s"Should have rejected the attempt to demand that an existing item in a subsequent event has a more specific type than when it was first defined."
+        recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
+
+        val atTheEndOfTime = PositiveInfinity[Instant]
+
+        val scope = world.scopeFor(atTheEndOfTime, world.nextRevision)
+
+        val checks = for {RecordingsNoLaterThan(historyId, historiesFrom, pertinentRecordings) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(atTheEndOfTime))
+                          Seq(history) = historiesFrom(scope)}
+          yield (historyId, history.datums, pertinentRecordings.map(_._1))
+
+        Prop.all(checks.map { case (historyId, actualHistory, expectedHistory) => ((actualHistory.length == expectedHistory.length) :| s"For ${historyId}, ${actualHistory.length} == expectedHistory.length") &&
+          Prop.all((actualHistory zip expectedHistory zipWithIndex) map { case ((actual, expected), step) => (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}" }: _*)
+        }: _*)
       })
     }
   }
