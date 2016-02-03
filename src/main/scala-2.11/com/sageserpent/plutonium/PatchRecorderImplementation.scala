@@ -44,7 +44,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
     idToItemStatesMap.get(id) match {
       case Some(itemStates) =>
-        val compatibleItemStates = itemStates filter (_.isCompatibleWith(typeOf[Raw]))
+        val compatibleItemStates = itemStates filter (_.isCompatibleWith(typeTag[Raw]))
 
         if (compatibleItemStates.nonEmpty) {
           for (itemState <- compatibleItemStates) {
@@ -84,13 +84,13 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
   private type CandidatePatches = mutable.MutableList[(SequenceIndex, AbstractPatch[_ <: Identified], Unbounded[Instant])]
 
-  private class ItemState(var itemType: Type) extends IdentifiedItemFactory {
-    def isCompatibleWith(itemType: Type) = this.itemType <:< itemType || itemType <:< this.itemType
+  private class ItemState(var typeTag: TypeTag[_ <: Identified]) extends IdentifiedItemFactory {
+    def isCompatibleWith(typeTag: TypeTag[_ <: Identified]) = this.typeTag.tpe <:< typeTag.tpe || typeTag.tpe <:< this.typeTag.tpe
 
     def addPatch(when: Unbounded[Instant], patch: AbstractPatch[_ <: Identified]) = {
       candidatePatches += ((nextSequenceIndex(), patch, when))
-      if (patch.itemType <:< itemType) {
-        itemType = patch.itemType
+      if (patch.typeTag.tpe <:< this.typeTag.tpe) {
+        this.typeTag = patch.typeTag
       }
     }
 
@@ -120,10 +120,15 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
     private val candidatePatches: CandidatePatches = mutable.MutableList.empty[(SequenceIndex, AbstractPatch[_ <: Identified], Unbounded[Instant])]
 
+    def createItem[SubclassOfRaw <: Raw, Raw <: Identified](id: Raw#Id, typeTag: universe.TypeTag[SubclassOfRaw]): SubclassOfRaw = {
+      PatchRecorderImplementation.this.itemFor[SubclassOfRaw](id.asInstanceOf[SubclassOfRaw#Id])(typeTag)
+    }
+
     override def itemFor[Raw <: Identified : universe.TypeTag](id: Raw#Id): Raw = {
       cachedItem match {
         case None =>
-          val result = PatchRecorderImplementation.this.itemFor(id)
+          implicit val typeTag = this.typeTag
+          val result = createItem(id, typeTag).asInstanceOf[Raw]
           cachedItem = Some(result)
           result
         case Some(item) =>
@@ -147,18 +152,18 @@ trait PatchRecorderImplementation extends PatchRecorder {
   private val actionQueue = mutable.PriorityQueue[IndexedAction]()
 
 
-  private def relevantItemStateFor(patch: AbstractPatch[_]) = {
+  private def relevantItemStateFor(patch: AbstractPatch[_ <: Identified]) = {
     val itemStates = idToItemStatesMap.getOrElseUpdate(patch.id, mutable.Set.empty)
 
-    val compatibleItemStates = itemStates filter (_.isCompatibleWith(patch.itemType))
+    val compatibleItemStates = itemStates filter (_.isCompatibleWith(patch.typeTag))
 
     if (compatibleItemStates.nonEmpty) if (1 < compatibleItemStates.size) {
-      throw new scala.RuntimeException(s"There is more than one item of id: '${patch.id}' compatible with type '${patch.itemType}', these have types: '${compatibleItemStates map (_.itemType)}'.")
+      throw new scala.RuntimeException(s"There is more than one item of id: '${patch.id}' compatible with type '${patch.typeTag.tpe}', these have types: '${compatibleItemStates map (_.typeTag.tpe)}'.")
     } else {
       compatibleItemStates.head
     }
     else {
-      val itemState = new ItemState(patch.itemType)
+      val itemState = new ItemState(patch.typeTag)
       itemStates += itemState
       itemState
     }
