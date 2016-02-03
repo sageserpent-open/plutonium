@@ -160,7 +160,7 @@ object WorldReferenceImplementation {
 
         val relevantEvents = eventTimeline.bucketsIterator flatMap (_.toArray.sortBy(_._2) map (_._1))
         for (event <- relevantEvents) {
-          val patchesPickedUpFromAnEventBeingApplied = mutable.MutableList.empty[AbstractPatch[Identified]]
+          val patchesPickedUpFromAnEventBeingApplied = mutable.MutableList.empty[AbstractPatch[_ <: Identified]]
 
           class LocalRecorderFactory extends RecorderFactory {
             override def apply[Raw <: Identified : TypeTag](id: Raw#Id): Raw = {
@@ -237,18 +237,14 @@ object WorldReferenceImplementation {
         case Some(items) => {
           assert(items.nonEmpty)
           val conflictingItems = IdentifiedItemsScopeImplementation.yieldOnlyItemsOfSupertypeOf(items)
-          if (conflictingItems.nonEmpty) {
-            val typeTag = typeOf[Raw]
-            throw if (1 == conflictingItems.size) new RuntimeException(s"An event coming later than the first event defining an item: '${conflictingItems.head}' may not attempt to narrow the item's type to: '$typeTag', which is more specific.")
-            else new RuntimeException(s"An event coming later than earlier events defining items: '${conflictingItems.toList}' may not attempt to define an item's type as: '$typeTag', which is more specific than the others.")
-          }
+          assert(conflictingItems.isEmpty)
           val itemsOfDesiredType = IdentifiedItemsScopeImplementation.yieldOnlyItemsOfType[Raw](items).force
           if (itemsOfDesiredType.isEmpty)
             constructAndCacheItem()
-          else if (1 == itemsOfDesiredType.size)
+          else {
+            assert(1 == itemsOfDesiredType.size)
             itemsOfDesiredType.head
-          else
-            throw new RuntimeException(s"There is more than one item of id: '$id' compatible with type '$typeTag', these are: ${itemsOfDesiredType.toList}.")
+          }
         }
       }
     }
@@ -268,7 +264,7 @@ object WorldReferenceImplementation {
           if (items.isEmpty)
             idToItemsMultiMap.remove(id)
         case None =>
-          throw new RuntimeException(s"Attempt to annihilate item of id: $id that does not exist at: $when.")
+          assert(false)
       }
     }
 

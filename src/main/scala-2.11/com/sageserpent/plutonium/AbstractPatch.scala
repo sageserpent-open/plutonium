@@ -7,13 +7,13 @@ import scala.reflect.runtime.universe._
   */
 
 object AbstractPatch {
-  def bothPatchesReferToTheSameItem(lhs: AbstractPatch[Identified], rhs: AbstractPatch[Identified]): Boolean = {
-    lhs.id == rhs.id && (lhs.itemType <:< rhs.itemType || rhs.itemType <:< lhs.itemType)
+  def bothPatchesReferToTheSameItem(lhs: AbstractPatch[_], rhs: AbstractPatch[_]): Boolean = {
+    lhs.id == rhs.id && (lhs.typeTag.tpe <:< rhs.typeTag.tpe || rhs.typeTag.tpe <:< lhs.typeTag.tpe)
   }
 }
 
-abstract class AbstractPatch[+Raw <: Identified: TypeTag](val id: Raw#Id){
-  val itemType = typeOf[Raw]
+abstract class AbstractPatch[Raw <: Identified: TypeTag](val id: Raw#Id){
+  val typeTag = implicitly[TypeTag[Raw]]
   def apply(identifiedItemFactory: IdentifiedItemFactory): Unit
 }
 

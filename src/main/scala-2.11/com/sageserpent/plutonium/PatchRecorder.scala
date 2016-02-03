@@ -13,12 +13,12 @@ import scala.reflect.runtime.universe._
   */
 
 trait BestPatchSelection {
-  def apply(relatedPatches: Seq[AbstractPatch[Identified]]): AbstractPatch[Identified]
+  def apply(relatedPatches: Seq[AbstractPatch[_ <: Identified]]): AbstractPatch[_ <: Identified]
 }
 
 
 trait BestPatchSelectionContracts extends BestPatchSelection {
-  abstract override def apply(relatedPatches: Seq[AbstractPatch[Identified]]): AbstractPatch[Identified] = {
+  abstract override def apply(relatedPatches: Seq[AbstractPatch[_ <: Identified]]): AbstractPatch[_ <: Identified] = {
     require(relatedPatches.nonEmpty)
     require(1 == (relatedPatches map (_.id) distinct).size)
     require((for {lhs <- relatedPatches
@@ -35,9 +35,9 @@ trait PatchRecorder {
 
   def allRecordingsAreCaptured: Boolean
 
-  def recordPatchFromChange(when: Unbounded[Instant], patch: AbstractPatch[Identified]): Unit
+  def recordPatchFromChange(when: Unbounded[Instant], patch: AbstractPatch[_ <: Identified]): Unit
 
-  def recordPatchFromMeasurement(when: Unbounded[Instant], patch: AbstractPatch[Identified]): Unit
+  def recordPatchFromMeasurement(when: Unbounded[Instant], patch: AbstractPatch[_ <: Identified]): Unit
 
   def recordAnnihilation[Raw <: Identified : TypeTag](when: Instant, id: Raw#Id): Unit
 
@@ -52,13 +52,13 @@ trait PatchRecorderContracts extends PatchRecorder {
   require(whenEventPertainedToByLastRecordingTookPlace.isEmpty)
   require(!allRecordingsAreCaptured)
 
-  abstract override def recordPatchFromChange(when: Unbounded[Instant], patch: AbstractPatch[Identified]): Unit = {
+  abstract override def recordPatchFromChange(when: Unbounded[Instant], patch: AbstractPatch[_ <: Identified]): Unit = {
     require(whenEventPertainedToByLastRecordingTookPlace.cata(some = when >= _, none = true))
     require(!allRecordingsAreCaptured)
     super.recordPatchFromChange(when, patch)
   }
 
-  abstract override def recordPatchFromMeasurement(when: Unbounded[Instant], patch: AbstractPatch[Identified]): Unit = {
+  abstract override def recordPatchFromMeasurement(when: Unbounded[Instant], patch: AbstractPatch[_ <: Identified]): Unit = {
     require(whenEventPertainedToByLastRecordingTookPlace.cata(some = when >= _, none = true))
     require(!allRecordingsAreCaptured)
     super.recordPatchFromMeasurement(when, patch)
