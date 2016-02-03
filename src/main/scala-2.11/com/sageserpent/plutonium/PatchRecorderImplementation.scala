@@ -174,13 +174,4 @@ trait PatchRecorderImplementation extends PatchRecorder {
     _nextSequenceIndex += 1
     result
   }
-
-  // TODO - this is for the future...
-  def createItemOfType(itemType: Type, id: Any): Any = {
-    val clazz = currentMirror.runtimeClass(itemType.typeSymbol.asClass)
-    val proxyClassSymbol = currentMirror.classSymbol(clazz)
-    val classMirror = currentMirror.reflectClass(proxyClassSymbol.asClass)
-    val constructor = itemType.decls.find(_.isConstructor).get
-    classMirror.reflectConstructor(constructor.asMethod)(id)
-  }
 }
