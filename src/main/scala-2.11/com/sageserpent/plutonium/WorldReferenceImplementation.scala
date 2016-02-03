@@ -160,7 +160,7 @@ object WorldReferenceImplementation {
 
         val relevantEvents = eventTimeline.bucketsIterator flatMap (_.toArray.sortBy(_._2) map (_._1))
         for (event <- relevantEvents) {
-          val patchesPickedUpFromAnEventBeingApplied = mutable.MutableList.empty[AbstractPatch[Identified]]
+          val patchesPickedUpFromAnEventBeingApplied = mutable.MutableList.empty[AbstractPatch[_ <: Identified]]
 
           class LocalRecorderFactory extends RecorderFactory {
             override def apply[Raw <: Identified : TypeTag](id: Raw#Id): Raw = {

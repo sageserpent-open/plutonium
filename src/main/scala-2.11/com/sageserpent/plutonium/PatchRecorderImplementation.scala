@@ -23,7 +23,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
   override def allRecordingsAreCaptured: Boolean = _allRecordingsAreCaptured
 
-  override def recordPatchFromChange(when: Unbounded[Instant], patch: AbstractPatch[Identified]): Unit = {
+  override def recordPatchFromChange(when: Unbounded[Instant], patch: AbstractPatch[_ <: Identified]): Unit = {
     _whenEventPertainedToByLastRecordingTookPlace = Some(when)
 
     val itemState = relevantItemStateFor(patch)
@@ -33,7 +33,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
     itemState.addPatch(when, patch)
   }
 
-  override def recordPatchFromMeasurement(when: Unbounded[Instant], patch: AbstractPatch[Identified]): Unit = {
+  override def recordPatchFromMeasurement(when: Unbounded[Instant], patch: AbstractPatch[_ <: Identified]): Unit = {
     _whenEventPertainedToByLastRecordingTookPlace = Some(when)
 
     relevantItemStateFor(patch).addPatch(when, patch)
@@ -82,12 +82,12 @@ trait PatchRecorderImplementation extends PatchRecorder {
     }
   }
 
-  private type CandidatePatches = mutable.MutableList[(SequenceIndex, AbstractPatch[Identified], Unbounded[Instant])]
+  private type CandidatePatches = mutable.MutableList[(SequenceIndex, AbstractPatch[_ <: Identified], Unbounded[Instant])]
 
   private class ItemState(var itemType: Type) extends IdentifiedItemFactory {
     def isCompatibleWith(itemType: Type) = this.itemType <:< itemType || itemType <:< this.itemType
 
-    def addPatch(when: Unbounded[Instant], patch: AbstractPatch[Identified]) = {
+    def addPatch(when: Unbounded[Instant], patch: AbstractPatch[_ <: Identified]) = {
       candidatePatches += ((nextSequenceIndex(), patch, when))
       if (patch.itemType <:< itemType) {
         itemType = patch.itemType
@@ -118,7 +118,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
     private var cachedItem: Option[Any] = None
 
-    private val candidatePatches: CandidatePatches = mutable.MutableList.empty[(SequenceIndex, AbstractPatch[Identified], Unbounded[Instant])]
+    private val candidatePatches: CandidatePatches = mutable.MutableList.empty[(SequenceIndex, AbstractPatch[_ <: Identified], Unbounded[Instant])]
 
     override def itemFor[Raw <: Identified : universe.TypeTag](id: Raw#Id): Raw = {
       cachedItem match {
@@ -147,7 +147,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
   private val actionQueue = mutable.PriorityQueue[IndexedAction]()
 
 
-  private def relevantItemStateFor(patch: AbstractPatch[Identified]) = {
+  private def relevantItemStateFor(patch: AbstractPatch[_]) = {
     val itemStates = idToItemStatesMap.getOrElseUpdate(patch.id, mutable.Set.empty)
 
     val compatibleItemStates = itemStates filter (_.isCompatibleWith(patch.itemType))
