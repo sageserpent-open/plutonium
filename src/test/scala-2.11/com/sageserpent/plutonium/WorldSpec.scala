@@ -656,11 +656,11 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
 
         val eventIdForFailingRevisionsOnly = -1
 
-        for {moreSpecificFooHistoryId: MoreSpecificFooHistory#Id <- recordingsGroupedById.map(_.historyId) collect { case id: MoreSpecificFooHistory#Id => id.asInstanceOf[MoreSpecificFooHistory#Id] }
-             item <- queryScope.render(Bitemporal.withId[MoreSpecificFooHistory](moreSpecificFooHistoryId))
+        for {fooHistoryId: MoreSpecificFooHistory#Id <- recordingsGroupedById.map(_.historyId) collect { case id: FooHistory#Id => id.asInstanceOf[FooHistory#Id] }
+             _ <- queryScope.render(Bitemporal.withId[FooHistory](fooHistoryId)) filter (_.isInstanceOf[MoreSpecificFooHistory])
         } {
           intercept[RuntimeException] {
-            world.revise(Map(eventIdForFailingRevisionsOnly -> Some(Change[AnotherSpecificFooHistory](whenInconsistentEventsOccur)(moreSpecificFooHistoryId.asInstanceOf[AnotherSpecificFooHistory#Id],
+            world.revise(Map(eventIdForFailingRevisionsOnly -> Some(Change[AnotherSpecificFooHistory](whenInconsistentEventsOccur)(fooHistoryId.asInstanceOf[AnotherSpecificFooHistory#Id],
               { anotherSpecificFooHistory: AnotherSpecificFooHistory =>
                 anotherSpecificFooHistory.property3 = 6 // Have to actually *update* to cause an inconsistency.
             }))), world.revisionAsOfs.last)
