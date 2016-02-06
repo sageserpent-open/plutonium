@@ -624,6 +624,65 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
     }
   }
 
+  it should "forbid recording of events that have inconsistent views of the type of an item referenced by an id" in {
+    {
+      val testCaseGenerator = for {recordingsGroupedById <- inconsistentlyTypedRecordingsGroupedByIdGenerator
+                                   obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
+                                   seed <- seedGenerator
+                                   random = new Random(seed)
+                                   shuffledRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, recordingsGroupedById)
+                                   shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, obsoleteRecordingsGroupedById)
+                                   shuffledRecordingAndEventPairs = intersperseObsoleteRecordings(random, shuffledRecordings, shuffledObsoleteRecordings)
+                                   bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(shuffledRecordingAndEventPairs)
+                                   asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
+                                   whenInconsistentEventsOccur <- unboundedInstantGenerator
+      } yield (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, whenInconsistentEventsOccur)
+      check(Prop.forAllNoShrink(testCaseGenerator) { case (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, whenInconsistentEventsOccur) =>
+        val world = new WorldUnderTest()
+
+        var numberOfEvents = bigShuffledHistoryOverLotsOfThings.size
+
+        val sizeOfPartOne = 1 min (numberOfEvents / 2)
+
+        val (historyPartOne, historyPartTwo) = bigShuffledHistoryOverLotsOfThings splitAt sizeOfPartOne
+
+        val (asOfsPartOne, asOfsPartTwo) = asOfs splitAt sizeOfPartOne
+
+        recordEventsInWorld(historyPartOne, asOfsPartOne, world)
+
+        val atTheEndOfTime = PositiveInfinity[Instant]
+
+        val queryScope = world.scopeFor(whenInconsistentEventsOccur, world.nextRevision)
+
+        val eventIdForFailingRevisionsOnly = -1
+
+        for {moreSpecificFooHistoryId: MoreSpecificFooHistory#Id <- recordingsGroupedById.map(_.historyId) collect { case id: MoreSpecificFooHistory#Id => id.asInstanceOf[MoreSpecificFooHistory#Id] }
+             item <- queryScope.render(Bitemporal.withId[MoreSpecificFooHistory](moreSpecificFooHistoryId))
+        } {
+          intercept[RuntimeException] {
+            world.revise(Map(eventIdForFailingRevisionsOnly -> Some(Change[AnotherSpecificFooHistory](whenInconsistentEventsOccur)(moreSpecificFooHistoryId.asInstanceOf[AnotherSpecificFooHistory#Id],
+              { anotherSpecificFooHistory: AnotherSpecificFooHistory =>
+                anotherSpecificFooHistory.property3 = 6 // Have to actually *update* to cause an inconsistency.
+            }))), world.revisionAsOfs.last)
+          }
+        }
+
+        recordEventsInWorld(historyPartTwo, asOfsPartTwo, world)
+
+
+        val scope = world.scopeFor(atTheEndOfTime, world.nextRevision)
+
+        val checks = for {RecordingsNoLaterThan(historyId, historiesFrom, pertinentRecordings) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(atTheEndOfTime))
+                          Seq(history) = historiesFrom(scope)}
+          yield (historyId, history.datums, pertinentRecordings.map(_._1))
+
+        Prop.all(checks.map { case (historyId, actualHistory, expectedHistory) => ((actualHistory.length == expectedHistory.length) :| s"For ${historyId}, ${actualHistory.length} == expectedHistory.length") &&
+          Prop.all((actualHistory zip expectedHistory zipWithIndex) map { case ((actual, expected), step) => (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}" }: _*)
+        }: _*)
+      })
+    }
+  }
+
   it should "reflect the absence of all items of a compatible type relevant to a scope that share an id following an annihilation using that id." in {
     val testCaseGenerator = for {recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = true)
                                  queryWhen <- instantGenerator
@@ -645,8 +704,9 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
 
       val maximumEventId = bigShuffledHistoryOverLotsOfThings.flatten map (_._2) max
 
-      val annihilationEvents = idsThatEachReferToMoreThanOneItem.zipWithIndex map {case(idThatEachRefersToMoreThanOneItem, index) =>
-        (1 + maximumEventId + index, Some(Annihilation[History](queryWhen, idThatEachRefersToMoreThanOneItem.asInstanceOf[History#Id])))} toMap
+      val annihilationEvents = idsThatEachReferToMoreThanOneItem.zipWithIndex map { case (idThatEachRefersToMoreThanOneItem, index) =>
+        (1 + maximumEventId + index, Some(Annihilation[History](queryWhen, idThatEachRefersToMoreThanOneItem.asInstanceOf[History#Id])))
+      } toMap
 
       world.revise(annihilationEvents, asOfs.last)
 
