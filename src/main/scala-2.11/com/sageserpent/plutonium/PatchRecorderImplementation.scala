@@ -84,13 +84,24 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
   private type CandidatePatches = mutable.MutableList[(SequenceIndex, AbstractPatch[_ <: Identified], Unbounded[Instant])]
 
-  private class ItemState(var typeTag: TypeTag[_ <: Identified]) extends IdentifiedItemFactory {
-    def isCompatibleWith(typeTag: TypeTag[_ <: Identified]) = this.typeTag.tpe <:< typeTag.tpe || typeTag.tpe <:< this.typeTag.tpe
+  private class ItemState(initialTypeTag: TypeTag[_ <: Identified]) extends IdentifiedItemFactory {
+    private var _lowerBoundTypeTag = initialTypeTag
+
+    def lowerBoundTypeTag = _lowerBoundTypeTag
+
+    private var _upperBoundTypeTag = initialTypeTag
+
+    def isInconsistentWith(typeTag: TypeTag[_ <: Identified]) =
+      typeTag.tpe <:< this._upperBoundTypeTag.tpe && !isCompatibleWith(typeTag)
+
+    def isCompatibleWith(typeTag: TypeTag[_ <: Identified]) = this._lowerBoundTypeTag.tpe <:< typeTag.tpe || typeTag.tpe <:< this._lowerBoundTypeTag.tpe
 
     def addPatch(when: Unbounded[Instant], patch: AbstractPatch[_ <: Identified]) = {
       candidatePatches += ((nextSequenceIndex(), patch, when))
-      if (patch.typeTag.tpe <:< this.typeTag.tpe) {
-        this.typeTag = patch.typeTag
+      if (patch.typeTag.tpe <:< this._lowerBoundTypeTag.tpe) {
+        this._lowerBoundTypeTag = patch.typeTag
+      } else if (this._upperBoundTypeTag.tpe <:< patch.typeTag.tpe) {
+        this._upperBoundTypeTag = patch.typeTag
       }
     }
 
@@ -127,7 +138,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
     override def itemFor[Raw <: Identified : universe.TypeTag](id: Raw#Id): Raw = {
       cachedItem match {
         case None =>
-          implicit val typeTag = this.typeTag
+          implicit val typeTag = this._lowerBoundTypeTag
           val result = createItem(id, typeTag).asInstanceOf[Raw]
           cachedItem = Some(result)
           result
@@ -155,10 +166,16 @@ trait PatchRecorderImplementation extends PatchRecorder {
   private def relevantItemStateFor(patch: AbstractPatch[_ <: Identified]) = {
     val itemStates = idToItemStatesMap.getOrElseUpdate(patch.id, mutable.Set.empty)
 
+    val clashingItemStates = itemStates filter (_.isInconsistentWith(patch.typeTag))
+
+    if (clashingItemStates.nonEmpty){
+      throw new RuntimeException(s"There is at least one item of id: '${patch.id}' that would be inconsistent with type '${patch.typeTag.tpe}', these have types: '${clashingItemStates map (_.lowerBoundTypeTag.tpe)}'.")
+    }
+
     val compatibleItemStates = itemStates filter (_.isCompatibleWith(patch.typeTag))
 
     if (compatibleItemStates.nonEmpty) if (1 < compatibleItemStates.size) {
-      throw new scala.RuntimeException(s"There is more than one item of id: '${patch.id}' compatible with type '${patch.typeTag.tpe}', these have types: '${compatibleItemStates map (_.typeTag.tpe)}'.")
+      throw new scala.RuntimeException(s"There is more than one item of id: '${patch.id}' compatible with type '${patch.typeTag.tpe}', these have types: '${compatibleItemStates map (_.lowerBoundTypeTag.tpe)}'.")
     } else {
       compatibleItemStates.head
     }
