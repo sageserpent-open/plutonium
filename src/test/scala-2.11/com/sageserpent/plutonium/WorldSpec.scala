@@ -654,16 +654,20 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
 
         val queryScope = world.scopeFor(whenInconsistentEventsOccur, world.nextRevision)
 
-        val eventIdForFailingRevisionsOnly = -1
+        val eventIdForExtraConsistentChange = -1
+        val eventIdForInconsistentChangeOnly = -2
 
-        for {fooHistoryId: MoreSpecificFooHistory#Id <- recordingsGroupedById.map(_.historyId) collect { case id: FooHistory#Id => id.asInstanceOf[FooHistory#Id] }
-             _ <- queryScope.render(Bitemporal.withId[FooHistory](fooHistoryId)) filter (_.isInstanceOf[MoreSpecificFooHistory])
+        for {fooHistoryId: MoreSpecificFooHistory#Id <- recordingsGroupedById.map(_.historyId) collect { case id: MoreSpecificFooHistory#Id => id.asInstanceOf[MoreSpecificFooHistory#Id] }
+             _ <- queryScope.render(Bitemporal.withId[MoreSpecificFooHistory](fooHistoryId)) filter (_.isInstanceOf[MoreSpecificFooHistory])
         } {
           intercept[RuntimeException] {
-            world.revise(Map(eventIdForFailingRevisionsOnly -> Some(Change[AnotherSpecificFooHistory](whenInconsistentEventsOccur)(fooHistoryId.asInstanceOf[AnotherSpecificFooHistory#Id],
-              { anotherSpecificFooHistory: AnotherSpecificFooHistory =>
-                anotherSpecificFooHistory.property3 = 6 // Have to actually *update* to cause an inconsistency.
-            }))), world.revisionAsOfs.last)
+            val consistentButLooselyTypedChange = Change[FooHistory](NegativeInfinity[Instant])(fooHistoryId, { fooHistory: FooHistory =>
+              fooHistory.property1 = "Hello"
+            })
+            val inconsistentlyTypedChange = Change[AnotherSpecificFooHistory](whenInconsistentEventsOccur)(fooHistoryId.asInstanceOf[AnotherSpecificFooHistory#Id], { anotherSpecificFooHistory: AnotherSpecificFooHistory =>
+              anotherSpecificFooHistory.property3 = 6 // Have to actually *update* to cause an inconsistency.
+            })
+            world.revise(Map(eventIdForExtraConsistentChange -> Some(consistentButLooselyTypedChange), eventIdForInconsistentChangeOnly -> Some(inconsistentlyTypedChange)), world.revisionAsOfs.last)
           }
         }
 
