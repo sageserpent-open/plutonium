@@ -43,7 +43,7 @@ object Bitemporal {
 
   def numberOf[Raw <: Identified : TypeTag](id: Raw#Id): Bitemporal[Int] = ???  // TODO - this counts the items.
 
-  // TODO - something that makes a Bitemporal[Instant] to provide a way of snooping into the scope's 'when' from within the monad.
+  // TODO - a Bitemporal[Instant] that yields the query scope's 'when' from within the monad.
 
   // TODO - something that yields a bitemporal for the asOf and for the revision?
 

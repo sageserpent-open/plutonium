@@ -55,7 +55,9 @@ Similarly, wildcards need zero, one or many matches. (DONE)
 
 (ANNIHILATIONS - DONE)
 
-(OBSERVATIONS - got the general 'mix in measurements' test support done. Need a test th prove that an measurement spore cannot read from a scope.)
+(OBSERVATIONS - got the general 'mix in measurements' test support done. Need a test to prove that an measurement spore cannot read from a scope.)
+
+(DONE)
 
 ---------------------------------------------------------------------------------------------------------------------------
 
@@ -67,9 +69,10 @@ Could do this for one of the test data classes by imposing a precondition on the
 that the scope in a spore captures all the history up to, but not including, the change.
 
 (THIS IS ALREADY TESTED INDIRECTLY - HAVE ADDED COMMENTARY TO DOCUMENT THIS)
+(NOW AVOIDED AS MEASUREMENTS PRECLUDE EVENTS REFERRING TO STATE AT A POINT IN TIME - ALTHOUGH THE UPDATE OPERATION ITSELF MAY REFER TO LOCAL STATE)
 
 11. Use mixin technique to do design-by-contract precondition checking in a trait for the various bits and pieces.
 
-
+(DONE)
 
 
