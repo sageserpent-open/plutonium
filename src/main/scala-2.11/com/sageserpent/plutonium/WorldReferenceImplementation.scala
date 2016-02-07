@@ -10,6 +10,7 @@ import com.sageserpent.plutonium.WorldReferenceImplementation.IdentifiedItemsSco
 import net.sf.cglib.proxy._
 import resource.makeManagedResource
 
+import scala.RuntimeException
 import scala.collection.Searching._
 import scala.collection.immutable.{SortedBagConfiguration, TreeBag}
 import scala.collection.mutable
@@ -207,7 +208,7 @@ object WorldReferenceImplementation {
               }
 
             case annihilation@Annihilation(when, id) => {
-              implicit val typeTag = annihilation.typeTag
+              implicit val typeTag = annihilation.capturedTypeTag
               patchRecorder.recordAnnihilation(when, id)
             }
           }
@@ -320,8 +321,46 @@ class WorldReferenceImplementation extends World {
     }
 
     override def render[Raw](bitemporal: Bitemporal[Raw]): Stream[Raw] = {
-      // TODO - pattern match on the flavour of Bitemporal....
-      ???
+      def itemsFor[Raw <: Identified: TypeTag](id: Raw#Id): Stream[Raw]= {
+        identifiedItemsScope.itemsFor(id)
+      }
+      def zeroOrOneItemFor[Raw <: Identified: TypeTag](id: Raw#Id): Stream[Raw] = {
+        itemsFor(id) match {
+          case zeroOrOneItems@(Stream.Empty | _ #:: Stream.Empty) => zeroOrOneItems
+          case _ => throw new scala.RuntimeException(s"Id: '${id}' matches more than one item of type: '${typeTag.tpe}'.")
+        }
+      }
+      def singleItemFor[Raw <: Identified: TypeTag](id: Raw#Id): Stream[Raw] = {
+        zeroOrOneItemFor(id) match {
+          case Stream.Empty => throw new scala.RuntimeException(s"Id: '${id}' does not match any items of type: '${typeTag.tpe}'.")
+          case result@Stream(_) => result
+        }
+      }
+      def allItems: Stream[Nothing] = {
+        identifiedItemsScope.allItems()
+      }
+      bitemporal match {
+        case FlatMapBitemporalResult(preceedingContext, stage: ((_) => Bitemporal[Raw])) => render(preceedingContext) flatMap (raw => render(stage(raw)))
+        case PlusBitemporalResult(lhs, rhs) => render(lhs) ++ render(rhs)
+        case PointBitemporalResult(raw) => Stream(raw)
+        case NoneBitemporalResult() => Stream.empty
+        case bitemporal @ IdentifiedItemsBitemporalResult(id) => {
+          implicit val typeTag = bitemporal.capturedTypeTag
+          itemsFor(id)
+        }
+        case bitemporal @ ZeroOrOneIdentifiedItemBitemporalResult(id) => {
+          implicit val typeTag = bitemporal.capturedTypeTag
+          zeroOrOneItemFor(id)
+        }
+        case bitemporal @ SingleIdentifiedItemBitemporalResult(id) => {
+          implicit val typeTag = bitemporal.capturedTypeTag
+          singleItemFor(id)
+        }
+        case bitemporal @ WildcardBitemporalResult() =>{
+          implicit val typeTag = bitemporal.capturedTypeTag
+          allItems
+        }
+      }
     }
   }
 

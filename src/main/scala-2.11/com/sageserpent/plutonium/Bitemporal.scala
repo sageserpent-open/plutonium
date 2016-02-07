@@ -14,24 +14,32 @@ trait Bitemporal[Raw] {
 
   def flatMap[Raw2](stage: Raw => Bitemporal[Raw2]): Bitemporal[Raw2]
 
-  def plus[Raw2 <: Raw](another: Bitemporal[Raw2]): Bitemporal[Raw]
+  def plus(another: Bitemporal[Raw]): Bitemporal[Raw]
 }
 
-case class FlatMapBitemporalResult[Raw, Raw2](preceedingContext: Bitemporal[Raw], stage: Raw => Bitemporal[Raw2]) extends AbstractBitemporalReferenceImplementation[Raw2]
+case class FlatMapBitemporalResult[ContextRaw, Raw](preceedingContext: Bitemporal[ContextRaw], stage: ContextRaw => Bitemporal[Raw]) extends AbstractBitemporalReferenceImplementation[Raw]
 
-case class PlusBitemporalResult[Raw, Raw2 <: Raw](lhs: Bitemporal[Raw], rhs: Bitemporal[Raw2]) extends AbstractBitemporalReferenceImplementation[Raw]
+case class PlusBitemporalResult[Raw](lhs: Bitemporal[Raw], rhs: Bitemporal[Raw]) extends AbstractBitemporalReferenceImplementation[Raw]
 
-case class PointBitemporalResult[Raw](value: Raw) extends AbstractBitemporalReferenceImplementation[Raw]
+case class PointBitemporalResult[Raw](raw: Raw) extends AbstractBitemporalReferenceImplementation[Raw]
 
 case class NoneBitemporalResult[Raw]() extends AbstractBitemporalReferenceImplementation[Raw]
 
-case class IdentifiedItemsBitemporalResult[Raw <: Identified : TypeTag](id: Raw#Id) extends AbstractBitemporalReferenceImplementation[Raw]
+case class IdentifiedItemsBitemporalResult[Raw <: Identified : TypeTag](id: Raw#Id) extends AbstractBitemporalReferenceImplementation[Raw]{
+  val capturedTypeTag = typeTag[Raw]
+}
 
-case class ZeroOrOneIdentifiedItemBitemporalResult[Raw <: Identified : TypeTag](id: Raw#Id) extends AbstractBitemporalReferenceImplementation[Raw]
+case class ZeroOrOneIdentifiedItemBitemporalResult[Raw <: Identified : TypeTag](id: Raw#Id) extends AbstractBitemporalReferenceImplementation[Raw]{
+  val capturedTypeTag = typeTag[Raw]
+}
 
-case class SingleIdentifiedItemBitemporalResult[Raw <: Identified : TypeTag](id: Raw#Id) extends AbstractBitemporalReferenceImplementation[Raw]
+case class SingleIdentifiedItemBitemporalResult[Raw <: Identified : TypeTag](id: Raw#Id) extends AbstractBitemporalReferenceImplementation[Raw]{
+  val capturedTypeTag = typeTag[Raw]
+}
 
-case class WildcardBitemporalResult[Raw <: Identified : TypeTag]() extends AbstractBitemporalReferenceImplementation[Raw]
+case class WildcardBitemporalResult[Raw <: Identified : TypeTag]() extends AbstractBitemporalReferenceImplementation[Raw]{
+  val capturedTypeTag = typeTag[Raw]
+}
 
 // This companion object can produce a bitemporal instance that refers to zero, one or many raw instances depending
 // how many of those raw instances match the id or wildcard.

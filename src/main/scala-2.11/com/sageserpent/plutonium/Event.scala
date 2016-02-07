@@ -74,6 +74,6 @@ object Measurement {
 // recreated and so on all at the same time.
 case class Annihilation[Raw <: Identified: TypeTag](definiteWhen: Instant, id: Raw#Id) extends Event {
   val when = Finite(definiteWhen)
-  val typeTag = implicitly[TypeTag[Raw]]
+  val capturedTypeTag = typeTag[Raw]
 }
 
