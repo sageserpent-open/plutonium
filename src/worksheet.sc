@@ -75,5 +75,16 @@ class Example(val id: Int) extends Identified {
     case Some(id) => Bitemporal.withId[Example](id)
     case None => Bitemporal.none[Example]
   }
+
+  // For completeness...
+
+  private var yetAnotherBitemporal: Bitemporal[Example] = Bitemporal.none
+
+  // An event would call this, using 'Bitemporal.withId[Example](id)' in the event.
+  def referenceToYetAnotherBitemporal_=(yetAnotherBitemporal: Bitemporal[Example]) = {
+    this.yetAnotherBitemporal = yetAnotherBitemporal
+  }
+
+  def referenceToYetAnotherBitemporal_ = this.yetAnotherBitemporal
 }
 
