@@ -98,10 +98,10 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
     def addPatch(when: Unbounded[Instant], patch: AbstractPatch[_ <: Identified]) = {
       candidatePatches += ((nextSequenceIndex(), patch, when))
-      if (patch.typeTag.tpe <:< this._lowerBoundTypeTag.tpe) {
-        this._lowerBoundTypeTag = patch.typeTag
-      } else if (this._upperBoundTypeTag.tpe <:< patch.typeTag.tpe) {
-        this._upperBoundTypeTag = patch.typeTag
+      if (patch.capturedTypeTag.tpe <:< this._lowerBoundTypeTag.tpe) {
+        this._lowerBoundTypeTag = patch.capturedTypeTag
+      } else if (this._upperBoundTypeTag.tpe <:< patch.capturedTypeTag.tpe) {
+        this._upperBoundTypeTag = patch.capturedTypeTag
       }
     }
 
@@ -166,21 +166,21 @@ trait PatchRecorderImplementation extends PatchRecorder {
   private def relevantItemStateFor(patch: AbstractPatch[_ <: Identified]) = {
     val itemStates = idToItemStatesMap.getOrElseUpdate(patch.id, mutable.Set.empty)
 
-    val clashingItemStates = itemStates filter (_.isInconsistentWith(patch.typeTag))
+    val clashingItemStates = itemStates filter (_.isInconsistentWith(patch.capturedTypeTag))
 
     if (clashingItemStates.nonEmpty){
-      throw new RuntimeException(s"There is at least one item of id: '${patch.id}' that would be inconsistent with type '${patch.typeTag.tpe}', these have types: '${clashingItemStates map (_.lowerBoundTypeTag.tpe)}'.")
+      throw new RuntimeException(s"There is at least one item of id: '${patch.id}' that would be inconsistent with type '${patch.capturedTypeTag.tpe}', these have types: '${clashingItemStates map (_.lowerBoundTypeTag.tpe)}'.")
     }
 
-    val compatibleItemStates = itemStates filter (_.isCompatibleWith(patch.typeTag))
+    val compatibleItemStates = itemStates filter (_.isCompatibleWith(patch.capturedTypeTag))
 
     if (compatibleItemStates.nonEmpty) if (1 < compatibleItemStates.size) {
-      throw new scala.RuntimeException(s"There is more than one item of id: '${patch.id}' compatible with type '${patch.typeTag.tpe}', these have types: '${compatibleItemStates map (_.lowerBoundTypeTag.tpe)}'.")
+      throw new scala.RuntimeException(s"There is more than one item of id: '${patch.id}' compatible with type '${patch.capturedTypeTag.tpe}', these have types: '${compatibleItemStates map (_.lowerBoundTypeTag.tpe)}'.")
     } else {
       compatibleItemStates.head
     }
     else {
-      val itemState = new ItemState(patch.typeTag)
+      val itemState = new ItemState(patch.capturedTypeTag)
       itemStates += itemState
       itemState
     }
