@@ -1,43 +1,43 @@
 package com.sageserpent.plutonium
 
 /**
- * Created by Gerard on 09/07/2015.
- */
+  * Created by Gerard on 09/07/2015.
+  */
 
 import scala.reflect.runtime.universe._
 import scalaz.MonadPlus
 
-trait Bitemporal[Raw] {
+sealed trait Bitemporal[Raw] {
   def filter = implicitly[MonadPlus[Bitemporal]].filter[Raw](this) _
 
   def map[Raw2] = implicitly[MonadPlus[Bitemporal]].map[Raw, Raw2](this) _
 
-  def flatMap[Raw2](stage: Raw => Bitemporal[Raw2]): Bitemporal[Raw2]
+  def flatMap[Raw2](stage: Raw => Bitemporal[Raw2]): Bitemporal[Raw2] = FlatMapBitemporalResult(preceedingContext = this, stage = stage)
 
-  def plus(another: Bitemporal[Raw]): Bitemporal[Raw]
+  def plus(another: Bitemporal[Raw]): Bitemporal[Raw] = PlusBitemporalResult(lhs = this, rhs = another)
 }
 
-case class FlatMapBitemporalResult[ContextRaw, Raw](preceedingContext: Bitemporal[ContextRaw], stage: ContextRaw => Bitemporal[Raw]) extends AbstractBitemporalReferenceImplementation[Raw]
+case class FlatMapBitemporalResult[ContextRaw, Raw](preceedingContext: Bitemporal[ContextRaw], stage: ContextRaw => Bitemporal[Raw]) extends Bitemporal[Raw]
 
-case class PlusBitemporalResult[Raw](lhs: Bitemporal[Raw], rhs: Bitemporal[Raw]) extends AbstractBitemporalReferenceImplementation[Raw]
+case class PlusBitemporalResult[Raw](lhs: Bitemporal[Raw], rhs: Bitemporal[Raw]) extends Bitemporal[Raw]
 
-case class PointBitemporalResult[Raw](raw: Raw) extends AbstractBitemporalReferenceImplementation[Raw]
+case class PointBitemporalResult[Raw](raw: Raw) extends Bitemporal[Raw]
 
-case class NoneBitemporalResult[Raw]() extends AbstractBitemporalReferenceImplementation[Raw]
+case class NoneBitemporalResult[Raw]() extends Bitemporal[Raw]
 
-case class IdentifiedItemsBitemporalResult[Raw <: Identified : TypeTag](id: Raw#Id) extends AbstractBitemporalReferenceImplementation[Raw]{
+case class IdentifiedItemsBitemporalResult[Raw <: Identified : TypeTag](id: Raw#Id) extends Bitemporal[Raw] {
   val capturedTypeTag = typeTag[Raw]
 }
 
-case class ZeroOrOneIdentifiedItemBitemporalResult[Raw <: Identified : TypeTag](id: Raw#Id) extends AbstractBitemporalReferenceImplementation[Raw]{
+case class ZeroOrOneIdentifiedItemBitemporalResult[Raw <: Identified : TypeTag](id: Raw#Id) extends Bitemporal[Raw] {
   val capturedTypeTag = typeTag[Raw]
 }
 
-case class SingleIdentifiedItemBitemporalResult[Raw <: Identified : TypeTag](id: Raw#Id) extends AbstractBitemporalReferenceImplementation[Raw]{
+case class SingleIdentifiedItemBitemporalResult[Raw <: Identified : TypeTag](id: Raw#Id) extends Bitemporal[Raw] {
   val capturedTypeTag = typeTag[Raw]
 }
 
-case class WildcardBitemporalResult[Raw <: Identified : TypeTag]() extends AbstractBitemporalReferenceImplementation[Raw]{
+case class WildcardBitemporalResult[Raw <: Identified : TypeTag]() extends Bitemporal[Raw] {
   val capturedTypeTag = typeTag[Raw]
 }
 
@@ -46,9 +46,9 @@ case class WildcardBitemporalResult[Raw <: Identified : TypeTag]() extends Abstr
 object Bitemporal {
 
   trait IdentifiedItemsScope {
-    def itemsFor[Raw <: Identified: TypeTag](id: Raw#Id): Stream[Raw]
+    def itemsFor[Raw <: Identified : TypeTag](id: Raw#Id): Stream[Raw]
 
-    def allItems[Raw <: Identified: TypeTag](): Stream[Raw]
+    def allItems[Raw <: Identified : TypeTag](): Stream[Raw]
   }
 
   def apply[Raw](raw: Raw) = PointBitemporalResult(raw)
@@ -63,7 +63,7 @@ object Bitemporal {
 
   def none[Raw]: Bitemporal[Raw] = NoneBitemporalResult[Raw]
 
-  def numberOf[Raw <: Identified : TypeTag](id: Raw#Id): Bitemporal[Int] = ???  // TODO - this counts the items.
+  def numberOf[Raw <: Identified : TypeTag](id: Raw#Id): Bitemporal[Int] = ??? // TODO - this counts the items.
 
   // TODO - a Bitemporal[Instant] that yields the query scope's 'when' from within the monad.
 
