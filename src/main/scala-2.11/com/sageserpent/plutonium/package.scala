@@ -14,6 +14,6 @@ package object plutonium {
 
     override def empty[A]: Bitemporal[A] = Bitemporal.none
 
-    override def plus[A](a: Bitemporal[A], b: => Bitemporal[A]): Bitemporal[A] = a join b
+    override def plus[A](a: Bitemporal[A], b: => Bitemporal[A]): Bitemporal[A] = a plus b
   }
 }

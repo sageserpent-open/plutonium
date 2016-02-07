@@ -14,10 +14,24 @@ trait Bitemporal[Raw] {
 
   def flatMap[Raw2](stage: Raw => Bitemporal[Raw2]): Bitemporal[Raw2]
 
-  def interpret(scope: Bitemporal.IdentifiedItemsScope): Stream[Raw]
-
-  def join[Raw2 <: Raw](another: Bitemporal[Raw2]): Bitemporal[Raw]
+  def plus[Raw2 <: Raw](another: Bitemporal[Raw2]): Bitemporal[Raw]
 }
+
+case class FlatMapBitemporalResult[Raw, Raw2](preceedingContext: Bitemporal[Raw], stage: Raw => Bitemporal[Raw2]) extends AbstractBitemporalReferenceImplementation[Raw2]
+
+case class PlusBitemporalResult[Raw, Raw2 <: Raw](lhs: Bitemporal[Raw], rhs: Bitemporal[Raw2]) extends AbstractBitemporalReferenceImplementation[Raw]
+
+case class PointBitemporalResult[Raw](value: Raw) extends AbstractBitemporalReferenceImplementation[Raw]
+
+case class NoneBitemporalResult[Raw]() extends AbstractBitemporalReferenceImplementation[Raw]
+
+case class IdentifiedItemsBitemporalResult[Raw <: Identified : TypeTag](id: Raw#Id) extends AbstractBitemporalReferenceImplementation[Raw]
+
+case class ZeroOrOneIdentifiedItemBitemporalResult[Raw <: Identified : TypeTag](id: Raw#Id) extends AbstractBitemporalReferenceImplementation[Raw]
+
+case class SingleIdentifiedItemBitemporalResult[Raw <: Identified : TypeTag](id: Raw#Id) extends AbstractBitemporalReferenceImplementation[Raw]
+
+case class WildcardBitemporalResult[Raw <: Identified : TypeTag]() extends AbstractBitemporalReferenceImplementation[Raw]
 
 // This companion object can produce a bitemporal instance that refers to zero, one or many raw instances depending
 // how many of those raw instances match the id or wildcard.
@@ -29,17 +43,17 @@ object Bitemporal {
     def allItems[Raw <: Identified: TypeTag](): Stream[Raw]
   }
 
-  def apply[Raw](raw: Raw) = new DefaultBitemporalReferenceImplementation[Raw](raw)
+  def apply[Raw](raw: Raw) = PointBitemporalResult(raw)
 
-  def withId[Raw <: Identified : TypeTag](id: Raw#Id): Bitemporal[Raw] = new IdentifiedItemsBitemporalReferenceImplementation(id)
+  def withId[Raw <: Identified : TypeTag](id: Raw#Id): Bitemporal[Raw] = IdentifiedItemsBitemporalResult(id)
 
-  def zeroOrOneOf[Raw <: Identified : TypeTag](id: Raw#Id): Bitemporal[Raw] = new ZeroOrOneIdentifiedItemBitemporalReferenceImplementation(id)
+  def zeroOrOneOf[Raw <: Identified : TypeTag](id: Raw#Id): Bitemporal[Raw] = ZeroOrOneIdentifiedItemBitemporalResult(id)
 
-  def singleOneOf[Raw <: Identified : TypeTag](id: Raw#Id): Bitemporal[Raw] = new SingleIdentifiedItemBitemporalReferenceImplementation(id)
+  def singleOneOf[Raw <: Identified : TypeTag](id: Raw#Id): Bitemporal[Raw] = SingleIdentifiedItemBitemporalResult(id)
 
-  def wildcard[Raw <: Identified : TypeTag](): Bitemporal[Raw] = new WildcardBitemporalReferenceImplementation[Raw]
+  def wildcard[Raw <: Identified : TypeTag](): Bitemporal[Raw] = WildcardBitemporalResult[Raw]
 
-  def none[Raw]: Bitemporal[Raw] = new DefaultBitemporalReferenceImplementation[Raw]
+  def none[Raw]: Bitemporal[Raw] = NoneBitemporalResult[Raw]
 
   def numberOf[Raw <: Identified : TypeTag](id: Raw#Id): Bitemporal[Int] = ???  // TODO - this counts the items.
 

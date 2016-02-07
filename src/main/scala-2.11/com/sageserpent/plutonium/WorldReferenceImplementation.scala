@@ -314,16 +314,14 @@ class WorldReferenceImplementation extends World {
   }
 
   trait ScopeImplementation extends com.sageserpent.plutonium.Scope {
-    // TODO: snapshot the state from the world on construction - the effects of further revisions should not be apparent.
-
     val identifiedItemsScope = nextRevision match {
       case World.initialRevision => new IdentifiedItemsScopeImplementation
       case _ => new IdentifiedItemsScopeImplementation(when, nextRevision, asOf, revisionToEventTimelineMap(nextRevision - 1))
     }
 
-    // NOTE: this should return proxies to raw values, rather than the raw values themselves. Depending on the kind of the scope (created by client using 'World', or implicitly in an event).
     override def render[Raw](bitemporal: Bitemporal[Raw]): Stream[Raw] = {
-      bitemporal.interpret(identifiedItemsScope)
+      // TODO - pattern match on the flavour of Bitemporal....
+      ???
     }
   }
 
