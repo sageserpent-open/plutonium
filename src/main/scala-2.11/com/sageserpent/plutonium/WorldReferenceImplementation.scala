@@ -336,7 +336,7 @@ class WorldReferenceImplementation extends World {
           case result@Stream(_) => result
         }
       }
-      def allItems: Stream[Nothing] = {
+      def allItems[Raw <: Identified: TypeTag]: Stream[Raw] = {
         identifiedItemsScope.allItems()
       }
       bitemporal match {
