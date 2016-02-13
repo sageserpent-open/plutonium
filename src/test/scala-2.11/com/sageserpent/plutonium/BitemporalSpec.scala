@@ -67,7 +67,7 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
         override def equal(lhs: Bitemporal[Raw], rhs: Bitemporal[Raw]): Boolean = scope.render(lhs) == scope.render(rhs)
       }
 
-      ScalazProperties.monadPlus.laws[Bitemporal]
+      ScalazProperties.monadPlus.strongLaws[Bitemporal]
     })
   }
 
