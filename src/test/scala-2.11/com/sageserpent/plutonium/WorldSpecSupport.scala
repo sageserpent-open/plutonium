@@ -25,9 +25,12 @@ import scalaz.std.stream
 
 trait WorldSpecSupport {
 
-  class WorldUnderTest extends com.sageserpent.plutonium.WorldReferenceImplementation {
+  trait WorldUnderTest extends World {
     type EventId = Int
   }
+
+  // This looks odd, but the idea is *recreate* world instances each time the generator is used.
+  val worldGenerator = Gen.const(() => new WorldReferenceImplementation with WorldUnderTest) map (_.apply)
 
   val seedGenerator = Arbitrary.arbitrary[Long]
 
