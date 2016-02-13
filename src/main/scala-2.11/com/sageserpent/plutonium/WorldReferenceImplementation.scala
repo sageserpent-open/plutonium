@@ -433,5 +433,5 @@ class WorldReferenceImplementation extends World {
   // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
   override def scopeFor(when: Unbounded[Instant], asOf: Instant): Scope = new ScopeBasedOnAsOf(when, asOf) with ScopeImplementation
 
-  override def forkExperimentalWorld(scope: Scope): this.type = ???
+  override def forkExperimentalWorld(scope: Scope): this.type = this
 }
