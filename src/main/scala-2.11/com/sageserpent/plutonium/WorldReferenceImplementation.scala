@@ -290,12 +290,12 @@ case class MutableState[EventId](val revisionToEventTimelineMap: mutable.Map[Rev
                                  val revisionAsOfs: MutableList[Instant]){
 }
 
-class WorldReferenceImplementation(mutableState: MutableState[WorldReferenceImplementation#EventId]) extends World {
+class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId]) extends World[EventId] {
   // TODO - thread safety.
   type Scope = ScopeImplementation
 
   def this() = this(MutableState(revisionToEventTimelineMap = scala.collection.mutable.Map.empty[Revision, MutableState.EventTimeline],
-    eventIdToEventMap = scala.collection.mutable.Map.empty[WorldReferenceImplementation#EventId, (Event, Revision)],
+    eventIdToEventMap = scala.collection.mutable.Map.empty[EventId, (Event, Revision)],
     nextRevision = World.initialRevision,
     revisionAsOfs = MutableList.empty))
 
@@ -441,5 +441,5 @@ class WorldReferenceImplementation(mutableState: MutableState[WorldReferenceImpl
   // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
   override def scopeFor(when: Unbounded[Instant], asOf: Instant): Scope = new ScopeBasedOnAsOf(when, asOf) with ScopeImplementation
 
-  override def forkExperimentalWorld(scope: Scope): this.type = this
+  override def forkExperimentalWorld(scope: Scope): World[EventId] = this
 }
