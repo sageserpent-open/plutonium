@@ -5,12 +5,13 @@ import java.time.Instant
 
 import com.sageserpent.americium.{Finite, NegativeInfinity, PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.Bitemporal.IdentifiedItemsScope
+import com.sageserpent.plutonium.MutableState.{EventIdToEventMap, EventTimeline}
 import com.sageserpent.plutonium.World.Revision
 import com.sageserpent.plutonium.WorldReferenceImplementation.IdentifiedItemsScopeImplementation
 import net.sf.cglib.proxy._
 import resource.makeManagedResource
 
-import scala.RuntimeException
+import scala.{IllegalArgumentException, RuntimeException}
 import scala.collection.Searching._
 import scala.collection.immutable.{SortedBagConfiguration, TreeBag}
 import scala.collection.mutable
@@ -282,10 +283,10 @@ object WorldReferenceImplementation {
 
 object MutableState {
   type EventTimeline = TreeBag[(Event, Revision)]
+  type EventIdToEventMap[EventId] = Map[EventId, (Event, Revision)]
 }
 
-case class MutableState[EventId](val revisionToEventTimelineMap: mutable.Map[Revision, MutableState.EventTimeline],
-                                 val eventIdToEventMap: mutable.Map[EventId, (Event, Revision)],
+case class MutableState[EventId](val revisionToEventDataMap: mutable.Map[Revision, (MutableState.EventTimeline, MutableState.EventIdToEventMap[EventId])],
                                  var nextRevision: Revision,
                                  val revisionAsOfs: MutableList[Instant]) {
 }
@@ -294,19 +295,9 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
   // TODO - thread safety.
   type Scope = ScopeImplementation
 
-  {
-    import WorldReferenceImplementation._
+  eventDataForNewRevision() // Do this as a constructor precondition check.
 
-    val baselineEventTimeline = nextRevision match {
-      case World.initialRevision => TreeBag.empty[(Event, Revision)]
-      case _ => mutableState.revisionToEventTimelineMap(nextRevision - 1)
-    }
-
-    checkInvariantWrtEventTimeline(baselineEventTimeline)
-  }
-
-  def this() = this(MutableState(revisionToEventTimelineMap = scala.collection.mutable.Map.empty[Revision, MutableState.EventTimeline],
-    eventIdToEventMap = scala.collection.mutable.Map.empty[EventId, (Event, Revision)],
+  def this() = this(MutableState(revisionToEventDataMap = scala.collection.mutable.Map.empty[Revision, (MutableState.EventTimeline, MutableState.EventIdToEventMap[EventId])],
     nextRevision = World.initialRevision,
     revisionAsOfs = MutableList.empty))
 
@@ -337,7 +328,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
   trait ScopeImplementation extends com.sageserpent.plutonium.Scope {
     val identifiedItemsScope = nextRevision match {
       case World.initialRevision => new IdentifiedItemsScopeImplementation
-      case _ => new IdentifiedItemsScopeImplementation(when, nextRevision, asOf, mutableState.revisionToEventTimelineMap(nextRevision - 1))
+      case _ => new IdentifiedItemsScopeImplementation(when, nextRevision, asOf, mutableState.revisionToEventDataMap(nextRevision - 1)._1)
     }
 
     override def render[Raw](bitemporal: Bitemporal[Raw]): Stream[Raw] = {
@@ -392,14 +383,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
   def revise(events: Map[EventId, Option[Event]], asOf: Instant): Revision = {
     if (revisionAsOfs.nonEmpty && revisionAsOfs.last.isAfter(asOf)) throw new IllegalArgumentException(s"'asOf': ${asOf} should be no earlier than that of the last revision: ${revisionAsOfs.last}")
 
-    import WorldReferenceImplementation._
-
-    val baselineEventTimeline = nextRevision match {
-      case World.initialRevision => TreeBag.empty[(Event, Revision)]
-      case _ => mutableState.revisionToEventTimelineMap(nextRevision - 1)
-    }
-
-    checkInvariantWrtEventTimeline(baselineEventTimeline)
+    val (baselineEventTimeline: EventTimeline, baselineEventIdToEventMap: EventIdToEventMap[EventId]) = eventDataForNewRevision()
 
     // NOTE: don't use 'events.keys' here - that would result in set-like results,
     // which will cause annihilations occurring on the same item at the same when to
@@ -407,7 +391,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
     // distinct events with distinct event ids. That in turn breaks the invariant
     // checked by 'checkInvariantWrtEventTimeline'.
     val (eventIdsMadeObsoleteByThisRevision, eventsMadeObsoleteByThisRevision) = (for {(eventId, _) <- events
-                                                                                       obsoleteEvent <- mutableState.eventIdToEventMap get eventId} yield eventId -> obsoleteEvent) unzip
+                                                                                       obsoleteEvent <- baselineEventIdToEventMap get eventId} yield eventId -> obsoleteEvent) unzip
 
     assert(eventIdsMadeObsoleteByThisRevision.size == eventsMadeObsoleteByThisRevision.size)
 
@@ -423,11 +407,11 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
     // constructing a scope to apply queries on.
     new IdentifiedItemsScopeImplementation(PositiveInfinity[Instant], nextRevisionPostThisOne, Finite(asOf), newEventTimeline)
 
-    mutableState.revisionToEventTimelineMap += (nextRevision -> newEventTimeline)
+    val newEventIdToEventMap = baselineEventIdToEventMap -- eventIdsMadeObsoleteByThisRevision ++ newEvents
 
-    mutableState.eventIdToEventMap --= eventIdsMadeObsoleteByThisRevision ++= newEvents
+    checkInvariantWrtEventTimeline(newEventTimeline, newEventIdToEventMap)
 
-    checkInvariantWrtEventTimeline(newEventTimeline)
+    mutableState.revisionToEventDataMap += (nextRevision -> (newEventTimeline, newEventIdToEventMap))
 
     mutableState.revisionAsOfs += asOf
     val revision = nextRevision
@@ -435,11 +419,23 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
     revision
   }
 
-  private def checkInvariantWrtEventTimeline(eventTimeline: MutableState.EventTimeline): Unit = {
+  def eventDataForNewRevision(): (EventTimeline, EventIdToEventMap[EventId]) = {
+    import WorldReferenceImplementation._
+
+    val (baselineEventTimeline, baselineEventIdToEventMap) = nextRevision match {
+      case World.initialRevision => TreeBag.empty[(Event, Revision)] -> Map.empty[EventId, (Event, Revision)]
+      case _ => mutableState.revisionToEventDataMap(nextRevision - 1)
+    }
+
+    checkInvariantWrtEventTimeline(baselineEventTimeline, baselineEventIdToEventMap)
+    (baselineEventTimeline, baselineEventIdToEventMap)
+  }
+
+  private def checkInvariantWrtEventTimeline(eventTimeline: MutableState.EventTimeline, eventIdToEventMap: Map[EventId, (Event, Revision)]): Unit = {
     // Each event in 'eventIdToEventMap' should be in 'eventTimeline' and vice-versa.
 
     val eventsInEventTimeline = eventTimeline map (_._1) toList
-    val eventsInEventIdToEventMap = mutableState.eventIdToEventMap.values map (_._1) toList
+    val eventsInEventIdToEventMap = eventIdToEventMap.values map (_._1) toList
     val rogueEventsInEventIdToEventMap = eventsInEventIdToEventMap filter (!eventsInEventTimeline.contains(_))
     val rogueEventsInEventTimeline = eventsInEventTimeline filter (!eventsInEventIdToEventMap.contains(_))
     assert(rogueEventsInEventIdToEventMap.isEmpty, rogueEventsInEventIdToEventMap)
