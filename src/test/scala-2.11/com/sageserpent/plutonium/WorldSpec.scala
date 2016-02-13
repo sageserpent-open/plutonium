@@ -463,10 +463,6 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
     })
   }
 
-
-  private def historyFrom(world: World, recordingsGroupedById: List[RecordingsForAnId])(scope: world.Scope): List[(Any, Any)] = (for (recordingsForAnId <- recordingsGroupedById)
-    yield recordingsForAnId.historiesFrom(scope) flatMap (_.datums) map (recordingsForAnId.historyId -> _)) flatten
-
   it should "create a scope that is a snapshot unaffected by subsequent revisions" in {
     val testCaseGenerator = for {world <- worldGenerator
                                  recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
@@ -568,7 +564,7 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
 
   val inconsistentlyTypedRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(inconsistentlyTypedDataSamplesForAnIdGenerator, forbidAnnihilations = true)
 
-  it should "events to vary in their view of the type of an item referenced by an id" in {
+  it should "allow events to vary in their view of the type of an item referenced by an id" in {
     {
       val testCaseGenerator = for {world <- worldGenerator
                                    recordingsGroupedById <- inconsistentlyTypedRecordingsGroupedByIdGenerator
@@ -927,3 +923,4 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
     })
   }
 }
+
