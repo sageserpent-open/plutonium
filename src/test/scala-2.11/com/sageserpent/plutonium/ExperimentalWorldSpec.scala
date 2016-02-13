@@ -130,6 +130,44 @@ class ExperimentalWorldSpec extends FlatSpec with Matchers with Checkers with Wo
         Prop.all((actualHistory zip expectedHistory zipWithIndex) map { case ((actual, expected), step) => (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}" }: _*)
       }: _*)    })
   }
+
+  it should "not affect its base world when it is revised" in {
+    val testCaseGenerator = for {baseWorld <- worldGenerator
+                                 recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
+                                 followingRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
+                                 seed <- seedGenerator
+                                 random = new Random(seed)
+                                 bigShuffledHistoryOverLotsOfThings = (random.splitIntoNonEmptyPieces(shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, recordingsGroupedById)
+                                   .zipWithIndex)).force
+                                 bigFollowingShuffledHistoryOverLotsOfThings = (random.splitIntoNonEmptyPieces(shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, recordingsGroupedById)
+                                   .zipWithIndex)).force
+                                 baseHistoryLength = bigShuffledHistoryOverLotsOfThings.length
+                                 followingHistoryLength = bigFollowingShuffledHistoryOverLotsOfThings.length
+                                 asOfs <- Gen.listOfN(baseHistoryLength + followingHistoryLength, instantGenerator) map (_.sorted)
+                                 (baseAsOfs, followingAsOfs) = asOfs splitAt baseHistoryLength
+                                 forkAsOf <- instantGenerator
+                                 forkWhen <- unboundedInstantGenerator
+                                 queryWhen <- unboundedInstantGenerator
+    } yield (baseWorld, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, bigFollowingShuffledHistoryOverLotsOfThings, baseAsOfs, followingAsOfs, forkAsOf, forkWhen, queryWhen)
+    check(Prop.forAllNoShrink(testCaseGenerator) { case (baseWorld, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, bigFollowingShuffledHistoryOverLotsOfThings, baseAsOfs, followingAsOfs, forkAsOf, forkWhen, queryWhen) =>
+      recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), baseAsOfs, baseWorld)
+
+      val scopeToDefineFork = baseWorld.scopeFor(forkWhen, forkAsOf)
+
+      val experimentalWorld = baseWorld.forkExperimentalWorld(scopeToDefineFork)
+
+      recordEventsInWorld(liftRecordings(bigFollowingShuffledHistoryOverLotsOfThings), followingAsOfs, experimentalWorld)
+
+      val scope = experimentalWorld.scopeFor(queryWhen, baseWorld.nextRevision)
+
+      val checks = for {RecordingsNoLaterThan(historyId, historiesFrom, pertinentRecordings) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(queryWhen))
+                        Seq(history) = historiesFrom(scope)}
+        yield (historyId, history.datums, pertinentRecordings.map(_._1))
+
+      Prop.all(checks.map { case (historyId, actualHistory, expectedHistory) => ((actualHistory.length == expectedHistory.length) :| s"For ${historyId}, ${actualHistory.length} == expectedHistory.length") &&
+        Prop.all((actualHistory zip expectedHistory zipWithIndex) map { case ((actual, expected), step) => (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}" }: _*)
+      }: _*)    })
+  }
 }
 
 
