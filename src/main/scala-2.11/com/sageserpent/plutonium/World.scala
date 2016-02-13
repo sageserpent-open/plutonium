@@ -59,5 +59,5 @@ trait World {
   // differences that a) the revision history is truncated after the scope's revision and b) that only events coming no
   // later than the scope's 'when' are included in each revision. Of course, the experimental world can itself be revised
   // in just the same way as any other world, including the definition of events beyond the defining scope's 'when'.
-  def forkExperimentalWorld(scope: Scope): World
+  def forkExperimentalWorld(scope: Scope): this.type
 }
