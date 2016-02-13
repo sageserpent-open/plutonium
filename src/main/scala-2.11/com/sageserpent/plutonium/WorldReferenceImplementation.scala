@@ -143,7 +143,7 @@ object WorldReferenceImplementation {
     }
 
 
-    def this(_when: Unbounded[Instant], _nextRevision: Revision, _asOf: Unbounded[Instant], eventTimeline: WorldReferenceImplementation#EventTimeline) = {
+    def this(_when: Unbounded[Instant], _nextRevision: Revision, _asOf: Unbounded[Instant], eventTimeline: MutableState.EventTimeline) = {
       this()
       for (_ <- makeManagedResource {
         itemsAreLocked = false
@@ -280,15 +280,24 @@ object WorldReferenceImplementation {
 
 }
 
-class WorldReferenceImplementation extends World {
+object MutableState{
+  type EventTimeline = TreeBag[(Event, Revision)]
+}
+
+case class MutableState[EventId](val revisionToEventTimelineMap: mutable.Map[Revision, MutableState.EventTimeline],
+                                 val eventIdToEventMap: mutable.Map[EventId, (Event, Revision)],
+                                 var nextRevision: Revision,
+                                 val revisionAsOfs: MutableList[Instant]){
+}
+
+class WorldReferenceImplementation(mutableState: MutableState[WorldReferenceImplementation#EventId]) extends World {
   // TODO - thread safety.
   type Scope = ScopeImplementation
 
-  type EventTimeline = TreeBag[(Event, Revision)]
-
-  val revisionToEventTimelineMap = scala.collection.mutable.Map.empty[Revision, EventTimeline]
-
-  val eventIdToEventMap = scala.collection.mutable.Map.empty[EventId, (Event, Revision)]
+  def this() = this(MutableState(revisionToEventTimelineMap = scala.collection.mutable.Map.empty[Revision, MutableState.EventTimeline],
+    eventIdToEventMap = scala.collection.mutable.Map.empty[WorldReferenceImplementation#EventId, (Event, Revision)],
+    nextRevision = World.initialRevision,
+    revisionAsOfs = MutableList.empty))
 
   abstract class ScopeBasedOnNextRevision(val when: Unbounded[Instant], val nextRevision: Revision) extends com.sageserpent.plutonium.Scope {
     val asOf = nextRevision match {
@@ -317,26 +326,26 @@ class WorldReferenceImplementation extends World {
   trait ScopeImplementation extends com.sageserpent.plutonium.Scope {
     val identifiedItemsScope = nextRevision match {
       case World.initialRevision => new IdentifiedItemsScopeImplementation
-      case _ => new IdentifiedItemsScopeImplementation(when, nextRevision, asOf, revisionToEventTimelineMap(nextRevision - 1))
+      case _ => new IdentifiedItemsScopeImplementation(when, nextRevision, asOf, mutableState.revisionToEventTimelineMap(nextRevision - 1))
     }
 
     override def render[Raw](bitemporal: Bitemporal[Raw]): Stream[Raw] = {
-      def itemsFor[Raw <: Identified: TypeTag](id: Raw#Id): Stream[Raw]= {
+      def itemsFor[Raw <: Identified : TypeTag](id: Raw#Id): Stream[Raw] = {
         identifiedItemsScope.itemsFor(id)
       }
-      def zeroOrOneItemFor[Raw <: Identified: TypeTag](id: Raw#Id): Stream[Raw] = {
+      def zeroOrOneItemFor[Raw <: Identified : TypeTag](id: Raw#Id): Stream[Raw] = {
         itemsFor(id) match {
           case zeroOrOneItems@(Stream.Empty | _ #:: Stream.Empty) => zeroOrOneItems
           case _ => throw new scala.RuntimeException(s"Id: '${id}' matches more than one item of type: '${typeTag.tpe}'.")
         }
       }
-      def singleItemFor[Raw <: Identified: TypeTag](id: Raw#Id): Stream[Raw] = {
+      def singleItemFor[Raw <: Identified : TypeTag](id: Raw#Id): Stream[Raw] = {
         zeroOrOneItemFor(id) match {
           case Stream.Empty => throw new scala.RuntimeException(s"Id: '${id}' does not match any items of type: '${typeTag.tpe}'.")
           case result@Stream(_) => result
         }
       }
-      def allItems[Raw <: Identified: TypeTag]: Stream[Raw] = {
+      def allItems[Raw <: Identified : TypeTag]: Stream[Raw] = {
         identifiedItemsScope.allItems()
       }
       bitemporal match {
@@ -344,19 +353,19 @@ class WorldReferenceImplementation extends World {
         case PlusBitemporalResult(lhs, rhs) => render(lhs) ++ render(rhs)
         case PointBitemporalResult(raw) => Stream(raw)
         case NoneBitemporalResult() => Stream.empty
-        case bitemporal @ IdentifiedItemsBitemporalResult(id) => {
+        case bitemporal@IdentifiedItemsBitemporalResult(id) => {
           implicit val typeTag = bitemporal.capturedTypeTag
           itemsFor(id)
         }
-        case bitemporal @ ZeroOrOneIdentifiedItemBitemporalResult(id) => {
+        case bitemporal@ZeroOrOneIdentifiedItemBitemporalResult(id) => {
           implicit val typeTag = bitemporal.capturedTypeTag
           zeroOrOneItemFor(id)
         }
-        case bitemporal @ SingleIdentifiedItemBitemporalResult(id) => {
+        case bitemporal@SingleIdentifiedItemBitemporalResult(id) => {
           implicit val typeTag = bitemporal.capturedTypeTag
           singleItemFor(id)
         }
-        case bitemporal @ WildcardBitemporalResult() =>{
+        case bitemporal@WildcardBitemporalResult() => {
           implicit val typeTag = bitemporal.capturedTypeTag
           allItems
         }
@@ -364,11 +373,10 @@ class WorldReferenceImplementation extends World {
     }
   }
 
-  private var _nextRevision = World.initialRevision
 
-  override def nextRevision: Revision = _nextRevision
+  override def nextRevision: Revision = mutableState.nextRevision
 
-  override val revisionAsOfs: MutableList[Instant] = MutableList.empty
+  override val revisionAsOfs: Seq[Instant] = mutableState.revisionAsOfs
 
   def revise(events: Map[EventId, Option[Event]], asOf: Instant): Revision = {
     if (revisionAsOfs.nonEmpty && revisionAsOfs.last.isAfter(asOf)) throw new IllegalArgumentException(s"'asOf': ${asOf} should be no earlier than that of the last revision: ${revisionAsOfs.last}")
@@ -377,7 +385,7 @@ class WorldReferenceImplementation extends World {
 
     val baselineEventTimeline = nextRevision match {
       case World.initialRevision => TreeBag.empty[(Event, Revision)]
-      case _ => revisionToEventTimelineMap(nextRevision - 1)
+      case _ => mutableState.revisionToEventTimelineMap(nextRevision - 1)
     }
 
     checkInvariantWrtEventTimeline(baselineEventTimeline)
@@ -388,7 +396,7 @@ class WorldReferenceImplementation extends World {
     // distinct events with distinct event ids. That in turn breaks the invariant
     // checked by 'checkInvariantWrtEventTimeline'.
     val (eventIdsMadeObsoleteByThisRevision, eventsMadeObsoleteByThisRevision) = (for {(eventId, _) <- events
-                                                                                       obsoleteEvent <- eventIdToEventMap get eventId} yield eventId -> obsoleteEvent) unzip
+                                                                                       obsoleteEvent <- mutableState.eventIdToEventMap get eventId} yield eventId -> obsoleteEvent) unzip
 
     assert(eventIdsMadeObsoleteByThisRevision.size == eventsMadeObsoleteByThisRevision.size)
 
@@ -404,23 +412,23 @@ class WorldReferenceImplementation extends World {
     // constructing a scope to apply queries on.
     new IdentifiedItemsScopeImplementation(PositiveInfinity[Instant], nextRevisionPostThisOne, Finite(asOf), newEventTimeline)
 
-    revisionToEventTimelineMap += (nextRevision -> newEventTimeline)
+    mutableState.revisionToEventTimelineMap += (nextRevision -> newEventTimeline)
 
-    eventIdToEventMap --= eventIdsMadeObsoleteByThisRevision ++= newEvents
+    mutableState.eventIdToEventMap --= eventIdsMadeObsoleteByThisRevision ++= newEvents
 
     checkInvariantWrtEventTimeline(newEventTimeline)
 
-    revisionAsOfs += asOf
+    mutableState.revisionAsOfs += asOf
     val revision = nextRevision
-    _nextRevision = nextRevisionPostThisOne
+    mutableState.nextRevision = nextRevisionPostThisOne
     revision
   }
 
-  private def checkInvariantWrtEventTimeline(eventTimeline: EventTimeline): Unit = {
+  private def checkInvariantWrtEventTimeline(eventTimeline: MutableState.EventTimeline): Unit = {
     // Each event in 'eventIdToEventMap' should be in 'eventTimeline' and vice-versa.
 
     val eventsInEventTimeline = eventTimeline map (_._1) toList
-    val eventsInEventIdToEventMap = eventIdToEventMap.values map (_._1) toList
+    val eventsInEventIdToEventMap = mutableState.eventIdToEventMap.values map (_._1) toList
     val rogueEventsInEventIdToEventMap = eventsInEventIdToEventMap filter (!eventsInEventTimeline.contains(_))
     val rogueEventsInEventTimeline = eventsInEventTimeline filter (!eventsInEventIdToEventMap.contains(_))
     assert(rogueEventsInEventIdToEventMap.isEmpty, rogueEventsInEventIdToEventMap)
