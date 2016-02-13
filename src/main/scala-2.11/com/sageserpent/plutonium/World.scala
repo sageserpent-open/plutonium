@@ -54,4 +54,10 @@ trait World {
   // I can imagine queries being set to 'the beginning of time' and 'past the latest event'...
   // NOTE: again, the scope makes a *snapshot*, so the 'asOf' is interpreted wrt the state of the world at the point of creation of the scope.
   def scopeFor(when: Unbounded[Instant], asOf: Instant): Scope   // TODO - test to relate the properties on the scope to the call / state of the world.
+
+  // This creates a fresh world instance anew whose revision history is the same as the receiver world, with the important
+  // differences that a) the revision history is truncated after the scope's revision and b) that only events coming no
+  // later than the scope's 'when' are included in each revision. Of course, the experimental world can itself be revised
+  // in just the same way as any other world, including the definition of events beyond the defining scope's 'when'.
+  def forkExperimentalWorld(scope: Scope): World
 }
