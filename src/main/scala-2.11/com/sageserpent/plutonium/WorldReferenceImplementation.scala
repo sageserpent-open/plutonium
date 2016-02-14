@@ -5,12 +5,13 @@ import java.time.Instant
 
 import com.sageserpent.americium.{Finite, NegativeInfinity, PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.Bitemporal.IdentifiedItemsScope
+import com.sageserpent.plutonium.MutableState.{EventIdToEventMap, EventTimeline}
 import com.sageserpent.plutonium.World.Revision
 import com.sageserpent.plutonium.WorldReferenceImplementation.IdentifiedItemsScopeImplementation
 import net.sf.cglib.proxy._
 import resource.makeManagedResource
 
-import scala.RuntimeException
+import scala.{IllegalArgumentException, RuntimeException}
 import scala.collection.Searching._
 import scala.collection.immutable.{SortedBagConfiguration, TreeBag}
 import scala.collection.mutable
@@ -280,22 +281,25 @@ object WorldReferenceImplementation {
 
 }
 
-object MutableState{
+object MutableState {
   type EventTimeline = TreeBag[(Event, Revision)]
+  type EventIdToEventMap[EventId] = Map[EventId, (Event, Revision)]
 }
 
-case class MutableState[EventId](val revisionToEventTimelineMap: mutable.Map[Revision, MutableState.EventTimeline],
-                                 val eventIdToEventMap: mutable.Map[EventId, (Event, Revision)],
+case class MutableState[EventId](val revisionToEventDataMap: mutable.Map[Revision, (MutableState.EventTimeline, MutableState.EventIdToEventMap[EventId])],
                                  var nextRevision: Revision,
-                                 val revisionAsOfs: MutableList[Instant]){
+                                 val revisionAsOfs: MutableList[Instant]) {
 }
 
-class WorldReferenceImplementation(mutableState: MutableState[WorldReferenceImplementation#EventId]) extends World {
+class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId]) extends World[EventId] {
   // TODO - thread safety.
   type Scope = ScopeImplementation
 
-  def this() = this(MutableState(revisionToEventTimelineMap = scala.collection.mutable.Map.empty[Revision, MutableState.EventTimeline],
-    eventIdToEventMap = scala.collection.mutable.Map.empty[WorldReferenceImplementation#EventId, (Event, Revision)],
+  eventDataForNewRevision()
+
+  // Do this as a constructor precondition check.
+
+  def this() = this(MutableState(revisionToEventDataMap = scala.collection.mutable.Map.empty[Revision, (MutableState.EventTimeline, MutableState.EventIdToEventMap[EventId])],
     nextRevision = World.initialRevision,
     revisionAsOfs = MutableList.empty))
 
@@ -326,7 +330,7 @@ class WorldReferenceImplementation(mutableState: MutableState[WorldReferenceImpl
   trait ScopeImplementation extends com.sageserpent.plutonium.Scope {
     val identifiedItemsScope = nextRevision match {
       case World.initialRevision => new IdentifiedItemsScopeImplementation
-      case _ => new IdentifiedItemsScopeImplementation(when, nextRevision, asOf, mutableState.revisionToEventTimelineMap(nextRevision - 1))
+      case _ => new IdentifiedItemsScopeImplementation(when, nextRevision, asOf, mutableState.revisionToEventDataMap(nextRevision - 1)._1)
     }
 
     override def render[Raw](bitemporal: Bitemporal[Raw]): Stream[Raw] = {
@@ -381,14 +385,7 @@ class WorldReferenceImplementation(mutableState: MutableState[WorldReferenceImpl
   def revise(events: Map[EventId, Option[Event]], asOf: Instant): Revision = {
     if (revisionAsOfs.nonEmpty && revisionAsOfs.last.isAfter(asOf)) throw new IllegalArgumentException(s"'asOf': ${asOf} should be no earlier than that of the last revision: ${revisionAsOfs.last}")
 
-    import WorldReferenceImplementation._
-
-    val baselineEventTimeline = nextRevision match {
-      case World.initialRevision => TreeBag.empty[(Event, Revision)]
-      case _ => mutableState.revisionToEventTimelineMap(nextRevision - 1)
-    }
-
-    checkInvariantWrtEventTimeline(baselineEventTimeline)
+    val (baselineEventTimeline: EventTimeline, baselineEventIdToEventMap: EventIdToEventMap[EventId]) = eventDataForNewRevision()
 
     // NOTE: don't use 'events.keys' here - that would result in set-like results,
     // which will cause annihilations occurring on the same item at the same when to
@@ -396,7 +393,7 @@ class WorldReferenceImplementation(mutableState: MutableState[WorldReferenceImpl
     // distinct events with distinct event ids. That in turn breaks the invariant
     // checked by 'checkInvariantWrtEventTimeline'.
     val (eventIdsMadeObsoleteByThisRevision, eventsMadeObsoleteByThisRevision) = (for {(eventId, _) <- events
-                                                                                       obsoleteEvent <- mutableState.eventIdToEventMap get eventId} yield eventId -> obsoleteEvent) unzip
+                                                                                       obsoleteEvent <- baselineEventIdToEventMap get eventId} yield eventId -> obsoleteEvent) unzip
 
     assert(eventIdsMadeObsoleteByThisRevision.size == eventsMadeObsoleteByThisRevision.size)
 
@@ -412,11 +409,11 @@ class WorldReferenceImplementation(mutableState: MutableState[WorldReferenceImpl
     // constructing a scope to apply queries on.
     new IdentifiedItemsScopeImplementation(PositiveInfinity[Instant], nextRevisionPostThisOne, Finite(asOf), newEventTimeline)
 
-    mutableState.revisionToEventTimelineMap += (nextRevision -> newEventTimeline)
+    val newEventIdToEventMap = baselineEventIdToEventMap -- eventIdsMadeObsoleteByThisRevision ++ newEvents
 
-    mutableState.eventIdToEventMap --= eventIdsMadeObsoleteByThisRevision ++= newEvents
+    checkInvariantWrtEventTimeline(newEventTimeline, newEventIdToEventMap, nextRevisionPostThisOne)
 
-    checkInvariantWrtEventTimeline(newEventTimeline)
+    mutableState.revisionToEventDataMap += (nextRevision ->(newEventTimeline, newEventIdToEventMap))
 
     mutableState.revisionAsOfs += asOf
     val revision = nextRevision
@@ -424,15 +421,32 @@ class WorldReferenceImplementation(mutableState: MutableState[WorldReferenceImpl
     revision
   }
 
-  private def checkInvariantWrtEventTimeline(eventTimeline: MutableState.EventTimeline): Unit = {
+  def eventDataForNewRevision(): (EventTimeline, EventIdToEventMap[EventId]) = {
+    import WorldReferenceImplementation._
+
+    val (baselineEventTimeline, baselineEventIdToEventMap) = nextRevision match {
+      case World.initialRevision => TreeBag.empty[(Event, Revision)] -> Map.empty[EventId, (Event, Revision)]
+      case _ => mutableState.revisionToEventDataMap(nextRevision - 1)
+    }
+
+    checkInvariantWrtEventTimeline(baselineEventTimeline, baselineEventIdToEventMap, nextRevision)
+    (baselineEventTimeline, baselineEventIdToEventMap)
+  }
+
+  private def checkInvariantWrtEventTimeline(eventTimeline: MutableState.EventTimeline, eventIdToEventMap: Map[EventId, (Event, Revision)], nextRevision: Revision): Unit = {
     // Each event in 'eventIdToEventMap' should be in 'eventTimeline' and vice-versa.
 
     val eventsInEventTimeline = eventTimeline map (_._1) toList
-    val eventsInEventIdToEventMap = mutableState.eventIdToEventMap.values map (_._1) toList
+    val eventsInEventIdToEventMap = eventIdToEventMap.values map (_._1) toList
     val rogueEventsInEventIdToEventMap = eventsInEventIdToEventMap filter (!eventsInEventTimeline.contains(_))
     val rogueEventsInEventTimeline = eventsInEventTimeline filter (!eventsInEventIdToEventMap.contains(_))
     assert(rogueEventsInEventIdToEventMap.isEmpty, rogueEventsInEventIdToEventMap)
     assert(rogueEventsInEventTimeline.isEmpty, rogueEventsInEventTimeline)
+
+    // Each event in both 'eventIdToEventMap' and 'eventTimeline' should have been defined in a revision before the next one for the world as a whole.
+
+    assert(eventTimeline forall { case (_, revision) => nextRevision > revision })
+    assert(eventIdToEventMap forall { case (_, (_, revision)) => nextRevision > revision })
   }
 
   // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
@@ -441,5 +455,17 @@ class WorldReferenceImplementation(mutableState: MutableState[WorldReferenceImpl
   // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
   override def scopeFor(when: Unbounded[Instant], asOf: Instant): Scope = new ScopeBasedOnAsOf(when, asOf) with ScopeImplementation
 
-  override def forkExperimentalWorld(scope: Scope): this.type = this
+  override def forkExperimentalWorld(scope: Scope): World[EventId] = {
+    val onePastFinalSharedRevision = scope.nextRevision
+    val mutableStateUpToFinalSharedRevision = MutableState[EventId](revisionToEventDataMap = mutable.Map(mutableState.revisionToEventDataMap.filterKeys(_ < onePastFinalSharedRevision).toSeq: _*),
+      nextRevision = onePastFinalSharedRevision,
+      revisionAsOfs = mutableState.revisionAsOfs take onePastFinalSharedRevision)
+    val cutoffWhen = scope.when
+    val mutableStateWithEventsNoLaterThanCutoff = mutableStateUpToFinalSharedRevision.copy(revisionToEventDataMap = mutableStateUpToFinalSharedRevision.revisionToEventDataMap map {
+      case (revision, (baseEventTimeline, baseEventIdToEventMap)) =>
+        revision ->(baseEventTimeline filter { case (event, _) => cutoffWhen >= event.when },
+          baseEventIdToEventMap filter { case (_, (event, _)) => cutoffWhen >= event.when })
+    })
+    new WorldReferenceImplementation[EventId](mutableState = mutableStateWithEventsNoLaterThanCutoff)
+  }
 }
