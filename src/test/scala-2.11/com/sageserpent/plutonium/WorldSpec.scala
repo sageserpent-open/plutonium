@@ -875,7 +875,7 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
       }
 
       Prop.all(checks: _*)
-    })
+    }, minSuccessful(200))
   }
 
   it should "allow an entire history to be completely annulled and then rewritten at the same asOf" in {
