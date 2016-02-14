@@ -17,7 +17,7 @@ class ExperimentalWorldSpec extends FlatSpec with Matchers with Checkers with Wo
   implicit override val generatorDrivenConfig =
     PropertyCheckConfig(maxSize = 10)
 
-  "An experimental world" should "respond to scope queries in the same way as its base world as long as the scope for querying is contained within the defining scope" in {
+  "An experimental world" should "reflect the scope used to define it" in {
     val testCaseGenerator = for {forkAsOf <- instantGenerator
                                  forkWhen <- unboundedInstantGenerator
                                  queryAsOf <- instantGenerator if !forkAsOf.isBefore(queryAsOf)
@@ -37,20 +37,14 @@ class ExperimentalWorldSpec extends FlatSpec with Matchers with Checkers with Wo
 
       val experimentalWorld = baseWorld.forkExperimentalWorld(scopeToDefineFork)
 
-      assert(scopeToDefineFork.nextRevision == experimentalWorld.nextRevision)
-      assert(baseWorld.revisionAsOfs.takeWhile(revisionAsOf => !forkAsOf.isBefore(revisionAsOf)) == experimentalWorld.revisionAsOfs)
+      val filteredRevisionsFromBaseWorld = baseWorld.revisionAsOfs.takeWhile(revisionAsOf => !forkAsOf.isBefore(revisionAsOf)).toList
 
-      val scopeFromBaseWorld = baseWorld.scopeFor(queryWhen, queryAsOf)
-      val scopeFromExperimentalWorld = experimentalWorld.scopeFor(queryWhen, queryAsOf)
-
-      val utopianHistory = historyFrom(baseWorld, recordingsGroupedById)(scopeFromBaseWorld)
-      val distopianHistory = historyFrom(experimentalWorld, recordingsGroupedById)(scopeFromExperimentalWorld)
-
-      ((utopianHistory.length == distopianHistory.length) :| s"${utopianHistory.length} == distopianHistory.length") && Prop.all(utopianHistory zip distopianHistory map { case (utopianCase, distopianCase) => (utopianCase === distopianCase) :| s"${utopianCase} === distopianCase" }: _*)
+      (scopeToDefineFork.nextRevision == experimentalWorld.nextRevision) :| s"Expected 'experimentalWorld.nextRevision' to be ${scopeToDefineFork.nextRevision}." &&
+      (filteredRevisionsFromBaseWorld == experimentalWorld.revisionAsOfs) :| s"Expected 'experimentalWorld.revisionAsOfs' to be '$filteredRevisionsFromBaseWorld'."
     })
   }
 
-  "it" should "respond to scope queries in the same way as its base world as long as the scope for querying is contained within the defining scope" in {
+  it should "respond to scope queries in the same way as its base world as long as the scope for querying is contained within the defining scope" in {
     val testCaseGenerator = for {forkAsOf <- instantGenerator
                                  forkWhen <- unboundedInstantGenerator
                                  queryAsOf <- instantGenerator if !forkAsOf.isBefore(queryAsOf)
