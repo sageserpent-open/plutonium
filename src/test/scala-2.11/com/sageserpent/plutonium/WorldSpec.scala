@@ -832,8 +832,8 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
           val maximumEventIdFromThisSubsection = sortedEventIds.last
           val annulmentsForExtraEventIdsNotCorrectedInThisSubsection = Stream((1 + maximumEventIdFromThisSubsection) to maximumEventIdFromPreviousSubsection map ((None: Option[(Unbounded[Instant], Event)]) -> _))
           val asOfForAnnulments = asOfs.head
-          recordEventsInWorld(annulmentsForExtraEventIdsNotCorrectedInThisSubsection, List(asOfForAnnulments), world)
           try {
+            recordEventsInWorld(annulmentsForExtraEventIdsNotCorrectedInThisSubsection, List(asOfForAnnulments), world)
             recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
           }
           catch {
@@ -852,7 +852,7 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
               assert(World.initialRevision != world.nextRevision)
               val asOfForAllCorrections = asOfs.last
 
-              val annulmentsGalore = Stream((0 to maximumEventIdFromThisSubsection) map ((None: Option[(Unbounded[Instant], Event)]) -> _))
+              val annulmentsGalore = Stream((0 to (maximumEventIdFromPreviousSubsection max maximumEventIdFromThisSubsection)) map ((None: Option[(Unbounded[Instant], Event)]) -> _))
 
               recordEventsInWorld(annulmentsGalore, List(asOfForAllCorrections), world)
               recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, List.fill(asOfs.length)(asOfForAllCorrections), world)
@@ -875,7 +875,7 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
       }
 
       Prop.all(checks: _*)
-    }, minSuccessful(200))
+    }, minSuccessful(300), maxSize(50))
   }
 
   it should "allow an entire history to be completely annulled and then rewritten at the same asOf" in {
