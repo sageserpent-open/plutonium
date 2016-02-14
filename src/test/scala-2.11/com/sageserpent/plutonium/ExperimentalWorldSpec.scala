@@ -2,7 +2,7 @@ package com.sageserpent.plutonium
 
 import java.time.Instant
 
-import com.sageserpent.americium.Unbounded
+import com.sageserpent.americium.{PositiveInfinity, Unbounded}
 import org.scalacheck.{Prop, Gen}
 import org.scalatest.prop.Checkers
 import org.scalatest.{Matchers, FlatSpec}
@@ -18,13 +18,11 @@ import com.sageserpent.americium.randomEnrichment._
   */
 class ExperimentalWorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSupport {
   implicit override val generatorDrivenConfig =
-    PropertyCheckConfig(maxSize = 10)
+    PropertyCheckConfig(maxSize = 15)
 
   "An experimental world" should "reflect the scope used to define it" in {
     val testCaseGenerator = for {forkAsOf <- instantGenerator
                                  forkWhen <- unboundedInstantGenerator
-                                 queryAsOf <- instantGenerator if !forkAsOf.isBefore(queryAsOf)
-                                 queryWhen <- unboundedInstantGenerator if queryWhen <= forkWhen
                                  baseWorld <- worldGenerator
                                  recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
                                  seed <- seedGenerator
@@ -32,8 +30,8 @@ class ExperimentalWorldSpec extends FlatSpec with Matchers with Checkers with Wo
                                  bigShuffledHistoryOverLotsOfThings = (random.splitIntoNonEmptyPieces(shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, recordingsGroupedById)
                                    .zipWithIndex)).force
                                  asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
-    } yield (baseWorld, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, forkAsOf, forkWhen, queryAsOf, queryWhen)
-    check(Prop.forAllNoShrink(testCaseGenerator) { case (baseWorld, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, forkAsOf, forkWhen, queryAsOf, queryWhen) =>
+    } yield (baseWorld, bigShuffledHistoryOverLotsOfThings, asOfs, forkAsOf, forkWhen)
+    check(Prop.forAllNoShrink(testCaseGenerator) { case (baseWorld, bigShuffledHistoryOverLotsOfThings, asOfs, forkAsOf, forkWhen) =>
       recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfs, baseWorld)
 
       val scopeToDefineFork = baseWorld.scopeFor(forkWhen, forkAsOf)
@@ -50,8 +48,8 @@ class ExperimentalWorldSpec extends FlatSpec with Matchers with Checkers with Wo
   it should "respond to scope queries in the same way as its base world as long as the scope for querying is contained within the defining scope, as long as no measurements are involved" in {
     val testCaseGenerator = for {forkAsOf <- instantGenerator
                                  forkWhen <- unboundedInstantGenerator
-                                 queryAsOf <- instantGenerator if !forkAsOf.isBefore(queryAsOf)
-                                 queryWhen <- unboundedInstantGenerator if queryWhen <= forkWhen
+                                 queryAsOfNoLaterThanFork <- instantGenerator if !forkAsOf.isBefore(queryAsOfNoLaterThanFork)
+                                 queryWhenNoLaterThanFork <- unboundedInstantGenerator if queryWhenNoLaterThanFork <= forkWhen
                                  baseWorld <- worldGenerator
                                  recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false, forbidMeasurements = true)
                                  seed <- seedGenerator
@@ -59,16 +57,45 @@ class ExperimentalWorldSpec extends FlatSpec with Matchers with Checkers with Wo
                                  bigShuffledHistoryOverLotsOfThings = (random.splitIntoNonEmptyPieces(shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, recordingsGroupedById)
                                    .zipWithIndex)).force
                                  asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
-    } yield (baseWorld, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, forkAsOf, forkWhen, queryAsOf, queryWhen)
-    check(Prop.forAllNoShrink(testCaseGenerator) { case (baseWorld, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, forkAsOf, forkWhen, queryAsOf, queryWhen) =>
+    } yield (baseWorld, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, forkAsOf, forkWhen, queryAsOfNoLaterThanFork, queryWhenNoLaterThanFork)
+    check(Prop.forAllNoShrink(testCaseGenerator) { case (baseWorld, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, forkAsOf, forkWhen, queryAsOfNoLaterThanFork, queryWhenNoLaterThanFork) =>
       recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfs, baseWorld)
 
       val scopeToDefineFork = baseWorld.scopeFor(forkWhen, forkAsOf)
 
       val experimentalWorld = baseWorld.forkExperimentalWorld(scopeToDefineFork)
 
-      val scopeFromBaseWorld = baseWorld.scopeFor(queryWhen, queryAsOf)
-      val scopeFromExperimentalWorld = experimentalWorld.scopeFor(queryWhen, queryAsOf)
+      val scopeFromBaseWorld = baseWorld.scopeFor(queryWhenNoLaterThanFork, queryAsOfNoLaterThanFork)
+      val scopeFromExperimentalWorld = experimentalWorld.scopeFor(queryWhenNoLaterThanFork, queryAsOfNoLaterThanFork)
+
+      val baseWorldHistory = historyFrom(baseWorld, recordingsGroupedById)(scopeFromBaseWorld)
+      val experimentalWorldHistory = historyFrom(experimentalWorld, recordingsGroupedById)(scopeFromExperimentalWorld)
+
+      ((baseWorldHistory.length == experimentalWorldHistory.length) :| s"${baseWorldHistory.length} == experimentalWorldHistory.length") && Prop.all(baseWorldHistory zip experimentalWorldHistory map { case (baseWorldCase, experimentalWorldCase) => (baseWorldCase === experimentalWorldCase) :| s"${baseWorldCase} === experimentalWorldCase" }: _*)
+    })
+  }
+
+  it should "respond to scope queries in the same way as its base world as long as the scope for querying is contained within the defining scope, as long as the defining scope's when as at positive infinity" in {
+    val testCaseGenerator = for {forkAsOf <- instantGenerator
+                                 queryAsOfNoLaterThanFork <- instantGenerator if !forkAsOf.isBefore(queryAsOfNoLaterThanFork)
+                                 queryWhen <- unboundedInstantGenerator
+                                 baseWorld <- worldGenerator
+                                 recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
+                                 seed <- seedGenerator
+                                 random = new Random(seed)
+                                 bigShuffledHistoryOverLotsOfThings = (random.splitIntoNonEmptyPieces(shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, recordingsGroupedById)
+                                   .zipWithIndex)).force
+                                 asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
+    } yield (baseWorld, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, forkAsOf, queryAsOfNoLaterThanFork, queryWhen)
+    check(Prop.forAllNoShrink(testCaseGenerator) { case (baseWorld, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, forkAsOf, queryAsOfNoLaterThanFork, queryWhen) =>
+      recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfs, baseWorld)
+
+      val scopeToDefineFork = baseWorld.scopeFor(PositiveInfinity[Instant], forkAsOf)
+
+      val experimentalWorld = baseWorld.forkExperimentalWorld(scopeToDefineFork)
+
+      val scopeFromBaseWorld = baseWorld.scopeFor(queryWhen, queryAsOfNoLaterThanFork)
+      val scopeFromExperimentalWorld = experimentalWorld.scopeFor(queryWhen, queryAsOfNoLaterThanFork)
 
       val baseWorldHistory = historyFrom(baseWorld, recordingsGroupedById)(scopeFromBaseWorld)
       val experimentalWorldHistory = historyFrom(experimentalWorld, recordingsGroupedById)(scopeFromExperimentalWorld)
@@ -125,6 +152,40 @@ class ExperimentalWorldSpec extends FlatSpec with Matchers with Checkers with Wo
       ((experimentalWorldHistory.length == experimentalWorldHistoryAfterBaseWorldRevised.length) :| s"${experimentalWorldHistory.length} == experimentalWorldHistoryAfterBaseWorldRevised.length") && Prop.all(experimentalWorldHistory zip experimentalWorldHistoryAfterBaseWorldRevised map { case (experimentalWorldCase, experimentalWorldCaseAfterBaseWorldRevised) => (experimentalWorldCase === experimentalWorldCaseAfterBaseWorldRevised) :| s"${experimentalWorldCase} === experimentalWorldCaseAfterBaseWorldRevised" }: _*)
     })
   }
+
+  it should "not yield any further history beyond the defining scope's when provided it has not been further revised" in {
+    val testCaseGenerator = for {forkAsOf <- instantGenerator
+                                 forkWhen <- unboundedInstantGenerator
+                                 queryAsOfNoLaterThanFork <- instantGenerator if !forkAsOf.isBefore(queryAsOfNoLaterThanFork)
+                                 queryWhenAfterFork <- unboundedInstantGenerator if queryWhenAfterFork > forkWhen
+                                 baseWorld <- worldGenerator
+                                 recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
+                                 followingRecordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
+                                 seed <- seedGenerator
+                                 random = new Random(seed)
+                                 bigShuffledHistoryOverLotsOfThings = (random.splitIntoNonEmptyPieces(shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, recordingsGroupedById)
+                                   .zipWithIndex)).force
+                                 asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
+    } yield (baseWorld, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, forkAsOf, forkWhen, queryAsOfNoLaterThanFork, queryWhenAfterFork)
+    check(Prop.forAllNoShrink(testCaseGenerator) { case (baseWorld, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, forkAsOf, forkWhen, queryAsOfNoLaterThanFork, queryWhenAfterFork) =>
+      recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfs, baseWorld)
+
+      val scopeToDefineFork = baseWorld.scopeFor(forkWhen, forkAsOf)
+
+      val experimentalWorld = baseWorld.forkExperimentalWorld(scopeToDefineFork)
+
+      val scopeFromExperimentalWorld = experimentalWorld.scopeFor(forkWhen, queryAsOfNoLaterThanFork)
+
+      val experimentalWorldHistory = historyFrom(experimentalWorld, recordingsGroupedById)(scopeFromExperimentalWorld)
+
+      val scopeFromExperimentalWorldAfterForkWhen = experimentalWorld.scopeFor(queryWhenAfterFork, queryAsOfNoLaterThanFork)
+
+      val experimentalWorldHistoryAfterRokeWhen = historyFrom(experimentalWorld, recordingsGroupedById)(scopeFromExperimentalWorldAfterForkWhen)
+
+      ((experimentalWorldHistory.length == experimentalWorldHistoryAfterRokeWhen.length) :| s"${experimentalWorldHistory.length} == experimentalWorldHistoryAfterRokeWhen.length") && Prop.all(experimentalWorldHistory zip experimentalWorldHistoryAfterRokeWhen map { case (experimentalWorldCase, experimentalWorldCaseAfterBaseWorldRevised) => (experimentalWorldCase === experimentalWorldCaseAfterBaseWorldRevised) :| s"${experimentalWorldCase} === experimentalWorldCaseAfterBaseWorldRevised" }: _*)
+    })
+  }
+
 
   it should "be a world in its own right" in {
     val testCaseGenerator = for {forkAsOf <- instantGenerator
