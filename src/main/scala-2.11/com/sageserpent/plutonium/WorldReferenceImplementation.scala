@@ -295,9 +295,8 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
   // TODO - thread safety.
   type Scope = ScopeImplementation
 
-  eventDataForNewRevision()
-
   // Do this as a constructor precondition check.
+  eventDataForNewRevision()
 
   def this() = this(MutableState(revisionToEventDataMap = scala.collection.mutable.Map.empty[Revision, (MutableState.EventTimeline, MutableState.EventIdToEventMap[EventId])],
     nextRevision = World.initialRevision,
@@ -436,8 +435,8 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
   private def checkInvariantWrtEventTimeline(eventTimeline: MutableState.EventTimeline, eventIdToEventMap: Map[EventId, (Event, Revision)], nextRevision: Revision): Unit = {
     // Each event in 'eventIdToEventMap' should be in 'eventTimeline' and vice-versa.
 
-    val eventsInEventTimeline = eventTimeline map (_._1) toList
-    val eventsInEventIdToEventMap = eventIdToEventMap.values map (_._1) toList
+    val eventsInEventTimeline = eventTimeline toList
+    val eventsInEventIdToEventMap = eventIdToEventMap.values toList
     val rogueEventsInEventIdToEventMap = eventsInEventIdToEventMap filter (!eventsInEventTimeline.contains(_))
     val rogueEventsInEventTimeline = eventsInEventTimeline filter (!eventsInEventIdToEventMap.contains(_))
     assert(rogueEventsInEventIdToEventMap.isEmpty, rogueEventsInEventIdToEventMap)
