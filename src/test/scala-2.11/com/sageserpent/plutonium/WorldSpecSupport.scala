@@ -189,7 +189,8 @@ trait WorldSpecSupport {
                                 override val historiesFrom: Scope => Seq[History],
                                 annihilationFor: Instant => Annihilation[_ <: Identified],
                                 dataSamplesGroupedForLifespans: Stream[Traversable[(Any, (Unbounded[Instant], Boolean) => Event)]],
-                                sampleWhensGroupedForLifespans: Stream[List[Unbounded[Instant]]]) extends RecordingsForAnId {
+                                sampleWhensGroupedForLifespans: Stream[List[Unbounded[Instant]]],
+                                forbidMeasurements: Boolean) extends RecordingsForAnId {
     require(dataSamplesGroupedForLifespans.size == sampleWhensGroupedForLifespans.size)
     require({
       val sampleWhens = sampleWhensGroupedForLifespans.flatten
@@ -205,7 +206,7 @@ trait WorldSpecSupport {
     private def decisionsToMakeAChange(numberOfDataSamples: Int) = {
       val random = new Random(numberOfDataSamples)
       List.fill(numberOfDataSamples) {
-        random.nextBoolean()
+        if (forbidMeasurements) true else random.nextBoolean()
     }
     }
 
@@ -316,7 +317,8 @@ trait WorldSpecSupport {
   }
 
   def recordingsGroupedByIdGenerator_(dataSamplesForAnIdGenerator: Gen[(Any, Scope => Seq[History], List[(Any, (Unbounded[Instant], Boolean) => Event)], Instant => Annihilation[_ <: Identified])],
-                                      forbidAnnihilations: Boolean = false) = {
+                                      forbidAnnihilations: Boolean = false,
+                                      forbidMeasurements: Boolean = false) = {
     val unconstrainedParametersGenerator = for {(historyId, historiesFrom, dataSamples, annihilationFor) <- dataSamplesForAnIdGenerator
                                                 seed <- seedGenerator
                                                 random = new Random(seed)
@@ -350,7 +352,7 @@ trait WorldSpecSupport {
     val parametersGenerator = unconstrainedParametersGenerator retryUntil { case (firstAnnihilationHasBeenAlignedWithADefiniteWhen, _) => firstAnnihilationHasBeenAlignedWithADefiniteWhen } map (_._2)
 
     val recordingsForAnIdGenerator = for ((historyId, historiesFrom, annihilationFor, dataSamplesGroupedForLifespans, sampleWhensGroupedForLifespans) <- parametersGenerator)
-      yield new RecordingsForAPhoenixId(historyId, historiesFrom, annihilationFor, dataSamplesGroupedForLifespans, sampleWhensGroupedForLifespans) with RecordingsForAnIdContracts
+      yield new RecordingsForAPhoenixId(historyId, historiesFrom, annihilationFor, dataSamplesGroupedForLifespans, sampleWhensGroupedForLifespans, forbidMeasurements) with RecordingsForAnIdContracts
 
     def idsAreNotRepeated(recordingsForVariousIds: List[RecordingsForAnId]) = {
       recordingsForVariousIds groupBy (_.historyId) forall { case (_, repeatedIdGroup) => 1 == repeatedIdGroup.size }
@@ -443,14 +445,14 @@ trait WorldSpecSupport {
   }
 
 
-  def mixedRecordingsGroupedByIdGenerator(faulty: Boolean = false, forbidAnnihilations: Boolean) = {
+  def mixedRecordingsGroupedByIdGenerator(faulty: Boolean = false, forbidAnnihilations: Boolean, forbidMeasurements: Boolean = false) = {
     val mixedDisjointLeftHandDataSamplesForAnIdGenerator = Gen.frequency(Seq(
       dataSamplesForAnIdGenerator_[FooHistory](dataSampleGenerator1(faulty), fooHistoryIdGenerator, Some(moreSpecificFooDataSampleGenerator(faulty))),
       dataSamplesForAnIdGenerator_[FooHistory](dataSampleGenerator2(faulty), fooHistoryIdGenerator),
       dataSamplesForAnIdGenerator_[MoreSpecificFooHistory](moreSpecificFooDataSampleGenerator(faulty), moreSpecificFooHistoryIdGenerator)) map (1 -> _): _*)
 
     val disjointLeftHandDataSamplesForAnIdGenerator = mixedDisjointLeftHandDataSamplesForAnIdGenerator
-    val disjointLeftHandRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(disjointLeftHandDataSamplesForAnIdGenerator, forbidAnnihilations = faulty || forbidAnnihilations)
+    val disjointLeftHandRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(disjointLeftHandDataSamplesForAnIdGenerator, forbidAnnihilations = faulty || forbidAnnihilations, forbidMeasurements = forbidMeasurements)
 
     val mixedDisjointRightHandDataSamplesForAnIdGenerator = Gen.frequency(Seq(
       dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator3(faulty), barHistoryIdGenerator),
@@ -459,7 +461,7 @@ trait WorldSpecSupport {
       dataSamplesForAnIdGenerator_[IntegerHistory](integerDataSampleGenerator(faulty), integerHistoryIdGenerator)) map (1 -> _): _*)
 
     val disjointRightHandDataSamplesForAnIdGenerator = mixedDisjointRightHandDataSamplesForAnIdGenerator
-    val disjointRightHandRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(disjointRightHandDataSamplesForAnIdGenerator, forbidAnnihilations = faulty || forbidAnnihilations)
+    val disjointRightHandRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(disjointRightHandDataSamplesForAnIdGenerator, forbidAnnihilations = faulty || forbidAnnihilations, forbidMeasurements = forbidMeasurements)
 
     val recordingsWithPotentialSharingOfIdsAcrossTheTwoDisjointHands = for {leftHandRecordingsGroupedById <- disjointLeftHandRecordingsGroupedByIdGenerator
                                                                             rightHandRecordingsGroupedById <- disjointRightHandRecordingsGroupedByIdGenerator} yield leftHandRecordingsGroupedById -> rightHandRecordingsGroupedById
@@ -472,7 +474,7 @@ trait WorldSpecSupport {
       yield leftHand ++ rightHand
   }
 
-  def recordingsGroupedByIdGenerator(forbidAnnihilations: Boolean) = mixedRecordingsGroupedByIdGenerator(forbidAnnihilations = forbidAnnihilations)
+  def recordingsGroupedByIdGenerator(forbidAnnihilations: Boolean, forbidMeasurements: Boolean = false) = mixedRecordingsGroupedByIdGenerator(forbidAnnihilations = forbidAnnihilations, forbidMeasurements = forbidMeasurements)
 
   // These recordings don't allow the possibility of the same id being shared by bitemporals of related (but different)
   // types when these are plugged into tests that use them to correct one world history into another. Note that we don't
