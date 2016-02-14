@@ -44,7 +44,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
     idToItemStatesMap.get(id) match {
       case Some(itemStates) =>
-        val compatibleItemStates = itemStates filter (_.isCompatibleWith(typeTag[Raw]))
+        val compatibleItemStates = itemStates filter (_.canBeAnnihilatedAs(typeTag[Raw]))
 
         if (compatibleItemStates.nonEmpty) {
           for (itemState <- compatibleItemStates) {
@@ -92,9 +92,12 @@ trait PatchRecorderImplementation extends PatchRecorder {
     private var _upperBoundTypeTag = initialTypeTag
 
     def isInconsistentWith(typeTag: TypeTag[_ <: Identified]) =
-      typeTag.tpe <:< this._upperBoundTypeTag.tpe && !isCompatibleWith(typeTag)
+      typeTag.tpe <:< this._upperBoundTypeTag.tpe && !isFusibleWith(typeTag)
 
-    def isCompatibleWith(typeTag: TypeTag[_ <: Identified]) = this._lowerBoundTypeTag.tpe <:< typeTag.tpe || typeTag.tpe <:< this._lowerBoundTypeTag.tpe
+    def isFusibleWith(typeTag: TypeTag[_ <: Identified]) = this._lowerBoundTypeTag.tpe <:< typeTag.tpe || typeTag.tpe <:< this._lowerBoundTypeTag.tpe
+
+    def canBeAnnihilatedAs(typeTag: TypeTag[_ <: Identified]) =
+      this._lowerBoundTypeTag.tpe <:< typeTag.tpe
 
     def addPatch(when: Unbounded[Instant], patch: AbstractPatch[_ <: Identified]) = {
       candidatePatches += ((nextSequenceIndex(), patch, when))
@@ -172,7 +175,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
       throw new RuntimeException(s"There is at least one item of id: '${patch.id}' that would be inconsistent with type '${patch.capturedTypeTag.tpe}', these have types: '${clashingItemStates map (_.lowerBoundTypeTag.tpe)}'.")
     }
 
-    val compatibleItemStates = itemStates filter (_.isCompatibleWith(patch.capturedTypeTag))
+    val compatibleItemStates = itemStates filter (_.isFusibleWith(patch.capturedTypeTag))
 
     if (compatibleItemStates.nonEmpty) if (1 < compatibleItemStates.size) {
       throw new scala.RuntimeException(s"There is more than one item of id: '${patch.id}' compatible with type '${patch.capturedTypeTag.tpe}', these have types: '${compatibleItemStates map (_.lowerBoundTypeTag.tpe)}'.")
