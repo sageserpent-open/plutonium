@@ -178,7 +178,8 @@ trait WorldSpecSupport {
 
   trait RecordingsForAnIdContracts {
     self: RecordingsForAnId =>
-    require(BargainBasement.isSorted(events map (_._1)))
+    val eventWhens = events map (_._1)
+    require(eventWhens zip eventWhens.tail forall {case (lhs, rhs) => lhs <= rhs})
   }
 
   case class RecordingsNoLaterThan(historyId: Any, historiesFrom: Scope => Seq[History], datums: List[(Any, Unbounded[Instant])])
