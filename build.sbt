@@ -19,4 +19,4 @@ lazy val settings = Seq(organization := "com.sageserpent",
 
 lazy val plutonium = (project in file(".")).settings(settings: _*)
 
-resolvers += Resolver.bintrayRepo("sageserpent-open", "maven")
+resolvers += Resolver.jcenterRepo
