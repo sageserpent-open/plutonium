@@ -18,7 +18,7 @@ import com.sageserpent.americium.randomEnrichment._
   */
 class ExperimentalWorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSupport {
   implicit override val generatorDrivenConfig =
-    PropertyCheckConfig(maxSize = 15)
+    PropertyCheckConfig(maxSize = 20, minSuccessful = 200)
 
   "An experimental world" should "reflect the scope used to define it" in {
     val testCaseGenerator = for {forkAsOf <- instantGenerator
@@ -48,7 +48,7 @@ class ExperimentalWorldSpec extends FlatSpec with Matchers with Checkers with Wo
   it should "respond to scope queries in the same way as its base world as long as the scope for querying is contained within the defining scope, as long as no measurements are involved" in {
     val testCaseGenerator = for {forkAsOf <- instantGenerator
                                  forkWhen <- unboundedInstantGenerator
-                                 queryAsOfNoLaterThanFork <- instantGenerator if !forkAsOf.isBefore(queryAsOfNoLaterThanFork)
+                                 queryAsOfNoLaterThanFork <- instantGenerator retryUntil (queryAsOfNoLaterThanFork => !forkAsOf.isBefore(queryAsOfNoLaterThanFork))
                                  queryWhenNoLaterThanFork <- unboundedInstantGenerator if queryWhenNoLaterThanFork <= forkWhen
                                  baseWorld <- worldGenerator
                                  recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false, forbidMeasurements = true)
@@ -156,7 +156,7 @@ class ExperimentalWorldSpec extends FlatSpec with Matchers with Checkers with Wo
   it should "not yield any further history beyond the defining scope's when provided it has not been further revised" in {
     val testCaseGenerator = for {forkAsOf <- instantGenerator
                                  forkWhen <- unboundedInstantGenerator
-                                 queryAsOfNoLaterThanFork <- instantGenerator if !forkAsOf.isBefore(queryAsOfNoLaterThanFork)
+                                 queryAsOfNoLaterThanFork <- instantGenerator retryUntil (queryAsOfNoLaterThanFork => !forkAsOf.isBefore(queryAsOfNoLaterThanFork))
                                  queryWhenAfterFork <- unboundedInstantGenerator if queryWhenAfterFork > forkWhen
                                  baseWorld <- worldGenerator
                                  recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
