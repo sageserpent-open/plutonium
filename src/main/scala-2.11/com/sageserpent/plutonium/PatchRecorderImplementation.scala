@@ -14,7 +14,7 @@ import scala.reflect.runtime.universe._
 trait PatchRecorderImplementation extends PatchRecorder {
   // This class makes no pretence at exception safety - it doesn't need to in the context
   // of the client 'WorldReferenceImplementation', which provides exception safety at a higher level.
-  self: BestPatchSelection with IdentifiedItemFactory =>
+  self: BestPatchSelection with IdentifiedItemAccess with IdentifiedItemAnnihilation =>
   private var _whenEventPertainedToByLastRecordingTookPlace: Option[Unbounded[Instant]] = None
 
   private var _allRecordingsAreCaptured = false
@@ -39,12 +39,17 @@ trait PatchRecorderImplementation extends PatchRecorder {
     relevantItemStateFor(patch).addPatch(when, patch)
   }
 
+  def annihilateItemFor_[SubclassOfRaw <: Raw, Raw <: Identified](id: Raw#Id, typeTag: universe.TypeTag[SubclassOfRaw], when: Instant): Unit = {
+    annihilateItemFor[SubclassOfRaw](id.asInstanceOf[SubclassOfRaw#Id], when)(typeTag)
+  }
+
   override def recordAnnihilation[Raw <: Identified : TypeTag](when: Instant, id: Raw#Id): Unit = {
     _whenEventPertainedToByLastRecordingTookPlace = Some(Finite(when))
 
     idToItemStatesMap.get(id) match {
       case Some(itemStates) =>
-        val compatibleItemStates = itemStates filter (_.canBeAnnihilatedAs(typeTag[Raw]))
+        val expectedTypeTag = typeTag[Raw]
+        val compatibleItemStates = itemStates filter (_.canBeAnnihilatedAs(expectedTypeTag))
 
         if (compatibleItemStates.nonEmpty) {
           for (itemState <- compatibleItemStates) {
@@ -55,11 +60,12 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
           val sequenceIndex = nextSequenceIndex()
 
-          actionQueue.enqueue((sequenceIndex, Unit => {
-            annihilateItemsFor(id, when)
+          actionQueue.enqueue((sequenceIndex, Unit => for (itemStateToBeAnnihilated <- compatibleItemStates){
+            val typeTagForSpecificItem = itemStateToBeAnnihilated.lowerBoundTypeTag
+            annihilateItemFor_(id, typeTagForSpecificItem, when)
           }, Finite(when)))
-        } else throw new RuntimeException(s"Attempt to annihilate item of id: $id that does not exist at: $when.")
-      case None => throw new RuntimeException(s"Attempt to annihilate item of id: $id that does not exist at: $when.")
+        } else throw new RuntimeException(s"Attempt to annihilate item of id: $id that does not exist with the expected type of '${expectedTypeTag.tpe}' at: $when, the items that do exist have types: '${compatibleItemStates map (_.lowerBoundTypeTag.tpe) toList}'.")
+      case None => throw new RuntimeException(s"Attempt to annihilate item of id: $id that does not exist at all at: $when.")
     }
   }
 
@@ -84,7 +90,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
   private type CandidatePatches = mutable.MutableList[(SequenceIndex, AbstractPatch[_ <: Identified], Unbounded[Instant])]
 
-  private class ItemState(initialTypeTag: TypeTag[_ <: Identified]) extends IdentifiedItemFactory {
+  private class ItemState(initialTypeTag: TypeTag[_ <: Identified]) extends IdentifiedItemAccess {
     private var _lowerBoundTypeTag = initialTypeTag
 
     def lowerBoundTypeTag = _lowerBoundTypeTag
@@ -134,23 +140,21 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
     private val candidatePatches: CandidatePatches = mutable.MutableList.empty[(SequenceIndex, AbstractPatch[_ <: Identified], Unbounded[Instant])]
 
-    def createItem[SubclassOfRaw <: Raw, Raw <: Identified](id: Raw#Id, typeTag: universe.TypeTag[SubclassOfRaw]): SubclassOfRaw = {
+    def itemFor_[SubclassOfRaw <: Raw, Raw <: Identified](id: Raw#Id, typeTag: universe.TypeTag[SubclassOfRaw]): SubclassOfRaw = {
       PatchRecorderImplementation.this.itemFor[SubclassOfRaw](id.asInstanceOf[SubclassOfRaw#Id])(typeTag)
     }
 
     override def itemFor[Raw <: Identified : universe.TypeTag](id: Raw#Id): Raw = {
       cachedItem match {
         case None =>
-          implicit val typeTag = this._lowerBoundTypeTag
-          val result = createItem(id, typeTag).asInstanceOf[Raw]
+          val typeTag = this._lowerBoundTypeTag
+          val result = itemFor_(id, typeTag).asInstanceOf[Raw]
           cachedItem = Some(result)
           result
         case Some(item) =>
           item.asInstanceOf[Raw]
       }
     }
-
-    override def annihilateItemsFor[Raw <: Identified : universe.TypeTag](id: Raw#Id, when: Instant): Unit = PatchRecorderImplementation.this.annihilateItemsFor(id, when)
   }
 
   private val idToItemStatesMap = mutable.Map.empty[Any, mutable.Set[ItemState]]

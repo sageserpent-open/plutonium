@@ -29,7 +29,7 @@ trait BestPatchSelectionContracts extends BestPatchSelection {
 
 
 trait PatchRecorder {
-  self: BestPatchSelection with IdentifiedItemFactory =>
+  self: BestPatchSelection with IdentifiedItemAnnihilation =>
 
   def whenEventPertainedToByLastRecordingTookPlace: Option[Unbounded[Instant]]
 
@@ -47,7 +47,7 @@ trait PatchRecorder {
 }
 
 trait PatchRecorderContracts extends PatchRecorder {
-  self: BestPatchSelectionContracts with IdentifiedItemFactory =>
+  self: BestPatchSelectionContracts with IdentifiedItemAnnihilation =>
 
   require(whenEventPertainedToByLastRecordingTookPlace.isEmpty)
   require(!allRecordingsAreCaptured)

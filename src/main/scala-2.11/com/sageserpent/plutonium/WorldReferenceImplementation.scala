@@ -150,13 +150,15 @@ object WorldReferenceImplementation {
         itemsAreLocked = false
       } { _ => itemsAreLocked = true
       }(List.empty)) {
-        val patchRecorder = new PatchRecorderImplementation with PatchRecorderContracts with BestPatchSelectionImplementation with BestPatchSelectionContracts with IdentifiedItemFactory {
+        val patchRecorder = new PatchRecorderImplementation with PatchRecorderContracts
+          with BestPatchSelectionImplementation with BestPatchSelectionContracts
+          with IdentifiedItemAccess with IdentifiedItemAnnihilation {
           override def itemFor[Raw <: Identified : universe.TypeTag](id: Raw#Id): Raw = {
             identifiedItemsScopeThis.itemFor[Raw](id)
           }
 
-          override def annihilateItemsFor[Raw <: Identified : universe.TypeTag](id: Raw#Id, when: Instant): Unit = {
-            identifiedItemsScopeThis.annihilateItemsFor[Raw](id, when)
+          override def annihilateItemFor[Raw <: Identified : universe.TypeTag](id: Raw#Id, when: Instant): Unit = {
+            identifiedItemsScopeThis.annihilateItemFor[Raw](id, when)
           }
         }
 
@@ -251,7 +253,7 @@ object WorldReferenceImplementation {
       }
     }
 
-    private def annihilateItemsFor[Raw <: Identified : TypeTag](id: Raw#Id, when: Instant): Unit = {
+    private def annihilateItemFor[Raw <: Identified : TypeTag](id: Raw#Id, when: Instant): Unit = {
       idToItemsMultiMap.get(id) match {
         case (Some(items)) =>
           assert(items.nonEmpty)
@@ -260,8 +262,9 @@ object WorldReferenceImplementation {
           // evaluate the stream as the underlying source collection, namely 'items' is being mutated. This is
           // what you get when you go back to imperative programming after too much referential transparency.
           val itemsSelectedForAnnihilation = IdentifiedItemsScopeImplementation.yieldOnlyItemsOfType(items).force
+          assert(1 == itemsSelectedForAnnihilation.size)
 
-          items --= itemsSelectedForAnnihilation
+          items -= itemsSelectedForAnnihilation.head
 
           if (items.isEmpty)
             idToItemsMultiMap.remove(id)
