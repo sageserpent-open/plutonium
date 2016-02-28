@@ -15,7 +15,7 @@ trait Identified {
   // invariant is considered an admissible failure, unlike for a conventional invariant,
   // where it would be a fatal assertion failure. This is to allow a world to check the
   // effects of a revision, which may cause an inconsistency.
-  def checkBitemporalInvariant: Bitemporal[Unit] = ().point[Bitemporal]
+  def checkBitemporalInvariant: Bitemporal[() => Unit] = (() => ()).point[Bitemporal]
 }
 
 

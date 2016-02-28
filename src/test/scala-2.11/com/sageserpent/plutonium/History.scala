@@ -1,16 +1,16 @@
 package com.sageserpent.plutonium
 
 /**
- * Created by Gerard on 21/09/2015.
- */
+  * Created by Gerard on 21/09/2015.
+  */
 abstract class History extends Identified {
   override def hashCode = super.hashCode
 
   var isConsistent = true
 
-  override def checkBitemporalInvariant: Bitemporal[Unit] = {
-    if (!isConsistent) throw WorldSpecSupport.changeError
-    super.checkBitemporalInvariant
+  override def checkBitemporalInvariant: Bitemporal[() => Unit] = {
+    for {_ <- super.checkBitemporalInvariant
+    } yield (() => if (!isConsistent) throw WorldSpecSupport.changeError)
   }
 
   private val _datums = scala.collection.mutable.MutableList.empty[Any]
@@ -29,7 +29,7 @@ abstract class History extends Identified {
   }
 
   val datums: scala.collection.Seq[Any] = _datums
-  
+
   var shouldBeUnchanged: Boolean = true
 
   val propertyAllowingSecondOrderMutation = scala.collection.mutable.MutableList.empty[Any]
