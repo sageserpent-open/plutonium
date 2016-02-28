@@ -23,7 +23,12 @@ import scala.util.Random
 import scalaz.std.stream
 
 
+object WorldSpecSupport {
+  lazy val changeError = new Error("Error in making a change.")
+}
+
 trait WorldSpecSupport {
+  import WorldSpecSupport._
 
   // This looks odd, but the idea is *recreate* world instances each time the generator is used.
   val worldGenerator = Gen.const(() => new WorldReferenceImplementation[Int]) map (_.apply)
@@ -48,8 +53,6 @@ trait WorldSpecSupport {
 
   val moreSpecificFooHistoryIdGenerator = fooHistoryIdGenerator // Just making a point that both kinds of bitemporal will use the same type of ids.
 
-  lazy val changeError = new Error("Error in making a change.")
-
   private def eventConstructor[AHistory <: History : TypeTag](makeAChange: Boolean)(when: Unbounded[Instant])(id: AHistory#Id, effect: Spore[AHistory, Unit]) =
   // Yeuch!! Why can't I just partially apply Change.apply and then return that, dropping the extra arguments?
     if (makeAChange) Change(when)(id, effect) else Measurement(when)(id, effect)
@@ -71,7 +74,7 @@ trait WorldSpecSupport {
   }))
 
   def dataSampleGenerator2(faulty: Boolean) = for {data <- Arbitrary.arbitrary[Boolean]} yield (data, (when: Unbounded[Instant], makeAChange: Boolean, fooHistoryId: FooHistory#Id) => eventConstructor[FooHistory](makeAChange)(when)(fooHistoryId, (fooHistory: FooHistory) => {
-    if (capture(faulty)) throw changeError // Modelling an admissible postcondition failure.
+    if (capture(faulty)) fooHistory.isConsistent = false // Modelling an admissible bitemporal invariant failure.
     try{
       fooHistory.id
       fooHistory.datums
