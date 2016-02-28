@@ -186,6 +186,26 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
     })
   }
 
+  it should "not permit an inconsistent revision to be made" in {
+    val testCaseGenerator = for {world <- worldGenerator
+                                 faultyRecordingsGroupedById <- faultyRecordingsGroupedByIdGenerator
+                                 seed <- seedGenerator
+                                 random = new Random(seed)
+                                 bigShuffledFaultyHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, faultyRecordingsGroupedById).zipWithIndex)
+                                 asOfs <- Gen.listOfN(bigShuffledFaultyHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
+                                 queryWhen <- unboundedInstantGenerator
+    } yield (world, faultyRecordingsGroupedById, bigShuffledFaultyHistoryOverLotsOfThings, asOfs, queryWhen)
+    check(Prop.forAllNoShrink(testCaseGenerator) { case (world, faultyRecordingsGroupedById, bigShuffledFaultyHistoryOverLotsOfThings, asOfs, queryWhen) =>
+      (try {
+        recordEventsInWorld(liftRecordings(bigShuffledFaultyHistoryOverLotsOfThings), asOfs, world)
+        Prop.falsified
+      }
+      catch {
+        case exception if exception == WorldSpecSupport.changeError => Prop.proved
+      }) :| "An exception should have been thrown when making an inconsistent revision."
+    })
+  }
+
   it should "reveal all the history up to the 'when' limit of a scope made from it" in {
     val testCaseGenerator = for {world <- worldGenerator
                                  recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)

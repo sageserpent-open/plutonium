@@ -23,7 +23,12 @@ import scala.util.Random
 import scalaz.std.stream
 
 
+object WorldSpecSupport {
+  lazy val changeError = new RuntimeException("Error in making a change.")
+}
+
 trait WorldSpecSupport {
+  import WorldSpecSupport._
 
   // This looks odd, but the idea is *recreate* world instances each time the generator is used.
   val worldGenerator = Gen.const(() => new WorldReferenceImplementation[Int]) map (_.apply)
@@ -47,8 +52,6 @@ trait WorldSpecSupport {
   val integerHistoryIdGenerator = stringIdGenerator
 
   val moreSpecificFooHistoryIdGenerator = fooHistoryIdGenerator // Just making a point that both kinds of bitemporal will use the same type of ids.
-
-  lazy val changeError = new Error("Error in making a change.")
 
   private def eventConstructor[AHistory <: History : TypeTag](makeAChange: Boolean)(when: Unbounded[Instant])(id: AHistory#Id, effect: Spore[AHistory, Unit]) =
   // Yeuch!! Why can't I just partially apply Change.apply and then return that, dropping the extra arguments?
@@ -393,7 +396,7 @@ trait WorldSpecSupport {
     for (revisionAction <- revisionActions(bigShuffledHistoryOverLotsOfThings, asOfs, world)) try {
       revisionAction()
     } catch {
-      case error if changeError == error =>
+      case exception if changeError == exception =>
     }
   }
 

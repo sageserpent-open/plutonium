@@ -22,7 +22,7 @@ abstract class History extends Identified {
   }
 
   val datums: scala.collection.Seq[Any] = _datums
-  
+
   var shouldBeUnchanged: Boolean = true
 
   val propertyAllowingSecondOrderMutation = scala.collection.mutable.MutableList.empty[Any]
