@@ -6,13 +6,6 @@ package com.sageserpent.plutonium
 class FooHistory(val id: FooHistory#Id) extends History {
   type Id = String
 
-  var isConsistent = true
-
-  override def checkBitemporalInvariant: Bitemporal[Unit] = {
-    if (!isConsistent) throw WorldSpecSupport.changeError
-    super.checkBitemporalInvariant
-  }
-
   def property1 = ???
 
   def property1_=(data: String): Unit = {

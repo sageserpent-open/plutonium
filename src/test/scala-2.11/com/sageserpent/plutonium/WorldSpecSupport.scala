@@ -24,7 +24,7 @@ import scalaz.std.stream
 
 
 object WorldSpecSupport {
-  lazy val changeError = new Error("Error in making a change.")
+  lazy val changeError = new RuntimeException("Error in making a change.")
 }
 
 trait WorldSpecSupport {
@@ -58,7 +58,7 @@ trait WorldSpecSupport {
     if (makeAChange) Change(when)(id, effect) else Measurement(when)(id, effect)
 
   def dataSampleGenerator1(faulty: Boolean) = for {data <- Arbitrary.arbitrary[String]} yield (data, (when: americium.Unbounded[Instant], makeAChange: Boolean, fooHistoryId: FooHistory#Id) => eventConstructor[FooHistory](makeAChange)(when)(fooHistoryId, (fooHistory: FooHistory) => {
-    if (capture(faulty)) throw changeError // Modelling a precondition failure.
+    if (capture(faulty)) fooHistory.isConsistent = false // Modelling an admissible bitemporal invariant failure.
     try{
       fooHistory.id
       fooHistory.datums
@@ -74,7 +74,7 @@ trait WorldSpecSupport {
   }))
 
   def dataSampleGenerator2(faulty: Boolean) = for {data <- Arbitrary.arbitrary[Boolean]} yield (data, (when: Unbounded[Instant], makeAChange: Boolean, fooHistoryId: FooHistory#Id) => eventConstructor[FooHistory](makeAChange)(when)(fooHistoryId, (fooHistory: FooHistory) => {
-    if (capture(faulty)) fooHistory.isConsistent = false // Modelling an admissible bitemporal invariant failure.
+    if (capture(faulty)) throw changeError // Modelling an admissible postcondition failure.
     try{
       fooHistory.id
       fooHistory.datums
@@ -90,7 +90,7 @@ trait WorldSpecSupport {
   }))
 
   def dataSampleGenerator3(faulty: Boolean) = for {data <- Arbitrary.arbitrary[Double]} yield (data, (when: Unbounded[Instant], makeAChange: Boolean, barHistoryId: BarHistory#Id) => eventConstructor[BarHistory](makeAChange)(when)(barHistoryId, (barHistory: BarHistory) => {
-    if (capture(faulty)) throw changeError
+    if (capture(faulty)) barHistory.isConsistent = false // Modelling an admissible bitemporal invariant failure.
     try{
       barHistory.id
       barHistory.datums
@@ -138,12 +138,12 @@ trait WorldSpecSupport {
   }))
 
   def integerDataSampleGenerator(faulty: Boolean) = for {data <- Arbitrary.arbitrary[Int]} yield (data, (when: americium.Unbounded[Instant], makeAChange: Boolean, integerHistoryId: IntegerHistory#Id) => eventConstructor[IntegerHistory](makeAChange)(when)(integerHistoryId, (integerHistory: IntegerHistory) => {
-    if (capture(faulty)) throw changeError // Modelling a precondition failure.
+    if (capture(faulty)) integerHistory.isConsistent = false // Modelling an admissible bitemporal invariant failure.
     integerHistory.integerProperty = capture(data)
   }))
 
   def moreSpecificFooDataSampleGenerator(faulty: Boolean) = for {data <- Gen.oneOf(Arbitrary.arbitrary[String], Arbitrary.arbitrary[Double])} yield (data, (when: americium.Unbounded[Instant], makeAChange: Boolean, fooHistoryId: MoreSpecificFooHistory#Id) => eventConstructor[MoreSpecificFooHistory](makeAChange)(when)(fooHistoryId, (fooHistory: MoreSpecificFooHistory) => {
-    if (capture(faulty)) throw changeError // Modelling a precondition failure.
+    if (capture(faulty)) fooHistory.isConsistent = false // Modelling an admissible bitemporal invariant failure.
     capture(data) match {
       case stringData: String => fooHistory.property1 = stringData
       case doubleData: Double => fooHistory.property3 = doubleData
@@ -396,7 +396,7 @@ trait WorldSpecSupport {
     for (revisionAction <- revisionActions(bigShuffledHistoryOverLotsOfThings, asOfs, world)) try {
       revisionAction()
     } catch {
-      case error if changeError == error =>
+      case exception if changeError == exception =>
     }
   }
 

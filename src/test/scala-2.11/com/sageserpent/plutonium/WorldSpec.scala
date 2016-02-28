@@ -196,10 +196,13 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
                                  queryWhen <- unboundedInstantGenerator
     } yield (world, faultyRecordingsGroupedById, bigShuffledFaultyHistoryOverLotsOfThings, asOfs, queryWhen)
     check(Prop.forAllNoShrink(testCaseGenerator) { case (world, faultyRecordingsGroupedById, bigShuffledFaultyHistoryOverLotsOfThings, asOfs, queryWhen) =>
-      {
-        intercept[RuntimeException](recordEventsInWorld(liftRecordings(bigShuffledFaultyHistoryOverLotsOfThings), asOfs, world))
-        Prop.proved
-      } :| "An exception should have been thrown when making an inconsistent revision."
+      (try {
+        recordEventsInWorld(liftRecordings(bigShuffledFaultyHistoryOverLotsOfThings), asOfs, world)
+        Prop.falsified
+      }
+      catch {
+        case exception if exception == WorldSpecSupport.changeError => Prop.proved
+      }) :| "An exception should have been thrown when making an inconsistent revision."
     })
   }
 
