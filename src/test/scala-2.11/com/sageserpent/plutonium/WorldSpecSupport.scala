@@ -71,7 +71,6 @@ trait WorldSpecSupport {
   }))
 
   def dataSampleGenerator2(faulty: Boolean) = for {data <- Arbitrary.arbitrary[Boolean]} yield (data, (when: Unbounded[Instant], makeAChange: Boolean, fooHistoryId: FooHistory#Id) => eventConstructor[FooHistory](makeAChange)(when)(fooHistoryId, (fooHistory: FooHistory) => {
-    if (capture(faulty)) throw changeError // Modelling an admissible postcondition failure.
     try{
       fooHistory.id
       fooHistory.datums
@@ -84,10 +83,11 @@ trait WorldSpecSupport {
       case _ :RuntimeException =>
     }
     fooHistory.property2 = capture(data)
+    if (capture(faulty)) throw changeError // Modelling an admissible postcondition failure.
   }))
 
   def dataSampleGenerator3(faulty: Boolean) = for {data <- Arbitrary.arbitrary[Double]} yield (data, (when: Unbounded[Instant], makeAChange: Boolean, barHistoryId: BarHistory#Id) => eventConstructor[BarHistory](makeAChange)(when)(barHistoryId, (barHistory: BarHistory) => {
-    if (capture(faulty)) throw changeError
+    if (capture(faulty)) throw changeError // Modelling a precondition failure.
     try{
       barHistory.id
       barHistory.datums
@@ -98,12 +98,11 @@ trait WorldSpecSupport {
     catch {
       case _ :RuntimeException =>
     }
-    barHistory.property1 = capture(data) // Modelling a precondition failure.
+    barHistory.property1 = capture(data)
   }))
 
   def dataSampleGenerator4(faulty: Boolean) = for {data1 <- Arbitrary.arbitrary[String]
                                                    data2 <- Arbitrary.arbitrary[Int]} yield (data1 -> data2, (when: americium.Unbounded[Instant], makeAChange: Boolean, barHistoryId: BarHistory#Id) => eventConstructor[BarHistory](makeAChange)(when)(barHistoryId, (barHistory: BarHistory) => {
-    if (capture(faulty)) throw changeError // Modelling an admissible postcondition failure.
     try{
       barHistory.id
       barHistory.datums
@@ -115,12 +114,12 @@ trait WorldSpecSupport {
       case _ :RuntimeException =>
     }
     barHistory.method1(capture(data1), capture(data2))
+    if (capture(faulty)) throw changeError // Modelling an admissible postcondition failure.
   }))
 
   def dataSampleGenerator5(faulty: Boolean) = for {data1 <- Arbitrary.arbitrary[Int]
                                                    data2 <- Arbitrary.arbitrary[String]
                                                    data3 <- Arbitrary.arbitrary[Boolean]} yield ((data1, data2, data3), (when: Unbounded[Instant], makeAChange: Boolean, barHistoryId: BarHistory#Id) => eventConstructor[BarHistory](makeAChange)(when)(barHistoryId, (barHistory: BarHistory) => {
-    if (capture(faulty)) throw changeError // Modelling an admissible postcondition failure.
     try{
       barHistory.id
       barHistory.datums
@@ -132,6 +131,7 @@ trait WorldSpecSupport {
       case _ :RuntimeException =>
     }
     barHistory.method2(capture(data1), capture(data2), capture(data3))
+    if (capture(faulty)) throw changeError // Modelling an admissible postcondition failure.
   }))
 
   def integerDataSampleGenerator(faulty: Boolean) = for {data <- Arbitrary.arbitrary[Int]} yield (data, (when: americium.Unbounded[Instant], makeAChange: Boolean, integerHistoryId: IntegerHistory#Id) => eventConstructor[IntegerHistory](makeAChange)(when)(integerHistoryId, (integerHistory: IntegerHistory) => {

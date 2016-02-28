@@ -4,7 +4,6 @@ import java.lang.reflect.Method
 import java.time.Instant
 
 import com.sageserpent.americium.{Finite, NegativeInfinity, PositiveInfinity, Unbounded}
-import com.sageserpent.plutonium.Bitemporal.IdentifiedItemsScope
 import com.sageserpent.plutonium.MutableState.{EventIdToEventMap, EventTimeline}
 import com.sageserpent.plutonium.World.Revision
 import com.sageserpent.plutonium.WorldReferenceImplementation.IdentifiedItemsScopeImplementation
@@ -80,7 +79,7 @@ object WorldReferenceImplementation {
     val nonMutableMembersThatCanAlwaysBeReadFrom = classOf[Identified].getMethods ++ classOf[AnyRef].getMethods
   }
 
-  class IdentifiedItemsScopeImplementation extends IdentifiedItemsScope {
+  class IdentifiedItemsScopeImplementation {
     identifiedItemsScopeThis =>
 
     // The next two mutable fields are concerned with the proxies behaving differently depending on whether
@@ -273,13 +272,13 @@ object WorldReferenceImplementation {
       }
     }
 
-    override def itemsFor[Raw <: Identified : TypeTag](id: Raw#Id): Stream[Raw] = {
+    def itemsFor[Raw <: Identified : TypeTag](id: Raw#Id): Stream[Raw] = {
       val items = idToItemsMultiMap.getOrElse(id, Set.empty[Raw])
 
       IdentifiedItemsScopeImplementation.yieldOnlyItemsOfType(items)
     }
 
-    override def allItems[Raw <: Identified : TypeTag](): Stream[Raw] = IdentifiedItemsScopeImplementation.yieldOnlyItemsOfType(idToItemsMultiMap.values.flatten)
+    def allItems[Raw <: Identified : TypeTag](): Stream[Raw] = IdentifiedItemsScopeImplementation.yieldOnlyItemsOfType(idToItemsMultiMap.values.flatten)
   }
 
 }

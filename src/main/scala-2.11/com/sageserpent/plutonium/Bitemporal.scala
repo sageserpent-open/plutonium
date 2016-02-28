@@ -44,13 +44,6 @@ case class WildcardBitemporalResult[Raw <: Identified : TypeTag]() extends Bitem
 // This companion object can produce a bitemporal instance that refers to zero, one or many raw instances depending
 // how many of those raw instances match the id or wildcard.
 object Bitemporal {
-
-  trait IdentifiedItemsScope {
-    def itemsFor[Raw <: Identified : TypeTag](id: Raw#Id): Stream[Raw]
-
-    def allItems[Raw <: Identified : TypeTag](): Stream[Raw]
-  }
-
   def apply[Raw](raw: Raw) = PointBitemporalResult(raw)
 
   def withId[Raw <: Identified : TypeTag](id: Raw#Id): Bitemporal[Raw] = IdentifiedItemsBitemporalResult(id)
