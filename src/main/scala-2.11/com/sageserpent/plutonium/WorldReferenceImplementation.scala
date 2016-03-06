@@ -148,15 +148,8 @@ object WorldReferenceImplementation {
       } { _ => itemsAreLocked = true
       }(List.empty)) {
         val patchRecorder = new PatchRecorderImplementation with PatchRecorderContracts
-          with BestPatchSelectionImplementation with BestPatchSelectionContracts
-          with IdentifiedItemAccess with IdentifiedItemAnnihilation {
-          override def itemFor[Raw <: Identified : universe.TypeTag](id: Raw#Id): Raw = {
-            identifiedItemsScopeThis.itemFor[Raw](id)
-          }
-
-          override def annihilateItemFor[Raw <: Identified : universe.TypeTag](id: Raw#Id, when: Instant): Unit = {
-            identifiedItemsScopeThis.annihilateItemFor[Raw](id, when)
-          }
+          with BestPatchSelectionImplementation with BestPatchSelectionContracts {
+          override val identifiedItemsScope: IdentifiedItemsScopeImplementation = identifiedItemsScopeThis
         }
 
         val relevantEvents = eventTimeline.bucketsIterator flatMap (_.toArray.sortBy(_._2) map (_._1))
@@ -226,7 +219,7 @@ object WorldReferenceImplementation {
 
     val idToItemsMultiMap = new MultiMap[Identified#Id, Identified]
 
-    private def itemFor[Raw <: Identified : TypeTag](id: Raw#Id): Raw = {
+    def itemFor[Raw <: Identified : TypeTag](id: Raw#Id): Raw = {
       def constructAndCacheItem(): Raw = {
         val item = constructFrom(id, localMethodInterceptor)
         idToItemsMultiMap.addBinding(id, item)
@@ -250,7 +243,7 @@ object WorldReferenceImplementation {
       }
     }
 
-    private def annihilateItemFor[Raw <: Identified : TypeTag](id: Raw#Id, when: Instant): Unit = {
+    def annihilateItemFor[Raw <: Identified : TypeTag](id: Raw#Id, when: Instant): Unit = {
       idToItemsMultiMap.get(id) match {
         case (Some(items)) =>
           assert(items.nonEmpty)

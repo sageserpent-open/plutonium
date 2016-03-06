@@ -14,7 +14,9 @@ import scala.reflect.runtime.universe._
 trait PatchRecorderImplementation extends PatchRecorder {
   // This class makes no pretence at exception safety - it doesn't need to in the context
   // of the client 'WorldReferenceImplementation', which provides exception safety at a higher level.
-  self: BestPatchSelection with IdentifiedItemAccess with IdentifiedItemAnnihilation =>
+  self: BestPatchSelection =>
+  val identifiedItemsScope: WorldReferenceImplementation.IdentifiedItemsScopeImplementation
+
   private var _whenEventPertainedToByLastRecordingTookPlace: Option[Unbounded[Instant]] = None
 
   private var _allRecordingsAreCaptured = false
@@ -40,7 +42,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
   }
 
   def annihilateItemFor_[SubclassOfRaw <: Raw, Raw <: Identified](id: Raw#Id, typeTag: universe.TypeTag[SubclassOfRaw], when: Instant): Unit = {
-    annihilateItemFor[SubclassOfRaw](id.asInstanceOf[SubclassOfRaw#Id], when)(typeTag)
+    identifiedItemsScope.annihilateItemFor[SubclassOfRaw](id.asInstanceOf[SubclassOfRaw#Id], when)(typeTag)
   }
 
   override def recordAnnihilation[Raw <: Identified : TypeTag](when: Instant, id: Raw#Id): Unit = {
@@ -141,7 +143,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
     private val candidatePatches: CandidatePatches = mutable.MutableList.empty[(SequenceIndex, AbstractPatch[_ <: Identified], Unbounded[Instant])]
 
     def itemFor_[SubclassOfRaw <: Raw, Raw <: Identified](id: Raw#Id, typeTag: universe.TypeTag[SubclassOfRaw]): SubclassOfRaw = {
-      PatchRecorderImplementation.this.itemFor[SubclassOfRaw](id.asInstanceOf[SubclassOfRaw#Id])(typeTag)
+      PatchRecorderImplementation.this.identifiedItemsScope.itemFor[SubclassOfRaw](id.asInstanceOf[SubclassOfRaw#Id])(typeTag)
     }
 
     override def itemFor[Raw <: Identified : universe.TypeTag](id: Raw#Id): Raw = {
