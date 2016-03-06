@@ -15,6 +15,7 @@ object AbstractPatch {
 abstract class AbstractPatch[Raw <: Identified: TypeTag](val id: Raw#Id){
   val capturedTypeTag = typeTag[Raw]
   def apply(identifiedItemFactory: IdentifiedItemAccess): Unit
+  def checkInvariant(scope: Scope): Unit
 }
 
 

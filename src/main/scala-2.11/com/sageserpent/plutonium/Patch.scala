@@ -15,4 +15,12 @@ class Patch[Raw <: Identified : TypeTag](override val id: Raw#Id, method: Method
     val targetToBePatched = identifiedItemFactory.itemFor[Raw](id)
     methodProxy.invoke(targetToBePatched, arguments)
   }
+
+  def checkInvariant(scope: Scope): Unit = {
+    val bitemporalInvariant = for {
+      target <- Bitemporal.singleOneOf[Raw](id)
+    } yield target.checkInvariant
+
+    scope.render(bitemporalInvariant)
+  }
 }

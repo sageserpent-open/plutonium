@@ -6,7 +6,6 @@ import java.time.Instant
 import com.sageserpent.americium.{Finite, NegativeInfinity, PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.MutableState.{EventIdToEventMap, EventTimeline}
 import com.sageserpent.plutonium.World.Revision
-import com.sageserpent.plutonium.WorldReferenceImplementation.IdentifiedItemsScopeImplementation
 import net.sf.cglib.proxy._
 import resource.makeManagedResource
 
