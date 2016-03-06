@@ -10,7 +10,6 @@ import com.sageserpent.plutonium.WorldReferenceImplementation.IdentifiedItemsSco
 import net.sf.cglib.proxy._
 import resource.makeManagedResource
 
-import scala.{IllegalArgumentException, RuntimeException}
 import scala.collection.Searching._
 import scala.collection.immutable.{SortedBagConfiguration, TreeBag}
 import scala.collection.mutable
@@ -281,58 +280,8 @@ object WorldReferenceImplementation {
     def allItems[Raw <: Identified : TypeTag](): Stream[Raw] = IdentifiedItemsScopeImplementation.yieldOnlyItemsOfType(idToItemsMultiMap.values.flatten)
   }
 
-}
-
-object MutableState {
-  type EventTimeline = TreeBag[(Event, Revision)]
-  type EventIdToEventMap[EventId] = Map[EventId, (Event, Revision)]
-}
-
-case class MutableState[EventId](val revisionToEventDataMap: mutable.Map[Revision, (MutableState.EventTimeline, MutableState.EventIdToEventMap[EventId])],
-                                 var nextRevision: Revision,
-                                 val revisionAsOfs: MutableList[Instant]) {
-}
-
-class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId]) extends World[EventId] {
-  // TODO - thread safety.
-  type Scope = ScopeImplementation
-
-  // Do this as a constructor precondition check.
-  eventDataForNewRevision()
-
-  def this() = this(MutableState(revisionToEventDataMap = scala.collection.mutable.Map.empty[Revision, (MutableState.EventTimeline, MutableState.EventIdToEventMap[EventId])],
-    nextRevision = World.initialRevision,
-    revisionAsOfs = MutableList.empty))
-
-  abstract class ScopeBasedOnNextRevision(val when: Unbounded[Instant], val nextRevision: Revision) extends com.sageserpent.plutonium.Scope {
-    val asOf = nextRevision match {
-      case World.initialRevision => NegativeInfinity[Instant]
-      case _ => Finite(revisionAsOfs(nextRevision - 1))
-    }
-  }
-
-  abstract class ScopeBasedOnAsOf(val when: Unbounded[Instant], unliftedAsOf: Instant) extends com.sageserpent.plutonium.Scope {
-    override val asOf = Finite(unliftedAsOf)
-
-    override val nextRevision: Revision = {
-      revisionAsOfs.search(unliftedAsOf) match {
-        case found@Found(_) => {
-          val versionTimelineNotIncludingAllUpToTheMatch = revisionAsOfs drop (1 + found.foundIndex)
-          versionTimelineNotIncludingAllUpToTheMatch.indexWhere(implicitly[Ordering[Instant]].lt(unliftedAsOf, _)) match {
-            case -1 => revisionAsOfs.length
-            case index => found.foundIndex + 1 + index
-          }
-        }
-        case notFound@InsertionPoint(_) => notFound.insertionPoint
-      }
-    }
-  }
-
   trait ScopeImplementation extends com.sageserpent.plutonium.Scope {
-    val identifiedItemsScope = nextRevision match {
-      case World.initialRevision => new IdentifiedItemsScopeImplementation
-      case _ => new IdentifiedItemsScopeImplementation(when, nextRevision, asOf, mutableState.revisionToEventDataMap(nextRevision - 1)._1)
-    }
+    val identifiedItemsScope: IdentifiedItemsScopeImplementation
 
     override def render[Raw](bitemporal: Bitemporal[Raw]): Stream[Raw] = {
       def itemsFor[Raw <: Identified : TypeTag](id: Raw#Id): Stream[Raw] = {
@@ -377,7 +326,61 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
       }
     }
   }
+}
 
+object MutableState {
+  type EventTimeline = TreeBag[(Event, Revision)]
+  type EventIdToEventMap[EventId] = Map[EventId, (Event, Revision)]
+}
+
+case class MutableState[EventId](val revisionToEventDataMap: mutable.Map[Revision, (MutableState.EventTimeline, MutableState.EventIdToEventMap[EventId])],
+                                 var nextRevision: Revision,
+                                 val revisionAsOfs: MutableList[Instant]) {
+}
+
+class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId]) extends World[EventId] {
+  // TODO - thread safety.
+  import WorldReferenceImplementation._
+
+  type Scope = ScopeImplementation
+
+  // Do this as a constructor precondition check.
+  eventDataForNewRevision()
+
+  def this() = this(MutableState(revisionToEventDataMap = scala.collection.mutable.Map.empty[Revision, (MutableState.EventTimeline, MutableState.EventIdToEventMap[EventId])],
+    nextRevision = World.initialRevision,
+    revisionAsOfs = MutableList.empty))
+
+  abstract class ScopeBasedOnNextRevision(val when: Unbounded[Instant], val nextRevision: Revision) extends com.sageserpent.plutonium.Scope {
+    val asOf = nextRevision match {
+      case World.initialRevision => NegativeInfinity[Instant]
+      case _ => Finite(revisionAsOfs(nextRevision - 1))
+    }
+  }
+
+  abstract class ScopeBasedOnAsOf(val when: Unbounded[Instant], unliftedAsOf: Instant) extends com.sageserpent.plutonium.Scope {
+    override val asOf = Finite(unliftedAsOf)
+
+    override val nextRevision: Revision = {
+      revisionAsOfs.search(unliftedAsOf) match {
+        case found@Found(_) => {
+          val versionTimelineNotIncludingAllUpToTheMatch = revisionAsOfs drop (1 + found.foundIndex)
+          versionTimelineNotIncludingAllUpToTheMatch.indexWhere(implicitly[Ordering[Instant]].lt(unliftedAsOf, _)) match {
+            case -1 => revisionAsOfs.length
+            case index => found.foundIndex + 1 + index
+          }
+        }
+        case notFound@InsertionPoint(_) => notFound.insertionPoint
+      }
+    }
+  }
+
+  trait SelfPopulatedScope extends ScopeImplementation {
+    val identifiedItemsScope = nextRevision match {
+      case World.initialRevision => new IdentifiedItemsScopeImplementation
+      case _ => new IdentifiedItemsScopeImplementation(when, nextRevision, asOf, mutableState.revisionToEventDataMap(nextRevision - 1)._1)
+    }
+  }
 
   override def nextRevision: Revision = mutableState.nextRevision
 
@@ -423,8 +426,6 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
   }
 
   def eventDataForNewRevision(): (EventTimeline, EventIdToEventMap[EventId]) = {
-    import WorldReferenceImplementation._
-
     val (baselineEventTimeline, baselineEventIdToEventMap) = nextRevision match {
       case World.initialRevision => TreeBag.empty[(Event, Revision)] -> Map.empty[EventId, (Event, Revision)]
       case _ => mutableState.revisionToEventDataMap(nextRevision - 1)
@@ -451,10 +452,10 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
   }
 
   // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
-  override def scopeFor(when: Unbounded[Instant], nextRevision: Revision): Scope = new ScopeBasedOnNextRevision(when, nextRevision) with ScopeImplementation
+  override def scopeFor(when: Unbounded[Instant], nextRevision: Revision): Scope = new ScopeBasedOnNextRevision(when, nextRevision) with SelfPopulatedScope
 
   // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
-  override def scopeFor(when: Unbounded[Instant], asOf: Instant): Scope = new ScopeBasedOnAsOf(when, asOf) with ScopeImplementation
+  override def scopeFor(when: Unbounded[Instant], asOf: Instant): Scope = new ScopeBasedOnAsOf(when, asOf) with SelfPopulatedScope
 
   override def forkExperimentalWorld(scope: Scope): World[EventId] = {
     val onePastFinalSharedRevision = scope.nextRevision
