@@ -150,6 +150,8 @@ object WorldReferenceImplementation {
         val patchRecorder = new PatchRecorderImplementation with PatchRecorderContracts
           with BestPatchSelectionImplementation with BestPatchSelectionContracts {
           override val identifiedItemsScope: IdentifiedItemsScopeImplementation = identifiedItemsScopeThis
+          override val asOf: Unbounded[Instant] = _asOf
+          override val nextRevision: Revision = _nextRevision
         }
 
         val relevantEvents = eventTimeline.bucketsIterator flatMap (_.toArray.sortBy(_._2) map (_._1))

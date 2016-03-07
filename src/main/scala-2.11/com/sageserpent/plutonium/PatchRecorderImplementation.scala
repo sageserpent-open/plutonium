@@ -3,6 +3,8 @@ package com.sageserpent.plutonium
 import java.time.Instant
 
 import com.sageserpent.americium.{Finite, Unbounded}
+import com.sageserpent.plutonium.World.Revision
+import com.sageserpent.plutonium.WorldReferenceImplementation.{IdentifiedItemsScopeImplementation, ScopeImplementation}
 import scala.collection.mutable
 import scala.reflect.runtime._
 import scala.reflect.runtime.universe._
@@ -16,6 +18,8 @@ trait PatchRecorderImplementation extends PatchRecorder {
   // of the client 'WorldReferenceImplementation', which provides exception safety at a higher level.
   self: BestPatchSelection =>
   val identifiedItemsScope: WorldReferenceImplementation.IdentifiedItemsScopeImplementation
+  val asOf: Unbounded[Instant]
+  val nextRevision: Revision
 
   private var _whenEventPertainedToByLastRecordingTookPlace: Option[Unbounded[Instant]] = None
 
@@ -133,6 +137,13 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
         actionQueue.enqueue((sequenceIndex, Unit => {
           bestPatch(this)
+          val scopeForInvariantCheck = new ScopeImplementation {
+            override val identifiedItemsScope: IdentifiedItemsScopeImplementation = PatchRecorderImplementation.this.identifiedItemsScope
+            override val nextRevision: Revision = PatchRecorderImplementation.this.nextRevision
+            override val asOf: Unbounded[Instant] = PatchRecorderImplementation.this.asOf
+            override val when: Unbounded[Instant] = when
+          }
+          bestPatch.checkInvariant(scopeForInvariantCheck)
         }, when))
 
         candidatePatches.clear()
