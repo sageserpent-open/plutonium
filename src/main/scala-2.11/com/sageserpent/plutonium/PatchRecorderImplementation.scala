@@ -5,6 +5,7 @@ import java.time.Instant
 import com.sageserpent.americium.{Finite, Unbounded}
 import com.sageserpent.plutonium.World.Revision
 import com.sageserpent.plutonium.WorldReferenceImplementation.{IdentifiedItemsScopeImplementation, ScopeImplementation}
+import resource.ExtractableManagedResource
 import scala.collection.mutable
 import scala.reflect.runtime._
 import scala.reflect.runtime.universe._
@@ -20,6 +21,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
   val identifiedItemsScope: WorldReferenceImplementation.IdentifiedItemsScopeImplementation
   val asOf: Unbounded[Instant]
   val nextRevision: Revision
+  val itemsAreLockedResource: ExtractableManagedResource[Unit]
 
   private var _whenEventPertainedToByLastRecordingTookPlace: Option[Unbounded[Instant]] = None
 
@@ -133,18 +135,21 @@ trait PatchRecorderImplementation extends PatchRecorder {
         // the precise interleaving of events on related items, only that the correct
         // ones have been applied to each item. So does this mean that the action queue
         // can be split across items?
-        val (sequenceIndex, _, when) = candidatePatches.head
+        val (sequenceIndex, _, whenPatchOccurs) = candidatePatches.head
 
         actionQueue.enqueue((sequenceIndex, Unit => {
           bestPatch(this)
-          val scopeForInvariantCheck = new ScopeImplementation {
-            override val identifiedItemsScope: IdentifiedItemsScopeImplementation = PatchRecorderImplementation.this.identifiedItemsScope
-            override val nextRevision: Revision = PatchRecorderImplementation.this.nextRevision
-            override val asOf: Unbounded[Instant] = PatchRecorderImplementation.this.asOf
-            override val when: Unbounded[Instant] = when
+          for (_ <- itemsAreLockedResource)
+          {
+            val scopeForInvariantCheck = new ScopeImplementation {
+              override val identifiedItemsScope: IdentifiedItemsScopeImplementation = PatchRecorderImplementation.this.identifiedItemsScope
+              override val nextRevision: Revision = PatchRecorderImplementation.this.nextRevision
+              override val asOf: Unbounded[Instant] = PatchRecorderImplementation.this.asOf
+              override val when: Unbounded[Instant] = whenPatchOccurs
+            }
+            bestPatch.checkInvariant(scopeForInvariantCheck)
           }
-          bestPatch.checkInvariant(scopeForInvariantCheck)
-        }, when))
+        }, whenPatchOccurs))
 
         candidatePatches.clear()
       }
