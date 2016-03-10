@@ -95,7 +95,7 @@ object WorldReferenceImplementation {
             stopInfiniteRecursiveInterception = true
           } { _ => stopInfiniteRecursiveInterception = false }(List.empty)) {
             if (itemsAreLocked && method.getReturnType == classOf[Unit])
-              throw new UnsupportedOperationException("Attempt to write via: '$method' to an item: '$target' rendered from a bitemporal query.")
+              throw new UnsupportedOperationException(s"Attempt to write via: '$method' to an item: '$target' rendered from a bitemporal query.")
           }
         }
 
