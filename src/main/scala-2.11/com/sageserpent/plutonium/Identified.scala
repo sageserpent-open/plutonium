@@ -13,7 +13,7 @@ trait Identified {
   // it is vital that the subclass uses a for-comprehension to make the conjunction of the subclass part of the
   // invariant with that of the superclass, as the invariant has to be executed *later* when rendered against a
   // scope.
-  val checkInvariant: Bitemporal[Unit] = ().point
+  def checkInvariant: Bitemporal[() => Unit] = (() => ()).point
 }
 
 

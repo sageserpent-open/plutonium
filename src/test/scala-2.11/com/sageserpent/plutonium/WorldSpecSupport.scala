@@ -24,7 +24,7 @@ import scalaz.std.stream
 
 
 object WorldSpecSupport {
-  lazy val changeError = new RuntimeException("Error in making a change.")
+  val changeError = new RuntimeException("Error in making a change.")
 }
 
 trait WorldSpecSupport {
@@ -90,7 +90,7 @@ trait WorldSpecSupport {
   }))
 
   def dataSampleGenerator3(faulty: Boolean) = for {data <- Arbitrary.arbitrary[Double]} yield (data, (when: Unbounded[Instant], makeAChange: Boolean, barHistoryId: BarHistory#Id) => eventConstructor[BarHistory](makeAChange)(when)(barHistoryId, (barHistory: BarHistory) => {
-    if (capture(faulty)) throw changeError // Modelling a precondition failure.
+    if (capture(faulty)) barHistory.isConsistent = false // Modelling an admissible bitemporal invariant failure.
     try{
       barHistory.id
       barHistory.datums
@@ -138,12 +138,12 @@ trait WorldSpecSupport {
   }))
 
   def integerDataSampleGenerator(faulty: Boolean) = for {data <- Arbitrary.arbitrary[Int]} yield (data, (when: americium.Unbounded[Instant], makeAChange: Boolean, integerHistoryId: IntegerHistory#Id) => eventConstructor[IntegerHistory](makeAChange)(when)(integerHistoryId, (integerHistory: IntegerHistory) => {
-    if (capture(faulty)) throw changeError // Modelling a precondition failure.
+    if (capture(faulty)) integerHistory.isConsistent = false // Modelling an admissible bitemporal invariant failure.
     integerHistory.integerProperty = capture(data)
   }))
 
   def moreSpecificFooDataSampleGenerator(faulty: Boolean) = for {data <- Gen.oneOf(Arbitrary.arbitrary[String], Arbitrary.arbitrary[Double])} yield (data, (when: americium.Unbounded[Instant], makeAChange: Boolean, fooHistoryId: MoreSpecificFooHistory#Id) => eventConstructor[MoreSpecificFooHistory](makeAChange)(when)(fooHistoryId, (fooHistory: MoreSpecificFooHistory) => {
-    if (capture(faulty)) throw changeError // Modelling a precondition failure.
+    if (capture(faulty)) fooHistory.isConsistent = false // Modelling an admissible bitemporal invariant failure.
     capture(data) match {
       case stringData: String => fooHistory.property1 = stringData
       case doubleData: Double => fooHistory.property3 = doubleData

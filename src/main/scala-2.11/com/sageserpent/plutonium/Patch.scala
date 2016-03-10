@@ -19,8 +19,10 @@ class Patch[Raw <: Identified : TypeTag](override val id: Raw#Id, method: Method
   def checkInvariant(scope: Scope): Unit = {
     val bitemporalInvariant = for {
       target <- Bitemporal.singleOneOf[Raw](id)
-    } yield target.checkInvariant
+      invariant <- target.checkInvariant
+    } yield invariant
 
-    scope.render(bitemporalInvariant)
+    val invariant = scope.render(bitemporalInvariant).head
+    invariant()
   }
 }
