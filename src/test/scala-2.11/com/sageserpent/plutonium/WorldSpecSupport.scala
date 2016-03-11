@@ -57,21 +57,37 @@ trait WorldSpecSupport {
   // Yeuch!! Why can't I just partially apply Change.apply and then return that, dropping the extra arguments?
     if (makeAChange) Change(when)(id, effect) else Measurement(when)(id, effect)
 
-  def dataSampleGenerator1(faulty: Boolean) = for {data <- Arbitrary.arbitrary[String]} yield (data, (when: americium.Unbounded[Instant], makeAChange: Boolean, fooHistoryId: FooHistory#Id) => eventConstructor[FooHistory](makeAChange)(when)(fooHistoryId, (fooHistory: FooHistory) => {
-    if (capture(faulty)) throw changeError // Modelling a precondition failure.
-    try{
-      fooHistory.id
-      fooHistory.datums
-      fooHistory.property1
-      fooHistory.property2
-      // Neither changes nor measurements are allowed to read from the items they work on.
-      assert(false)
-    }
-    catch {
-      case _ :RuntimeException =>
-    }
-    fooHistory.property1 = capture(data)
-  }))
+  def dataSampleGenerator1(faulty: Boolean) = for {data <- Arbitrary.arbitrary[String]} yield (data, (when: americium.Unbounded[Instant], makeAChange: Boolean, fooHistoryId: FooHistory#Id) => if (!faulty) {
+    eventConstructor[FooHistory](makeAChange)(when)(fooHistoryId, (fooHistory: FooHistory) => {
+      try {
+        fooHistory.id
+        fooHistory.datums
+        fooHistory.property1
+        fooHistory.property2
+        // Neither changes nor measurements are allowed to read from the items they work on.
+        assert(false)
+      }
+      catch {
+        case _: RuntimeException =>
+      }
+      fooHistory.property1 = capture(data)
+    })
+  } else {
+    eventConstructor[BadFooHistory](makeAChange)(when)(fooHistoryId, (fooHistory: BadFooHistory) => {
+      try {
+        fooHistory.id
+        fooHistory.datums
+        fooHistory.property1
+        fooHistory.property2
+        // Neither changes nor measurements are allowed to read from the items they work on.
+        assert(false)
+      }
+      catch {
+        case _: RuntimeException =>
+      }
+      fooHistory.property1 = capture(data)
+    })
+  })
 
   def dataSampleGenerator2(faulty: Boolean) = for {data <- Arbitrary.arbitrary[Boolean]} yield (data, (when: Unbounded[Instant], makeAChange: Boolean, fooHistoryId: FooHistory#Id) => eventConstructor[FooHistory](makeAChange)(when)(fooHistoryId, (fooHistory: FooHistory) => {
     try{

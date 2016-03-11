@@ -10,3 +10,5 @@ class MoreSpecificFooHistory(id: FooHistory#Id) extends FooHistory(id) {
     recordDatum(data)
   }
 }
+
+

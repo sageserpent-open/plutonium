@@ -6,17 +6,7 @@ package com.sageserpent.plutonium
 abstract class History extends Identified {
   override def hashCode = super.hashCode
 
-  var isConsistent = true
-
   private val _datums = scala.collection.mutable.MutableList.empty[Any]
-
-  override def checkInvariant: Bitemporal[() => Unit] = {
-    for {checkInvariantOnSuper <- super.checkInvariant
-    } yield () => {
-      checkInvariantOnSuper()
-      if (!isConsistent) throw WorldSpecSupport.changeError
-    }
-  }
 
   // Subclasses should define properties whose updates call this method to log the update in the history.
   // Building up the history in this way causes the tests using the functionality in 'WorldSpec' along with
