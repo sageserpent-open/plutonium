@@ -524,10 +524,10 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
                                  faultyRecordingsGroupedById <- faultyRecordingsGroupedByIdGenerator
                                  seed <- seedGenerator
                                  random = new Random(seed)
-                                 bigShuffledHistoryOverLotsOfThings = (random.splitIntoNonEmptyPieces(shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, recordingsGroupedById)
-                                   .zipWithIndex)).force
-                                 bigShuffledFaultyHistoryOverLotsOfThings = (random.splitIntoNonEmptyPieces(shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, faultyRecordingsGroupedById)
-                                   .zipWithIndex map { case (stuff, index) => stuff -> (-1 - index) })).force // Map with event ids over to strictly negative values to avoid collisions with the changes that are expected to work.
+                                 bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, recordingsGroupedById)
+                                   .zipWithIndex).force
+                                 bigShuffledFaultyHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, faultyRecordingsGroupedById)
+                                   .zipWithIndex map { case (stuff, index) => stuff -> (-1 - index) }).force // Map with event ids over to strictly negative values to avoid collisions with the changes that are expected to work.
                                  asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
                                  faultyAsOfs <- Gen.listOfN(bigShuffledFaultyHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
                                  queryWhen <- unboundedInstantGenerator
