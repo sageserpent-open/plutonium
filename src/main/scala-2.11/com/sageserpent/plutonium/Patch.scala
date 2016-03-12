@@ -22,7 +22,12 @@ class Patch[Raw <: Identified : TypeTag](override val id: Raw#Id, method: Method
       checkInvariant <- target.checkInvariant
     } yield checkInvariant
 
-    val checkInvariant = scope.render(bitemporalCheckInvariant).head
+    val checkInvariantsForPotentiallySeveralOrNoItems = scope.render(bitemporalCheckInvariant)
+    assert(checkInvariantsForPotentiallySeveralOrNoItems match {
+      case Stream(_) => true
+      case _ => false
+    })
+    val checkInvariant = checkInvariantsForPotentiallySeveralOrNoItems.head
     checkInvariant()
   }
 }

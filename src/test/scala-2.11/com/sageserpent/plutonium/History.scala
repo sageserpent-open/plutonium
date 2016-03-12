@@ -10,7 +10,7 @@ abstract class History extends Identified {
     for {checkInvariantOnSuper <- super.checkInvariant
     } yield () => {
       checkInvariantOnSuper()
-      if (!shouldBeUnchanged){
+      if (invariantBreakageScheduled){
         // NOTE: breakage of a bitemporal invariant is *not* a logic error; we expect
         // to be asked to try to record events that could potentially make the world
         // inconsistent - so we don't use an assertion here.
@@ -45,6 +45,12 @@ abstract class History extends Identified {
   val datums: scala.collection.Seq[Any] = _datums
 
   var shouldBeUnchanged: Boolean = true
+
+  private var invariantBreakageScheduled = false
+
+  def forceInvariantBreakage() = {
+    invariantBreakageScheduled = true
+  }
 
   val propertyAllowingSecondOrderMutation = scala.collection.mutable.MutableList.empty[Any]
 }

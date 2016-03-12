@@ -133,7 +133,7 @@ trait WorldSpecSupport {
       case _ :RuntimeException =>
     }
     barHistory.method1(capture(data1), capture(data2))
-    if (capture(faulty)) barHistory.shouldBeUnchanged = false // Modelling breakage of the bitemporal invariant.
+    if (capture(faulty)) barHistory.forceInvariantBreakage() // Modelling breakage of the bitemporal invariant.
   }))
 
   def dataSampleGenerator5(faulty: Boolean) = for {data1 <- Arbitrary.arbitrary[Int]
@@ -410,11 +410,11 @@ trait WorldSpecSupport {
 
   def recordEventsInWorldWithoutGivingUpOnFailure(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[(Option[(Unbounded[Instant], Event)], Int)]], asOfs: List[Instant], world: World[Int]) = {
     for (revisionAction <- revisionActions(bigShuffledHistoryOverLotsOfThings, asOfs, world)) try {
-      revisionAction()
-    } catch {
-      case exception if changeError == exception =>
+        revisionAction()
+      } catch {
+        case exception if changeError == exception =>
+      }
     }
-  }
 
   def revisionActions(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[(Option[(Unbounded[Instant], Event)], Int)]], asOfs: List[Instant], world: World[Int]): Stream[() => Revision] = {
     assert(bigShuffledHistoryOverLotsOfThings.length == asOfs.length)
