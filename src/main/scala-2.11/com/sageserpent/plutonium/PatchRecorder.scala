@@ -22,7 +22,7 @@ trait BestPatchSelectionContracts extends BestPatchSelection {
     require(relatedPatches.nonEmpty)
     require(1 == (relatedPatches map (_.id) distinct).size)
     require((for {lhs <- relatedPatches
-                  rhs <- relatedPatches if lhs != rhs} yield AbstractPatch.bothPatchesReferToTheSameItem(lhs, rhs)).forall(identity))
+                  rhs <- relatedPatches if lhs != rhs} yield AbstractPatch.patchesAreRelated(lhs, rhs)).forall(identity))
     super.apply(relatedPatches)
   }
 }
