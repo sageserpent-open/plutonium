@@ -6,6 +6,22 @@ package com.sageserpent.plutonium
 abstract class History extends Identified {
   override def hashCode = super.hashCode
 
+  override def checkInvariant: Bitemporal[() => Unit] = {
+    for {checkInvariantOnSuper <- super.checkInvariant
+    } yield () => {
+      checkInvariantOnSuper()
+      assert(shouldBeUnchanged)
+      try {
+        shouldBeUnchanged = false
+        // An invariant should not be able to modify its item.
+        assert(false)
+      }
+      catch {
+        case _ :RuntimeException =>
+      }
+    }
+  }
+
   private val _datums = scala.collection.mutable.MutableList.empty[Any]
 
   // Subclasses should define properties whose updates call this method to log the update in the history.
