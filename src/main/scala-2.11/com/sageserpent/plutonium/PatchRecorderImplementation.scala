@@ -108,12 +108,12 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
     private var _upperBoundTypeTag = initialTypeTag
 
-    def isInconsistentWith(patch: AbstractPatch[_ <: Identified]) = {
-      patch.capturedTypeTag.tpe <:< this._upperBoundTypeTag.tpe && !isFusibleWith(patch)
+    def isInconsistentWith(typeTag: TypeTag[_ <: Identified]) = {
+      typeTag.tpe <:< this._upperBoundTypeTag.tpe && !isFusibleWith(typeTag)
     }
 
-    def isFusibleWith(patch: AbstractPatch[_ <: Identified]) = {
-      this._lowerBoundTypeTag.tpe <:< patch.capturedTypeTag.tpe || patch.capturedTypeTag.tpe <:< this._lowerBoundTypeTag.tpe
+    def isFusibleWith(typeTag: TypeTag[_ <: Identified]) = {
+      this._lowerBoundTypeTag.tpe <:< typeTag.tpe || typeTag.tpe <:< this._lowerBoundTypeTag.tpe
     }
 
     def canBeAnnihilatedAs(typeTag: TypeTag[_ <: Identified]) =
@@ -226,13 +226,13 @@ trait PatchRecorderImplementation extends PatchRecorder {
   private def relevantItemStateFor(patch: AbstractPatch[_ <: Identified]) = {
     val itemStates = idToItemStatesMap.getOrElseUpdate(patch.id, mutable.Set.empty)
 
-    val clashingItemStates = itemStates filter (_.isInconsistentWith(patch))
+    val clashingItemStates = itemStates filter (_.isInconsistentWith(patch.capturedTypeTag))
 
     if (clashingItemStates.nonEmpty){
       throw new RuntimeException(s"There is at least one item of id: '${patch.id}' that would be inconsistent with type '${patch.capturedTypeTag.tpe}', these have types: '${clashingItemStates map (_.lowerBoundTypeTag.tpe)}'.")
     }
 
-    val compatibleItemStates = itemStates filter (_.isFusibleWith(patch))
+    val compatibleItemStates = itemStates filter (_.isFusibleWith(patch.capturedTypeTag))
 
     if (compatibleItemStates.nonEmpty) if (1 < compatibleItemStates.size) {
       throw new scala.RuntimeException(s"There is more than one item of id: '${patch.id}' compatible with type '${patch.capturedTypeTag.tpe}', these have types: '${compatibleItemStates map (_.lowerBoundTypeTag.tpe)}'.")
