@@ -109,15 +109,11 @@ trait PatchRecorderImplementation extends PatchRecorder {
     private var _upperBoundTypeTag = initialTypeTag
 
     def isInconsistentWith(patch: AbstractPatch[_ <: Identified]) = {
-      patch.capturedTypeTag.tpe <:< this._upperBoundTypeTag.tpe && !isFusibleWithBasedOnlyOnType(patch.capturedTypeTag)
+      patch.capturedTypeTag.tpe <:< this._upperBoundTypeTag.tpe && !isFusibleWith(patch)
     }
 
     def isFusibleWith(patch: AbstractPatch[_ <: Identified]) = {
-      isFusibleWithBasedOnlyOnType(patch.capturedTypeTag)
-    }
-
-    private def isFusibleWithBasedOnlyOnType(typeTag: universe.TypeTag[_ <: Identified]): Boolean = {
-      this._lowerBoundTypeTag.tpe <:< typeTag.tpe || typeTag.tpe <:< this._lowerBoundTypeTag.tpe
+      this._lowerBoundTypeTag.tpe <:< patch.capturedTypeTag.tpe || patch.capturedTypeTag.tpe <:< this._lowerBoundTypeTag.tpe
     }
 
     def canBeAnnihilatedAs(typeTag: TypeTag[_ <: Identified]) =
