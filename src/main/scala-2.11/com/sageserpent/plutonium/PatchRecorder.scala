@@ -22,15 +22,13 @@ trait BestPatchSelectionContracts extends BestPatchSelection {
     require(relatedPatches.nonEmpty)
     require(1 == (relatedPatches map (_.id) distinct).size)
     require((for {lhs <- relatedPatches
-                  rhs <- relatedPatches if lhs != rhs} yield AbstractPatch.bothPatchesReferToTheSameItem(lhs, rhs)).forall(identity))
+                  rhs <- relatedPatches if lhs != rhs} yield AbstractPatch.patchesAreRelated(lhs, rhs)).forall(identity))
     super.apply(relatedPatches)
   }
 }
 
 
 trait PatchRecorder {
-  self: BestPatchSelection with IdentifiedItemAnnihilation =>
-
   def whenEventPertainedToByLastRecordingTookPlace: Option[Unbounded[Instant]]
 
   def allRecordingsAreCaptured: Boolean
@@ -47,8 +45,6 @@ trait PatchRecorder {
 }
 
 trait PatchRecorderContracts extends PatchRecorder {
-  self: BestPatchSelectionContracts with IdentifiedItemAnnihilation =>
-
   require(whenEventPertainedToByLastRecordingTookPlace.isEmpty)
   require(!allRecordingsAreCaptured)
 

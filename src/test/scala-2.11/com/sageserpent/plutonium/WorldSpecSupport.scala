@@ -24,7 +24,7 @@ import scalaz.std.stream
 
 
 object WorldSpecSupport {
-  lazy val changeError = new RuntimeException("Error in making a change.")
+  val changeError = new RuntimeException("Error in making a change.")
 }
 
 trait WorldSpecSupport {
@@ -57,21 +57,37 @@ trait WorldSpecSupport {
   // Yeuch!! Why can't I just partially apply Change.apply and then return that, dropping the extra arguments?
     if (makeAChange) Change(when)(id, effect) else Measurement(when)(id, effect)
 
-  def dataSampleGenerator1(faulty: Boolean) = for {data <- Arbitrary.arbitrary[String]} yield (data, (when: americium.Unbounded[Instant], makeAChange: Boolean, fooHistoryId: FooHistory#Id) => eventConstructor[FooHistory](makeAChange)(when)(fooHistoryId, (fooHistory: FooHistory) => {
-    if (capture(faulty)) throw changeError // Modelling a precondition failure.
-    try{
-      fooHistory.id
-      fooHistory.datums
-      fooHistory.property1
-      fooHistory.property2
-      // Neither changes nor measurements are allowed to read from the items they work on.
-      assert(false)
-    }
-    catch {
-      case _ :RuntimeException =>
-    }
-    fooHistory.property1 = capture(data)
-  }))
+  def dataSampleGenerator1(faulty: Boolean) = for {data <- Arbitrary.arbitrary[String]} yield (data, (when: americium.Unbounded[Instant], makeAChange: Boolean, fooHistoryId: FooHistory#Id) => if (!faulty) {
+    eventConstructor[FooHistory](makeAChange)(when)(fooHistoryId, (fooHistory: FooHistory) => {
+      try {
+        fooHistory.id
+        fooHistory.datums
+        fooHistory.property1
+        fooHistory.property2
+        // Neither changes nor measurements are allowed to read from the items they work on.
+        assert(false)
+      }
+      catch {
+        case _: RuntimeException =>
+      }
+      fooHistory.property1 = capture(data)
+    })
+  } else {
+    eventConstructor[BadFooHistory](makeAChange)(when)(fooHistoryId, (fooHistory: BadFooHistory) => {
+      try {
+        fooHistory.id
+        fooHistory.datums
+        fooHistory.property1
+        fooHistory.property2
+        // Neither changes nor measurements are allowed to read from the items they work on.
+        assert(false)
+      }
+      catch {
+        case _: RuntimeException =>
+      }
+      fooHistory.property1 = capture(data)
+    })
+  })
 
   def dataSampleGenerator2(faulty: Boolean) = for {data <- Arbitrary.arbitrary[Boolean]} yield (data, (when: Unbounded[Instant], makeAChange: Boolean, fooHistoryId: FooHistory#Id) => eventConstructor[FooHistory](makeAChange)(when)(fooHistoryId, (fooHistory: FooHistory) => {
     try{
@@ -117,7 +133,7 @@ trait WorldSpecSupport {
       case _ :RuntimeException =>
     }
     barHistory.method1(capture(data1), capture(data2))
-    if (capture(faulty)) throw changeError // Modelling an admissible postcondition failure.
+    if (capture(faulty)) barHistory.forceInvariantBreakage() // Modelling breakage of the bitemporal invariant.
   }))
 
   def dataSampleGenerator5(faulty: Boolean) = for {data1 <- Arbitrary.arbitrary[Int]
@@ -142,12 +158,9 @@ trait WorldSpecSupport {
     integerHistory.integerProperty = capture(data)
   }))
 
-  def moreSpecificFooDataSampleGenerator(faulty: Boolean) = for {data <- Gen.oneOf(Arbitrary.arbitrary[String], Arbitrary.arbitrary[Double])} yield (data, (when: americium.Unbounded[Instant], makeAChange: Boolean, fooHistoryId: MoreSpecificFooHistory#Id) => eventConstructor[MoreSpecificFooHistory](makeAChange)(when)(fooHistoryId, (fooHistory: MoreSpecificFooHistory) => {
+  def moreSpecificFooDataSampleGenerator(faulty: Boolean) = for {data <- Arbitrary.arbitrary[String]} yield (data, (when: americium.Unbounded[Instant], makeAChange: Boolean, fooHistoryId: MoreSpecificFooHistory#Id) => eventConstructor[MoreSpecificFooHistory](makeAChange)(when)(fooHistoryId, (fooHistory: MoreSpecificFooHistory) => {
     if (capture(faulty)) throw changeError // Modelling a precondition failure.
-    capture(data) match {
-      case stringData: String => fooHistory.property1 = stringData
-      case doubleData: Double => fooHistory.property3 = doubleData
-    }
+    fooHistory.property1 = capture(data)
   }))
 
   def dataSamplesForAnIdGenerator_[AHistory <: History : TypeTag](dataSampleGenerator: Gen[(_, (Unbounded[Instant], Boolean, AHistory#Id) => Event)], historyIdGenerator: Gen[AHistory#Id], specialDataSampleGenerator: Option[Gen[(_, (Unbounded[Instant], Boolean, AHistory#Id) => Event)]] = None) = {
@@ -394,11 +407,11 @@ trait WorldSpecSupport {
 
   def recordEventsInWorldWithoutGivingUpOnFailure(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[(Option[(Unbounded[Instant], Event)], Int)]], asOfs: List[Instant], world: World[Int]) = {
     for (revisionAction <- revisionActions(bigShuffledHistoryOverLotsOfThings, asOfs, world)) try {
-      revisionAction()
-    } catch {
-      case exception if changeError == exception =>
+        revisionAction()
+      } catch {
+        case exception if changeError == exception =>
+      }
     }
-  }
 
   def revisionActions(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[(Option[(Unbounded[Instant], Event)], Int)]], asOfs: List[Instant], world: World[Int]): Stream[() => Revision] = {
     assert(bigShuffledHistoryOverLotsOfThings.length == asOfs.length)

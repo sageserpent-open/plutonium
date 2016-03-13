@@ -1,5 +1,7 @@
 package com.sageserpent.plutonium
 
+import java.lang.reflect.Method
+
 import scala.reflect.runtime.universe._
 
 /**
@@ -7,14 +9,18 @@ import scala.reflect.runtime.universe._
   */
 
 object AbstractPatch {
-  def bothPatchesReferToTheSameItem(lhs: AbstractPatch[_], rhs: AbstractPatch[_]): Boolean = {
-    lhs.id == rhs.id && (lhs.capturedTypeTag.tpe <:< rhs.capturedTypeTag.tpe || rhs.capturedTypeTag.tpe <:< lhs.capturedTypeTag.tpe)
+  def patchesAreRelated(lhs: AbstractPatch[_], rhs: AbstractPatch[_]): Boolean = {
+    val bothReferToTheSameItem = lhs.id == rhs.id && (lhs.capturedTypeTag.tpe <:< rhs.capturedTypeTag.tpe || rhs.capturedTypeTag.tpe <:< lhs.capturedTypeTag.tpe)
+    val bothReferToTheSameMethod = WorldReferenceImplementation.firstMethodIsOverrideCompatibleWithSecond(lhs.method, rhs.method) ||
+      WorldReferenceImplementation.firstMethodIsOverrideCompatibleWithSecond(rhs.method, lhs.method)
+    bothReferToTheSameItem && bothReferToTheSameMethod
   }
 }
 
-abstract class AbstractPatch[Raw <: Identified: TypeTag](val id: Raw#Id){
+abstract class AbstractPatch[Raw <: Identified: TypeTag](val id: Raw#Id, val method: Method){
   val capturedTypeTag = typeTag[Raw]
   def apply(identifiedItemFactory: IdentifiedItemAccess): Unit
+  def checkInvariant(scope: Scope): Unit
 }
 
 
