@@ -158,12 +158,9 @@ trait WorldSpecSupport {
     integerHistory.integerProperty = capture(data)
   }))
 
-  def moreSpecificFooDataSampleGenerator(faulty: Boolean) = for {data <- Gen.oneOf(Arbitrary.arbitrary[String], Arbitrary.arbitrary[Double])} yield (data, (when: americium.Unbounded[Instant], makeAChange: Boolean, fooHistoryId: MoreSpecificFooHistory#Id) => eventConstructor[MoreSpecificFooHistory](makeAChange)(when)(fooHistoryId, (fooHistory: MoreSpecificFooHistory) => {
+  def moreSpecificFooDataSampleGenerator(faulty: Boolean) = for {data <- Arbitrary.arbitrary[String]} yield (data, (when: americium.Unbounded[Instant], makeAChange: Boolean, fooHistoryId: MoreSpecificFooHistory#Id) => eventConstructor[MoreSpecificFooHistory](makeAChange)(when)(fooHistoryId, (fooHistory: MoreSpecificFooHistory) => {
     if (capture(faulty)) throw changeError // Modelling a precondition failure.
-    capture(data) match {
-      case stringData: String => fooHistory.property1 = stringData
-      case doubleData: Double => fooHistory.property3 = doubleData
-    }
+    fooHistory.property1 = capture(data)
   }))
 
   def dataSamplesForAnIdGenerator_[AHistory <: History : TypeTag](dataSampleGenerator: Gen[(_, (Unbounded[Instant], Boolean, AHistory#Id) => Event)], historyIdGenerator: Gen[AHistory#Id], specialDataSampleGenerator: Option[Gen[(_, (Unbounded[Instant], Boolean, AHistory#Id) => Event)]] = None) = {
