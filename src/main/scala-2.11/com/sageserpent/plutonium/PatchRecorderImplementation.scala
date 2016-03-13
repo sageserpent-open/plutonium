@@ -37,7 +37,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
     val itemState = relevantItemStateFor(patch)
 
-    itemState.submitCandidatePatches()
+    itemState.submitCandidatePatches(patch.method)
 
     itemState.addPatch(when, patch)
   }
@@ -97,88 +97,102 @@ trait PatchRecorderImplementation extends PatchRecorder {
     }
   }
 
-  private type CandidatePatches = mutable.MutableList[(SequenceIndex, AbstractPatch[_ <: Identified], Unbounded[Instant])]
+  type CandidatePatchTuple = (SequenceIndex, AbstractPatch[_ <: Identified], Unbounded[Instant])
 
-  private class ItemState(initialTypeTag: TypeTag[_ <: Identified], initialMethod: Method/*TODO: defining this and then adding the actual patch later invites error.*/) extends IdentifiedItemAccess {
+  private type CandidatePatches = mutable.MutableList[CandidatePatchTuple]
+
+  private class ItemState(initialTypeTag: TypeTag[_ <: Identified]) extends IdentifiedItemAccess {
     private var _lowerBoundTypeTag = initialTypeTag
 
     def lowerBoundTypeTag = _lowerBoundTypeTag
 
     private var _upperBoundTypeTag = initialTypeTag
 
-    private var examplarFormOfMethod = initialMethod
-
     def isInconsistentWith(patch: AbstractPatch[_ <: Identified]) = {
-      val methodsAreConsistent = isFusibleWithBasedOnlyOnMethod(patch.method)
-      methodsAreConsistent && patch.capturedTypeTag.tpe <:< this._upperBoundTypeTag.tpe && !isFusibleWithBasedOnlyOnType(patch.capturedTypeTag)
+      patch.capturedTypeTag.tpe <:< this._upperBoundTypeTag.tpe && !isFusibleWithBasedOnlyOnType(patch.capturedTypeTag)
     }
 
     def isFusibleWith(patch: AbstractPatch[_ <: Identified]) = {
-      val itemTypesCanBeFused = isFusibleWithBasedOnlyOnType(patch.capturedTypeTag)
-      val methodsAreConsistent = isFusibleWithBasedOnlyOnMethod(patch.method)
-      itemTypesCanBeFused && methodsAreConsistent
+      isFusibleWithBasedOnlyOnType(patch.capturedTypeTag)
     }
 
     private def isFusibleWithBasedOnlyOnType(typeTag: universe.TypeTag[_ <: Identified]): Boolean = {
       this._lowerBoundTypeTag.tpe <:< typeTag.tpe || typeTag.tpe <:< this._lowerBoundTypeTag.tpe
     }
 
-    private def isFusibleWithBasedOnlyOnMethod(method: Method): Boolean = {
-      WorldReferenceImplementation.firstMethodIsOverrideCompatibleWithSecond(method, examplarFormOfMethod) ||
-        WorldReferenceImplementation.firstMethodIsOverrideCompatibleWithSecond(examplarFormOfMethod, method)
-    }
-
     def canBeAnnihilatedAs(typeTag: TypeTag[_ <: Identified]) =
       this._lowerBoundTypeTag.tpe <:< typeTag.tpe
 
     def addPatch(when: Unbounded[Instant], patch: AbstractPatch[_ <: Identified]) = {
-      candidatePatches += ((nextSequenceIndex(), patch, when))
+      val candidatePatchTuple = (nextSequenceIndex(), patch, when)
+      methodAndItsCandidatePatchTuplesFor(patch.method) match {
+        case (Some((exemplarMethod, candidatePatchTuples))) =>
+          candidatePatchTuples += candidatePatchTuple
+          if (WorldReferenceImplementation.firstMethodIsOverrideCompatibleWithSecond(exemplarMethod, patch.method)) {
+            exemplarMethodToCandidatePatchesMap -= exemplarMethod
+            exemplarMethodToCandidatePatchesMap += (patch.method -> candidatePatchTuples)
+          }
+        case None =>
+          exemplarMethodToCandidatePatchesMap += (patch.method -> mutable.MutableList(candidatePatchTuple))
+      }
+
       if (patch.capturedTypeTag.tpe <:< this._lowerBoundTypeTag.tpe) {
         this._lowerBoundTypeTag = patch.capturedTypeTag
       } else if (this._upperBoundTypeTag.tpe <:< patch.capturedTypeTag.tpe) {
         this._upperBoundTypeTag = patch.capturedTypeTag
       }
+    }
 
-      if (WorldReferenceImplementation.firstMethodIsOverrideCompatibleWithSecond(examplarFormOfMethod, patch.method)){
-        examplarFormOfMethod = patch.method
+    private def methodAndItsCandidatePatchTuplesFor(method: Method): Option[(Method, CandidatePatches)] = {
+      exemplarMethodToCandidatePatchesMap.find {
+        case (exemplarMethod, _) => WorldReferenceImplementation.firstMethodIsOverrideCompatibleWithSecond(method, exemplarMethod) ||
+          WorldReferenceImplementation.firstMethodIsOverrideCompatibleWithSecond(exemplarMethod, method)
       }
     }
 
     def submitCandidatePatches(): Unit =
-      if (candidatePatches.nonEmpty) {
-        val bestPatch = self(candidatePatches.map(_._2))
-
-        // The best patch has to be applied as if it occurred when the original
-        // patch would have taken place - so it steals the latter's sequence index.
-        // TODO: is there a test that demonstrates the need for this? Come to think
-        // of it though, I'm not sure if a mutator could legitimately make bitemporal
-        // queries of other bitemporal items; the only way an inter-item relationship
-        // makes a difference is when a query is executed - and that doesn't care about
-        // the precise interleaving of events on related items, only that the correct
-        // ones have been applied to each item. So does this mean that the action queue
-        // can be split across items?
-        val (sequenceIndex, _, whenPatchOccurs) = candidatePatches.head
-
-        actionQueue.enqueue((sequenceIndex, Unit => {
-          bestPatch(this)
-          for (_ <- itemsAreLockedResource)
-          {
-            val scopeForInvariantCheck = new ScopeImplementation {
-              override val identifiedItemsScope: IdentifiedItemsScopeImplementation = PatchRecorderImplementation.this.identifiedItemsScope
-              override val nextRevision: Revision = PatchRecorderImplementation.this.nextRevision
-              override val asOf: Unbounded[Instant] = PatchRecorderImplementation.this.asOf
-              override val when: Unbounded[Instant] = whenPatchOccurs
-            }
-            bestPatch.checkInvariant(scopeForInvariantCheck)
-          }
-        }, whenPatchOccurs))
-
-        candidatePatches.clear()
+      for ((exemplarMethod, candidatePatchTuples) <- exemplarMethodToCandidatePatchesMap) {
+        submitCandidatePatches(candidatePatchTuples)
       }
+
+    def submitCandidatePatches(method: Method): Unit = methodAndItsCandidatePatchTuplesFor(method) match {
+      case Some((_, candidatePatchTuples)) => submitCandidatePatches(candidatePatchTuples)
+      case None =>
+    }
+
+    private def submitCandidatePatches(candidatePatchTuples: CandidatePatches): Unit = {
+      val bestPatch = self(candidatePatchTuples.map(_._2))
+
+      // The best patch has to be applied as if it occurred when the original
+      // patch would have taken place - so it steals the latter's sequence index.
+      // TODO: is there a test that demonstrates the need for this? Come to think
+      // of it though, I'm not sure if a mutator could legitimately make bitemporal
+      // queries of other bitemporal items; the only way an inter-item relationship
+      // makes a difference is when a query is executed - and that doesn't care about
+      // the precise interleaving of events on related items, only that the correct
+      // ones have been applied to each item. So does this mean that the action queue
+      // can be split across items?
+      val (sequenceIndex, _, whenPatchOccurs) = candidatePatchTuples.head
+
+      actionQueue.enqueue((sequenceIndex, Unit => {
+        bestPatch(this)
+        for (_ <- itemsAreLockedResource) {
+          val scopeForInvariantCheck = new ScopeImplementation {
+            override val identifiedItemsScope: IdentifiedItemsScopeImplementation = PatchRecorderImplementation.this.identifiedItemsScope
+            override val nextRevision: Revision = PatchRecorderImplementation.this.nextRevision
+            override val asOf: Unbounded[Instant] = PatchRecorderImplementation.this.asOf
+            override val when: Unbounded[Instant] = whenPatchOccurs
+          }
+          bestPatch.checkInvariant(scopeForInvariantCheck)
+        }
+      }, whenPatchOccurs))
+
+      candidatePatchTuples.clear()
+    }
 
     private var cachedItem: Option[Any] = None
 
-    private val candidatePatches: CandidatePatches = mutable.MutableList.empty[(SequenceIndex, AbstractPatch[_ <: Identified], Unbounded[Instant])]
+    private val exemplarMethodToCandidatePatchesMap: mutable.Map[Method, CandidatePatches] = mutable.Map.empty
 
     def itemFor_[SubclassOfRaw <: Raw, Raw <: Identified](id: Raw#Id, typeTag: universe.TypeTag[SubclassOfRaw]): SubclassOfRaw = {
       PatchRecorderImplementation.this.identifiedItemsScope.itemFor[SubclassOfRaw](id.asInstanceOf[SubclassOfRaw#Id])(typeTag)
@@ -227,7 +241,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
       compatibleItemStates.head
     }
     else {
-      val itemState = new ItemState(patch.capturedTypeTag, patch.method)
+      val itemState = new ItemState(patch.capturedTypeTag)
       itemStates += itemState
       itemState
     }
