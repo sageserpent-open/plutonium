@@ -11,7 +11,8 @@ import scala.reflect.runtime.universe._
 object AbstractPatch {
   def patchesAreRelated(lhs: AbstractPatch[_], rhs: AbstractPatch[_]): Boolean = {
     val bothReferToTheSameItem = lhs.id == rhs.id && (lhs.capturedTypeTag.tpe <:< rhs.capturedTypeTag.tpe || rhs.capturedTypeTag.tpe <:< lhs.capturedTypeTag.tpe)
-    val bothReferToTheSameMethod = lhs.method == rhs.method
+    val bothReferToTheSameMethod = WorldReferenceImplementation.firstMethodIsOverrideCompatibleWithSecond(lhs.method, rhs.method) ||
+      WorldReferenceImplementation.firstMethodIsOverrideCompatibleWithSecond(rhs.method, lhs.method)
     bothReferToTheSameItem && bothReferToTheSameMethod
   }
 }
