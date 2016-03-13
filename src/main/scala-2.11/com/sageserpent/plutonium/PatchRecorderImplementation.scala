@@ -1,5 +1,6 @@
 package com.sageserpent.plutonium
 
+import java.lang.reflect.Method
 import java.time.Instant
 
 import com.sageserpent.americium.{Finite, Unbounded}
@@ -98,17 +99,34 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
   private type CandidatePatches = mutable.MutableList[(SequenceIndex, AbstractPatch[_ <: Identified], Unbounded[Instant])]
 
-  private class ItemState(initialTypeTag: TypeTag[_ <: Identified]) extends IdentifiedItemAccess {
+  private class ItemState(initialTypeTag: TypeTag[_ <: Identified], initialMethod: Method/*TODO: defining this and then adding the actual patch later invites error.*/) extends IdentifiedItemAccess {
     private var _lowerBoundTypeTag = initialTypeTag
 
     def lowerBoundTypeTag = _lowerBoundTypeTag
 
     private var _upperBoundTypeTag = initialTypeTag
 
-    def isInconsistentWith(typeTag: TypeTag[_ <: Identified]) =
-      typeTag.tpe <:< this._upperBoundTypeTag.tpe && !isFusibleWith(typeTag)
+    private var examplarFormOfMethod = initialMethod
 
-    def isFusibleWith(typeTag: TypeTag[_ <: Identified]) = this._lowerBoundTypeTag.tpe <:< typeTag.tpe || typeTag.tpe <:< this._lowerBoundTypeTag.tpe
+    def isInconsistentWith(patch: AbstractPatch[_ <: Identified]) = {
+      val methodsAreConsistent = isFusibleWithBasedOnlyOnMethod(patch.method)
+      methodsAreConsistent && patch.capturedTypeTag.tpe <:< this._upperBoundTypeTag.tpe && !isFusibleWithBasedOnlyOnType(patch.capturedTypeTag)
+    }
+
+    def isFusibleWith(patch: AbstractPatch[_ <: Identified]) = {
+      val itemTypesCanBeFused = isFusibleWithBasedOnlyOnType(patch.capturedTypeTag)
+      val methodsAreConsistent = isFusibleWithBasedOnlyOnMethod(patch.method)
+      itemTypesCanBeFused && methodsAreConsistent
+    }
+
+    private def isFusibleWithBasedOnlyOnType(typeTag: universe.TypeTag[_ <: Identified]): Boolean = {
+      this._lowerBoundTypeTag.tpe <:< typeTag.tpe || typeTag.tpe <:< this._lowerBoundTypeTag.tpe
+    }
+
+    private def isFusibleWithBasedOnlyOnMethod(method: Method): Boolean = {
+      WorldReferenceImplementation.firstMethodIsOverrideCompatibleWithSecond(method, examplarFormOfMethod) ||
+        WorldReferenceImplementation.firstMethodIsOverrideCompatibleWithSecond(examplarFormOfMethod, method)
+    }
 
     def canBeAnnihilatedAs(typeTag: TypeTag[_ <: Identified]) =
       this._lowerBoundTypeTag.tpe <:< typeTag.tpe
@@ -119,6 +137,10 @@ trait PatchRecorderImplementation extends PatchRecorder {
         this._lowerBoundTypeTag = patch.capturedTypeTag
       } else if (this._upperBoundTypeTag.tpe <:< patch.capturedTypeTag.tpe) {
         this._upperBoundTypeTag = patch.capturedTypeTag
+      }
+
+      if (WorldReferenceImplementation.firstMethodIsOverrideCompatibleWithSecond(examplarFormOfMethod, patch.method)){
+        examplarFormOfMethod = patch.method
       }
     }
 
@@ -191,13 +213,13 @@ trait PatchRecorderImplementation extends PatchRecorder {
   private def relevantItemStateFor(patch: AbstractPatch[_ <: Identified]) = {
     val itemStates = idToItemStatesMap.getOrElseUpdate(patch.id, mutable.Set.empty)
 
-    val clashingItemStates = itemStates filter (_.isInconsistentWith(patch.capturedTypeTag))
+    val clashingItemStates = itemStates filter (_.isInconsistentWith(patch))
 
     if (clashingItemStates.nonEmpty){
       throw new RuntimeException(s"There is at least one item of id: '${patch.id}' that would be inconsistent with type '${patch.capturedTypeTag.tpe}', these have types: '${clashingItemStates map (_.lowerBoundTypeTag.tpe)}'.")
     }
 
-    val compatibleItemStates = itemStates filter (_.isFusibleWith(patch.capturedTypeTag))
+    val compatibleItemStates = itemStates filter (_.isFusibleWith(patch))
 
     if (compatibleItemStates.nonEmpty) if (1 < compatibleItemStates.size) {
       throw new scala.RuntimeException(s"There is more than one item of id: '${patch.id}' compatible with type '${patch.capturedTypeTag.tpe}', these have types: '${compatibleItemStates map (_.lowerBoundTypeTag.tpe)}'.")
@@ -205,7 +227,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
       compatibleItemStates.head
     }
     else {
-      val itemState = new ItemState(patch.capturedTypeTag)
+      val itemState = new ItemState(patch.capturedTypeTag, patch.method)
       itemStates += itemState
       itemState
     }

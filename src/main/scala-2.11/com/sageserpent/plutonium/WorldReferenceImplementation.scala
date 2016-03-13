@@ -67,14 +67,18 @@ object WorldReferenceImplementation {
     }
 
     def alwaysAllowsReadAccessTo(method: Method) = nonMutableMembersThatCanAlwaysBeReadFrom.exists(exclusionMethod => {
-      exclusionMethod.getName == method.getName &&
-        exclusionMethod.getDeclaringClass.isAssignableFrom(method.getDeclaringClass) &&
-        exclusionMethod.getReturnType == method.getReturnType &&
-        exclusionMethod.getParameterCount == method.getParameterCount &&
-        exclusionMethod.getParameterTypes.toSeq == method.getParameterTypes.toSeq // What about contravariance? Hmmm...
+      firstMethodIsOverrideCompatibleWithSecond(method, exclusionMethod)
     })
 
     val nonMutableMembersThatCanAlwaysBeReadFrom = classOf[Identified].getMethods ++ classOf[AnyRef].getMethods
+  }
+
+  def firstMethodIsOverrideCompatibleWithSecond(firstMethod: Method, secondMethod: Method): Boolean = {
+    secondMethod.getName == firstMethod.getName &&
+      secondMethod.getDeclaringClass.isAssignableFrom(firstMethod.getDeclaringClass) &&
+      secondMethod.getReturnType == firstMethod.getReturnType &&
+      secondMethod.getParameterCount == firstMethod.getParameterCount &&
+      secondMethod.getParameterTypes.toSeq == firstMethod.getParameterTypes.toSeq // What about contravariance? Hmmm...
   }
 
   class IdentifiedItemsScopeImplementation {
