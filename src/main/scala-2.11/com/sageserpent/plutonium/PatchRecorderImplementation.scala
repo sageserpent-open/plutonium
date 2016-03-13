@@ -151,16 +151,21 @@ trait PatchRecorderImplementation extends PatchRecorder {
     }
 
     def submitCandidatePatches(): Unit =
-      for ((exemplarMethod, candidatePatchTuples) <- exemplarMethodToCandidatePatchesMap) {
-        submitCandidatePatches(candidatePatchTuples)
+      {
+        for ((exemplarMethod, candidatePatchTuples) <- exemplarMethodToCandidatePatchesMap) {
+          enqueueBestCandidatePatchFrom(candidatePatchTuples)
+        }
+        exemplarMethodToCandidatePatchesMap.clear()
       }
 
     def submitCandidatePatches(method: Method): Unit = methodAndItsCandidatePatchTuplesFor(method) match {
-      case Some((_, candidatePatchTuples)) => submitCandidatePatches(candidatePatchTuples)
+      case Some((exemplarMethod, candidatePatchTuples)) =>
+        enqueueBestCandidatePatchFrom(candidatePatchTuples)
+        exemplarMethodToCandidatePatchesMap -= exemplarMethod
       case None =>
     }
 
-    private def submitCandidatePatches(candidatePatchTuples: CandidatePatches): Unit = {
+    private def enqueueBestCandidatePatchFrom(candidatePatchTuples: CandidatePatches): Unit = {
       val bestPatch = self(candidatePatchTuples.map(_._2))
 
       // The best patch has to be applied as if it occurred when the original
@@ -186,8 +191,6 @@ trait PatchRecorderImplementation extends PatchRecorder {
           bestPatch.checkInvariant(scopeForInvariantCheck)
         }
       }, whenPatchOccurs))
-
-      candidatePatchTuples.clear()
     }
 
     private var cachedItem: Option[Any] = None
