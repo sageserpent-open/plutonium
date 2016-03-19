@@ -305,7 +305,7 @@ object WorldReferenceImplementation {
         identifiedItemsScope.allItems()
       }
       bitemporal match {
-        case ApBitemporalResult(preceedingContext, stage: ((_) => Bitemporal[Raw])) => for {
+        case ApBitemporalResult(preceedingContext, stage: (Bitemporal[(_) => Raw])) => for {
           preceedingContext <- render(preceedingContext)
           stage <- render(stage)
         } yield stage(preceedingContext)
