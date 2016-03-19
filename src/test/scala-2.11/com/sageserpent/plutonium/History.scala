@@ -6,11 +6,10 @@ package com.sageserpent.plutonium
 abstract class History extends Identified {
   override def hashCode = super.hashCode
 
-  override def checkInvariant: Bitemporal[() => Unit] = {
-    for {checkInvariantOnSuper <- super.checkInvariant
-    } yield () => {
-      checkInvariantOnSuper()
-      if (invariantBreakageScheduled){
+  override def checkInvariant: () => Unit = {
+    () => {
+      super.checkInvariant()
+      if (invariantBreakageScheduled) {
         // NOTE: breakage of a bitemporal invariant is *not* a logic error; we expect
         // to be asked to try to record events that could potentially make the world
         // inconsistent - so we don't use an assertion here.
@@ -22,8 +21,9 @@ abstract class History extends Identified {
         assert(false)
       }
       catch {
-        case _ :RuntimeException =>
+        case _: RuntimeException =>
       }
+
     }
   }
 

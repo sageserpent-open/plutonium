@@ -19,8 +19,7 @@ class Patch[Raw <: Identified : TypeTag](id: Raw#Id, method: Method, arguments: 
   def checkInvariant(scope: Scope): Unit = {
     val bitemporalCheckInvariant = for {
       target <- Bitemporal.singleOneOf[Raw](id)
-      checkInvariant <- target.checkInvariant
-    } yield checkInvariant
+    } yield target.checkInvariant
 
     val checkInvariantsForPotentiallySeveralOrNoItems = scope.render(bitemporalCheckInvariant)
     assert(checkInvariantsForPotentiallySeveralOrNoItems match {

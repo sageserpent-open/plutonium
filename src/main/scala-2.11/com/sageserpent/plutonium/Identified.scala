@@ -1,7 +1,5 @@
 package com.sageserpent.plutonium
 
-import scalaz.syntax.monad._
-
 trait Identified {
   type Id
   val id: Id // This can't be mutated! Begs the question - should other attributes be mutable or not?
@@ -13,7 +11,7 @@ trait Identified {
   // it is vital that the subclass uses a for-comprehension to make the conjunction of the subclass part of the
   // invariant with that of the superclass, as the invariant has to be executed *later* when rendered against a
   // scope.
-  def checkInvariant: Bitemporal[() => Unit] = (() => ()).point
+  def checkInvariant: () => Unit = () => ()
 }
 
 

@@ -5,19 +5,17 @@ package com.sageserpent.plutonium
   */
 
 import scala.reflect.runtime.universe._
-import scalaz.MonadPlus
+import scalaz.ApplicativePlus
 
 sealed trait Bitemporal[Raw] {
-  def filter = implicitly[MonadPlus[Bitemporal]].filter[Raw](this) _
+  def map[Raw2] = implicitly[ApplicativePlus[Bitemporal]].map[Raw, Raw2](this) _
 
-  def map[Raw2] = implicitly[MonadPlus[Bitemporal]].map[Raw, Raw2](this) _
-
-  def flatMap[Raw2](stage: Raw => Bitemporal[Raw2]): Bitemporal[Raw2] = FlatMapBitemporalResult(preceedingContext = this, stage = stage)
+  def ap[Raw2](stage: Bitemporal[Raw => Raw2]): Bitemporal[Raw2] = ApBitemporalResult(preceedingContext = this, stage = stage)
 
   def plus(another: Bitemporal[Raw]): Bitemporal[Raw] = PlusBitemporalResult(lhs = this, rhs = another)
 }
 
-case class FlatMapBitemporalResult[ContextRaw, Raw](preceedingContext: Bitemporal[ContextRaw], stage: ContextRaw => Bitemporal[Raw]) extends Bitemporal[Raw]
+case class ApBitemporalResult[ContextRaw, Raw](preceedingContext: Bitemporal[ContextRaw], stage: Bitemporal[ContextRaw => Raw]) extends Bitemporal[Raw]
 
 case class PlusBitemporalResult[Raw](lhs: Bitemporal[Raw], rhs: Bitemporal[Raw]) extends Bitemporal[Raw]
 

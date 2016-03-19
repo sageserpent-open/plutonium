@@ -305,7 +305,10 @@ object WorldReferenceImplementation {
         identifiedItemsScope.allItems()
       }
       bitemporal match {
-        case FlatMapBitemporalResult(preceedingContext, stage: ((_) => Bitemporal[Raw])) => render(preceedingContext) flatMap (raw => render(stage(raw)))
+        case ApBitemporalResult(preceedingContext, stage: ((_) => Bitemporal[Raw])) => for {
+          preceedingContext <- render(preceedingContext)
+          stage <- render(stage)
+        } yield stage(preceedingContext)
         case PlusBitemporalResult(lhs, rhs) => render(lhs) ++ render(rhs)
         case PointBitemporalResult(raw) => Stream(raw)
         case NoneBitemporalResult() => Stream.empty
