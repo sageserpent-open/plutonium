@@ -7,6 +7,10 @@ class MoreSpecificFooHistory(id: FooHistory#Id) extends FooHistory(id) {
   override def property1_=(data: String): Unit = {
     recordDatum(data)
   }
+
+  def method1(data: String): Unit = {
+    recordDatum(data)
+  }
 }
 
 

@@ -158,9 +158,21 @@ trait WorldSpecSupport {
     integerHistory.integerProperty = capture(data)
   }))
 
-  def moreSpecificFooDataSampleGenerator(faulty: Boolean) = for {data <- Arbitrary.arbitrary[String]} yield (data, (when: americium.Unbounded[Instant], makeAChange: Boolean, fooHistoryId: MoreSpecificFooHistory#Id) => eventConstructor[MoreSpecificFooHistory](makeAChange)(when)(fooHistoryId, (fooHistory: MoreSpecificFooHistory) => {
+  def moreSpecificFooDataSampleGenerator(faulty: Boolean) = for {data <- Gen.oneOf(
+    Arbitrary.arbitrary[String] map ("property1" -> _),
+    Arbitrary.arbitrary[Boolean] map ("property2" -> _),
+    Arbitrary.arbitrary[String] map ("property3" -> _),
+    Arbitrary.arbitrary[String] map ("method1" -> _))} yield (data, (when: americium.Unbounded[Instant], makeAChange: Boolean, fooHistoryId: MoreSpecificFooHistory#Id) => eventConstructor[MoreSpecificFooHistory](makeAChange)(when)(fooHistoryId, (fooHistory: MoreSpecificFooHistory) => {
     if (capture(faulty)) throw changeError // Modelling a precondition failure.
-    fooHistory.property1 = capture(data)
+    // NASTY HACK: there is a convention burnt into the implementation of 'RecordingsForAPhoenixId'
+    // that a pair is actually a description of the property / method being mutated and the corresponding
+    // data to be captured.
+    capture(data) match {
+      case ("property1", stringData: String) => fooHistory.property1 = stringData
+      case ("property2", booleanData: Boolean) => fooHistory.property2 = booleanData
+      case ("property3", stringData: String) => fooHistory.property3 = stringData
+      case ("method1", stringData: String) => fooHistory.method1(stringData)
+    }
   }))
 
   def dataSamplesForAnIdGenerator_[AHistory <: History : TypeTag](dataSampleGenerator: Gen[(_, (Unbounded[Instant], Boolean, AHistory#Id) => Event)], historyIdGenerator: Gen[AHistory#Id], specialDataSampleGenerator: Option[Gen[(_, (Unbounded[Instant], Boolean, AHistory#Id) => Event)]] = None) = {
@@ -290,18 +302,34 @@ trait WorldSpecSupport {
 
         def pickFromRunOfFollowingMeasurements(dataSamples: Seq[Any]) = dataSamples.last // TODO - generalise this if and when measurements progress beyond the 'latest when wins' strategy.
 
-        val runsOfFollowingMeasurements = dataSampleAndWhenPairsForALifespan zip
-          decisionsToMakeAChange(dataSampleAndWhenPairsForALifespan.size) groupWhile
-          {case (_, (_, makeAChange)) => !makeAChange} map
-          (_ map (_._1)) toList
+        // PLAN: generalise the next pieces of code by grouping the data samples by the property or method used to add them in,
+        // then recombine the chosen data samples before doing the final filtering.
 
-        val dataSampleAndWhenPairsForALifespanPickedFromRuns = runsOfFollowingMeasurements map {runOfFollowingMeasurements =>
-          pickFromRunOfFollowingMeasurements(runOfFollowingMeasurements map (_._1)) -> runOfFollowingMeasurements.head._2
+        def dataSampleAndWhenPairsForALifespanPickedFromRuns(dataSampleAndWhenPairsForALifespan: List[(Any, Unbounded[Instant])]): List[(Any, Unbounded[Instant])] = {
+          val runsOfFollowingMeasurements = dataSampleAndWhenPairsForALifespan zip
+            decisionsToMakeAChange(dataSampleAndWhenPairsForALifespan.size) groupWhile { case (_, (_, makeAChange)) => !makeAChange } map
+            (_ map (_._1)) toList
+
+          runsOfFollowingMeasurements map { runOfFollowingMeasurements =>
+            pickFromRunOfFollowingMeasurements(runOfFollowingMeasurements map (_._1)) -> runOfFollowingMeasurements.head._2
+          }
         }
+
+        def classifyDataAsUsedToSetAGivenPropertyOrMethod(dataSampleAndWhenWithIndex: ((Any, Unbounded[Instant]), Int)): (Option[Any], ((Any, Unbounded[Instant]), Int)) = dataSampleAndWhenWithIndex match {
+          case (((tag, data), when), index) => Some(tag) -> ((data, when), index)
+          case ((data, when), index) => None -> ((data, when), index)
+        }
+
+        val dataSampleAndWhenPairsForALifespanPickedFromRuns2: List[(Any, Unbounded[Instant])] =
+          (dataSampleAndWhenPairsForALifespan.zipWithIndex map
+            classifyDataAsUsedToSetAGivenPropertyOrMethod groupBy
+            (_._1) map {
+            case (group, (_, dataSampleAndWhenGroup)) => dataSampleAndWhenPairsForALifespanPickedFromRuns(dataSampleAndWhenGroup)
+          }).flatten.toList
 
         Some(RecordingsNoLaterThan(historyId = historyId,
           historiesFrom = historiesFrom,
-          datums = dataSampleAndWhenPairsForALifespanPickedFromRuns takeWhile { case (_, eventWhen) => eventWhen <= when }))
+          datums = dataSampleAndWhenPairsForALifespanPickedFromRuns2 takeWhile { case (_, eventWhen) => eventWhen <= when }))
       }
 
       val searchResult = sampleWhensGroupedForLifespans map (_.last) search when

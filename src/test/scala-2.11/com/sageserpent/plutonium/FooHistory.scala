@@ -17,4 +17,10 @@ class FooHistory(val id: FooHistory#Id) extends History {
   def property2_=(data: Boolean): Unit = {
     recordDatum(data)
   }
+
+  def property3 = ???
+
+  def property3_=(data: String): Unit = {
+    recordDatum(data)
+  }
 }
