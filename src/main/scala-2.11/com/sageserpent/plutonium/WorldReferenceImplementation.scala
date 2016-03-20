@@ -81,6 +81,10 @@ object WorldReferenceImplementation {
       secondMethod.getParameterTypes.toSeq == firstMethod.getParameterTypes.toSeq // What about contravariance? Hmmm...
   }
 
+  val invariantCheckMethod = classOf[Identified].getMethod("checkInvariant")
+
+  def isInvariantCheck(method: Method): Boolean = firstMethodIsOverrideCompatibleWithSecond(method, invariantCheckMethod)
+
   class IdentifiedItemsScopeImplementation {
     identifiedItemsScopeThis =>
 
@@ -98,7 +102,7 @@ object WorldReferenceImplementation {
           for (_ <- makeManagedResource {
             stopInfiniteRecursiveInterception = true
           } { _ => stopInfiniteRecursiveInterception = false }(List.empty)) {
-            if (itemsAreLocked && method.getReturnType == classOf[Unit] && method.getName != "checkInvariant")
+            if (itemsAreLocked && method.getReturnType == classOf[Unit] && !WorldReferenceImplementation.isInvariantCheck(method))
               throw new UnsupportedOperationException(s"Attempt to write via: '$method' to an item: '$target' rendered from a bitemporal query.")
           }
         }
