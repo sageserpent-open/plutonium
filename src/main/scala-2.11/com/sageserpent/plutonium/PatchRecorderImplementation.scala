@@ -5,8 +5,8 @@ import java.time.Instant
 
 import com.sageserpent.americium.{Finite, Unbounded}
 import com.sageserpent.plutonium.World.Revision
-import com.sageserpent.plutonium.WorldReferenceImplementation.{IdentifiedItemsScopeImplementation, ScopeImplementation}
 import resource.ExtractableManagedResource
+
 import scala.collection.mutable
 import scala.reflect.runtime._
 import scala.reflect.runtime.universe._
@@ -177,13 +177,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
       actionQueue.enqueue((sequenceIndex, Unit => {
         bestPatch(this)
         for (_ <- itemsAreLockedResource) {
-          val scopeForInvariantCheck = new ScopeImplementation {
-            override val identifiedItemsScope: IdentifiedItemsScopeImplementation = PatchRecorderImplementation.this.identifiedItemsScope
-            override val nextRevision: Revision = PatchRecorderImplementation.this.nextRevision
-            override val asOf: Unbounded[Instant] = PatchRecorderImplementation.this.asOf
-            override val when: Unbounded[Instant] = whenPatchOccurs
-          }
-          bestPatch.checkInvariant(scopeForInvariantCheck)
+          bestPatch.checkInvariant(this)
         }
       }, whenPatchOccurs))
     }

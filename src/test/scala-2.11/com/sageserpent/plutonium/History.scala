@@ -1,29 +1,26 @@
 package com.sageserpent.plutonium
 
 /**
- * Created by Gerard on 21/09/2015.
- */
+  * Created by Gerard on 21/09/2015.
+  */
 abstract class History extends Identified {
   override def hashCode = super.hashCode
 
-  override def checkInvariant: () => Unit = {
-    () => {
-      super.checkInvariant()
-      if (invariantBreakageScheduled) {
-        // NOTE: breakage of a bitemporal invariant is *not* a logic error; we expect
-        // to be asked to try to record events that could potentially make the world
-        // inconsistent - so we don't use an assertion here.
-        throw WorldSpecSupport.changeError
-      }
-      try {
-        shouldBeUnchanged = false
-        // An invariant should not be able to modify its item. End of story, no if or buts.
-        assert(false)
-      }
-      catch {
-        case _: RuntimeException =>
-      }
-
+  override def checkInvariant(): Unit = {
+    super.checkInvariant()
+    if (invariantBreakageScheduled) {
+      // NOTE: breakage of a bitemporal invariant is *not* a logic error; we expect
+      // to be asked to try to record events that could potentially make the world
+      // inconsistent - so we don't use an assertion here.
+      throw WorldSpecSupport.changeError
+    }
+    try {
+      shouldBeUnchanged = false
+      // An invariant should not be able to modify its item. End of story, no if or buts.
+      assert(false)
+    }
+    catch {
+      case _: RuntimeException =>
     }
   }
 

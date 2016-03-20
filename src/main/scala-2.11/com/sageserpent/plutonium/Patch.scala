@@ -16,17 +16,7 @@ class Patch[Raw <: Identified : TypeTag](id: Raw#Id, method: Method, arguments: 
     methodProxy.invoke(targetToBePatched, arguments)
   }
 
-  def checkInvariant(scope: Scope): Unit = {
-    val bitemporalCheckInvariant = for {
-      target <- Bitemporal.singleOneOf[Raw](id)
-    } yield target.checkInvariant
-
-    val checkInvariantsForPotentiallySeveralOrNoItems = scope.render(bitemporalCheckInvariant)
-    assert(checkInvariantsForPotentiallySeveralOrNoItems match {
-      case Stream(_) => true
-      case _ => false
-    })
-    val checkInvariant = checkInvariantsForPotentiallySeveralOrNoItems.head
-    checkInvariant()
+  def checkInvariant(identifiedItemFactory: IdentifiedItemAccess): Unit = {
+    identifiedItemFactory.itemFor[Raw](id).checkInvariant()
   }
 }

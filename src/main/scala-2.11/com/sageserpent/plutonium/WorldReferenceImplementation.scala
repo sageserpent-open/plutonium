@@ -98,7 +98,7 @@ object WorldReferenceImplementation {
           for (_ <- makeManagedResource {
             stopInfiniteRecursiveInterception = true
           } { _ => stopInfiniteRecursiveInterception = false }(List.empty)) {
-            if (itemsAreLocked && method.getReturnType == classOf[Unit])
+            if (itemsAreLocked && method.getReturnType == classOf[Unit] && method.getName != "checkInvariant")
               throw new UnsupportedOperationException(s"Attempt to write via: '$method' to an item: '$target' rendered from a bitemporal query.")
           }
         }
