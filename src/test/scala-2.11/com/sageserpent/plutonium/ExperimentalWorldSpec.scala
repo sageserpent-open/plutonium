@@ -180,9 +180,9 @@ class ExperimentalWorldSpec extends FlatSpec with Matchers with Checkers with Wo
 
       val scopeFromExperimentalWorldAfterForkWhen = experimentalWorld.scopeFor(queryWhenAfterFork, queryAsOfNoLaterThanFork)
 
-      val experimentalWorldHistoryAfterRokeWhen = historyFrom(experimentalWorld, recordingsGroupedById)(scopeFromExperimentalWorldAfterForkWhen)
+      val experimentalWorldHistoryAfterForkWhen = historyFrom(experimentalWorld, recordingsGroupedById)(scopeFromExperimentalWorldAfterForkWhen)
 
-      ((experimentalWorldHistory.length == experimentalWorldHistoryAfterRokeWhen.length) :| s"${experimentalWorldHistory.length} == experimentalWorldHistoryAfterRokeWhen.length") && Prop.all(experimentalWorldHistory zip experimentalWorldHistoryAfterRokeWhen map { case (experimentalWorldCase, experimentalWorldCaseAfterBaseWorldRevised) => (experimentalWorldCase === experimentalWorldCaseAfterBaseWorldRevised) :| s"${experimentalWorldCase} === experimentalWorldCaseAfterBaseWorldRevised" }: _*)
+      ((experimentalWorldHistory.length == experimentalWorldHistoryAfterForkWhen.length) :| s"${experimentalWorldHistory.length} == experimentalWorldHistoryAfterForkWhen.length") && Prop.all(experimentalWorldHistory zip experimentalWorldHistoryAfterForkWhen map { case (experimentalWorldCase, experimentalWorldCaseAfterBaseWorldRevised) => (experimentalWorldCase === experimentalWorldCaseAfterBaseWorldRevised) :| s"${experimentalWorldCase} === experimentalWorldCaseAfterBaseWorldRevised" }: _*)
     })
   }
 

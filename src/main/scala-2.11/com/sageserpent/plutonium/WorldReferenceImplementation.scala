@@ -338,9 +338,9 @@ object MutableState {
   type EventIdToEventMap[EventId] = Map[EventId, (Event, Revision)]
 }
 
-case class MutableState[EventId](val revisionToEventDataMap: mutable.Map[Revision, (MutableState.EventTimeline, MutableState.EventIdToEventMap[EventId])],
+case class MutableState[EventId](revisionToEventDataMap: mutable.Map[Revision, (MutableState.EventTimeline, MutableState.EventIdToEventMap[EventId])],
                                  var nextRevision: Revision,
-                                 val revisionAsOfs: MutableList[Instant]) {
+                                 revisionAsOfs: MutableList[Instant]) {
 }
 
 class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId]) extends World[EventId] {
