@@ -28,19 +28,16 @@ trait Instrument {
   this: Identified =>
 
   type Id = Long
-  type Volume
 
   val id: Id
 
   def fairPrice: Double
-
-  def fairPrice(volume: Volume)(implicit conversion: Volume => Double): Double = volume / unitOfVolume * fairPrice
-
-  val unitOfVolume: Volume
 }
 
-class Contract(val id: Long, var party: String, var counterparty: String, var instrument: Instrument, var volume: Instrument#Volume) extends Identified {
+class Contract(val id: Long, var party: String, var counterparty: String, var instrument: Instrument, var volume: Double) extends Identified {
   type Id = Long
+
+  def fairPrice: Double = volume * instrument.fairPrice
 }
 
 
