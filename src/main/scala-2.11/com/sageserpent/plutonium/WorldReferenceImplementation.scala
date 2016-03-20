@@ -158,8 +158,6 @@ object WorldReferenceImplementation {
         val patchRecorder = new PatchRecorderImplementation with PatchRecorderContracts
           with BestPatchSelectionImplementation with BestPatchSelectionContracts {
           override val identifiedItemsScope: IdentifiedItemsScopeImplementation = identifiedItemsScopeThis
-          override val asOf: Unbounded[Instant] = _asOf
-          override val nextRevision: Revision = _nextRevision
           override val itemsAreLockedResource: ExtractableManagedResource[Unit] = for (_ <- makeManagedResource {
             itemsAreLocked = true
           } { _ => itemsAreLocked = false

@@ -4,7 +4,6 @@ import java.lang.reflect.Method
 import java.time.Instant
 
 import com.sageserpent.americium.{Finite, Unbounded}
-import com.sageserpent.plutonium.World.Revision
 import resource.ExtractableManagedResource
 
 import scala.collection.mutable
@@ -20,8 +19,6 @@ trait PatchRecorderImplementation extends PatchRecorder {
   // of the client 'WorldReferenceImplementation', which provides exception safety at a higher level.
   self: BestPatchSelection =>
   val identifiedItemsScope: WorldReferenceImplementation.IdentifiedItemsScopeImplementation
-  val asOf: Unbounded[Instant]
-  val nextRevision: Revision
   val itemsAreLockedResource: ExtractableManagedResource[Unit]
 
   private var _whenEventPertainedToByLastRecordingTookPlace: Option[Unbounded[Instant]] = None
