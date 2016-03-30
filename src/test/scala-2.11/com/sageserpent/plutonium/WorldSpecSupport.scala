@@ -283,21 +283,23 @@ trait WorldSpecSupport {
 
     override def thePartNoLaterThan(when: Unbounded[Instant]): Option[RecordingsNoLaterThan] = {
       def thePartNoLaterThan(relevantGroupIndex: Int): Some[RecordingsNoLaterThan] = {
-        val dataSampleAndWhenPairsForALifespanWithIndices = dataSamplesGroupedForLifespans(relevantGroupIndex).toList.map(_._2) zip sampleWhensGroupedForLifespans(relevantGroupIndex) zipWithIndex
+        val dataSampleAndWhenPairsForALifespanWithIndices = dataSamplesGroupedForLifespans(relevantGroupIndex).toList.map {case (classifier, dataSample, _) => classifier -> dataSample} zip sampleWhensGroupedForLifespans(relevantGroupIndex) zipWithIndex
 
-        def pickFromRunOfFollowingMeasurements(dataSamples: Seq[Any]) = dataSamples.last // TODO - generalise this if and when measurements progress beyond the 'latest when wins' strategy.
+        def dataSampleAndWhenPairsForALifespanPickedFromRunsWithIndices(dataSampleAndWhenPairsForALifespanWithIndices: List[(((Int, Any), Unbounded[Instant]), Int)]) = {
+          def pickFromRunOfFollowingMeasurements(dataSamples: Seq[Any]) = dataSamples.last // TODO - generalise this if and when measurements progress beyond the 'latest when wins' strategy.
 
-        val runsOfFollowingMeasurementsWithIndices: List[Seq[((Any, Unbounded[Instant]), Int)]] = dataSampleAndWhenPairsForALifespanWithIndices zip
-          decisionsToMakeAChange(dataSampleAndWhenPairsForALifespanWithIndices.size) groupWhile
-          {case (_, (_, makeAChange)) => !makeAChange} map
-          (_ map (_._1)) toList
+          val runsOfFollowingMeasurementsWithIndices: List[Seq[(((Int, Any), Unbounded[Instant]), Int)]] = dataSampleAndWhenPairsForALifespanWithIndices zip
+            decisionsToMakeAChange(dataSampleAndWhenPairsForALifespanWithIndices.size) groupWhile { case (_, (_, makeAChange)) => !makeAChange } map
+            (_ map (_._1)) toList
 
-        val dataSampleAndWhenPairsForALifespanPickedFromRunsWithIndices = runsOfFollowingMeasurementsWithIndices map {runOfFollowingMeasurements =>
-          val ((_, whenForFirstEventInRun), indexForFirstEventInRun) = runOfFollowingMeasurements.head
-          (pickFromRunOfFollowingMeasurements(runOfFollowingMeasurements map {case ((dataSample, _), _) => dataSample}) -> whenForFirstEventInRun, indexForFirstEventInRun)
+          runsOfFollowingMeasurementsWithIndices map { runOfFollowingMeasurements =>
+            val ((_, whenForFirstEventInRun), indexForFirstEventInRun) = runOfFollowingMeasurements.head
+            (pickFromRunOfFollowingMeasurements(runOfFollowingMeasurements map { case (((_, dataSample), _), _) => dataSample }) -> whenForFirstEventInRun, indexForFirstEventInRun)
+          }
         }
 
-        val dataSampleAndWhenPairsForALifespanPickedFromRuns = dataSampleAndWhenPairsForALifespanPickedFromRunsWithIndices map (_._1)
+        val dataSampleAndWhenPairsForALifespanPickedFromRuns = ((dataSampleAndWhenPairsForALifespanWithIndices groupBy { case (((classifier, _), _), _) => classifier }).values flatMap
+          dataSampleAndWhenPairsForALifespanPickedFromRunsWithIndices).toList sortBy (_._2) map (_._1)
 
         Some(RecordingsNoLaterThan(historyId = historyId,
           historiesFrom = historiesFrom,
