@@ -580,14 +580,14 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
   }
 
 
-  val inconsistentlyTypedDataSamplesForAnIdGenerator = dataSamplesForAnIdGenerator_[FooHistory](moreSpecificFooDataSampleGenerator(faulty = false), fooHistoryIdGenerator, Some(dataSampleGenerator1(faulty = false)))
+  val variablyTypedDataSamplesForAnIdGenerator = dataSamplesForAnIdGenerator_[FooHistory](Gen.oneOf(moreSpecificFooDataSampleGenerator(faulty = false), dataSampleGenerator1(faulty = false)), fooHistoryIdGenerator)
 
-  val inconsistentlyTypedRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(inconsistentlyTypedDataSamplesForAnIdGenerator, forbidAnnihilations = true)
+  val variablyTypedRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(variablyTypedDataSamplesForAnIdGenerator, forbidAnnihilations = true)
 
   it should "allow events to vary in their view of the type of an item referenced by an id" in {
     {
       val testCaseGenerator = for {world <- worldGenerator
-                                   recordingsGroupedById <- inconsistentlyTypedRecordingsGroupedByIdGenerator
+                                   recordingsGroupedById <- variablyTypedRecordingsGroupedByIdGenerator
                                    obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
                                    seed <- seedGenerator
                                    random = new Random(seed)
@@ -618,7 +618,7 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
   it should "forbid recording of events that have inconsistent views of the type of an item referenced by an id" in {
     {
       val testCaseGenerator = for {world <- worldGenerator
-                                   recordingsGroupedById <- inconsistentlyTypedRecordingsGroupedByIdGenerator
+                                   recordingsGroupedById <- variablyTypedRecordingsGroupedByIdGenerator
                                    obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
                                    seed <- seedGenerator
                                    random = new Random(seed)

@@ -163,13 +163,10 @@ trait WorldSpecSupport {
     fooHistory.property1 = capture(data)
   }))
 
-  def dataSamplesForAnIdGenerator_[AHistory <: History : TypeTag](dataSampleGenerator: Gen[(_, (Unbounded[Instant], Boolean, AHistory#Id) => Event)], historyIdGenerator: Gen[AHistory#Id], specialDataSampleGenerator: Option[Gen[(_, (Unbounded[Instant], Boolean, AHistory#Id) => Event)]] = None) = {
+  def dataSamplesForAnIdGenerator_[AHistory <: History : TypeTag](dataSampleGenerator: Gen[(_, (Unbounded[Instant], Boolean, AHistory#Id) => Event)], historyIdGenerator: Gen[AHistory#Id]) = {
     // It makes no sense to have an id without associated data samples - the act of
     // recording a data sample via a change is what introduces an id into the world.
-    val dataSamplesGenerator = Gen.nonEmptyListOf(specialDataSampleGenerator match {
-      case Some(specialDataSampleGenerator) => Gen.oneOf(dataSampleGenerator, specialDataSampleGenerator)
-      case None => dataSampleGenerator
-    })
+    val dataSamplesGenerator = Gen.nonEmptyListOf(dataSampleGenerator)
 
     for {dataSamples <- dataSamplesGenerator
          historyId <- historyIdGenerator} yield (historyId,
@@ -464,7 +461,7 @@ trait WorldSpecSupport {
 
   def mixedRecordingsGroupedByIdGenerator(faulty: Boolean = false, forbidAnnihilations: Boolean, forbidMeasurements: Boolean = false) = {
     val mixedDisjointLeftHandDataSamplesForAnIdGenerator = Gen.frequency(Seq(
-      dataSamplesForAnIdGenerator_[FooHistory](dataSampleGenerator1(faulty), fooHistoryIdGenerator, Some(moreSpecificFooDataSampleGenerator(faulty))),
+      dataSamplesForAnIdGenerator_[FooHistory](Gen.oneOf(dataSampleGenerator1(faulty), moreSpecificFooDataSampleGenerator(faulty)), fooHistoryIdGenerator),
       dataSamplesForAnIdGenerator_[FooHistory](dataSampleGenerator2(faulty), fooHistoryIdGenerator),
       dataSamplesForAnIdGenerator_[MoreSpecificFooHistory](moreSpecificFooDataSampleGenerator(faulty), moreSpecificFooHistoryIdGenerator)) map (1 -> _): _*)
 
