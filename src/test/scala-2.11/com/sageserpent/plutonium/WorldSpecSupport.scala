@@ -163,7 +163,7 @@ trait WorldSpecSupport {
     fooHistory.property1 = capture(data)
   }))
 
-  def dataSamplesForAnIdGenerator_[AHistory <: History : TypeTag](dataSampleGenerator: Gen[(_, (Unbounded[Instant], Boolean, AHistory#Id) => Event)], historyIdGenerator: Gen[AHistory#Id]) = {
+  def dataSamplesForAnIdGenerator_[AHistory <: History : TypeTag]( historyIdGenerator: Gen[AHistory#Id], dataSampleGenerator: Gen[(_, (Unbounded[Instant], Boolean, AHistory#Id) => Event)]) = {
     // It makes no sense to have an id without associated data samples - the act of
     // recording a data sample via a change is what introduces an id into the world.
     val dataSamplesGenerator = Gen.nonEmptyListOf(dataSampleGenerator)
@@ -461,18 +461,18 @@ trait WorldSpecSupport {
 
   def mixedRecordingsGroupedByIdGenerator(faulty: Boolean = false, forbidAnnihilations: Boolean, forbidMeasurements: Boolean = false) = {
     val mixedDisjointLeftHandDataSamplesForAnIdGenerator = Gen.frequency(Seq(
-      dataSamplesForAnIdGenerator_[FooHistory](Gen.oneOf(dataSampleGenerator1(faulty), moreSpecificFooDataSampleGenerator(faulty)), fooHistoryIdGenerator),
-      dataSamplesForAnIdGenerator_[FooHistory](dataSampleGenerator2(faulty), fooHistoryIdGenerator),
-      dataSamplesForAnIdGenerator_[MoreSpecificFooHistory](moreSpecificFooDataSampleGenerator(faulty), moreSpecificFooHistoryIdGenerator)) map (1 -> _): _*)
+      dataSamplesForAnIdGenerator_[FooHistory](fooHistoryIdGenerator, Gen.oneOf(dataSampleGenerator1(faulty), moreSpecificFooDataSampleGenerator(faulty))),
+      dataSamplesForAnIdGenerator_[FooHistory](fooHistoryIdGenerator, dataSampleGenerator2(faulty)),
+      dataSamplesForAnIdGenerator_[MoreSpecificFooHistory](moreSpecificFooHistoryIdGenerator, moreSpecificFooDataSampleGenerator(faulty))) map (1 -> _): _*)
 
     val disjointLeftHandDataSamplesForAnIdGenerator = mixedDisjointLeftHandDataSamplesForAnIdGenerator
     val disjointLeftHandRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(disjointLeftHandDataSamplesForAnIdGenerator, forbidAnnihilations = faulty || forbidAnnihilations, forbidMeasurements = forbidMeasurements)
 
     val mixedDisjointRightHandDataSamplesForAnIdGenerator = Gen.frequency(Seq(
-      dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator3(faulty), barHistoryIdGenerator),
-      dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator4(faulty), barHistoryIdGenerator),
-      dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator5(faulty), barHistoryIdGenerator),
-      dataSamplesForAnIdGenerator_[IntegerHistory](integerDataSampleGenerator(faulty), integerHistoryIdGenerator)) map (1 -> _): _*)
+      dataSamplesForAnIdGenerator_[BarHistory](barHistoryIdGenerator, dataSampleGenerator3(faulty)),
+      dataSamplesForAnIdGenerator_[BarHistory](barHistoryIdGenerator, dataSampleGenerator4(faulty)),
+      dataSamplesForAnIdGenerator_[BarHistory](barHistoryIdGenerator, dataSampleGenerator5(faulty)),
+      dataSamplesForAnIdGenerator_[IntegerHistory](integerHistoryIdGenerator, integerDataSampleGenerator(faulty))) map (1 -> _): _*)
 
     val disjointRightHandDataSamplesForAnIdGenerator = mixedDisjointRightHandDataSamplesForAnIdGenerator
     val disjointRightHandRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(disjointRightHandDataSamplesForAnIdGenerator, forbidAnnihilations = faulty || forbidAnnihilations, forbidMeasurements = forbidMeasurements)
@@ -495,14 +495,14 @@ trait WorldSpecSupport {
   // mind sharing the same id between these samples and the previous ones for the *same* type - all that means is that
   // we can see weird histories for an id when doing step-by-step corrections.
   def mixedNonConflictingDataSamplesForAnIdGenerator(faulty: Boolean = false) = Gen.frequency(Seq(
-    dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator3(faulty), barHistoryIdGenerator),
-    dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator4(faulty), barHistoryIdGenerator),
-    dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator5(faulty), barHistoryIdGenerator),
-    dataSamplesForAnIdGenerator_[IntegerHistory](integerDataSampleGenerator(faulty), integerHistoryIdGenerator)) map (1 -> _): _*)
+    dataSamplesForAnIdGenerator_[BarHistory](barHistoryIdGenerator, dataSampleGenerator3(faulty)),
+    dataSamplesForAnIdGenerator_[BarHistory](barHistoryIdGenerator, dataSampleGenerator4(faulty)),
+    dataSamplesForAnIdGenerator_[BarHistory](barHistoryIdGenerator, dataSampleGenerator5(faulty)),
+    dataSamplesForAnIdGenerator_[IntegerHistory](integerHistoryIdGenerator, integerDataSampleGenerator(faulty))) map (1 -> _): _*)
 
   val nonConflictingDataSamplesForAnIdGenerator = mixedNonConflictingDataSamplesForAnIdGenerator()
   val nonConflictingRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(nonConflictingDataSamplesForAnIdGenerator, forbidAnnihilations = true)
 
-  val integerDataSamplesForAnIdGenerator = dataSamplesForAnIdGenerator_[IntegerHistory](integerDataSampleGenerator(faulty = false), integerHistoryIdGenerator)
+  val integerDataSamplesForAnIdGenerator = dataSamplesForAnIdGenerator_[IntegerHistory](integerHistoryIdGenerator, integerDataSampleGenerator(faulty = false))
   val integerHistoryRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(integerDataSamplesForAnIdGenerator)
 }

@@ -580,7 +580,7 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
   }
 
 
-  val variablyTypedDataSamplesForAnIdGenerator = dataSamplesForAnIdGenerator_[FooHistory](Gen.oneOf(moreSpecificFooDataSampleGenerator(faulty = false), dataSampleGenerator1(faulty = false)), fooHistoryIdGenerator)
+  val variablyTypedDataSamplesForAnIdGenerator = dataSamplesForAnIdGenerator_[FooHistory](fooHistoryIdGenerator, Gen.oneOf(moreSpecificFooDataSampleGenerator(faulty = false), dataSampleGenerator1(faulty = false)))
 
   val variablyTypedRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(variablyTypedDataSamplesForAnIdGenerator, forbidAnnihilations = true)
 
