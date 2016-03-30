@@ -163,15 +163,15 @@ trait WorldSpecSupport {
     fooHistory.property1 = capture(data)
   }))
 
-  def dataSamplesForAnIdGenerator_[AHistory <: History : TypeTag]( historyIdGenerator: Gen[AHistory#Id], dataSampleGenerator: Gen[(_, (Unbounded[Instant], Boolean, AHistory#Id) => Event)]) = {
+  def dataSamplesForAnIdGenerator_[AHistory <: History : TypeTag]( historyIdGenerator: Gen[AHistory#Id], dataSampleGenerators: Gen[(_, (Unbounded[Instant], Boolean, AHistory#Id) => Event)] *) = {
     // It makes no sense to have an id without associated data samples - the act of
     // recording a data sample via a change is what introduces an id into the world.
-    val dataSamplesGenerator = Gen.nonEmptyListOf(dataSampleGenerator)
+    val dataSamplesGenerator = Gen.nonEmptyListOf(Gen.frequency(dataSampleGenerators.zipWithIndex map {case (generator, index) => generator map (sample => index -> sample)} map (1 -> _): _*))
 
     for {dataSamples <- dataSamplesGenerator
          historyId <- historyIdGenerator} yield (historyId,
       (scope: Scope) => scope.render(Bitemporal.zeroOrOneOf[AHistory](historyId)): Seq[History],
-      for {(data, changeFor: ((Unbounded[Instant], Boolean, AHistory#Id) => Event)) <- dataSamples} yield (data, changeFor(_: Unbounded[Instant], _: Boolean, historyId)),
+      for {(index, (data, changeFor: ((Unbounded[Instant], Boolean, AHistory#Id) => Event))) <- dataSamples} yield (index, data, changeFor(_: Unbounded[Instant], _: Boolean, historyId)),
       Annihilation(_: Instant, historyId))
   }
 
@@ -202,7 +202,7 @@ trait WorldSpecSupport {
   class RecordingsForAPhoenixId(override val historyId: Any,
                                 override val historiesFrom: Scope => Seq[History],
                                 annihilationFor: Instant => Annihilation[_ <: Identified],
-                                dataSamplesGroupedForLifespans: Stream[Traversable[(Any, (Unbounded[Instant], Boolean) => Event)]],
+                                dataSamplesGroupedForLifespans: Stream[Traversable[(Int, Any, (Unbounded[Instant], Boolean) => Event)]],
                                 sampleWhensGroupedForLifespans: Stream[List[Unbounded[Instant]]],
                                 forbidMeasurements: Boolean) extends RecordingsForAnId {
     require(dataSamplesGroupedForLifespans.size == sampleWhensGroupedForLifespans.size)
@@ -230,7 +230,7 @@ trait WorldSpecSupport {
       } yield {
         val numberOfChanges = dataSamples.size
         // NOTE: we may have an extra event when - 'zip' will disregard this.
-        val data = dataSamples.toSeq zip decisionsToMakeAChange(dataSamples.size) zip eventWhens map { case (((dataSample, _), makeAChange), eventWhen) => (if (makeAChange) "Change: " else "Measurement: ") ++ dataSample.toString }
+        val data = dataSamples.toSeq zip decisionsToMakeAChange(dataSamples.size) zip eventWhens map { case (((_, dataSample, _), makeAChange), eventWhen) => (if (makeAChange) "Change: " else "Measurement: ") ++ dataSample.toString }
         eventWhens zip (if (numberOfChanges < eventWhens.size)
           data :+ "Annihilation"
         else
@@ -245,7 +245,7 @@ trait WorldSpecSupport {
     } yield {
       val numberOfChanges = dataSamples.size
       // NOTE: we may have an extra event when - 'zip' will disregard this.
-      val changes = dataSamples.toSeq zip decisionsToMakeAChange(dataSamples.size) zip eventWhens map { case (((_, changeFor), makeAChange), eventWhen) => changeFor(eventWhen, makeAChange) }
+      val changes = dataSamples.toSeq zip decisionsToMakeAChange(dataSamples.size) zip eventWhens map { case (((_, _, changeFor), makeAChange), eventWhen) => changeFor(eventWhen, makeAChange) }
       eventWhens zip (if (numberOfChanges < eventWhens.size)
         changes :+ annihilationFor(eventWhens.last match { case Finite(definiteWhen) => definiteWhen })
       else
@@ -283,7 +283,7 @@ trait WorldSpecSupport {
 
     override def thePartNoLaterThan(when: Unbounded[Instant]): Option[RecordingsNoLaterThan] = {
       def thePartNoLaterThan(relevantGroupIndex: Revision): Some[RecordingsNoLaterThan] = {
-        val dataSampleAndWhenPairsForALifespan = dataSamplesGroupedForLifespans(relevantGroupIndex).toList.map(_._1) zip sampleWhensGroupedForLifespans(relevantGroupIndex)
+        val dataSampleAndWhenPairsForALifespan = dataSamplesGroupedForLifespans(relevantGroupIndex).toList.map(_._2) zip sampleWhensGroupedForLifespans(relevantGroupIndex)
 
         def pickFromRunOfFollowingMeasurements(dataSamples: Seq[Any]) = dataSamples.last // TODO - generalise this if and when measurements progress beyond the 'latest when wins' strategy.
 
@@ -330,7 +330,7 @@ trait WorldSpecSupport {
     override val whenEarliestChangeHappened: Unbounded[Instant] = sampleWhensGroupedForLifespans.head.head
   }
 
-  def recordingsGroupedByIdGenerator_(dataSamplesForAnIdGenerator: Gen[(Any, Scope => Seq[History], List[(Any, (Unbounded[Instant], Boolean) => Event)], Instant => Annihilation[_ <: Identified])],
+  def recordingsGroupedByIdGenerator_(dataSamplesForAnIdGenerator: Gen[(Any, Scope => Seq[History], List[(Int, Any, (Unbounded[Instant], Boolean) => Event)], Instant => Annihilation[_ <: Identified])],
                                       forbidAnnihilations: Boolean = false,
                                       forbidMeasurements: Boolean = false) = {
     val unconstrainedParametersGenerator = for {(historyId, historiesFrom, dataSamples, annihilationFor) <- dataSamplesForAnIdGenerator
@@ -339,7 +339,7 @@ trait WorldSpecSupport {
                                                 dataSamplesGroupedForLifespans = if (forbidAnnihilations) Stream(dataSamples) else random.splitIntoNonEmptyPieces(dataSamples)
                                                 finalLifespanIsOngoing <- if (forbidAnnihilations) Gen.const(true) else Arbitrary.arbitrary[Boolean]
                                                 numberOfEventsForLifespans = {
-                                                  def numberOfEventsForLimitedLifespans(dataSamplesGroupedForLimitedLifespans: Stream[Traversable[(Any, (Unbounded[Instant], Boolean) => Event)]]) = {
+                                                  def numberOfEventsForLimitedLifespans(dataSamplesGroupedForLimitedLifespans: Stream[Traversable[(Int, Any, (Unbounded[Instant], Boolean) => Event)]]) = {
                                                     // Add an extra when for the annihilation at the end of the lifespan...
                                                     dataSamplesGroupedForLimitedLifespans map (1 + _.size)
                                                   }
