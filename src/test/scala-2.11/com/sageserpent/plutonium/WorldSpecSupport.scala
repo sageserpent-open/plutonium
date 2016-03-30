@@ -282,19 +282,22 @@ trait WorldSpecSupport {
     }
 
     override def thePartNoLaterThan(when: Unbounded[Instant]): Option[RecordingsNoLaterThan] = {
-      def thePartNoLaterThan(relevantGroupIndex: Revision): Some[RecordingsNoLaterThan] = {
-        val dataSampleAndWhenPairsForALifespan = dataSamplesGroupedForLifespans(relevantGroupIndex).toList.map(_._2) zip sampleWhensGroupedForLifespans(relevantGroupIndex)
+      def thePartNoLaterThan(relevantGroupIndex: Int): Some[RecordingsNoLaterThan] = {
+        val dataSampleAndWhenPairsForALifespanWithIndices = dataSamplesGroupedForLifespans(relevantGroupIndex).toList.map(_._2) zip sampleWhensGroupedForLifespans(relevantGroupIndex) zipWithIndex
 
         def pickFromRunOfFollowingMeasurements(dataSamples: Seq[Any]) = dataSamples.last // TODO - generalise this if and when measurements progress beyond the 'latest when wins' strategy.
 
-        val runsOfFollowingMeasurements = dataSampleAndWhenPairsForALifespan zip
-          decisionsToMakeAChange(dataSampleAndWhenPairsForALifespan.size) groupWhile
+        val runsOfFollowingMeasurementsWithIndices: List[Seq[((Any, Unbounded[Instant]), Int)]] = dataSampleAndWhenPairsForALifespanWithIndices zip
+          decisionsToMakeAChange(dataSampleAndWhenPairsForALifespanWithIndices.size) groupWhile
           {case (_, (_, makeAChange)) => !makeAChange} map
           (_ map (_._1)) toList
 
-        val dataSampleAndWhenPairsForALifespanPickedFromRuns = runsOfFollowingMeasurements map {runOfFollowingMeasurements =>
-          pickFromRunOfFollowingMeasurements(runOfFollowingMeasurements map (_._1)) -> runOfFollowingMeasurements.head._2
+        val dataSampleAndWhenPairsForALifespanPickedFromRunsWithIndices = runsOfFollowingMeasurementsWithIndices map {runOfFollowingMeasurements =>
+          val ((_, whenForFirstEventInRun), indexForFirstEventInRun) = runOfFollowingMeasurements.head
+          (pickFromRunOfFollowingMeasurements(runOfFollowingMeasurements map {case ((dataSample, _), _) => dataSample}) -> whenForFirstEventInRun, indexForFirstEventInRun)
         }
+
+        val dataSampleAndWhenPairsForALifespanPickedFromRuns = dataSampleAndWhenPairsForALifespanPickedFromRunsWithIndices map (_._1)
 
         Some(RecordingsNoLaterThan(historyId = historyId,
           historiesFrom = historiesFrom,
