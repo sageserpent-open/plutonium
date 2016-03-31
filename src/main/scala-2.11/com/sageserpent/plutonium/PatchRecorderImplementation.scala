@@ -135,7 +135,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
     private def methodAndItsCandidatePatchTuplesFor(method: Method): Option[(Method, CandidatePatches)] = {
       // Direct use of key into map...
       exemplarMethodToCandidatePatchesMap.get(method) map (method -> _) orElse
-      // ... allback to doing a linear search if the methods are not equal, but are related.
+      // ... fallback to doing a linear search if the methods are not equal, but are related.
       exemplarMethodToCandidatePatchesMap.find {
         case (exemplarMethod, _) => WorldReferenceImplementation.firstMethodIsOverrideCompatibleWithSecond(method, exemplarMethod) ||
           WorldReferenceImplementation.firstMethodIsOverrideCompatibleWithSecond(exemplarMethod, method)
@@ -175,7 +175,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
         bestPatch(this)
         for (_ <- itemsAreLockedResource) {
           bestPatch.checkInvariant(this)
-        }
+          }
       }, whenPatchOccurs))
     }
 

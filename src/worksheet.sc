@@ -38,6 +38,5 @@ class Contract(val id: Long, var party: String, var counterparty: String, var in
   type Id = Long
 
   def fairPrice: Double = volume * instrument.fairPrice
-}
-
+  }
 

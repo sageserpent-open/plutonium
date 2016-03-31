@@ -163,18 +163,15 @@ trait WorldSpecSupport {
     fooHistory.property1 = capture(data)
   }))
 
-  def dataSamplesForAnIdGenerator_[AHistory <: History : TypeTag](dataSampleGenerator: Gen[(_, (Unbounded[Instant], Boolean, AHistory#Id) => Event)], historyIdGenerator: Gen[AHistory#Id], specialDataSampleGenerator: Option[Gen[(_, (Unbounded[Instant], Boolean, AHistory#Id) => Event)]] = None) = {
+  def dataSamplesForAnIdGenerator_[AHistory <: History : TypeTag]( historyIdGenerator: Gen[AHistory#Id], dataSampleGenerators: Gen[(_, (Unbounded[Instant], Boolean, AHistory#Id) => Event)] *) = {
     // It makes no sense to have an id without associated data samples - the act of
     // recording a data sample via a change is what introduces an id into the world.
-    val dataSamplesGenerator = Gen.nonEmptyListOf(specialDataSampleGenerator match {
-      case Some(specialDataSampleGenerator) => Gen.oneOf(dataSampleGenerator, specialDataSampleGenerator)
-      case None => dataSampleGenerator
-    })
+    val dataSamplesGenerator = Gen.nonEmptyListOf(Gen.frequency(dataSampleGenerators.zipWithIndex map {case (generator, index) => generator map (sample => index -> sample)} map (1 -> _): _*))
 
     for {dataSamples <- dataSamplesGenerator
          historyId <- historyIdGenerator} yield (historyId,
       (scope: Scope) => scope.render(Bitemporal.zeroOrOneOf[AHistory](historyId)): Seq[History],
-      for {(data, changeFor: ((Unbounded[Instant], Boolean, AHistory#Id) => Event)) <- dataSamples} yield (data, changeFor(_: Unbounded[Instant], _: Boolean, historyId)),
+      for {(index, (data, changeFor: ((Unbounded[Instant], Boolean, AHistory#Id) => Event))) <- dataSamples} yield (index, data, changeFor(_: Unbounded[Instant], _: Boolean, historyId)),
       Annihilation(_: Instant, historyId))
   }
 
@@ -205,7 +202,7 @@ trait WorldSpecSupport {
   class RecordingsForAPhoenixId(override val historyId: Any,
                                 override val historiesFrom: Scope => Seq[History],
                                 annihilationFor: Instant => Annihilation[_ <: Identified],
-                                dataSamplesGroupedForLifespans: Stream[Traversable[(Any, (Unbounded[Instant], Boolean) => Event)]],
+                                dataSamplesGroupedForLifespans: Stream[Traversable[(Int, Any, (Unbounded[Instant], Boolean) => Event)]],
                                 sampleWhensGroupedForLifespans: Stream[List[Unbounded[Instant]]],
                                 forbidMeasurements: Boolean) extends RecordingsForAnId {
     require(dataSamplesGroupedForLifespans.size == sampleWhensGroupedForLifespans.size)
@@ -233,7 +230,7 @@ trait WorldSpecSupport {
       } yield {
         val numberOfChanges = dataSamples.size
         // NOTE: we may have an extra event when - 'zip' will disregard this.
-        val data = dataSamples.toSeq zip decisionsToMakeAChange(dataSamples.size) zip eventWhens map { case (((dataSample, _), makeAChange), eventWhen) => (if (makeAChange) "Change: " else "Measurement: ") ++ dataSample.toString }
+        val data = dataSamples.toSeq zip decisionsToMakeAChange(dataSamples.size) zip eventWhens map { case (((_, dataSample, _), makeAChange), eventWhen) => (if (makeAChange) "Change: " else "Measurement: ") ++ dataSample.toString }
         eventWhens zip (if (numberOfChanges < eventWhens.size)
           data :+ "Annihilation"
         else
@@ -248,7 +245,7 @@ trait WorldSpecSupport {
     } yield {
       val numberOfChanges = dataSamples.size
       // NOTE: we may have an extra event when - 'zip' will disregard this.
-      val changes = dataSamples.toSeq zip decisionsToMakeAChange(dataSamples.size) zip eventWhens map { case (((_, changeFor), makeAChange), eventWhen) => changeFor(eventWhen, makeAChange) }
+      val changes = dataSamples.toSeq zip decisionsToMakeAChange(dataSamples.size) zip eventWhens map { case (((_, _, changeFor), makeAChange), eventWhen) => changeFor(eventWhen, makeAChange) }
       eventWhens zip (if (numberOfChanges < eventWhens.size)
         changes :+ annihilationFor(eventWhens.last match { case Finite(definiteWhen) => definiteWhen })
       else
@@ -285,19 +282,27 @@ trait WorldSpecSupport {
     }
 
     override def thePartNoLaterThan(when: Unbounded[Instant]): Option[RecordingsNoLaterThan] = {
-      def thePartNoLaterThan(relevantGroupIndex: Revision): Some[RecordingsNoLaterThan] = {
-        val dataSampleAndWhenPairsForALifespan = dataSamplesGroupedForLifespans(relevantGroupIndex).toList.map(_._1) zip sampleWhensGroupedForLifespans(relevantGroupIndex)
+      def thePartNoLaterThan(relevantGroupIndex: Int): Some[RecordingsNoLaterThan] = {
+        val dataSampleAndWhenPairsForALifespanWithIndices = dataSamplesGroupedForLifespans(relevantGroupIndex).toList.map {case (classifier, dataSample, _) => classifier -> dataSample} zip sampleWhensGroupedForLifespans(relevantGroupIndex) zipWithIndex
 
-        def pickFromRunOfFollowingMeasurements(dataSamples: Seq[Any]) = dataSamples.last // TODO - generalise this if and when measurements progress beyond the 'latest when wins' strategy.
+        val dataSampleAndWhenPairsForALifespanWithIndicesAndWhetherToMakeChanges =
+          dataSampleAndWhenPairsForALifespanWithIndices zip decisionsToMakeAChange(dataSampleAndWhenPairsForALifespanWithIndices.size)
 
-        val runsOfFollowingMeasurements = dataSampleAndWhenPairsForALifespan zip
-          decisionsToMakeAChange(dataSampleAndWhenPairsForALifespan.size) groupWhile
-          {case (_, (_, makeAChange)) => !makeAChange} map
-          (_ map (_._1)) toList
+        def dataSampleAndWhenPairsForALifespanPickedFromRunsWithIndices(dataSampleAndWhenPairsForALifespanWithIndicesAndWhetherToMakeChanges: List[((((Int, Any), Unbounded[Instant]), Int), Boolean)]) = {
+          def pickFromRunOfFollowingMeasurements(dataSamples: Seq[Any]) = dataSamples.last // TODO - generalise this if and when measurements progress beyond the 'latest when wins' strategy.
 
-        val dataSampleAndWhenPairsForALifespanPickedFromRuns = runsOfFollowingMeasurements map {runOfFollowingMeasurements =>
-          pickFromRunOfFollowingMeasurements(runOfFollowingMeasurements map (_._1)) -> runOfFollowingMeasurements.head._2
+          val runsOfFollowingMeasurementsWithIndices: List[Seq[(((Int, Any), Unbounded[Instant]), Int)]] =
+            dataSampleAndWhenPairsForALifespanWithIndicesAndWhetherToMakeChanges groupWhile { case (_, (_, makeAChange)) => !makeAChange } map
+            (_ map (_._1)) toList
+
+          runsOfFollowingMeasurementsWithIndices map { runOfFollowingMeasurements =>
+            val ((_, whenForFirstEventInRun), indexForFirstEventInRun) = runOfFollowingMeasurements.head
+            (pickFromRunOfFollowingMeasurements(runOfFollowingMeasurements map { case (((_, dataSample), _), _) => dataSample }) -> whenForFirstEventInRun, indexForFirstEventInRun)
+          }
         }
+
+        val dataSampleAndWhenPairsForALifespanPickedFromRuns = ((dataSampleAndWhenPairsForALifespanWithIndicesAndWhetherToMakeChanges groupBy { case ((((classifier, _), _), _), _) => classifier }).values flatMap
+          dataSampleAndWhenPairsForALifespanPickedFromRunsWithIndices).toList sortBy (_._2) map (_._1)
 
         Some(RecordingsNoLaterThan(historyId = historyId,
           historiesFrom = historiesFrom,
@@ -333,7 +338,7 @@ trait WorldSpecSupport {
     override val whenEarliestChangeHappened: Unbounded[Instant] = sampleWhensGroupedForLifespans.head.head
   }
 
-  def recordingsGroupedByIdGenerator_(dataSamplesForAnIdGenerator: Gen[(Any, Scope => Seq[History], List[(Any, (Unbounded[Instant], Boolean) => Event)], Instant => Annihilation[_ <: Identified])],
+  def recordingsGroupedByIdGenerator_(dataSamplesForAnIdGenerator: Gen[(Any, Scope => Seq[History], List[(Int, Any, (Unbounded[Instant], Boolean) => Event)], Instant => Annihilation[_ <: Identified])],
                                       forbidAnnihilations: Boolean = false,
                                       forbidMeasurements: Boolean = false) = {
     val unconstrainedParametersGenerator = for {(historyId, historiesFrom, dataSamples, annihilationFor) <- dataSamplesForAnIdGenerator
@@ -342,7 +347,7 @@ trait WorldSpecSupport {
                                                 dataSamplesGroupedForLifespans = if (forbidAnnihilations) Stream(dataSamples) else random.splitIntoNonEmptyPieces(dataSamples)
                                                 finalLifespanIsOngoing <- if (forbidAnnihilations) Gen.const(true) else Arbitrary.arbitrary[Boolean]
                                                 numberOfEventsForLifespans = {
-                                                  def numberOfEventsForLimitedLifespans(dataSamplesGroupedForLimitedLifespans: Stream[Traversable[(Any, (Unbounded[Instant], Boolean) => Event)]]) = {
+                                                  def numberOfEventsForLimitedLifespans(dataSamplesGroupedForLimitedLifespans: Stream[Traversable[(Int, Any, (Unbounded[Instant], Boolean) => Event)]]) = {
                                                     // Add an extra when for the annihilation at the end of the lifespan...
                                                     dataSamplesGroupedForLimitedLifespans map (1 + _.size)
                                                   }
@@ -464,18 +469,15 @@ trait WorldSpecSupport {
 
   def mixedRecordingsGroupedByIdGenerator(faulty: Boolean = false, forbidAnnihilations: Boolean, forbidMeasurements: Boolean = false) = {
     val mixedDisjointLeftHandDataSamplesForAnIdGenerator = Gen.frequency(Seq(
-      dataSamplesForAnIdGenerator_[FooHistory](dataSampleGenerator1(faulty), fooHistoryIdGenerator, Some(moreSpecificFooDataSampleGenerator(faulty))),
-      dataSamplesForAnIdGenerator_[FooHistory](dataSampleGenerator2(faulty), fooHistoryIdGenerator),
-      dataSamplesForAnIdGenerator_[MoreSpecificFooHistory](moreSpecificFooDataSampleGenerator(faulty), moreSpecificFooHistoryIdGenerator)) map (1 -> _): _*)
+      dataSamplesForAnIdGenerator_[FooHistory](fooHistoryIdGenerator, Gen.oneOf(dataSampleGenerator1(faulty), moreSpecificFooDataSampleGenerator(faulty)), dataSampleGenerator2(faulty)),
+      dataSamplesForAnIdGenerator_[MoreSpecificFooHistory](moreSpecificFooHistoryIdGenerator, moreSpecificFooDataSampleGenerator(faulty))) map (1 -> _): _*)
 
     val disjointLeftHandDataSamplesForAnIdGenerator = mixedDisjointLeftHandDataSamplesForAnIdGenerator
     val disjointLeftHandRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(disjointLeftHandDataSamplesForAnIdGenerator, forbidAnnihilations = faulty || forbidAnnihilations, forbidMeasurements = forbidMeasurements)
 
     val mixedDisjointRightHandDataSamplesForAnIdGenerator = Gen.frequency(Seq(
-      dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator3(faulty), barHistoryIdGenerator),
-      dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator4(faulty), barHistoryIdGenerator),
-      dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator5(faulty), barHistoryIdGenerator),
-      dataSamplesForAnIdGenerator_[IntegerHistory](integerDataSampleGenerator(faulty), integerHistoryIdGenerator)) map (1 -> _): _*)
+      dataSamplesForAnIdGenerator_[BarHistory](barHistoryIdGenerator, dataSampleGenerator3(faulty), dataSampleGenerator4(faulty), dataSampleGenerator5(faulty)),
+      dataSamplesForAnIdGenerator_[IntegerHistory](integerHistoryIdGenerator, integerDataSampleGenerator(faulty))) map (1 -> _): _*)
 
     val disjointRightHandDataSamplesForAnIdGenerator = mixedDisjointRightHandDataSamplesForAnIdGenerator
     val disjointRightHandRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(disjointRightHandDataSamplesForAnIdGenerator, forbidAnnihilations = faulty || forbidAnnihilations, forbidMeasurements = forbidMeasurements)
@@ -498,14 +500,12 @@ trait WorldSpecSupport {
   // mind sharing the same id between these samples and the previous ones for the *same* type - all that means is that
   // we can see weird histories for an id when doing step-by-step corrections.
   def mixedNonConflictingDataSamplesForAnIdGenerator(faulty: Boolean = false) = Gen.frequency(Seq(
-    dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator3(faulty), barHistoryIdGenerator),
-    dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator4(faulty), barHistoryIdGenerator),
-    dataSamplesForAnIdGenerator_[BarHistory](dataSampleGenerator5(faulty), barHistoryIdGenerator),
-    dataSamplesForAnIdGenerator_[IntegerHistory](integerDataSampleGenerator(faulty), integerHistoryIdGenerator)) map (1 -> _): _*)
+    dataSamplesForAnIdGenerator_[BarHistory](barHistoryIdGenerator, dataSampleGenerator3(faulty), dataSampleGenerator4(faulty), dataSampleGenerator5(faulty)),
+    dataSamplesForAnIdGenerator_[IntegerHistory](integerHistoryIdGenerator, integerDataSampleGenerator(faulty))) map (1 -> _): _*)
 
   val nonConflictingDataSamplesForAnIdGenerator = mixedNonConflictingDataSamplesForAnIdGenerator()
   val nonConflictingRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(nonConflictingDataSamplesForAnIdGenerator, forbidAnnihilations = true)
 
-  val integerDataSamplesForAnIdGenerator = dataSamplesForAnIdGenerator_[IntegerHistory](integerDataSampleGenerator(faulty = false), integerHistoryIdGenerator)
+  val integerDataSamplesForAnIdGenerator = dataSamplesForAnIdGenerator_[IntegerHistory](integerHistoryIdGenerator, integerDataSampleGenerator(faulty = false))
   val integerHistoryRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(integerDataSamplesForAnIdGenerator)
 }
