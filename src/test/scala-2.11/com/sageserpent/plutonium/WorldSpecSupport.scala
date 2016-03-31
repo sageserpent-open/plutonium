@@ -285,11 +285,14 @@ trait WorldSpecSupport {
       def thePartNoLaterThan(relevantGroupIndex: Int): Some[RecordingsNoLaterThan] = {
         val dataSampleAndWhenPairsForALifespanWithIndices = dataSamplesGroupedForLifespans(relevantGroupIndex).toList.map {case (classifier, dataSample, _) => classifier -> dataSample} zip sampleWhensGroupedForLifespans(relevantGroupIndex) zipWithIndex
 
-        def dataSampleAndWhenPairsForALifespanPickedFromRunsWithIndices(dataSampleAndWhenPairsForALifespanWithIndices: List[(((Int, Any), Unbounded[Instant]), Int)]) = {
+        val dataSampleAndWhenPairsForALifespanWithIndicesAndWhetherToMakeChanges =
+          dataSampleAndWhenPairsForALifespanWithIndices zip decisionsToMakeAChange(dataSampleAndWhenPairsForALifespanWithIndices.size)
+
+        def dataSampleAndWhenPairsForALifespanPickedFromRunsWithIndices(dataSampleAndWhenPairsForALifespanWithIndicesAndWhetherToMakeChanges: List[((((Int, Any), Unbounded[Instant]), Int), Boolean)]) = {
           def pickFromRunOfFollowingMeasurements(dataSamples: Seq[Any]) = dataSamples.last // TODO - generalise this if and when measurements progress beyond the 'latest when wins' strategy.
 
-          val runsOfFollowingMeasurementsWithIndices: List[Seq[(((Int, Any), Unbounded[Instant]), Int)]] = dataSampleAndWhenPairsForALifespanWithIndices zip
-            decisionsToMakeAChange(dataSampleAndWhenPairsForALifespanWithIndices.size) groupWhile { case (_, (_, makeAChange)) => !makeAChange } map
+          val runsOfFollowingMeasurementsWithIndices: List[Seq[(((Int, Any), Unbounded[Instant]), Int)]] =
+            dataSampleAndWhenPairsForALifespanWithIndicesAndWhetherToMakeChanges groupWhile { case (_, (_, makeAChange)) => !makeAChange } map
             (_ map (_._1)) toList
 
           runsOfFollowingMeasurementsWithIndices map { runOfFollowingMeasurements =>
@@ -298,7 +301,7 @@ trait WorldSpecSupport {
           }
         }
 
-        val dataSampleAndWhenPairsForALifespanPickedFromRuns = ((dataSampleAndWhenPairsForALifespanWithIndices groupBy { case (((classifier, _), _), _) => classifier }).values flatMap
+        val dataSampleAndWhenPairsForALifespanPickedFromRuns = ((dataSampleAndWhenPairsForALifespanWithIndicesAndWhetherToMakeChanges groupBy { case ((((classifier, _), _), _), _) => classifier }).values flatMap
           dataSampleAndWhenPairsForALifespanPickedFromRunsWithIndices).toList sortBy (_._2) map (_._1)
 
         Some(RecordingsNoLaterThan(historyId = historyId,
@@ -466,17 +469,14 @@ trait WorldSpecSupport {
 
   def mixedRecordingsGroupedByIdGenerator(faulty: Boolean = false, forbidAnnihilations: Boolean, forbidMeasurements: Boolean = false) = {
     val mixedDisjointLeftHandDataSamplesForAnIdGenerator = Gen.frequency(Seq(
-      dataSamplesForAnIdGenerator_[FooHistory](fooHistoryIdGenerator, Gen.oneOf(dataSampleGenerator1(faulty), moreSpecificFooDataSampleGenerator(faulty))),
-      dataSamplesForAnIdGenerator_[FooHistory](fooHistoryIdGenerator, dataSampleGenerator2(faulty)),
+      dataSamplesForAnIdGenerator_[FooHistory](fooHistoryIdGenerator, Gen.oneOf(dataSampleGenerator1(faulty), moreSpecificFooDataSampleGenerator(faulty)), dataSampleGenerator2(faulty)),
       dataSamplesForAnIdGenerator_[MoreSpecificFooHistory](moreSpecificFooHistoryIdGenerator, moreSpecificFooDataSampleGenerator(faulty))) map (1 -> _): _*)
 
     val disjointLeftHandDataSamplesForAnIdGenerator = mixedDisjointLeftHandDataSamplesForAnIdGenerator
     val disjointLeftHandRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(disjointLeftHandDataSamplesForAnIdGenerator, forbidAnnihilations = faulty || forbidAnnihilations, forbidMeasurements = forbidMeasurements)
 
     val mixedDisjointRightHandDataSamplesForAnIdGenerator = Gen.frequency(Seq(
-      dataSamplesForAnIdGenerator_[BarHistory](barHistoryIdGenerator, dataSampleGenerator3(faulty)),
-      dataSamplesForAnIdGenerator_[BarHistory](barHistoryIdGenerator, dataSampleGenerator4(faulty)),
-      dataSamplesForAnIdGenerator_[BarHistory](barHistoryIdGenerator, dataSampleGenerator5(faulty)),
+      dataSamplesForAnIdGenerator_[BarHistory](barHistoryIdGenerator, dataSampleGenerator3(faulty), dataSampleGenerator4(faulty), dataSampleGenerator5(faulty)),
       dataSamplesForAnIdGenerator_[IntegerHistory](integerHistoryIdGenerator, integerDataSampleGenerator(faulty))) map (1 -> _): _*)
 
     val disjointRightHandDataSamplesForAnIdGenerator = mixedDisjointRightHandDataSamplesForAnIdGenerator
@@ -500,9 +500,7 @@ trait WorldSpecSupport {
   // mind sharing the same id between these samples and the previous ones for the *same* type - all that means is that
   // we can see weird histories for an id when doing step-by-step corrections.
   def mixedNonConflictingDataSamplesForAnIdGenerator(faulty: Boolean = false) = Gen.frequency(Seq(
-    dataSamplesForAnIdGenerator_[BarHistory](barHistoryIdGenerator, dataSampleGenerator3(faulty)),
-    dataSamplesForAnIdGenerator_[BarHistory](barHistoryIdGenerator, dataSampleGenerator4(faulty)),
-    dataSamplesForAnIdGenerator_[BarHistory](barHistoryIdGenerator, dataSampleGenerator5(faulty)),
+    dataSamplesForAnIdGenerator_[BarHistory](barHistoryIdGenerator, dataSampleGenerator3(faulty), dataSampleGenerator4(faulty), dataSampleGenerator5(faulty)),
     dataSamplesForAnIdGenerator_[IntegerHistory](integerHistoryIdGenerator, integerDataSampleGenerator(faulty))) map (1 -> _): _*)
 
   val nonConflictingDataSamplesForAnIdGenerator = mixedNonConflictingDataSamplesForAnIdGenerator()
