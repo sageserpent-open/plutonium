@@ -286,6 +286,30 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
     })
   }
 
+  it should "reveal all the history of a related item up to the 'when' limit of a scope made from it" in {
+    val testCaseGenerator = for {world <- worldGenerator
+                                 recordingsGroupedById <- referencedHistoryRecordingsGroupedByIdGenerator
+                                 seed <- seedGenerator
+                                 random = new Random(seed)
+                                 bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, recordingsGroupedById).zipWithIndex)
+                                 asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
+                                 queryWhen <- unboundedInstantGenerator
+    } yield (world, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
+    check(Prop.forAllNoShrink(testCaseGenerator) { case (world, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
+      recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfs, world)
+
+      val scope = world.scopeFor(queryWhen, world.nextRevision)
+
+      val checks = for {RecordingsNoLaterThan(historyId, historiesFrom, pertinentRecordings, _) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(queryWhen))
+                        Seq(history) = historiesFrom(scope)}
+        yield (historyId, history.datums, pertinentRecordings.map(_._1))
+
+      Prop.all(checks.map { case (historyId, actualHistory, expectedHistory) => ((actualHistory.length == expectedHistory.length) :| s"For ${historyId}, the number of datums: ${actualHistory.length} was expected to be to: ${expectedHistory.length}") &&
+        Prop.all((actualHistory zip expectedHistory zipWithIndex) map { case ((actual, expected), step) => (actual == expected) :| s"For ${historyId}, @step ${step}, the datum: ${actual}, was expected to be: ${expected}" }: _*)
+      }: _*)
+    })
+  }
+
   it should "not reveal an item at a query time coming before its first defining event" in {
     val testCaseGenerator = for {world <- worldGenerator
                                  recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
@@ -710,10 +734,10 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
              _ <- queryScope.render(Bitemporal.withId[MoreSpecificFooHistory](fooHistoryId)) filter (_.isInstanceOf[MoreSpecificFooHistory])
         } {
           intercept[RuntimeException] {
-            val consistentButLooselyTypedChange = Change[FooHistory](NegativeInfinity[Instant])(fooHistoryId, { fooHistory: FooHistory =>
+            val consistentButLooselyTypedChange = Change.forOneItem[FooHistory](fooHistoryId, { fooHistory: FooHistory =>
               fooHistory.property1 = "Hello"
             })
-            val inconsistentlyTypedChange = Change[AnotherSpecificFooHistory](whenInconsistentEventsOccur)(fooHistoryId.asInstanceOf[AnotherSpecificFooHistory#Id], { anotherSpecificFooHistory: AnotherSpecificFooHistory =>
+            val inconsistentlyTypedChange = Change.forOneItem[AnotherSpecificFooHistory](whenInconsistentEventsOccur)(fooHistoryId.asInstanceOf[AnotherSpecificFooHistory#Id], { anotherSpecificFooHistory: AnotherSpecificFooHistory =>
               anotherSpecificFooHistory.property3 = 6 // Have to actually *update* to cause an inconsistency.
             })
             world.revise(Map(eventIdForExtraConsistentChange -> Some(consistentButLooselyTypedChange), eventIdForInconsistentChangeOnly -> Some(inconsistentlyTypedChange)), world.revisionAsOfs.last)

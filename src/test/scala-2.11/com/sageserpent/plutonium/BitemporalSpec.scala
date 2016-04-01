@@ -20,7 +20,7 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
   implicit override val generatorDrivenConfig =
     PropertyCheckConfig(maxSize = 30)
 
-  "The class Bitemporal" should "be a monad plus instance" in {
+  "The class Bitemporal" should "be an applicative plus instance" in {
     val testCaseGenerator = for {world <- worldGenerator
                                  integerHistoryRecordingsGroupedById <- integerHistoryRecordingsGroupedByIdGenerator
                                  obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator

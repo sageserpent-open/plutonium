@@ -51,14 +51,18 @@ trait WorldSpecSupport {
 
   val integerHistoryIdGenerator = stringIdGenerator
 
+  var referringHistoryIdGenerator = stringIdGenerator
+
   val moreSpecificFooHistoryIdGenerator = fooHistoryIdGenerator // Just making a point that both kinds of bitemporal will use the same type of ids.
 
-  private def eventConstructor[AHistory <: History : TypeTag](makeAChange: Boolean)(when: Unbounded[Instant])(id: AHistory#Id, effect: Spore[AHistory, Unit]) =
-  // Yeuch!! Why can't I just partially apply Change.apply and then return that, dropping the extra arguments?
-    if (makeAChange) Change(when)(id, effect) else Measurement(when)(id, effect)
+  private def eventConstructorReferringToOneItem[AHistory <: History : TypeTag](makeAChange: Boolean)(when: Unbounded[Instant]): (AHistory#Id, Spore[AHistory, Unit]) => Event =
+    if (makeAChange) Change.forOneItem(when)(_, _) else Measurement.forOneItem(when)(_, _)
+
+  private def eventConstructorReferringToTwoItems[AHistory <: History : TypeTag, AnotherHistory <: History : TypeTag](makeAChange: Boolean)(when: Unbounded[Instant]): (AHistory#Id, AnotherHistory#Id, Spore2[AHistory, AnotherHistory, Unit]) => Event =
+    if (makeAChange) Change.forTwoItems(when)(_, _, _) else Measurement.forTwoItems(when)(_, _, _)
 
   def dataSampleGenerator1(faulty: Boolean) = for {data <- Arbitrary.arbitrary[String]} yield (data, (when: americium.Unbounded[Instant], makeAChange: Boolean, fooHistoryId: FooHistory#Id) => if (!faulty) {
-    eventConstructor[FooHistory](makeAChange)(when)(fooHistoryId, (fooHistory: FooHistory) => {
+    eventConstructorReferringToOneItem[FooHistory](makeAChange)(when).apply(fooHistoryId, (fooHistory: FooHistory) => {
       try {
         fooHistory.id
         fooHistory.datums
@@ -73,7 +77,7 @@ trait WorldSpecSupport {
       fooHistory.property1 = capture(data)
     })
   } else {
-    eventConstructor[BadFooHistory](makeAChange)(when)(fooHistoryId, (fooHistory: BadFooHistory) => {
+    eventConstructorReferringToOneItem[BadFooHistory](makeAChange)(when).apply(fooHistoryId, (fooHistory: BadFooHistory) => {
       try {
         fooHistory.id
         fooHistory.datums
@@ -89,7 +93,8 @@ trait WorldSpecSupport {
     })
   })
 
-  def dataSampleGenerator2(faulty: Boolean) = for {data <- Arbitrary.arbitrary[Boolean]} yield (data, (when: Unbounded[Instant], makeAChange: Boolean, fooHistoryId: FooHistory#Id) => eventConstructor[FooHistory](makeAChange)(when)(fooHistoryId, (fooHistory: FooHistory) => {
+  def dataSampleGenerator2(faulty: Boolean) = for {data <- Arbitrary.arbitrary[Boolean]}
+    yield (data, (when: Unbounded[Instant], makeAChange: Boolean, fooHistoryId: FooHistory#Id) => eventConstructorReferringToOneItem[FooHistory](makeAChange)(when).apply(fooHistoryId, (fooHistory: FooHistory) => {
     try{
       fooHistory.id
       fooHistory.datums
@@ -105,7 +110,8 @@ trait WorldSpecSupport {
     if (capture(faulty)) throw changeError // Modelling an admissible postcondition failure.
   }))
 
-  def dataSampleGenerator3(faulty: Boolean) = for {data <- Arbitrary.arbitrary[Double]} yield (data, (when: Unbounded[Instant], makeAChange: Boolean, barHistoryId: BarHistory#Id) => eventConstructor[BarHistory](makeAChange)(when)(barHistoryId, (barHistory: BarHistory) => {
+  def dataSampleGenerator3(faulty: Boolean) = for {data <- Arbitrary.arbitrary[Double]}
+    yield (data, (when: Unbounded[Instant], makeAChange: Boolean, barHistoryId: BarHistory#Id) => eventConstructorReferringToOneItem[BarHistory](makeAChange)(when).apply(barHistoryId, (barHistory: BarHistory) => {
     if (capture(faulty)) throw changeError // Modelling a precondition failure.
     try{
       barHistory.id
@@ -121,7 +127,8 @@ trait WorldSpecSupport {
   }))
 
   def dataSampleGenerator4(faulty: Boolean) = for {data1 <- Arbitrary.arbitrary[String]
-                                                   data2 <- Arbitrary.arbitrary[Int]} yield (data1 -> data2, (when: americium.Unbounded[Instant], makeAChange: Boolean, barHistoryId: BarHistory#Id) => eventConstructor[BarHistory](makeAChange)(when)(barHistoryId, (barHistory: BarHistory) => {
+                                                   data2 <- Arbitrary.arbitrary[Int]}
+    yield (data1 -> data2, (when: americium.Unbounded[Instant], makeAChange: Boolean, barHistoryId: BarHistory#Id) => eventConstructorReferringToOneItem[BarHistory](makeAChange)(when).apply(barHistoryId, (barHistory: BarHistory) => {
     try{
       barHistory.id
       barHistory.datums
@@ -138,7 +145,8 @@ trait WorldSpecSupport {
 
   def dataSampleGenerator5(faulty: Boolean) = for {data1 <- Arbitrary.arbitrary[Int]
                                                    data2 <- Arbitrary.arbitrary[String]
-                                                   data3 <- Arbitrary.arbitrary[Boolean]} yield ((data1, data2, data3), (when: Unbounded[Instant], makeAChange: Boolean, barHistoryId: BarHistory#Id) => eventConstructor[BarHistory](makeAChange)(when)(barHistoryId, (barHistory: BarHistory) => {
+                                                   data3 <- Arbitrary.arbitrary[Boolean]}
+    yield ((data1, data2, data3), (when: Unbounded[Instant], makeAChange: Boolean, barHistoryId: BarHistory#Id) => eventConstructorReferringToOneItem[BarHistory](makeAChange)(when).apply(barHistoryId, (barHistory: BarHistory) => {
     try{
       barHistory.id
       barHistory.datums
@@ -153,15 +161,23 @@ trait WorldSpecSupport {
     if (capture(faulty)) throw changeError // Modelling an admissible postcondition failure.
   }))
 
-  def integerDataSampleGenerator(faulty: Boolean) = for {data <- Arbitrary.arbitrary[Int]} yield (data, (when: americium.Unbounded[Instant], makeAChange: Boolean, integerHistoryId: IntegerHistory#Id) => eventConstructor[IntegerHistory](makeAChange)(when)(integerHistoryId, (integerHistory: IntegerHistory) => {
+  def integerDataSampleGenerator(faulty: Boolean) = for {data <- Arbitrary.arbitrary[Int]}
+    yield (data, (when: americium.Unbounded[Instant], makeAChange: Boolean, integerHistoryId: IntegerHistory#Id) => eventConstructorReferringToOneItem[IntegerHistory](makeAChange)(when).apply(integerHistoryId, (integerHistory: IntegerHistory) => {
     if (capture(faulty)) throw changeError // Modelling a precondition failure.
     integerHistory.integerProperty = capture(data)
   }))
 
-  def moreSpecificFooDataSampleGenerator(faulty: Boolean) = for {data <- Arbitrary.arbitrary[String]} yield (data, (when: americium.Unbounded[Instant], makeAChange: Boolean, fooHistoryId: MoreSpecificFooHistory#Id) => eventConstructor[MoreSpecificFooHistory](makeAChange)(when)(fooHistoryId, (fooHistory: MoreSpecificFooHistory) => {
+  def moreSpecificFooDataSampleGenerator(faulty: Boolean) = for {data <- Arbitrary.arbitrary[String]}
+    yield (data, (when: americium.Unbounded[Instant], makeAChange: Boolean, fooHistoryId: MoreSpecificFooHistory#Id) => eventConstructorReferringToOneItem[MoreSpecificFooHistory](makeAChange)(when).apply(fooHistoryId, (fooHistory: MoreSpecificFooHistory) => {
     if (capture(faulty)) throw changeError // Modelling a precondition failure.
     fooHistory.property1 = capture(data)
   }))
+
+  def referenceToItemDataSampleGenerator(faulty: Boolean) = for {idToReferToAnotherItem <- Gen.oneOf(ReferringHistory.specialIds)}
+    yield (idToReferToAnotherItem, (when: americium.Unbounded[Instant], makeAChange: Boolean, referringHistoryId: ReferringHistory#Id) => eventConstructorReferringToTwoItems[ReferringHistory, History](makeAChange)(when).apply(referringHistoryId, idToReferToAnotherItem, spore {(referringHistory: ReferringHistory, referencedItem: History) => {
+    if (capture(faulty)) throw changeError // Modelling a precondition failure.
+    referringHistory.referTo(referencedItem)
+  }}))
 
   def dataSamplesForAnIdGenerator_[AHistory <: History : TypeTag]( historyIdGenerator: Gen[AHistory#Id], dataSampleGenerators: Gen[(_, (Unbounded[Instant], Boolean, AHistory#Id) => Event)] *) = {
     // It makes no sense to have an id without associated data samples - the act of
@@ -174,9 +190,9 @@ trait WorldSpecSupport {
     } yield (historyId,
       (scope: Scope) => scope.render(Bitemporal.zeroOrOneOf[AHistory](historyId)): Seq[History],
       for {(index, (data, changeFor: ((Unbounded[Instant], Boolean, AHistory#Id) => Event))) <- dataSamples} yield (index, data, changeFor(_: Unbounded[Instant], _: Boolean, historyId)),
-      Annihilation(_: Instant, historyId), if (headsItIs) Change(_: Unbounded[Instant])(historyId, (item: AHistory ) => {
+      Annihilation(_: Instant, historyId), if (headsItIs) Change.forOneItem(_: Unbounded[Instant])(historyId, (item: AHistory ) => {
       // A useless event: nothing changes!
-    }) else Measurement(_: Unbounded[Instant])(historyId, (item: AHistory ) => {
+    }) else Measurement.forOneItem(_: Unbounded[Instant])(historyId, (item: AHistory ) => {
       // A useless event: nothing is measured!
     }))
   }
@@ -516,4 +532,14 @@ trait WorldSpecSupport {
 
   val integerDataSamplesForAnIdGenerator = dataSamplesForAnIdGenerator_[IntegerHistory](integerHistoryIdGenerator, integerDataSampleGenerator(faulty = false))
   val integerHistoryRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(integerDataSamplesForAnIdGenerator)
+
+  val referenceToItemDataSamplesForAnIdGenerator = dataSamplesForAnIdGenerator_[ReferringHistory](referringHistoryIdGenerator, referenceToItemDataSampleGenerator(faulty = false))
+  val referringHistoryRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(referenceToItemDataSamplesForAnIdGenerator)
+
+  val mixedRecordingsForReferencedIdGenerator = Gen.frequency(Seq(
+    dataSamplesForAnIdGenerator_[FooHistory](Gen.oneOf(ReferringHistory.specialFooIds), Gen.oneOf(dataSampleGenerator1(faulty = false), moreSpecificFooDataSampleGenerator(faulty = false)), dataSampleGenerator2(faulty = false)),
+    dataSamplesForAnIdGenerator_[BarHistory](Gen.oneOf(ReferringHistory.specialBarIds), dataSampleGenerator3(faulty = false), dataSampleGenerator4(false), dataSampleGenerator5(faulty = false)),
+    dataSamplesForAnIdGenerator_[IntegerHistory](Gen.oneOf(ReferringHistory.specialIntIds), integerDataSampleGenerator(faulty = false))) map (1 -> _): _*)
+
+  val referencedHistoryRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(mixedRecordingsForReferencedIdGenerator)
 }

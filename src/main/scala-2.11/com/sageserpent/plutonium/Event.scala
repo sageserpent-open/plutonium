@@ -25,7 +25,7 @@ case class Change(val when: Unbounded[Instant], update: Spore[RecorderFactory, U
 }
 
 object Change {
-  def apply[Raw <: Identified : TypeTag](when: Unbounded[Instant])(id: Raw#Id, update: Spore[Raw, Unit]): Change = {
+  def forOneItem[Raw <: Identified : TypeTag](when: Unbounded[Instant])(id: Raw#Id, update: Spore[Raw, Unit]): Change = {
     val typeTag = implicitly[TypeTag[Raw]]
     Change(when, spore {
       (recorderFactory: RecorderFactory) => {
@@ -35,11 +35,17 @@ object Change {
     })
   }
 
-  def apply[Raw <: Identified : TypeTag](when: Instant)(id: Raw#Id, update: Spore[Raw, Unit]): Change = apply(Finite(when))(id, update)
+  def forOneItem[Raw <: Identified : TypeTag](when: Instant)(id: Raw#Id, update: Spore[Raw, Unit]): Change = forOneItem(Finite(when))(id, update)
 
-  def apply[Raw <: Identified : TypeTag](id: Raw#Id, update: Spore[Raw, Unit]): Change = apply(americium.NegativeInfinity[Instant]())(id, update)
+  def forOneItem[Raw <: Identified : TypeTag](id: Raw#Id, update: Spore[Raw, Unit]): Change = forOneItem(americium.NegativeInfinity[Instant]())(id, update)
 
-  // etc for multiple bitemporals....
+  def forTwoItems[Raw1 <: Identified : TypeTag, Raw2 <: Identified : TypeTag](when: Unbounded[Instant])(id1: Raw1#Id, id2: Raw2#Id, update: Spore2[Raw1, Raw2, Unit]): Change = {
+    ???
+  }
+
+  def forOneItem[Raw1 <: Identified : TypeTag, Raw2 <: Identified : TypeTag](when: Instant)(id1: Raw1#Id, id2: Raw2#Id, update: Spore2[Raw1, Raw2, Unit]): Change = forTwoItems(Finite(when))(id1, id2, update)
+
+  def forOneItem[Raw1 <: Identified : TypeTag, Raw2 <: Identified : TypeTag](id1: Raw1#Id, id2: Raw2#Id, update: Spore2[Raw1, Raw2, Unit]): Change = forTwoItems(americium.NegativeInfinity[Instant]())(id1, id2, update)
 }
 
 case class Measurement(val when: Unbounded[Instant], reading: Spore[RecorderFactory, Unit]) extends Event {
@@ -47,7 +53,7 @@ case class Measurement(val when: Unbounded[Instant], reading: Spore[RecorderFact
 
 
 object Measurement {
-  def apply[Raw <: Identified : TypeTag](when: Unbounded[Instant])(id: Raw#Id, measurement: Spore[Raw, Unit]): Measurement = {
+  def forOneItem[Raw <: Identified : TypeTag](when: Unbounded[Instant])(id: Raw#Id, measurement: Spore[Raw, Unit]): Measurement = {
     val typeTag = implicitly[TypeTag[Raw]]
     Measurement(when, spore {
       (recorderFactory: RecorderFactory) => {
@@ -57,11 +63,17 @@ object Measurement {
     })
   }
 
-  def apply[Raw <: Identified : TypeTag](when: Instant)(id: Raw#Id, update: Spore[Raw, Unit]): Measurement = apply(Finite(when))(id, update)
+  def forOneItem[Raw <: Identified : TypeTag](when: Instant)(id: Raw#Id, update: Spore[Raw, Unit]): Measurement = forOneItem(Finite(when))(id, update)
 
-  def apply[Raw <: Identified : TypeTag](id: Raw#Id, update: Spore[Raw, Unit]): Measurement = apply(americium.NegativeInfinity[Instant]())(id, update)
+  def forOneItem[Raw <: Identified : TypeTag](id: Raw#Id, update: Spore[Raw, Unit]): Measurement = forOneItem(americium.NegativeInfinity[Instant]())(id, update)
 
-  // etc for multiple bitemporals....
+  def forTwoItems[Raw1 <: Identified : TypeTag, Raw2 <: Identified : TypeTag](when: Unbounded[Instant])(id1: Raw1#Id, id2: Raw2#Id, update: Spore2[Raw1, Raw2, Unit]): Measurement = {
+    ???
+  }
+
+  def forOneItem[Raw1 <: Identified : TypeTag, Raw2 <: Identified : TypeTag](when: Instant)(id1: Raw1#Id, id2: Raw2#Id, update: Spore2[Raw1, Raw2, Unit]): Measurement = forTwoItems(Finite(when))(id1, id2, update)
+
+  def forOneItem[Raw1 <: Identified : TypeTag, Raw2 <: Identified : TypeTag](id1: Raw1#Id, id2: Raw2#Id, update: Spore2[Raw1, Raw2, Unit]): Measurement = forTwoItems(americium.NegativeInfinity[Instant]())(id1, id2, update)
 }
 
 
