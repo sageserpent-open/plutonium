@@ -40,7 +40,15 @@ object Change {
   def forOneItem[Raw <: Identified : TypeTag](id: Raw#Id, update: Spore[Raw, Unit]): Change = forOneItem(americium.NegativeInfinity[Instant]())(id, update)
 
   def forTwoItems[Raw1 <: Identified : TypeTag, Raw2 <: Identified : TypeTag](when: Unbounded[Instant])(id1: Raw1#Id, id2: Raw2#Id, update: Spore2[Raw1, Raw2, Unit]): Change = {
-    ???
+    val typeTag1 = implicitly[TypeTag[Raw1]]
+    val typeTag2 = implicitly[TypeTag[Raw2]]
+    Change(when, spore {
+      (recorderFactory: RecorderFactory) => {
+        val recorder1 = recorderFactory(capture(id1))(capture(typeTag1))
+        val recorder2 = recorderFactory(capture(id2))(capture(typeTag2))
+        capture(update)(recorder1, recorder2)
+      }
+    })
   }
 
   def forOneItem[Raw1 <: Identified : TypeTag, Raw2 <: Identified : TypeTag](when: Instant)(id1: Raw1#Id, id2: Raw2#Id, update: Spore2[Raw1, Raw2, Unit]): Change = forTwoItems(Finite(when))(id1, id2, update)
