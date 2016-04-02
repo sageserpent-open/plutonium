@@ -73,6 +73,8 @@ object WorldReferenceImplementation {
     val nonMutableMembersThatCanAlwaysBeReadFrom = classOf[Identified].getMethods ++ classOf[AnyRef].getMethods
 
     val idProperty = classOf[Identified].getMethod("id")
+
+    val typeTagProperty = classOf[Identified].getMethod("typeTag")
   }
 
   def firstMethodIsOverrideCompatibleWithSecond(firstMethod: Method, secondMethod: Method): Boolean = {
@@ -179,6 +181,8 @@ object WorldReferenceImplementation {
                   if (theMethodIsTheFinaliser || IdentifiedItemsScopeImplementation.alwaysAllowsReadAccessTo(method)) {
                     if (firstMethodIsOverrideCompatibleWithSecond(method, IdentifiedItemsScopeImplementation.idProperty)){
                       id.asInstanceOf[AnyRef]
+                    } else if (firstMethodIsOverrideCompatibleWithSecond(method, IdentifiedItemsScopeImplementation.typeTagProperty)){
+                      typeTag[Raw]
                     } else {
                       methodProxy.invokeSuper(target, arguments)
                     }
