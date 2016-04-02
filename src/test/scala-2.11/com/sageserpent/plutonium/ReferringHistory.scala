@@ -12,12 +12,10 @@ class ReferringHistory(override val id: ReferringHistory#Id) extends History {
   type Id = String
 
   def referTo(referred: History): Unit = {
-    require(!_referencedHistories.contains(referred.id))
     _referencedHistories += (referred.id -> referred)
   }
 
   def forget(referred: History): Unit = {
-    require(_referencedHistories.contains(referred.id))
     _referencedHistories -= referred.id
   }
 

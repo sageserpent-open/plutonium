@@ -173,11 +173,17 @@ trait WorldSpecSupport {
     fooHistory.property1 = capture(data)
   }))
 
-  def referenceToItemDataSampleGenerator(faulty: Boolean) = for {idToReferToAnotherItem <- Gen.oneOf(ReferringHistory.specialIds)}
+  def referringToItemDataSampleGenerator(faulty: Boolean) = for {idToReferToAnotherItem <- Gen.oneOf(ReferringHistory.specialIds)}
     yield (idToReferToAnotherItem, (when: americium.Unbounded[Instant], makeAChange: Boolean, referringHistoryId: ReferringHistory#Id) => eventConstructorReferringToTwoItems[ReferringHistory, History](makeAChange)(when).apply(referringHistoryId, idToReferToAnotherItem, spore {(referringHistory: ReferringHistory, referencedItem: History) => {
     if (capture(faulty)) throw changeError // Modelling a precondition failure.
     referringHistory.referTo(referencedItem)
   }}))
+
+  def forgettingItemDataSampleGenerator(faulty: Boolean) = for {idToReferToAnotherItem <- Gen.oneOf(ReferringHistory.specialIds)}
+    yield (idToReferToAnotherItem, (when: americium.Unbounded[Instant], makeAChange: Boolean, referringHistoryId: ReferringHistory#Id) => eventConstructorReferringToTwoItems[ReferringHistory, History](makeAChange)(when).apply(referringHistoryId, idToReferToAnotherItem, spore {(referringHistory: ReferringHistory, referencedItem: History) => {
+      if (capture(faulty)) throw changeError // Modelling a precondition failure.
+      referringHistory.forget(referencedItem)
+    }}))
 
   def dataSamplesForAnIdGenerator_[AHistory <: History : TypeTag]( historyIdGenerator: Gen[AHistory#Id], dataSampleGenerators: Gen[(_, (Unbounded[Instant], Boolean, AHistory#Id) => Event)] *) = {
     // It makes no sense to have an id without associated data samples - the act of
@@ -533,7 +539,7 @@ trait WorldSpecSupport {
   val integerDataSamplesForAnIdGenerator = dataSamplesForAnIdGenerator_[IntegerHistory](integerHistoryIdGenerator, integerDataSampleGenerator(faulty = false))
   val integerHistoryRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(integerDataSamplesForAnIdGenerator)
 
-  val referenceToItemDataSamplesForAnIdGenerator = dataSamplesForAnIdGenerator_[ReferringHistory](referringHistoryIdGenerator, referenceToItemDataSampleGenerator(faulty = false))
+  val referenceToItemDataSamplesForAnIdGenerator = dataSamplesForAnIdGenerator_[ReferringHistory](referringHistoryIdGenerator, referringToItemDataSampleGenerator(faulty = false), forgettingItemDataSampleGenerator(faulty = false))
   val referringHistoryRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(referenceToItemDataSamplesForAnIdGenerator)
 
   val mixedRecordingsForReferencedIdGenerator = Gen.frequency(Seq(
