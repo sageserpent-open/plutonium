@@ -71,6 +71,8 @@ object WorldReferenceImplementation {
     })
 
     val nonMutableMembersThatCanAlwaysBeReadFrom = classOf[Identified].getMethods ++ classOf[AnyRef].getMethods
+
+    val idProperty = classOf[Identified].getMethod("id")
   }
 
   def firstMethodIsOverrideCompatibleWithSecond(firstMethod: Method, secondMethod: Method): Boolean = {
@@ -175,7 +177,11 @@ object WorldReferenceImplementation {
                   val theMethodIsTheFinaliser = method.getName == "finalize" && method.getParameterCount == 0 && method.getReturnType == classOf[Unit]
 
                   if (theMethodIsTheFinaliser || IdentifiedItemsScopeImplementation.alwaysAllowsReadAccessTo(method)) {
-                    methodProxy.invokeSuper(target, arguments)
+                    if (firstMethodIsOverrideCompatibleWithSecond(method, IdentifiedItemsScopeImplementation.idProperty)){
+                      id.asInstanceOf[AnyRef]
+                    } else {
+                      methodProxy.invokeSuper(target, arguments)
+                    }
                   } else {
                     if (method.getReturnType != classOf[Unit])
                       throw new UnsupportedOperationException("Attempt to call method: '$method' with a non-unit return type on a recorder proxy: '$target' while capturing a change or measurement.")
