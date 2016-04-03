@@ -15,7 +15,7 @@ class Patch[Raw <: Identified : TypeTag](id: Raw#Id, method: Method, arguments: 
   type WrappedArgument = \/[AnyRef, (Raw2#Id, TypeTag[Raw2])] forSome {type Raw2 <: Identified}
 
   def wrap(argument: AnyRef): WrappedArgument = argument match {
-    case identified: Identified => \/-(identified.id, identified.typeTag)
+    case identified: Identified with Recorder => \/-(identified.id, identified.typeTag)
     case _ => -\/(argument)
   }
 

@@ -70,11 +70,11 @@ object WorldReferenceImplementation {
       firstMethodIsOverrideCompatibleWithSecond(method, exclusionMethod)
     })
 
-    val nonMutableMembersThatCanAlwaysBeReadFrom = classOf[Identified].getMethods ++ classOf[AnyRef].getMethods
+    val nonMutableMembersThatCanAlwaysBeReadFrom = classOf[Identified].getMethods ++ classOf[AnyRef].getMethods ++ classOf[Recorder].getMethods
 
     val idProperty = classOf[Identified].getMethod("id")
 
-    val typeTagProperty = classOf[Identified].getMethod("typeTag")
+    val typeTagProperty = classOf[Recorder].getMethod("typeTag")
   }
 
   def firstMethodIsOverrideCompatibleWithSecond(firstMethod: Method, secondMethod: Method): Boolean = {
@@ -129,6 +129,7 @@ object WorldReferenceImplementation {
         val enhancer = new Enhancer
         enhancer.setInterceptDuringConstruction(false)
         enhancer.setSuperclass(clazz)
+        enhancer.setInterfaces(Array(classOf[Recorder]))
 
         enhancer.setCallbackType(classOf[MethodInterceptor])
 

@@ -1,7 +1,5 @@
 package com.sageserpent.plutonium
 
-import scala.reflect.runtime.universe._
-
 trait Identified {
   type Id
   val id: Id // This can't be mutated! Begs the question - should other attributes be mutable or not?
@@ -15,8 +13,6 @@ trait Identified {
   // scope.
   def checkInvariant(): Unit = {
   }
-
-  private [plutonium] def typeTag: TypeTag[this.type] = ???
 }
 
 
