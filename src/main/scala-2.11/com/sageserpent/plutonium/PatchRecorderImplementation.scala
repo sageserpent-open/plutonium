@@ -101,7 +101,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
   private type CandidatePatches = mutable.MutableList[CandidatePatchTuple]
 
-  private class ItemState(initialTypeTag: TypeTag[_ <: Identified]) extends IdentifiedItemAccess {
+  private class ItemState(initialTypeTag: TypeTag[_ <: Identified]) {
     private var _lowerBoundTypeTag = initialTypeTag
 
     def lowerBoundTypeTag = _lowerBoundTypeTag
@@ -172,7 +172,12 @@ trait PatchRecorderImplementation extends PatchRecorder {
       val (sequenceIndex, _, whenPatchOccurs) = candidatePatchTuples.head
 
       actionQueue.enqueue((sequenceIndex, Unit => {
-        bestPatch(this)
+        bestPatch(new IdentifiedItemAccess {
+          override def itemFor[Raw <: Identified : _root_.scala.reflect.runtime.universe.TypeTag](id: Raw#Id): Raw = {
+            val typeTag = _lowerBoundTypeTag
+            itemFor_(id, typeTag).asInstanceOf[Raw]
+          }
+        })
         for (_ <- itemsAreLockedResource) {
           val scopeForInvariantCheck = new ScopeImplementation {
             override val identifiedItemsScope: IdentifiedItemsScopeImplementation = PatchRecorderImplementation.this.identifiedItemsScope
@@ -185,24 +190,10 @@ trait PatchRecorderImplementation extends PatchRecorder {
       }, whenPatchOccurs))
     }
 
-    private var cachedItem: Option[Any] = None
-
     private val exemplarMethodToCandidatePatchesMap: mutable.Map[Method, CandidatePatches] = mutable.Map.empty
 
     def itemFor_[SubclassOfRaw <: Raw, Raw <: Identified](id: Raw#Id, typeTag: universe.TypeTag[SubclassOfRaw]): SubclassOfRaw = {
       PatchRecorderImplementation.this.identifiedItemsScope.itemFor[SubclassOfRaw](id.asInstanceOf[SubclassOfRaw#Id])(typeTag)
-    }
-
-    override def itemFor[Raw <: Identified : universe.TypeTag](id: Raw#Id): Raw = {
-      cachedItem match {
-        case None =>
-          val typeTag = this._lowerBoundTypeTag
-          val result = itemFor_(id, typeTag).asInstanceOf[Raw]
-          cachedItem = Some(result)
-          result
-        case Some(item) =>
-          item.asInstanceOf[Raw]
-      }
     }
   }
 
