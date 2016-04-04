@@ -156,10 +156,10 @@ object WorldReferenceImplementation {
           override val identifiedItemsScope: IdentifiedItemsScopeImplementation = identifiedItemsScopeThis
           override val asOf: Unbounded[Instant] = _asOf
           override val nextRevision: Revision = _nextRevision
-          override val itemsAreLockedResource: ManagedResource[Unit] = for (_ <- makeManagedResource {
+          override val itemsAreLockedResource: ManagedResource[Unit] = makeManagedResource {
             itemsAreLocked = true
           } { _ => itemsAreLocked = false
-          }(List.empty)) yield ()
+          }(List.empty)
         }
 
         val relevantEvents = eventTimeline.bucketsIterator flatMap (_.toArray.sortBy(_._2) map (_._1))
