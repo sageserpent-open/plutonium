@@ -14,4 +14,12 @@ trait IdentifiedItemAccess {
 }
 
 
+trait IdentifiedItemAccessContracts extends IdentifiedItemAccess {
+  abstract override def itemFor[Raw <: Identified: TypeTag](id: Raw#Id): Raw = {
+    val result = super.itemFor(id)
+    require(id == result.id)
+    result
+  }
+}
+
 

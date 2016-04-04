@@ -174,13 +174,15 @@ trait PatchRecorderImplementation extends PatchRecorder {
       // can be split across items?
       val (sequenceIndex, _, whenPatchOccurs) = candidatePatchTuples.head
 
+      class IdentifiedItemAccessImplementation extends IdentifiedItemAccess  {
+        override def itemFor[Raw <: Identified : scala.reflect.runtime.universe.TypeTag](id: Raw#Id): Raw = {
+          val typeTag = _lowerBoundTypeTag
+          itemFor_(id, typeTag).asInstanceOf[Raw]
+        }
+      }
+
       actionQueue.enqueue((sequenceIndex, Unit => {
-        bestPatch(new IdentifiedItemAccess {
-          override def itemFor[Raw <: Identified : scala.reflect.runtime.universe.TypeTag](id: Raw#Id): Raw = {
-            val typeTag = _lowerBoundTypeTag
-            itemFor_(id, typeTag).asInstanceOf[Raw]
-          }
-        })
+        bestPatch(new IdentifiedItemAccessImplementation with IdentifiedItemAccessContracts)
         for (_ <- itemsAreLockedResource) {
           val scopeForInvariantCheck = new ScopeImplementation {
             override val identifiedItemsScope: IdentifiedItemsScopeImplementation = PatchRecorderImplementation.this.identifiedItemsScope
