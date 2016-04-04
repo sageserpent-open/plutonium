@@ -165,33 +165,25 @@ object WorldReferenceImplementation {
             override def apply[Raw <: Identified : TypeTag](id: Raw#Id): Raw = {
               class LocalMethodInterceptor extends MethodInterceptor {
                 override def intercept(target: Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy): AnyRef = {
-                  val theMethodIsTheFinaliser = method.getName == "finalize" && method.getParameterCount == 0 && method.getReturnType == classOf[Unit]
-
-                  if (theMethodIsTheFinaliser || IdentifiedItemsScopeImplementation.alwaysAllowsReadAccessTo(method)) {
-                    if (firstMethodIsOverrideCompatibleWithSecond(method, IdentifiedItemsScopeImplementation.idProperty)){
-                      id.asInstanceOf[AnyRef]
-                    } else if (firstMethodIsOverrideCompatibleWithSecond(method, IdentifiedItemsScopeImplementation.typeTagProperty)){
-                      typeTag[Raw]
-                    } else {
-                      methodProxy.invokeSuper(target, arguments)
-                    }
+                  def isFinalizer: Boolean = method.getName == "finalize" && method.getParameterCount == 0 && method.getReturnType == classOf[Unit]
+                  if (firstMethodIsOverrideCompatibleWithSecond(method, IdentifiedItemsScopeImplementation.idProperty)) {
+                    id.asInstanceOf[AnyRef]
+                  } else if (firstMethodIsOverrideCompatibleWithSecond(method, IdentifiedItemsScopeImplementation.typeTagProperty)) {
+                    typeTag[Raw]
+                  } else if (IdentifiedItemsScopeImplementation.alwaysAllowsReadAccessTo(method) || isFinalizer) {
+                    methodProxy.invokeSuper(target, arguments)
+                  } else if (method.getReturnType != classOf[Unit]) {
+                    throw new UnsupportedOperationException("Attempt to call method: '$method' with a non-unit return type on a recorder proxy: '$target' while capturing a change or measurement.")
                   } else {
-                    if (method.getReturnType != classOf[Unit])
-                      throw new UnsupportedOperationException("Attempt to call method: '$method' with a non-unit return type on a recorder proxy: '$target' while capturing a change or measurement.")
-
                     val item = target.asInstanceOf[Raw] // Remember, the outer context is making a proxy of type 'Raw'.
-
                     val capturedPatch = new Patch[Raw](id, method, arguments, methodProxy)
-
                     patchesPickedUpFromAnEventBeingApplied += capturedPatch
-
                     null // Representation of a unit value by a CGLIB interceptor.
                   }
                 }
               }
 
               val localMethodInterceptor = new LocalMethodInterceptor
-
               constructFrom[Raw](id, localMethodInterceptor)
             }
           }
