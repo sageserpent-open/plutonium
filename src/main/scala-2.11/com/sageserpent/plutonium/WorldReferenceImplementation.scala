@@ -90,18 +90,10 @@ object WorldReferenceImplementation {
     // TODO - refactor into a single 'sin-bin of mutable state for history rewriting' object?
     var itemsAreLocked = false
 
-    var stopInfiniteRecursiveInterception = false
-
     class LocalMethodInterceptor extends MethodInterceptor {
       override def intercept(target: Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy): AnyRef = {
-        if (!stopInfiniteRecursiveInterception) {
-          for (_ <- makeManagedResource {
-            stopInfiniteRecursiveInterception = true
-          } { _ => stopInfiniteRecursiveInterception = false }(List.empty)) {
-            if (itemsAreLocked && method.getReturnType == classOf[Unit])
-              throw new UnsupportedOperationException(s"Attempt to write via: '$method' to an item: '$target' rendered from a bitemporal query.")
-          }
-        }
+        if (itemsAreLocked && method.getReturnType == classOf[Unit])
+          throw new UnsupportedOperationException(s"Attempt to write via: '$method' to an item: '$target' rendered from a bitemporal query.")
 
         methodProxy.invokeSuper(target, arguments)
       }
