@@ -7,7 +7,7 @@ import com.sageserpent.americium.{Finite, NegativeInfinity, PositiveInfinity, Un
 import com.sageserpent.plutonium.MutableState.{EventIdToEventMap, EventTimeline}
 import com.sageserpent.plutonium.World.Revision
 import net.sf.cglib.proxy._
-import resource.{ExtractableManagedResource, makeManagedResource}
+import resource.{ManagedResource, makeManagedResource}
 
 import scala.collection.Searching._
 import scala.collection.immutable.{SortedBagConfiguration, TreeBag}
@@ -92,24 +92,12 @@ object WorldReferenceImplementation {
   class IdentifiedItemsScopeImplementation {
     identifiedItemsScopeThis =>
 
-    // The next two mutable fields are concerned with the proxies behaving differently depending on whether
-    // they are invoked within the context of writing a history for a revision, or just accessing the results of
-    // a query.
-    // TODO - refactor into a single 'sin-bin of mutable state for history rewriting' object?
     var itemsAreLocked = false
-
-    var stopInfiniteRecursiveInterception = false
 
     class LocalMethodInterceptor extends MethodInterceptor {
       override def intercept(target: Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy): AnyRef = {
-        if (!stopInfiniteRecursiveInterception) {
-          for (_ <- makeManagedResource {
-            stopInfiniteRecursiveInterception = true
-          } { _ => stopInfiniteRecursiveInterception = false }(List.empty)) {
             if (itemsAreLocked && method.getReturnType == classOf[Unit] && !WorldReferenceImplementation.isInvariantCheck(method))
               throw new UnsupportedOperationException(s"Attempt to write via: '$method' to an item: '$target' rendered from a bitemporal query.")
-          }
-        }
 
         methodProxy.invokeSuper(target, arguments)
       }
@@ -163,10 +151,10 @@ object WorldReferenceImplementation {
         val patchRecorder = new PatchRecorderImplementation with PatchRecorderContracts
           with BestPatchSelectionImplementation with BestPatchSelectionContracts {
           override val identifiedItemsScope: IdentifiedItemsScopeImplementation = identifiedItemsScopeThis
-          override val itemsAreLockedResource: ExtractableManagedResource[Unit] = for (_ <- makeManagedResource {
+          override val itemsAreLockedResource: ManagedResource[Unit] = makeManagedResource {
             itemsAreLocked = true
           } { _ => itemsAreLocked = false
-          }(List.empty)) yield ()
+          }(List.empty)
         }
 
         val relevantEvents = eventTimeline.bucketsIterator flatMap (_.toArray.sortBy(_._2) map (_._1))
