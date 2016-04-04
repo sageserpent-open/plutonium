@@ -7,7 +7,7 @@ import com.sageserpent.americium.{Finite, NegativeInfinity, PositiveInfinity, Un
 import com.sageserpent.plutonium.MutableState.{EventIdToEventMap, EventTimeline}
 import com.sageserpent.plutonium.World.Revision
 import net.sf.cglib.proxy._
-import resource.{ExtractableManagedResource, makeManagedResource}
+import resource.{ManagedResource, makeManagedResource}
 
 import scala.collection.Searching._
 import scala.collection.immutable.{SortedBagConfiguration, TreeBag}
@@ -156,7 +156,7 @@ object WorldReferenceImplementation {
           override val identifiedItemsScope: IdentifiedItemsScopeImplementation = identifiedItemsScopeThis
           override val asOf: Unbounded[Instant] = _asOf
           override val nextRevision: Revision = _nextRevision
-          override val itemsAreLockedResource: ExtractableManagedResource[Unit] = for (_ <- makeManagedResource {
+          override val itemsAreLockedResource: ManagedResource[Unit] = for (_ <- makeManagedResource {
             itemsAreLocked = true
           } { _ => itemsAreLocked = false
           }(List.empty)) yield ()

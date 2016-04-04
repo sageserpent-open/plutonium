@@ -6,7 +6,8 @@ import java.time.Instant
 import com.sageserpent.americium.{Finite, Unbounded}
 import com.sageserpent.plutonium.World.Revision
 import com.sageserpent.plutonium.WorldReferenceImplementation.{IdentifiedItemsScopeImplementation, ScopeImplementation}
-import resource.ExtractableManagedResource
+import resource.ManagedResource
+
 import scala.collection.mutable
 import scala.reflect.runtime._
 import scala.reflect.runtime.universe._
@@ -22,7 +23,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
   val identifiedItemsScope: WorldReferenceImplementation.IdentifiedItemsScopeImplementation
   val asOf: Unbounded[Instant]
   val nextRevision: Revision
-  val itemsAreLockedResource: ExtractableManagedResource[Unit]
+  val itemsAreLockedResource: ManagedResource[Unit]
 
   private var _whenEventPertainedToByLastRecordingTookPlace: Option[Unbounded[Instant]] = None
 
@@ -175,7 +176,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
       actionQueue.enqueue((sequenceIndex, Unit => {
         bestPatch(new IdentifiedItemAccess {
-          override def itemFor[Raw <: Identified : _root_.scala.reflect.runtime.universe.TypeTag](id: Raw#Id): Raw = {
+          override def itemFor[Raw <: Identified : scala.reflect.runtime.universe.TypeTag](id: Raw#Id): Raw = {
             val typeTag = _lowerBoundTypeTag
             itemFor_(id, typeTag).asInstanceOf[Raw]
           }
