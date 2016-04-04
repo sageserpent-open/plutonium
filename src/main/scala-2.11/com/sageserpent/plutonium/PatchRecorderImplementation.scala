@@ -69,7 +69,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
           val sequenceIndex = nextSequenceIndex()
 
-          actionQueue.enqueue((sequenceIndex, Unit => for (itemStateToBeAnnihilated <- compatibleItemStates){
+          actionQueue.enqueue((sequenceIndex, Unit => for (itemStateToBeAnnihilated <- compatibleItemStates) {
             val typeTagForSpecificItem = itemStateToBeAnnihilated.lowerBoundTypeTag
             annihilateItemFor_(id, typeTagForSpecificItem, when)
           }, Finite(when)))
@@ -138,20 +138,19 @@ trait PatchRecorderImplementation extends PatchRecorder {
     private def methodAndItsCandidatePatchTuplesFor(method: Method): Option[(Method, CandidatePatches)] = {
       // Direct use of key into map...
       exemplarMethodToCandidatePatchesMap.get(method) map (method -> _) orElse
-      // ... fallback to doing a linear search if the methods are not equal, but are related.
-      exemplarMethodToCandidatePatchesMap.find {
-        case (exemplarMethod, _) => WorldReferenceImplementation.firstMethodIsOverrideCompatibleWithSecond(method, exemplarMethod) ||
-          WorldReferenceImplementation.firstMethodIsOverrideCompatibleWithSecond(exemplarMethod, method)
-      }
+        // ... fallback to doing a linear search if the methods are not equal, but are related.
+        exemplarMethodToCandidatePatchesMap.find {
+          case (exemplarMethod, _) => WorldReferenceImplementation.firstMethodIsOverrideCompatibleWithSecond(method, exemplarMethod) ||
+            WorldReferenceImplementation.firstMethodIsOverrideCompatibleWithSecond(exemplarMethod, method)
+        }
     }
 
-    def submitCandidatePatches(): Unit =
-      {
-        for ((exemplarMethod, candidatePatchTuples) <- exemplarMethodToCandidatePatchesMap) {
-          enqueueBestCandidatePatchFrom(candidatePatchTuples)
-        }
-        exemplarMethodToCandidatePatchesMap.clear()
+    def submitCandidatePatches(): Unit = {
+      for ((exemplarMethod, candidatePatchTuples) <- exemplarMethodToCandidatePatchesMap) {
+        enqueueBestCandidatePatchFrom(candidatePatchTuples)
       }
+      exemplarMethodToCandidatePatchesMap.clear()
+    }
 
     def submitCandidatePatches(method: Method): Unit = methodAndItsCandidatePatchTuplesFor(method) match {
       case Some((exemplarMethod, candidatePatchTuples)) =>
@@ -198,7 +197,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
     def itemFor_[SubclassOfRaw <: Raw, Raw <: Identified](id: Raw#Id, typeTag: universe.TypeTag[SubclassOfRaw]): SubclassOfRaw = {
       PatchRecorderImplementation.this.identifiedItemsScope.itemFor[SubclassOfRaw](id.asInstanceOf[SubclassOfRaw#Id])(typeTag)
     }
-      }
+  }
 
   private val idToItemStatesMap = mutable.Map.empty[Any, mutable.Set[ItemState]]
 
@@ -218,7 +217,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
     val clashingItemStates = itemStates filter (_.isInconsistentWith(patch.capturedTypeTag))
 
-    if (clashingItemStates.nonEmpty){
+    if (clashingItemStates.nonEmpty) {
       throw new RuntimeException(s"There is at least one item of id: '${patch.id}' that would be inconsistent with type '${patch.capturedTypeTag.tpe}', these have types: '${clashingItemStates map (_.lowerBoundTypeTag.tpe)}'.")
     }
 
