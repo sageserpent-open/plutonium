@@ -136,6 +136,9 @@ trait PatchRecorderImplementation extends PatchRecorder {
     }
 
     private def methodAndItsCandidatePatchTuplesFor(method: Method): Option[(Method, CandidatePatches)] = {
+      // Direct use of key into map...
+      exemplarMethodToCandidatePatchesMap.get(method) map (method -> _) orElse
+      // ... fallback to doing a linear search if the methods are not equal, but are related.
       exemplarMethodToCandidatePatchesMap.find {
         case (exemplarMethod, _) => WorldReferenceImplementation.firstMethodIsOverrideCompatibleWithSecond(method, exemplarMethod) ||
           WorldReferenceImplementation.firstMethodIsOverrideCompatibleWithSecond(exemplarMethod, method)
@@ -195,7 +198,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
     def itemFor_[SubclassOfRaw <: Raw, Raw <: Identified](id: Raw#Id, typeTag: universe.TypeTag[SubclassOfRaw]): SubclassOfRaw = {
       PatchRecorderImplementation.this.identifiedItemsScope.itemFor[SubclassOfRaw](id.asInstanceOf[SubclassOfRaw#Id])(typeTag)
     }
-  }
+      }
 
   private val idToItemStatesMap = mutable.Map.empty[Any, mutable.Set[ItemState]]
 
