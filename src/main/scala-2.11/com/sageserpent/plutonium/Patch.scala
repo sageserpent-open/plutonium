@@ -4,7 +4,6 @@ import java.lang.reflect.Method
 
 import net.sf.cglib.proxy.MethodProxy
 
-import scala.reflect.runtime.universe._
 import scalaz.{-\/, \/, \/-}
 
 
@@ -18,8 +17,6 @@ class Patch(targetRecorder: Recorder, method: Method, arguments: Array[AnyRef], 
 
   type WrappedArgument = \/[AnyRef, Recorder#ItemReconstitutionData[_ <: Identified]]
 
-  def reconstitute[Raw <: Identified](identifiedItemAccess: IdentifiedItemAccess)(itemReconstitutionData: Recorder#ItemReconstitutionData[Raw]) = identifiedItemAccess.itemFor(itemReconstitutionData)
-
   def wrap(argument: AnyRef): WrappedArgument = argument match {
     case argumentRecorder: Recorder => \/-(argumentRecorder.itemReconstitutionData)
     case _ => -\/(argument)
@@ -30,10 +27,10 @@ class Patch(targetRecorder: Recorder, method: Method, arguments: Array[AnyRef], 
   def unwrap(identifiedItemAccess: IdentifiedItemAccess)(wrappedArgument: WrappedArgument) = wrappedArgument.fold(identity, identifiedItemAccess.itemFor(_))
 
   def apply(identifiedItemAccess: IdentifiedItemAccess): Unit = {
-    methodProxy.invoke(targetRecorder, wrappedArguments map unwrap(identifiedItemAccess))
+    methodProxy.invoke(identifiedItemAccess.itemFor(targetReconstitutionData), wrappedArguments map unwrap(identifiedItemAccess))
   }
 
   def checkInvariant(identifiedItemAccess: IdentifiedItemAccess): Unit = {
-    reconstitute(identifiedItemAccess)(targetReconstitutionData).checkInvariant()
+    identifiedItemAccess.itemFor(targetReconstitutionData).checkInvariant()
   }
 }
