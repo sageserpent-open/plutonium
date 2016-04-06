@@ -72,9 +72,9 @@ object WorldReferenceImplementation {
 
     val nonMutableMembersThatCanAlwaysBeReadFrom = classOf[Identified].getMethods ++ classOf[AnyRef].getMethods ++ classOf[Recorder].getMethods
 
-    val idProperty = classOf[Identified].getMethod("id")
+    //val idProperty = classOf[Identified].getMethod("id")
 
-    val typeTagProperty = classOf[Recorder].getMethod("typeTag")
+    val itemReconstitutionDataProperty = classOf[Recorder].getMethod("itemReconstitutionData")
   }
 
   def firstMethodIsOverrideCompatibleWithSecond(firstMethod: Method, secondMethod: Method): Boolean = {
@@ -159,24 +159,24 @@ object WorldReferenceImplementation {
 
         val relevantEvents = eventTimeline.bucketsIterator flatMap (_.toArray.sortBy(_._2) map (_._1))
         for (event <- relevantEvents) {
-          val patchesPickedUpFromAnEventBeingApplied = mutable.MutableList.empty[AbstractPatch[_ <: Identified]]
+          val patchesPickedUpFromAnEventBeingApplied = mutable.MutableList.empty[AbstractPatch]
 
           class LocalRecorderFactory extends RecorderFactory {
             override def apply[Raw <: Identified : TypeTag](id: Raw#Id): Raw = {
               class LocalMethodInterceptor extends MethodInterceptor {
                 override def intercept(target: Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy): AnyRef = {
                   def isFinalizer: Boolean = method.getName == "finalize" && method.getParameterCount == 0 && method.getReturnType == classOf[Unit]
-                  if (firstMethodIsOverrideCompatibleWithSecond(method, IdentifiedItemsScopeImplementation.idProperty)) {
+                  /*if (firstMethodIsOverrideCompatibleWithSecond(method, IdentifiedItemsScopeImplementation.idProperty)) {
                     id.asInstanceOf[AnyRef]
-                  } else if (firstMethodIsOverrideCompatibleWithSecond(method, IdentifiedItemsScopeImplementation.typeTagProperty)) {
-                    typeTag[Raw]
+                  } else */if (firstMethodIsOverrideCompatibleWithSecond(method, IdentifiedItemsScopeImplementation.itemReconstitutionDataProperty)) {
+                    id -> typeTag[Raw]
                   } else if (IdentifiedItemsScopeImplementation.alwaysAllowsReadAccessTo(method) || isFinalizer) {
                     methodProxy.invokeSuper(target, arguments)
                   } else if (method.getReturnType != classOf[Unit]) {
                     throw new UnsupportedOperationException("Attempt to call method: '$method' with a non-unit return type on a recorder proxy: '$target' while capturing a change or measurement.")
                   } else {
-                    val item = target.asInstanceOf[Raw] // Remember, the outer context is making a proxy of type 'Raw'.
-                    val capturedPatch = new Patch[Raw](id, method, arguments, methodProxy)
+                    val item = target.asInstanceOf[Identified with Recorder] // Remember, the outer context is making a proxy of type 'Raw'.
+                    val capturedPatch = new Patch(item, method, arguments, methodProxy)
                     patchesPickedUpFromAnEventBeingApplied += capturedPatch
                     null // Representation of a unit value by a CGLIB interceptor.
                   }

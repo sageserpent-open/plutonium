@@ -29,7 +29,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
   override def allRecordingsAreCaptured: Boolean = _allRecordingsAreCaptured
 
-  override def recordPatchFromChange(when: Unbounded[Instant], patch: AbstractPatch[_ <: Identified]): Unit = {
+  override def recordPatchFromChange(when: Unbounded[Instant], patch: AbstractPatch): Unit = {
     _whenEventPertainedToByLastRecordingTookPlace = Some(when)
 
     val itemState = relevantItemStateFor(patch)
@@ -39,7 +39,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
     itemState.addPatch(when, patch)
   }
 
-  override def recordPatchFromMeasurement(when: Unbounded[Instant], patch: AbstractPatch[_ <: Identified]): Unit = {
+  override def recordPatchFromMeasurement(when: Unbounded[Instant], patch: AbstractPatch): Unit = {
     _whenEventPertainedToByLastRecordingTookPlace = Some(when)
 
     relevantItemStateFor(patch).addPatch(when, patch)
@@ -94,7 +94,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
     }
   }
 
-  type CandidatePatchTuple = (SequenceIndex, AbstractPatch[_ <: Identified], Unbounded[Instant])
+  type CandidatePatchTuple = (SequenceIndex, AbstractPatch, Unbounded[Instant])
 
   private type CandidatePatches = mutable.MutableList[CandidatePatchTuple]
 
@@ -112,7 +112,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
     def canBeAnnihilatedAs(typeTag: TypeTag[_ <: Identified]) =
       this._lowerBoundTypeTag.tpe <:< typeTag.tpe
 
-    def addPatch(when: Unbounded[Instant], patch: AbstractPatch[_ <: Identified]) = {
+    def addPatch(when: Unbounded[Instant], patch: AbstractPatch) = {
       val candidatePatchTuple = (nextSequenceIndex(), patch, when)
       methodAndItsCandidatePatchTuplesFor(patch.method) match {
         case (Some((exemplarMethod, candidatePatchTuples))) =>
@@ -125,7 +125,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
           exemplarMethodToCandidatePatchesMap += (patch.method -> mutable.MutableList(candidatePatchTuple))
       }
 
-      refineType(patch.capturedTypeTag)
+      refineType(patch.typeTag)
     }
 
     def refineType(typeTag: _root_.scala.reflect.runtime.universe.TypeTag[_ <: Identified]): Unit = {
@@ -161,8 +161,11 @@ trait PatchRecorderImplementation extends PatchRecorder {
     }
 
     class IdentifiedItemAccessImplementation extends IdentifiedItemAccess {
-      override def itemFor[Raw <: Identified : scala.reflect.runtime.universe.TypeTag](id: Raw#Id): Raw = {
+      override def itemFor[Raw <: Identified](itemReconstitutionData: Recorder#ItemReconstitutionData[Raw]): Raw = {
+        // TODO: this is wrong, but I'll fix this later - need to look up the relevant 'ItemState' using the type tag
+        // from 'itemReconstitutionData' and then use *that* to delegate to 'itemFor_' using its own lower bound type tag.
         val typeTag = _lowerBoundTypeTag
+        val (id, _) = itemReconstitutionData
         itemFor_(id, typeTag).asInstanceOf[Raw]
       }
     }
@@ -212,24 +215,24 @@ trait PatchRecorderImplementation extends PatchRecorder {
   private val actionQueue = mutable.PriorityQueue[IndexedAction]()
 
 
-  private def relevantItemStateFor(patch: AbstractPatch[_ <: Identified]) = {
+  private def relevantItemStateFor(patch: AbstractPatch) = {
     val itemStates = idToItemStatesMap.getOrElseUpdate(patch.id, mutable.Set.empty)
 
-    val clashingItemStates = itemStates filter (_.isInconsistentWith(patch.capturedTypeTag))
+    val clashingItemStates = itemStates filter (_.isInconsistentWith(patch.typeTag))
 
     if (clashingItemStates.nonEmpty) {
-      throw new RuntimeException(s"There is at least one item of id: '${patch.id}' that would be inconsistent with type '${patch.capturedTypeTag.tpe}', these have types: '${clashingItemStates map (_.lowerBoundTypeTag.tpe)}'.")
+      throw new RuntimeException(s"There is at least one item of id: '${patch.id}' that would be inconsistent with type '${patch.typeTag.tpe}', these have types: '${clashingItemStates map (_.lowerBoundTypeTag.tpe)}'.")
     }
 
-    val compatibleItemStates = itemStates filter (_.isFusibleWith(patch.capturedTypeTag))
+    val compatibleItemStates = itemStates filter (_.isFusibleWith(patch.typeTag))
 
     if (compatibleItemStates.nonEmpty) if (1 < compatibleItemStates.size) {
-      throw new scala.RuntimeException(s"There is more than one item of id: '${patch.id}' compatible with type '${patch.capturedTypeTag.tpe}', these have types: '${compatibleItemStates map (_.lowerBoundTypeTag.tpe)}'.")
+      throw new scala.RuntimeException(s"There is more than one item of id: '${patch.id}' compatible with type '${patch.typeTag.tpe}', these have types: '${compatibleItemStates map (_.lowerBoundTypeTag.tpe)}'.")
     } else {
       compatibleItemStates.head
     }
     else {
-      val itemState = new ItemState(patch.capturedTypeTag)
+      val itemState = new ItemState(patch.typeTag)
       itemStates += itemState
       itemState
     }
