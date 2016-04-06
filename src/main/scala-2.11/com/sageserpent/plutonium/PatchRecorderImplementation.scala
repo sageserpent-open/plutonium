@@ -125,10 +125,14 @@ trait PatchRecorderImplementation extends PatchRecorder {
           exemplarMethodToCandidatePatchesMap += (patch.method -> mutable.MutableList(candidatePatchTuple))
       }
 
-      if (patch.capturedTypeTag.tpe <:< this._lowerBoundTypeTag.tpe) {
-        this._lowerBoundTypeTag = patch.capturedTypeTag
-      } else if (this._upperBoundTypeTag.tpe <:< patch.capturedTypeTag.tpe) {
-        this._upperBoundTypeTag = patch.capturedTypeTag
+      refineType(patch.capturedTypeTag)
+    }
+
+    def refineType(typeTag: _root_.scala.reflect.runtime.universe.TypeTag[_ <: Identified]): Unit = {
+      if (typeTag.tpe <:< this._lowerBoundTypeTag.tpe) {
+        this._lowerBoundTypeTag = typeTag
+      } else if (this._upperBoundTypeTag.tpe <:< typeTag.tpe) {
+        this._upperBoundTypeTag = typeTag
       }
     }
 
