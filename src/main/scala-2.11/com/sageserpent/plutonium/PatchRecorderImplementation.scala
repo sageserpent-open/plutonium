@@ -161,7 +161,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
     }
 
     class IdentifiedItemAccessImplementation extends IdentifiedItemAccess {
-      override def itemFor[Raw <: Identified](itemReconstitutionData: Recorder#ItemReconstitutionData[Raw]): Raw = {
+      override def reconstitute[Raw <: Identified](itemReconstitutionData: Recorder#ItemReconstitutionData[Raw]): Raw = {
         // TODO: this is wrong, but I'll fix this later - need to look up the relevant 'ItemState' using the type tag
         // from 'itemReconstitutionData' and then use *that* to delegate to 'itemFor_' using its own lower bound type tag.
         val typeTag = _lowerBoundTypeTag

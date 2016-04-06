@@ -24,13 +24,13 @@ class Patch(targetRecorder: Recorder, method: Method, arguments: Array[AnyRef], 
 
   val wrappedArguments = arguments map wrap
 
-  def unwrap(identifiedItemAccess: IdentifiedItemAccess)(wrappedArgument: WrappedArgument) = wrappedArgument.fold(identity, identifiedItemAccess.itemFor(_))
+  def unwrap(identifiedItemAccess: IdentifiedItemAccess)(wrappedArgument: WrappedArgument) = wrappedArgument.fold(identity, identifiedItemAccess.reconstitute(_))
 
   def apply(identifiedItemAccess: IdentifiedItemAccess): Unit = {
-    methodProxy.invoke(identifiedItemAccess.itemFor(targetReconstitutionData), wrappedArguments map unwrap(identifiedItemAccess))
+    methodProxy.invoke(identifiedItemAccess.reconstitute(targetReconstitutionData), wrappedArguments map unwrap(identifiedItemAccess))
   }
 
   def checkInvariant(identifiedItemAccess: IdentifiedItemAccess): Unit = {
-    identifiedItemAccess.itemFor(targetReconstitutionData).checkInvariant()
+    identifiedItemAccess.reconstitute(targetReconstitutionData).checkInvariant()
   }
 }
