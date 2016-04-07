@@ -13,6 +13,8 @@ import scalaz.{-\/, \/, \/-}
 class Patch(targetRecorder: Recorder, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy) extends AbstractPatch(method) {
   override val targetReconstitutionData = targetRecorder.itemReconstitutionData
 
+  override val argumentReconstitutionDatums: Seq[Recorder#ItemReconstitutionData[_ <: Identified]] = arguments collect {case argumentRecorder: Recorder => argumentRecorder.itemReconstitutionData}
+
   override val (id, typeTag) = targetReconstitutionData
 
   type WrappedArgument = \/[AnyRef, Recorder#ItemReconstitutionData[_ <: Identified]]
