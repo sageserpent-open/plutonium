@@ -173,7 +173,7 @@ object WorldReferenceImplementation {
                   } else if (method.getReturnType != classOf[Unit]) {
                     throw new UnsupportedOperationException("Attempt to call method: '$method' with a non-unit return type on a recorder proxy: '$target' while capturing a change or measurement.")
                   } else {
-                    val item = target.asInstanceOf[Identified with Recorder] // Remember, the outer context is making a proxy of type 'Raw'.
+                    val item = target.asInstanceOf[Recorder] // Remember, the outer context is making a proxy of type 'Raw'.
                     val capturedPatch = new Patch(item, method, arguments, methodProxy)
                     patchesPickedUpFromAnEventBeingApplied += capturedPatch
                     null // Representation of a unit value by a CGLIB interceptor.
