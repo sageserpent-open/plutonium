@@ -32,7 +32,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
   override def recordPatchFromChange(when: Unbounded[Instant], patch: AbstractPatch): Unit = {
     _whenEventPertainedToByLastRecordingTookPlace = Some(when)
 
-    val itemState = relevantItemStateFor(patch)
+    val itemState = whatShallICallThis(patch)
 
     itemState.submitCandidatePatches(patch.method)
 
@@ -42,7 +42,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
   override def recordPatchFromMeasurement(when: Unbounded[Instant], patch: AbstractPatch): Unit = {
     _whenEventPertainedToByLastRecordingTookPlace = Some(when)
 
-    relevantItemStateFor(patch).addPatch(when, patch)
+    whatShallICallThis(patch).addPatch(when, patch)
   }
 
   def annihilateItemFor_[SubclassOfRaw <: Raw, Raw <: Identified](id: Raw#Id, typeTag: universe.TypeTag[SubclassOfRaw], when: Instant): Unit = {
@@ -124,8 +124,6 @@ trait PatchRecorderImplementation extends PatchRecorder {
         case None =>
           exemplarMethodToCandidatePatchesMap += (patch.method -> mutable.MutableList(candidatePatchTuple))
       }
-
-      refineType(patch.typeTag)
     }
 
     def refineType(typeTag: _root_.scala.reflect.runtime.universe.TypeTag[_ <: Identified]): Unit = {
@@ -215,8 +213,10 @@ trait PatchRecorderImplementation extends PatchRecorder {
   private val actionQueue = mutable.PriorityQueue[IndexedAction]()
 
 
-  private def relevantItemStateFor(patch: AbstractPatch): ItemState = {
-    relevantItemStateFor(patch.targetReconstitutionData)
+  private def whatShallICallThis(patch: AbstractPatch): ItemState = {
+    val targetItemState = relevantItemStateFor(patch.targetReconstitutionData)
+    targetItemState.refineType(patch.typeTag)
+    targetItemState
   }
 
   private def relevantItemStateFor(itemReconstitutionData: Recorder#ItemReconstitutionData[_ <: Identified]): ItemState = {
