@@ -215,24 +215,30 @@ trait PatchRecorderImplementation extends PatchRecorder {
   private val actionQueue = mutable.PriorityQueue[IndexedAction]()
 
 
-  private def relevantItemStateFor(patch: AbstractPatch) = {
-    val itemStates = idToItemStatesMap.getOrElseUpdate(patch.id, mutable.Set.empty)
+  private def relevantItemStateFor(patch: AbstractPatch): ItemState = {
+    relevantItemStateFor(patch.targetReconstitutionData)
+  }
 
-    val clashingItemStates = itemStates filter (_.isInconsistentWith(patch.typeTag))
+  private def relevantItemStateFor(itemReconstitutionData: Recorder#ItemReconstitutionData[_ <: Identified]): ItemState = {
+    val (id, typeTag) = itemReconstitutionData
+
+    val itemStates = idToItemStatesMap.getOrElseUpdate(id, mutable.Set.empty)
+
+    val clashingItemStates = itemStates filter (_.isInconsistentWith(typeTag))
 
     if (clashingItemStates.nonEmpty) {
-      throw new RuntimeException(s"There is at least one item of id: '${patch.id}' that would be inconsistent with type '${patch.typeTag.tpe}', these have types: '${clashingItemStates map (_.lowerBoundTypeTag.tpe)}'.")
+      throw new RuntimeException(s"There is at least one item of id: '${id}' that would be inconsistent with type '${typeTag.tpe}', these have types: '${clashingItemStates map (_.lowerBoundTypeTag.tpe)}'.")
     }
 
-    val compatibleItemStates = itemStates filter (_.isFusibleWith(patch.typeTag))
+    val compatibleItemStates = itemStates filter (_.isFusibleWith(typeTag))
 
     if (compatibleItemStates.nonEmpty) if (1 < compatibleItemStates.size) {
-      throw new scala.RuntimeException(s"There is more than one item of id: '${patch.id}' compatible with type '${patch.typeTag.tpe}', these have types: '${compatibleItemStates map (_.lowerBoundTypeTag.tpe)}'.")
+      throw new scala.RuntimeException(s"There is more than one item of id: '${id}' compatible with type '${typeTag.tpe}', these have types: '${compatibleItemStates map (_.lowerBoundTypeTag.tpe)}'.")
     } else {
       compatibleItemStates.head
     }
     else {
-      val itemState = new ItemState(patch.typeTag)
+      val itemState = new ItemState(typeTag)
       itemStates += itemState
       itemState
     }

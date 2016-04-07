@@ -11,7 +11,7 @@ import scalaz.{-\/, \/, \/-}
   * Created by Gerard on 23/01/2016.
   */
 class Patch(targetRecorder: Recorder, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy) extends AbstractPatch(method) {
-  private val targetReconstitutionData = targetRecorder.itemReconstitutionData
+  override val targetReconstitutionData = targetRecorder.itemReconstitutionData
 
   override val (id, typeTag) = targetReconstitutionData
 
