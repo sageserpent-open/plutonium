@@ -20,7 +20,7 @@ trait BestPatchSelection {
 trait BestPatchSelectionContracts extends BestPatchSelection {
   abstract override def apply(relatedPatches: Seq[AbstractPatch]): AbstractPatch = {
     require(relatedPatches.nonEmpty)
-    require(1 == (relatedPatches map (_.id) distinct).size)
+    require(1 == (relatedPatches map (_.targetId) distinct).size)
     require((for {lhs <- relatedPatches
                   rhs <- relatedPatches if lhs != rhs} yield AbstractPatch.patchesAreRelated(lhs, rhs)).forall(identity))
     super.apply(relatedPatches)
