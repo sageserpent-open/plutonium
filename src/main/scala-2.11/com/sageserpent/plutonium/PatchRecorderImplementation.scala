@@ -32,7 +32,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
   override def recordPatchFromChange(when: Unbounded[Instant], patch: AbstractPatch): Unit = {
     _whenEventPertainedToByLastRecordingTookPlace = Some(when)
 
-    val itemState = refinedRelevantItemStatesAndYieldTarget(patch)
+    val itemState = refineRelevantItemStatesAndYieldTarget(patch)
 
     itemState.submitCandidatePatches(patch.method)
 
@@ -42,7 +42,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
   override def recordPatchFromMeasurement(when: Unbounded[Instant], patch: AbstractPatch): Unit = {
     _whenEventPertainedToByLastRecordingTookPlace = Some(when)
 
-    refinedRelevantItemStatesAndYieldTarget(patch).addPatch(when, patch)
+    refineRelevantItemStatesAndYieldTarget(patch).addPatch(when, patch)
   }
 
   def annihilateItemFor_[SubclassOfRaw <: Raw, Raw <: Identified](id: Raw#Id, typeTag: universe.TypeTag[SubclassOfRaw], when: Instant): Unit = {
@@ -158,18 +158,6 @@ trait PatchRecorderImplementation extends PatchRecorder {
       case None =>
     }
 
-    class IdentifiedItemAccessImplementation extends IdentifiedItemAccess {
-      override def reconstitute[Raw <: Identified](itemReconstitutionData: Recorder#ItemReconstitutionData[Raw]): Raw = {
-        // TODO: this is wrong, but I'll fix this later - need to look up the relevant 'ItemState' using the type tag
-        // from 'itemReconstitutionData' and then use *that* to delegate to 'itemFor_' using its own lower bound type tag.
-        val typeTag = _lowerBoundTypeTag
-        val (id, _) = itemReconstitutionData
-        itemFor_(id, typeTag).asInstanceOf[Raw]
-      }
-    }
-
-    val identifiedItemAccess = new IdentifiedItemAccessImplementation with IdentifiedItemAccessContracts
-
     private def enqueueBestCandidatePatchFrom(candidatePatchTuples: CandidatePatches): Unit = {
       val bestPatch = self(candidatePatchTuples.map(_._2))
 
@@ -200,6 +188,15 @@ trait PatchRecorderImplementation extends PatchRecorder {
     }
   }
 
+  class IdentifiedItemAccessImplementation extends IdentifiedItemAccess {
+    override def reconstitute[Raw <: Identified](itemReconstitutionData: Recorder#ItemReconstitutionData[Raw]): Raw = {
+      val itemState = itemStateFor(itemReconstitutionData)
+      itemState.itemFor_(itemReconstitutionData._1, itemState.lowerBoundTypeTag).asInstanceOf[Raw]
+    }
+  }
+
+  val identifiedItemAccess = new IdentifiedItemAccessImplementation with IdentifiedItemAccessContracts
+
   private val idToItemStatesMap = mutable.Map.empty[Any, mutable.Set[ItemState]]
 
   private type SequenceIndex = Long
@@ -213,7 +210,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
   private val actionQueue = mutable.PriorityQueue[IndexedAction]()
 
 
-  private def refinedRelevantItemStatesAndYieldTarget(patch: AbstractPatch): ItemState = {
+  private def refineRelevantItemStatesAndYieldTarget(patch: AbstractPatch): ItemState = {
     def refinedItemStateFor(reconstitutionData: Recorder#ItemReconstitutionData[_ <: Identified]) = {
       val itemState = itemStateFor(reconstitutionData)
       itemState.refineType(reconstitutionData._2)
