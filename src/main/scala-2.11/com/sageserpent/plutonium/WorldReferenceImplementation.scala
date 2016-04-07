@@ -166,9 +166,7 @@ object WorldReferenceImplementation {
               class LocalMethodInterceptor extends MethodInterceptor {
                 override def intercept(target: Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy): AnyRef = {
                   def isFinalizer: Boolean = method.getName == "finalize" && method.getParameterCount == 0 && method.getReturnType == classOf[Unit]
-                  /*if (firstMethodIsOverrideCompatibleWithSecond(method, IdentifiedItemsScopeImplementation.idProperty)) {
-                    id.asInstanceOf[AnyRef]
-                  } else */if (firstMethodIsOverrideCompatibleWithSecond(method, IdentifiedItemsScopeImplementation.itemReconstitutionDataProperty)) {
+                  if (firstMethodIsOverrideCompatibleWithSecond(method, IdentifiedItemsScopeImplementation.itemReconstitutionDataProperty)) {
                     id -> typeTag[Raw]
                   } else if (IdentifiedItemsScopeImplementation.alwaysAllowsReadAccessTo(method) || isFinalizer) {
                     methodProxy.invokeSuper(target, arguments)
