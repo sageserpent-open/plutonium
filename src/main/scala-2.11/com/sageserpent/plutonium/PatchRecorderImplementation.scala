@@ -32,7 +32,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
   override def recordPatchFromChange(when: Unbounded[Instant], patch: AbstractPatch): Unit = {
     _whenEventPertainedToByLastRecordingTookPlace = Some(when)
 
-    val itemState = whatShallICallThis(patch)
+    val itemState = refinedRelevantItemStatesAndYieldTarget(patch)
 
     itemState.submitCandidatePatches(patch.method)
 
@@ -42,7 +42,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
   override def recordPatchFromMeasurement(when: Unbounded[Instant], patch: AbstractPatch): Unit = {
     _whenEventPertainedToByLastRecordingTookPlace = Some(when)
 
-    whatShallICallThis(patch).addPatch(when, patch)
+    refinedRelevantItemStatesAndYieldTarget(patch).addPatch(when, patch)
   }
 
   def annihilateItemFor_[SubclassOfRaw <: Raw, Raw <: Identified](id: Raw#Id, typeTag: universe.TypeTag[SubclassOfRaw], when: Instant): Unit = {
@@ -213,13 +213,20 @@ trait PatchRecorderImplementation extends PatchRecorder {
   private val actionQueue = mutable.PriorityQueue[IndexedAction]()
 
 
-  private def whatShallICallThis(patch: AbstractPatch): ItemState = {
-    val targetItemState = relevantItemStateFor(patch.targetReconstitutionData)
-    targetItemState.refineType(patch.typeTag)
-    targetItemState
+  private def refinedRelevantItemStatesAndYieldTarget(patch: AbstractPatch): ItemState = {
+    def refinedItemStateFor(reconstitutionData: Recorder#ItemReconstitutionData[_ <: Identified]) = {
+      val itemState = itemStateFor(reconstitutionData)
+      itemState.refineType(reconstitutionData._2)
+      itemState
+    }
+
+    for (argumentReconstitutionData <- patch.argumentReconstitutionDatums) {
+      refinedItemStateFor(argumentReconstitutionData)
+    }
+    refinedItemStateFor(patch.targetReconstitutionData)
   }
 
-  private def relevantItemStateFor(itemReconstitutionData: Recorder#ItemReconstitutionData[_ <: Identified]): ItemState = {
+  private def itemStateFor(itemReconstitutionData: Recorder#ItemReconstitutionData[_ <: Identified]): ItemState = {
     val (id, typeTag) = itemReconstitutionData
 
     val itemStates = idToItemStatesMap.getOrElseUpdate(id, mutable.Set.empty)
