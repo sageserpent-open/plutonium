@@ -158,29 +158,6 @@ trait PatchRecorderImplementation extends PatchRecorder {
       case None =>
     }
 
-    private def enqueueBestCandidatePatchFrom(candidatePatchTuples: CandidatePatches): Unit = {
-      val bestPatch = self(candidatePatchTuples.map(_._2))
-
-      // The best patch has to be applied as if it occurred when the original
-      // patch would have taken place - so it steals the latter's sequence index.
-      // TODO: is there a test that demonstrates the need for this? Come to think
-      // of it though, I'm not sure if a mutator could legitimately make bitemporal
-      // queries of other bitemporal items; the only way an inter-item relationship
-      // makes a difference is when a query is executed - and that doesn't care about
-      // the precise interleaving of events on related items, only that the correct
-      // ones have been applied to each item. So does this mean that the action queue
-      // can be split across items?
-      val (sequenceIndex, _, whenPatchOccurs) = candidatePatchTuples.head
-
-      actionQueue.enqueue((sequenceIndex, Unit => {
-
-        bestPatch(identifiedItemAccess)
-        for (_ <- itemsAreLockedResource) {
-          bestPatch.checkInvariant(identifiedItemAccess)
-        }
-      }, whenPatchOccurs))
-    }
-
     private val exemplarMethodToCandidatePatchesMap: mutable.Map[Method, CandidatePatches] = mutable.Map.empty
 
     def itemFor_[SubclassOfRaw <: Raw, Raw <: Identified](id: Raw#Id, typeTag: universe.TypeTag[SubclassOfRaw]): SubclassOfRaw = {
@@ -209,6 +186,23 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
   private val actionQueue = mutable.PriorityQueue[IndexedAction]()
 
+
+  private def enqueueBestCandidatePatchFrom(candidatePatchTuples: CandidatePatches): Unit = {
+    val bestPatch = self(candidatePatchTuples.map(_._2))
+
+    // The best patch has to be applied as if it occurred when the original
+    // patch would have taken place - so it steals the latter's sequence index.
+
+    val (sequenceIndex, _, whenPatchOccurs) = candidatePatchTuples.head
+
+    actionQueue.enqueue((sequenceIndex, Unit => {
+
+      bestPatch(identifiedItemAccess)
+      for (_ <- itemsAreLockedResource) {
+        bestPatch.checkInvariant(identifiedItemAccess)
+      }
+    }, whenPatchOccurs))
+  }
 
   private def refineRelevantItemStatesAndYieldTarget(patch: AbstractPatch): ItemState = {
     def refinedItemStateFor(reconstitutionData: Recorder#ItemReconstitutionData[_ <: Identified]) = {
