@@ -6,7 +6,7 @@ import java.time.Instant
 import com.sageserpent.americium.{Finite, Unbounded}
 import resource.ManagedResource
 
-import scala.collection.mutable
+import scala.collection.{Map, mutable}
 import scala.reflect.runtime._
 import scala.reflect.runtime.universe._
 
@@ -165,15 +165,6 @@ trait PatchRecorderImplementation extends PatchRecorder {
     }
   }
 
-  class IdentifiedItemAccessImplementation extends IdentifiedItemAccess {
-    override def reconstitute[Raw <: Identified](itemReconstitutionData: Recorder#ItemReconstitutionData[Raw]): Raw = {
-      val itemState = itemStateFor(itemReconstitutionData)
-      itemState.itemFor_(itemReconstitutionData._1, itemState.lowerBoundTypeTag).asInstanceOf[Raw]
-    }
-  }
-
-  val identifiedItemAccess = new IdentifiedItemAccessImplementation with IdentifiedItemAccessContracts
-
   private val idToItemStatesMap = mutable.Map.empty[Any, mutable.Set[ItemState]]
 
   private type SequenceIndex = Long
@@ -189,6 +180,19 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
   private def enqueueBestCandidatePatchFrom(candidatePatchTuples: CandidatePatches): Unit = {
     val bestPatch = self(candidatePatchTuples.map(_._2))
+
+    class IdentifiedItemAccessImplementation extends IdentifiedItemAccess {
+      val idToItemStatesMapImmutableSnapshot = scala.collection.immutable.Map((idToItemStatesMap mapValues (_.to[scala.collection.immutable.Set])).toSeq:_*)
+
+      override def reconstitute[Raw <: Identified](itemReconstitutionData: Recorder#ItemReconstitutionData[Raw]): Raw = {
+        val id = itemReconstitutionData._1
+        val typeTag = itemReconstitutionData._2
+        val itemState = (idToItemStatesMapImmutableSnapshot(id) filter (_.isFusibleWith(typeTag))).head
+        itemState.itemFor_(id, itemState.lowerBoundTypeTag).asInstanceOf[Raw]
+      }
+    }
+
+    val identifiedItemAccess = new IdentifiedItemAccessImplementation with IdentifiedItemAccessContracts
 
     // The best patch has to be applied as if it occurred when the original
     // patch would have taken place - so it steals the latter's sequence index.
