@@ -173,14 +173,14 @@ trait WorldSpecSupport {
     fooHistory.property1 = capture(data)
   }))
 
-  def referringToItemDataSampleGenerator(faulty: Boolean) = for {idToReferToAnotherItem <- Gen.oneOf(ReferringHistory.specialIds)}
-    yield (idToReferToAnotherItem, (when: americium.Unbounded[Instant], makeAChange: Boolean, referringHistoryId: ReferringHistory#Id) => eventConstructorReferringToTwoItems[ReferringHistory, History](makeAChange)(when).apply(referringHistoryId, idToReferToAnotherItem, spore {(referringHistory: ReferringHistory, referencedItem: History) => {
+  def referringToItemDataSampleGenerator(faulty: Boolean) = for {idToReferToAnotherItem <- Gen.oneOf(ReferringHistory.specialFooIds)}
+    yield (idToReferToAnotherItem, (when: americium.Unbounded[Instant], makeAChange: Boolean, referringHistoryId: ReferringHistory#Id) => eventConstructorReferringToTwoItems[ReferringHistory, FooHistory](makeAChange)(when).apply(referringHistoryId, idToReferToAnotherItem, spore {(referringHistory: ReferringHistory, referencedItem: FooHistory) => {
     if (capture(faulty)) throw changeError // Modelling a precondition failure.
     referringHistory.referTo(referencedItem)
   }}))
 
-  def forgettingItemDataSampleGenerator(faulty: Boolean) = for {idToReferToAnotherItem <- Gen.oneOf(ReferringHistory.specialIds)}
-    yield (idToReferToAnotherItem, (when: americium.Unbounded[Instant], makeAChange: Boolean, referringHistoryId: ReferringHistory#Id) => eventConstructorReferringToTwoItems[ReferringHistory, History](makeAChange)(when).apply(referringHistoryId, idToReferToAnotherItem, spore {(referringHistory: ReferringHistory, referencedItem: History) => {
+  def forgettingItemDataSampleGenerator(faulty: Boolean) = for {idToReferToAnotherItem <- Gen.oneOf(ReferringHistory.specialFooIds)}
+    yield (idToReferToAnotherItem, (when: americium.Unbounded[Instant], makeAChange: Boolean, referringHistoryId: ReferringHistory#Id) => eventConstructorReferringToTwoItems[ReferringHistory, FooHistory](makeAChange)(when).apply(referringHistoryId, idToReferToAnotherItem, spore {(referringHistory: ReferringHistory, referencedItem: FooHistory) => {
       if (capture(faulty)) throw changeError // Modelling a precondition failure.
       referringHistory.forget(referencedItem)
     }}))
@@ -542,10 +542,7 @@ trait WorldSpecSupport {
   val referenceToItemDataSamplesForAnIdGenerator = dataSamplesForAnIdGenerator_[ReferringHistory](referringHistoryIdGenerator, referringToItemDataSampleGenerator(faulty = false), forgettingItemDataSampleGenerator(faulty = false))
   val referringHistoryRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(referenceToItemDataSamplesForAnIdGenerator)
 
-  val mixedRecordingsForReferencedIdGenerator = Gen.frequency(Seq(
-    dataSamplesForAnIdGenerator_[FooHistory](Gen.oneOf(ReferringHistory.specialFooIds), Gen.oneOf(dataSampleGenerator1(faulty = false), moreSpecificFooDataSampleGenerator(faulty = false)), dataSampleGenerator2(faulty = false)),
-    dataSamplesForAnIdGenerator_[BarHistory](Gen.oneOf(ReferringHistory.specialBarIds), dataSampleGenerator3(faulty = false), dataSampleGenerator4(false), dataSampleGenerator5(faulty = false)),
-    dataSamplesForAnIdGenerator_[IntegerHistory](Gen.oneOf(ReferringHistory.specialIntIds), integerDataSampleGenerator(faulty = false))) map (1 -> _): _*)
+  val mixedRecordingsForReferencedIdGenerator = dataSamplesForAnIdGenerator_[FooHistory](Gen.oneOf(ReferringHistory.specialFooIds), Gen.oneOf(dataSampleGenerator1(faulty = false), moreSpecificFooDataSampleGenerator(faulty = false)), dataSampleGenerator2(faulty = false))
 
   val referencedHistoryRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(mixedRecordingsForReferencedIdGenerator)
 }
