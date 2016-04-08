@@ -96,8 +96,8 @@ object WorldReferenceImplementation {
 
     class LocalMethodInterceptor extends MethodInterceptor {
       override def intercept(target: Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy): AnyRef = {
-            if (itemsAreLocked && method.getReturnType == classOf[Unit] && !WorldReferenceImplementation.isInvariantCheck(method))
-              throw new UnsupportedOperationException(s"Attempt to write via: '$method' to an item: '$target' rendered from a bitemporal query.")
+        if (itemsAreLocked && method.getReturnType == classOf[Unit] && !WorldReferenceImplementation.isInvariantCheck(method))
+          throw new UnsupportedOperationException(s"Attempt to write via: '$method' to an item: '$target' rendered from a bitemporal query.")
 
         methodProxy.invokeSuper(target, arguments)
       }
@@ -132,10 +132,10 @@ object WorldReferenceImplementation {
       val (constructor, clazz) = cachedProxyConstructors.get(typeOfRaw) match {
         case Some(cachedProxyConstructorData) => cachedProxyConstructorData
         case None => val (constructor, clazz) = constructorFor(typeOfRaw)
-          cachedProxyConstructors += (typeOfRaw -> (constructor, clazz))
+          cachedProxyConstructors += (typeOfRaw ->(constructor, clazz))
           constructor -> clazz
       }
-      if (!isForRecordingOnly && Modifier.isAbstract(clazz.getModifiers)){
+      if (!isForRecordingOnly && Modifier.isAbstract(clazz.getModifiers)) {
         throw new UnsupportedOperationException(s"Attempt to create an instance of an abstract class '$clazz' for id: '$id'.")
       }
       val proxy = constructor(id).asInstanceOf[Raw]
@@ -249,7 +249,7 @@ object WorldReferenceImplementation {
 
     def annihilateItemFor[Raw <: Identified : TypeTag](id: Raw#Id, when: Instant): Unit = {
       idToItemsMultiMap.get(id) match {
-        case (Some(items)) =>
+        case Some(items) =>
           assert(items.nonEmpty)
 
           // Have to force evaluation of the stream so that the call to '--=' below does not try to incrementally
@@ -260,8 +260,9 @@ object WorldReferenceImplementation {
 
           items -= itemsSelectedForAnnihilation.head
 
-          if (items.isEmpty)
+          if (items.isEmpty) {
             idToItemsMultiMap.remove(id)
+          }
         case None =>
           assert(false)
       }
@@ -325,6 +326,7 @@ object WorldReferenceImplementation {
       }
     }
   }
+
 }
 
 object MutableState {
