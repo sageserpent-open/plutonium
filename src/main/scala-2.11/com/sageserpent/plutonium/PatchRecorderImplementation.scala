@@ -64,7 +64,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
           itemStates --= compatibleItemStates
 
-          if (itemStates.isEmpty){
+          if (itemStates.isEmpty) {
             idToItemStatesMap -= id
           }
 
@@ -163,13 +163,13 @@ trait PatchRecorderImplementation extends PatchRecorder {
     }
 
     private val exemplarMethodToCandidatePatchesMap: mutable.Map[Method, CandidatePatches] = mutable.Map.empty
-
-    def itemFor_[SubclassOfRaw <: Raw, Raw <: Identified](id: Raw#Id, typeTag: universe.TypeTag[SubclassOfRaw]): SubclassOfRaw = {
-      PatchRecorderImplementation.this.identifiedItemsScope.itemFor[SubclassOfRaw](id.asInstanceOf[SubclassOfRaw#Id])(typeTag)
-    }
   }
 
   private val idToItemStatesMap = mutable.Map.empty[Any, mutable.Set[ItemState]]
+
+  private type ItemReconstitutionDataToItemStateMap = mutable.Map[Recorder#ItemReconstitutionData[_ <: Identified], ItemState]
+
+  private val patchToItemStatesMap = mutable.Map.empty[AbstractPatch, ItemReconstitutionDataToItemStateMap]
 
   private type SequenceIndex = Long
 
@@ -186,13 +186,16 @@ trait PatchRecorderImplementation extends PatchRecorder {
     val bestPatch = self(candidatePatchTuples.map(_._2))
 
     class IdentifiedItemAccessImplementation extends IdentifiedItemAccess {
-      val idToItemStatesMapImmutableSnapshot = scala.collection.immutable.Map((idToItemStatesMap mapValues (_.to[scala.collection.immutable.Set])).toSeq:_*)
+      val reconstitutionDataToItemStateMap = patchToItemStatesMap.remove(bestPatch).get
 
       override def reconstitute[Raw <: Identified](itemReconstitutionData: Recorder#ItemReconstitutionData[Raw]): Raw = {
         val id = itemReconstitutionData._1
-        val typeTag = itemReconstitutionData._2
-        val itemState = (idToItemStatesMapImmutableSnapshot(id) filter (_.isFusibleWith(typeTag))).head
-        itemState.itemFor_(id, itemState.lowerBoundTypeTag).asInstanceOf[Raw]
+        val itemState = reconstitutionDataToItemStateMap(itemReconstitutionData)
+        itemFor_(id, itemState.lowerBoundTypeTag).asInstanceOf[Raw]
+      }
+
+      def itemFor_[SubclassOfRaw <: Raw, Raw <: Identified](id: Raw#Id, typeTag: universe.TypeTag[SubclassOfRaw]): SubclassOfRaw = {
+        PatchRecorderImplementation.this.identifiedItemsScope.itemFor[SubclassOfRaw](id.asInstanceOf[SubclassOfRaw#Id])(typeTag)
       }
     }
 
@@ -216,6 +219,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
     def refinedItemStateFor(reconstitutionData: Recorder#ItemReconstitutionData[_ <: Identified]) = {
       val itemState = itemStateFor(reconstitutionData)
       itemState.refineType(reconstitutionData._2)
+      patchToItemStatesMap.getOrElseUpdate(patch, mutable.Map.empty) += reconstitutionData -> itemState
       itemState
     }
 
