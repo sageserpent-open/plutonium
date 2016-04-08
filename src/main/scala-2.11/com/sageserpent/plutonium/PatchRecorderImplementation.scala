@@ -64,6 +64,10 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
           itemStates --= compatibleItemStates
 
+          if (itemStates.isEmpty){
+            idToItemStatesMap -= id
+          }
+
           val sequenceIndex = nextSequenceIndex()
 
           actionQueue.enqueue((sequenceIndex, Unit => for (itemStateToBeAnnihilated <- compatibleItemStates) {
