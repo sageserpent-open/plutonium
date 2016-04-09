@@ -234,8 +234,8 @@ object WorldReferenceImplementation {
           constructAndCacheItem()
         case Some(items) => {
           assert(items.nonEmpty)
-          val conflictingItems = IdentifiedItemsScopeImplementation.yieldOnlyItemsOfSupertypeOf(items)
-          assert(conflictingItems.isEmpty)
+          val conflictingItems = IdentifiedItemsScopeImplementation.yieldOnlyItemsOfSupertypeOf[Raw](items)
+          assert(conflictingItems.isEmpty, s"Found conflicting items for id: '$id' with type tag: '${typeTag[Raw].tpe}', these are: '${conflictingItems.toList}'.")
           val itemsOfDesiredType = IdentifiedItemsScopeImplementation.yieldOnlyItemsOfType[Raw](items).force
           if (itemsOfDesiredType.isEmpty)
             constructAndCacheItem()
