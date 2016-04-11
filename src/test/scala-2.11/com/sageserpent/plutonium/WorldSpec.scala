@@ -403,22 +403,23 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
 
       val scope = world.scopeFor(queryWhen, world.nextRevision)
 
-      val checks: List[(Any, ReferringHistory)] = for {RecordingsNoLaterThan(_, _, _, _, whenAnnihilated) <-
-                                                       referencedHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(queryWhen)) if whenAnnihilated.isDefined
-                                                       laterQueryWhenAtAnnihilation = whenAnnihilated.get
-                                                       RecordingsNoLaterThan(referringHistoryId, referringHistoriesFrom, _, _, _) <- referringHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(laterQueryWhenAtAnnihilation))
-                                                       NonExistentRecordings(referencedHistoryId, referencedHistoriesFrom, _) <- referencedHistoryRecordingsGroupedById flatMap (_.doesNotExistAt(laterQueryWhenAtAnnihilation))
-                                                       scopeInWhichReferencedItemIsAnnihilated = world.scopeFor(laterQueryWhenAtAnnihilation, world.nextRevision)
-                                                       Seq(referringHistory: ReferringHistory) = referringHistoriesFrom(scopeInWhichReferencedItemIsAnnihilated) if referringHistory.referencedHistories.contains(referencedHistoryId)}
-        yield (referencedHistoryId, referringHistory)
+      val checks = for {RecordingsNoLaterThan(originalReferencedHistoryId, _, _, _, whenAnnihilated) <-
+                          referencedHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(queryWhen)) if whenAnnihilated.isDefined
+                        laterQueryWhenAtAnnihilation = whenAnnihilated.get
+                        RecordingsNoLaterThan(referringHistoryId, referringHistoriesFrom, _, _, _) <- referringHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(laterQueryWhenAtAnnihilation))
+                        NonExistentRecordings(referencedHistoryId, _, _) <-
+                          referencedHistoryRecordingsGroupedById flatMap (_.doesNotExistAt(laterQueryWhenAtAnnihilation)) if originalReferencedHistoryId == referencedHistoryId
+                        scopeInWhichReferencedItemIsAnnihilated = world.scopeFor(laterQueryWhenAtAnnihilation, world.nextRevision)
+                        Seq(referringHistory: ReferringHistory) = referringHistoriesFrom(scopeInWhichReferencedItemIsAnnihilated) if referringHistory.referencedHistories.contains(referencedHistoryId)}
+        yield (referencedHistoryId, referringHistory, laterQueryWhenAtAnnihilation)
 
-      Prop.all(checks.map { case (referencedHistoryId, referringHistory) => {
+      Prop.all(checks.map { case (referencedHistoryId, referringHistory, laterQueryWhenAtAnnihilation) => {
         val ghostItem = referringHistory.referencedHistories(referencedHistoryId)
         ghostItem.id // That should be OK for a ghost.
         intercept[RuntimeException] {
           ghostItem.shouldBeUnchanged
         }
-        ghostItem.isGhost :| s"Expected referenced item of id: '$referencedHistoryId' referred to by item of id: '${referringHistory.id}' to be a ghost."
+        ghostItem.isGhost :| s"Expected referenced item of id: '$referencedHistoryId' referred to by item of id: '${referringHistory.id}' to be a ghost at time: $laterQueryWhenAtAnnihilation."
       }
       }: _*)
     })

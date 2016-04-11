@@ -72,8 +72,6 @@ object WorldReferenceImplementation {
 
     val nonMutableMembersThatCanAlwaysBeReadFrom = classOf[Identified].getMethods ++ classOf[AnyRef].getMethods ++ classOf[Recorder].getMethods
 
-    //val idProperty = classOf[Identified].getMethod("id")
-
     val itemReconstitutionDataProperty = classOf[Recorder].getMethod("itemReconstitutionData")
   }
 
@@ -185,7 +183,7 @@ object WorldReferenceImplementation {
               }
 
               val localMethodInterceptor = new LocalMethodInterceptor
-              constructFrom[Raw](id, localMethodInterceptor, true)
+              constructFrom[Raw](id, localMethodInterceptor, isForRecordingOnly = true)
             }
           }
 
@@ -225,7 +223,7 @@ object WorldReferenceImplementation {
 
     def itemFor[Raw <: Identified : TypeTag](id: Raw#Id): Raw = {
       def constructAndCacheItem(): Raw = {
-        val item = constructFrom(id, localMethodInterceptor, false)
+        val item = constructFrom(id, localMethodInterceptor, isForRecordingOnly = false)
         idToItemsMultiMap.addBinding(id, item)
         item
       }
@@ -255,10 +253,14 @@ object WorldReferenceImplementation {
           // Have to force evaluation of the stream so that the call to '--=' below does not try to incrementally
           // evaluate the stream as the underlying source collection, namely 'items' is being mutated. This is
           // what you get when you go back to imperative programming after too much referential transparency.
-          val itemsSelectedForAnnihilation = IdentifiedItemsScopeImplementation.yieldOnlyItemsOfType(items).force
+          val itemsSelectedForAnnihilation: Stream[Raw] = IdentifiedItemsScopeImplementation.yieldOnlyItemsOfType(items).force
           assert(1 == itemsSelectedForAnnihilation.size)
 
-          items -= itemsSelectedForAnnihilation.head
+          val itemToBeAnnihilated = itemsSelectedForAnnihilation.head
+
+          itemToBeAnnihilated.recordAnnihilation()
+
+          items -= itemToBeAnnihilated
 
           if (items.isEmpty) {
             idToItemsMultiMap.remove(id)
