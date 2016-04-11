@@ -245,7 +245,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
   private def itemStateFor(itemReconstitutionData: Recorder#ItemReconstitutionData[_ <: Identified]): ItemState = {
     val (id, typeTag) = itemReconstitutionData
 
-    val itemStates = idToItemStatesMap.get(id).toSeq.flatten filter (_.itemIsAnnihilatedAt.isEmpty)
+    val (itemStates, itemStatesFromPreviousLifecycles) = idToItemStatesMap.get(id).toSeq.flatten partition (_.itemIsAnnihilatedAt.isEmpty)
 
     val clashingItemStates = itemStates filter (_.isInconsistentWith(typeTag))
 
@@ -253,28 +253,34 @@ trait PatchRecorderImplementation extends PatchRecorder {
       throw new RuntimeException(s"There is at least one item of id: '${id}' that would be inconsistent with type '${typeTag.tpe}', these have types: '${clashingItemStates map (_.lowerBoundTypeTag.tpe)}'.")
     }
 
+    val potentiallyConflictingItemStatesFromPreviousLifecycles = itemStatesFromPreviousLifecycles filter (itemState => itemState.isFusibleWith(typeTag) || itemState.isInconsistentWith(typeTag))
+
+    val mutableItemStates = idToItemStatesMap.getOrElseUpdate(id, mutable.Set.empty)
+
+    mutableItemStates --= potentiallyConflictingItemStatesFromPreviousLifecycles
+
+    val itemCannotExistEarlierThan: Unbounded[Instant] = if (potentiallyConflictingItemStatesFromPreviousLifecycles.nonEmpty) potentiallyConflictingItemStatesFromPreviousLifecycles map (_.itemIsAnnihilatedAt.get) max else NegativeInfinity()
+
     val compatibleItemStates = itemStates filter (_.isFusibleWith(typeTag))
 
-/*    itemStates --= relatedItemStatesFromPreviousLifecycles
-
-    if (itemStates.isEmpty) {
-      idToItemStatesMap -= id
-    }*/
-
-    //val itemCannotExistEarlierThan: Unbounded[Instant] = if (relatedItemStatesFromPreviousLifecycles.nonEmpty) relatedItemStatesFromPreviousLifecycles map (_.itemIsAnnihilatedAt.get) max else NegativeInfinity()
-
-    if (compatibleItemStates.nonEmpty) if (1 < compatibleItemStates.size) {
+    val itemState = if (compatibleItemStates.nonEmpty) if (1 < compatibleItemStates.size) {
       throw new scala.RuntimeException(s"There is more than one item of id: '${id}' compatible with type '${typeTag.tpe}', these have types: '${compatibleItemStates map (_.lowerBoundTypeTag.tpe)}'.")
     } else {
       val compatibleItemState = compatibleItemStates.head
-      //compatibleItemState.refineCutoffForEarliestExistence(itemCannotExistEarlierThan)
+      compatibleItemState.refineCutoffForEarliestExistence(itemCannotExistEarlierThan)
       compatibleItemState
     }
     else {
-      val itemState = new ItemState(typeTag/*, itemCannotExistEarlierThan*/)
-      idToItemStatesMap.getOrElseUpdate(id, mutable.Set.empty) += itemState
+      val itemState = new ItemState(typeTag, itemCannotExistEarlierThan)
+      mutableItemStates += itemState
       itemState
     }
+
+    if (mutableItemStates.isEmpty) {
+      idToItemStatesMap -= id
+    }
+
+    itemState
   }
 
   private def nextSequenceIndex() = {
