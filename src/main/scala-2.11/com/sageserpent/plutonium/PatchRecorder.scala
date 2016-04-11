@@ -39,6 +39,7 @@ trait PatchRecorder {
 
   def recordAnnihilation[Raw <: Identified : TypeTag](when: Instant, id: Raw#Id): Unit
 
+  // TODO - fuse this with 'playPatchesUntil', but keep the contract checking...
   def noteThatThereAreNoFollowingRecordings(): Unit
 
   def playPatchesUntil(when: Unbounded[Instant])
