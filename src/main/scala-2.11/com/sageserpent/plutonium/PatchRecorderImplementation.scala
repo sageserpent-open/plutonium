@@ -253,13 +253,15 @@ trait PatchRecorderImplementation extends PatchRecorder {
       throw new RuntimeException(s"There is at least one item of id: '${id}' that would be inconsistent with type '${typeTag.tpe}', these have types: '${clashingItemStates map (_.lowerBoundTypeTag.tpe)}'.")
     }
 
-    val potentiallyConflictingItemStatesFromPreviousLifecycles = itemStatesFromPreviousLifecycles filter (itemState => itemState.isFusibleWith(typeTag) || itemState.isInconsistentWith(typeTag))
+    //TODO: there should be a way of purging item states whose items have had their annihilation recorded... Perhaps I can do that by detecting supertype matches here or when doing subsequent annihilations?
 
-    val mutableItemStates = idToItemStatesMap.getOrElseUpdate(id, mutable.Set.empty)
+    val itemStatesFromPreviousLifecyclesThatAreNotConsistentWithTheTypeUnderConsideration = itemStatesFromPreviousLifecycles filter (_.isInconsistentWith(typeTag))
 
-    mutableItemStates --= potentiallyConflictingItemStatesFromPreviousLifecycles
+    val itemStatesFromPreviousLifecyclesThatAreFusibleWithTheTypeUnderConsideration = itemStatesFromPreviousLifecycles filter (_.isFusibleWith(typeTag))
 
-    val itemCannotExistEarlierThan: Unbounded[Instant] = if (potentiallyConflictingItemStatesFromPreviousLifecycles.nonEmpty) potentiallyConflictingItemStatesFromPreviousLifecycles map (_.itemIsAnnihilatedAt.get) max else NegativeInfinity()
+    val itemStatesFromPreviousLifecyclesThatEstablishALowerBoundOnTheNewLifecycle = itemStatesFromPreviousLifecyclesThatAreNotConsistentWithTheTypeUnderConsideration ++ itemStatesFromPreviousLifecyclesThatAreFusibleWithTheTypeUnderConsideration
+
+    val itemCannotExistEarlierThan: Unbounded[Instant] = if (itemStatesFromPreviousLifecyclesThatEstablishALowerBoundOnTheNewLifecycle.nonEmpty) itemStatesFromPreviousLifecyclesThatEstablishALowerBoundOnTheNewLifecycle map (_.itemIsAnnihilatedAt.get) max else NegativeInfinity()
 
     val compatibleItemStates = itemStates filter (_.isFusibleWith(typeTag))
 
@@ -272,12 +274,9 @@ trait PatchRecorderImplementation extends PatchRecorder {
     }
     else {
       val itemState = new ItemState(typeTag, itemCannotExistEarlierThan)
+      val mutableItemStates = idToItemStatesMap.getOrElseUpdate(id, mutable.Set.empty)
       mutableItemStates += itemState
       itemState
-    }
-
-    if (mutableItemStates.isEmpty) {
-      idToItemStatesMap -= id
     }
 
     itemState
