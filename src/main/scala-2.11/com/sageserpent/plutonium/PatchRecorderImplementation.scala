@@ -89,8 +89,8 @@ trait PatchRecorderImplementation extends PatchRecorder {
     while (actionQueue.nonEmpty && (actionQueue.head match {
       case (_, _, whenForAction) => whenForAction <= when
     })) {
-      val (_, actionToBeExecuted, _) = actionQueue.dequeue()
-      actionToBeExecuted()
+      val (_, actionToBeExecuted, whenForAction) = actionQueue.dequeue()
+      actionToBeExecuted(whenForAction)
     }
   }
 
@@ -99,12 +99,12 @@ trait PatchRecorderImplementation extends PatchRecorder {
   private type CandidatePatches = mutable.MutableList[CandidatePatchTuple]
 
   private class ItemState(initialTypeTag: TypeTag[_ <: Identified],
-                          private var _itemCannotExistEarlierThan: Unbounded[Instant] = NegativeInfinity()) {
-    def itemCannotExistEarlierThan = _itemCannotExistEarlierThan
+                          private var _itemWouldConflictWithEarlierLifecyclePriorTo: Unbounded[Instant] = NegativeInfinity()) {
+    def itemWouldConflictWithEarlierLifecyclePriorTo = _itemWouldConflictWithEarlierLifecyclePriorTo
 
     def refineCutoffForEarliestExistence(itemCannotExistEarlierThan: Unbounded[Instant]) = {
-      if (itemCannotExistEarlierThan > _itemCannotExistEarlierThan){
-        _itemCannotExistEarlierThan = itemCannotExistEarlierThan
+      if (itemCannotExistEarlierThan > _itemWouldConflictWithEarlierLifecyclePriorTo){
+        _itemWouldConflictWithEarlierLifecyclePriorTo = itemCannotExistEarlierThan
       }
     }
 
@@ -188,7 +188,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
   private var _nextSequenceIndex: SequenceIndex = 0L
 
-  private type IndexedAction = (SequenceIndex, Unit => Unit, Unbounded[Instant])
+  private type IndexedAction = (SequenceIndex, Unbounded[Instant] => Unit, Unbounded[Instant])
 
   implicit val indexedActionOrdering = Ordering.by[IndexedAction, SequenceIndex](-_._1)
 
@@ -201,10 +201,17 @@ trait PatchRecorderImplementation extends PatchRecorder {
     class IdentifiedItemAccessImplementation extends IdentifiedItemAccess {
       val reconstitutionDataToItemStateMap = patchToItemStatesMap.remove(bestPatch).get
 
-      override def reconstitute[Raw <: Identified](itemReconstitutionData: Recorder#ItemReconstitutionData[Raw]): Raw = {
+      override def reconstitute[Raw <: Identified](itemReconstitutionData: Recorder#ItemReconstitutionData[Raw], when: Unbounded[Instant]): Raw = {
         val id = itemReconstitutionData._1
         val itemState = reconstitutionDataToItemStateMap(itemReconstitutionData)
-        itemFor_(id, itemState.lowerBoundTypeTag).asInstanceOf[Raw]
+
+        val lowerBoundTypeTag = itemState.lowerBoundTypeTag
+
+        if (itemState.itemWouldConflictWithEarlierLifecyclePriorTo > when){
+          throw new RuntimeException(s"Attempt to execute patch involving id: '$id' of type: '${lowerBoundTypeTag.tpe}' for a later lifecycle that cannot exist at time: $when, as there is at least one item from a previous lifecycle up until: ${itemState.itemWouldConflictWithEarlierLifecyclePriorTo}.")
+        }
+
+        itemFor_(id, lowerBoundTypeTag).asInstanceOf[Raw]
       }
 
       def itemFor_[SubclassOfRaw <: Raw, Raw <: Identified](id: Raw#Id, typeTag: universe.TypeTag[SubclassOfRaw]): SubclassOfRaw = {
@@ -219,11 +226,11 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
     val (sequenceIndex, _, whenPatchOccurs) = candidatePatchTuples.head
 
-    actionQueue.enqueue((sequenceIndex, Unit => {
+    actionQueue.enqueue((sequenceIndex, (when: Unbounded[Instant]) => {
 
-      bestPatch(identifiedItemAccess)
+      bestPatch(identifiedItemAccess, when)
       for (_ <- itemsAreLockedResource) {
-        bestPatch.checkInvariant(identifiedItemAccess)
+        bestPatch.checkInvariant(identifiedItemAccess, when)
       }
     }, whenPatchOccurs))
   }
