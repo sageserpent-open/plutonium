@@ -1,7 +1,9 @@
 package com.sageserpent.plutonium
 
 import java.lang.reflect.Method
+import java.time.Instant
 
+import com.sageserpent.americium.Unbounded
 import net.sf.cglib.proxy.MethodProxy
 
 import scalaz.{-\/, \/, \/-}
@@ -26,13 +28,13 @@ class Patch(targetRecorder: Recorder, method: Method, arguments: Array[AnyRef], 
 
   val wrappedArguments = arguments map wrap
 
-  def unwrap(identifiedItemAccess: IdentifiedItemAccess)(wrappedArgument: WrappedArgument) = wrappedArgument.fold(identity, identifiedItemAccess.reconstitute(_))
+  def unwrap(identifiedItemAccess: IdentifiedItemAccess, when: Unbounded[Instant])(wrappedArgument: WrappedArgument) = wrappedArgument.fold(identity, identifiedItemAccess.reconstitute(_, when))
 
-  def apply(identifiedItemAccess: IdentifiedItemAccess): Unit = {
-    methodProxy.invoke(identifiedItemAccess.reconstitute(targetReconstitutionData), wrappedArguments map unwrap(identifiedItemAccess))
+  def apply(identifiedItemAccess: IdentifiedItemAccess, when: Unbounded[Instant]): Unit = {
+    methodProxy.invoke(identifiedItemAccess.reconstitute(targetReconstitutionData, when), wrappedArguments map unwrap(identifiedItemAccess, when))
   }
 
-  def checkInvariant(identifiedItemAccess: IdentifiedItemAccess): Unit = {
-    identifiedItemAccess.reconstitute(targetReconstitutionData).checkInvariant()
+  def checkInvariant(identifiedItemAccess: IdentifiedItemAccess, when: Unbounded[Instant]): Unit = {
+    identifiedItemAccess.reconstitute(targetReconstitutionData, when).checkInvariant()
   }
 }
