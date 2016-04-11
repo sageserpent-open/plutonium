@@ -17,5 +17,7 @@ class ReferringHistory(override val id: ReferringHistory#Id) extends History {
 
   def referencedDatums: collection.Map[Any, Seq[Any]] = _referencedHistories mapValues (_.datums)
 
+  def referencedHistories: collection.Map[Any, History] = _referencedHistories
+
   private val _referencedHistories = collection.mutable.Map.empty[Any, History]
 }
