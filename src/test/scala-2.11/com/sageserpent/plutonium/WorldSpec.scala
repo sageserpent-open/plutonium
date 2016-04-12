@@ -416,19 +416,16 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
           referringHistory.referTo(referencedItem)
         }})
 
-        val measurement = Measurement.forTwoItems[ReferringHistory, AnotherSpecificFooHistory](whenMeasurementCausingConflictIsCarriedOut)(theReferrerId, referencedHistoryId.asInstanceOf[AnotherSpecificFooHistory#Id], spore {(referringHistory: ReferringHistory, referencedItem: AnotherSpecificFooHistory) => {
+        val measurementOne = Measurement.forTwoItems[ReferringHistory, MoreSpecificFooHistory](whenMeasurementCausingConflictIsCarriedOut)(theReferrerId, referencedHistoryId.asInstanceOf[MoreSpecificFooHistory#Id], spore {(referringHistory: ReferringHistory, referencedItem: MoreSpecificFooHistory) => {
           referringHistory.referTo(referencedItem)
         }})
 
-        world.revise(Map(-1 - (2 * index) -> Some(change), -(2 * (index + 1)) -> Some(measurement)), world.revisionAsOfs.last)
+        intercept[RuntimeException]{
+          world.revise(Map(-1 - (2 * index) -> Some(change), -(2 * (index + 1)) -> Some(measurementOne)), world.revisionAsOfs.last)
+        }
       }
 
-      if (checks.nonEmpty) {
-        Prop.all(checks.map { case (referencedHistoryId, laterQueryWhenAtAnnihilation) => {
-          Prop.undecided
-       }
-        }: _*)
-      } else Prop.undecided
+      Prop.proved
     })
   }
 
