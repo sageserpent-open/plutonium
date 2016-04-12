@@ -424,9 +424,6 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
           val ghostItem = referringHistory.referencedHistories(referencedHistoryId)
 
           ghostItem.id // That should be OK for a ghost.
-/*          intercept[RuntimeException] {
-            ghostItem.shouldBeUnchanged
-          }*/
           ghostItem.isGhost :| s"Expected referenced item of id: '$referencedHistoryId' referred to by item of id: '${referringHistory.id}' to be a ghost at time: $laterQueryWhenAtAnnihilation - the event causing referral was at: $referencingEventWhen."
         }
         }: _*)
