@@ -289,7 +289,7 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
 
   it should "reveal all the history of a related item up to the 'when' limit of a scope made from it" in {
     val testCaseGenerator = for {world <- worldGenerator
-                                 referencedHistoryRecordingsGroupedById <- referencedHistoryRecordingsGroupedByIdGenerator(forbidAnnihilations = true)
+                                 referencedHistoryRecordingsGroupedById <- referencedHistoryRecordingsGroupedByIdGenerator(forbidAnnihilations = false)
                                  referringHistoryRecordingsGroupedById <- referringHistoryRecordingsGroupedByIdGenerator(forbidMeasurements = true)
                                  seed <- seedGenerator
                                  random = new Random(seed)
@@ -366,7 +366,7 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
 
   it should "consider a reference to a related item in an event as being defining" in {
     val testCaseGenerator = for {world <- worldGenerator
-                                 referencedHistoryRecordingsGroupedById <- referencedHistoryRecordingsGroupedByIdGenerator(forbidAnnihilations = true)
+                                 referencedHistoryRecordingsGroupedById <- referencedHistoryRecordingsGroupedByIdGenerator(forbidAnnihilations = false)
                                  referringHistoryRecordingsGroupedById <- referringHistoryRecordingsGroupedByIdGenerator(forbidMeasurements = true)
                                  seed <- seedGenerator
                                  random = new Random(seed)
@@ -381,7 +381,7 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
 
       val checks: List[(Any, History)] = for {RecordingsNoLaterThan(referringHistoryId, referringHistoriesFrom, _, _, _) <- referringHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(queryWhen))
                                               NonExistentRecordings(referencedHistoryId, referencedHistoriesFrom, _) <- referencedHistoryRecordingsGroupedById flatMap (_.doesNotExistAt(queryWhen))
-                                              Seq(referringHistory: ReferringHistory) = referringHistoriesFrom(scope) if referringHistory.referencedDatums.contains(referencedHistoryId)
+                                              Seq(referringHistory: ReferringHistory) = referringHistoriesFrom(scope) if referringHistory.referencedDatums.contains(referencedHistoryId) && !referringHistory.referencedHistories(referencedHistoryId).isGhost
                                               Seq(referencedHistory) = referencedHistoriesFrom(scope)}
         yield (referencedHistoryId, referencedHistory)
 
