@@ -2,15 +2,21 @@ package com.sageserpent.plutonium
 
 trait Identified {
   type Id
-  val id: Id // This can't be mutated! Begs the question - should other attributes be mutable or not?
-  // Answer - provide support for in-place mutation of bitemporal objects. It just seems a whole lot more natural. OTOH, this will
-  // burn me when it comes to bitemporals that want to be case classes and for PnL style calculations where we get bitemporals
-  // for the same id via different scopes.
+  val id: Id
 
-  // This yields a bitemporal unit value whose execution should check the invariant. When overriding this method,
-  // it is vital that the subclass uses a for-comprehension to make the conjunction of the subclass part of the
-  // invariant with that of the superclass, as the invariant has to be executed *later* when rendered against a
-  // scope.
+  private var _isGhost = false
+
+  protected [plutonium] def recordAnnihilation(): Unit = {
+    require(!_isGhost)
+    _isGhost = true
+  }
+
+  // If an item has been annihilated, it will not be accessible from a query on a scope - but
+  // if there was an event that made another item refer to the annihilated one earlier in time,
+  // then it is possible for that other item to have a reference to the annihilated item. In
+  // this case, the annihilated item is considered to be a 'ghost'.
+  def isGhost: Boolean = _isGhost
+
   def checkInvariant(): Unit = {
   }
 }
