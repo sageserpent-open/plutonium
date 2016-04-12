@@ -388,7 +388,7 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
     })
   }
 
-  it should "treat an annihilated item accessed via a reference to a related item as being a ghost" in {
+/*  it should "treat an annihilated item accessed via a reference to a related item as being a ghost" in {
     val testCaseGenerator = for {world <- worldGenerator
                                  referencedHistoryRecordingsGroupedById <- referencedHistoryRecordingsGroupedByIdGenerator
                                  referringHistoryRecordingsGroupedById <- referringHistoryRecordingsGroupedByIdGenerator
@@ -423,7 +423,7 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
       }
       }: _*)
     })
-  }
+  }*/
 
   it should "not permit the annihilation of an item at a query time coming before its first defining event" in {
     val testCaseGenerator = for {world <- worldGenerator

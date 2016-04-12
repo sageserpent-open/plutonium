@@ -551,5 +551,7 @@ trait WorldSpecSupport {
 
   val mixedRecordingsForReferencedIdGenerator = dataSamplesForAnIdGenerator_[FooHistory](Gen.oneOf(ReferringHistory.specialFooIds), Gen.oneOf(dataSampleGenerator1(faulty = false), moreSpecificFooDataSampleGenerator(faulty = false)), dataSampleGenerator2(faulty = false))
 
-  val referencedHistoryRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(mixedRecordingsForReferencedIdGenerator)
+  // HACK: this generator forbids annihilations so that for the time being, we don't have to worry about the test logic being upset by
+  // ghosts, rogue measurement patches or just the insane complexity of the generated test cases running rings around the test logic!
+  val referencedHistoryRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(mixedRecordingsForReferencedIdGenerator, forbidAnnihilations = true)
 }
