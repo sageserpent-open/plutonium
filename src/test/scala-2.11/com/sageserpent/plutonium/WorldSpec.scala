@@ -403,29 +403,72 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
 
       val checks = for {RecordingsNoLaterThan(referencedHistoryId: History#Id, _, _, _, whenAnnihilated) <-
                         referencedHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(referencingEventWhen))
-
                         whenMeasurementCausingConflictIsCarriedOut <- whenAnnihilated.toList}
         yield (referencedHistoryId, whenMeasurementCausingConflictIsCarriedOut)
 
-      val theReferrerId = "The Referrer"
+      val theReferrerIdBase = "The Referrer"
 
       val unimportantReferencedHistoryId = "Groucho"
 
       for (((referencedHistoryId, whenMeasurementCausingConflictIsCarriedOut), index) <- checks zipWithIndex){
+        val theReferrerId = s"$theReferrerIdBase - $index"
+
         val change = Change.forTwoItems[ReferringHistory, History](referencingEventWhen)(theReferrerId, unimportantReferencedHistoryId.asInstanceOf[History#Id], spore {(referringHistory: ReferringHistory, referencedItem: History) => {
           referringHistory.referTo(referencedItem)
         }})
 
-        val measurementOne = Measurement.forTwoItems[ReferringHistory, MoreSpecificFooHistory](whenMeasurementCausingConflictIsCarriedOut)(theReferrerId, referencedHistoryId.asInstanceOf[MoreSpecificFooHistory#Id], spore {(referringHistory: ReferringHistory, referencedItem: MoreSpecificFooHistory) => {
+        val measurement = Measurement.forTwoItems[ReferringHistory, MoreSpecificFooHistory](whenMeasurementCausingConflictIsCarriedOut)(theReferrerId, referencedHistoryId.asInstanceOf[MoreSpecificFooHistory#Id], spore {(referringHistory: ReferringHistory, referencedItem: MoreSpecificFooHistory) => {
           referringHistory.referTo(referencedItem)
         }})
 
         intercept[RuntimeException]{
-          world.revise(Map(-1 - (2 * index) -> Some(change), -(2 * (index + 1)) -> Some(measurementOne)), world.revisionAsOfs.last)
+          world.revise(Map(-1 - (2 * index) -> Some(change), -(2 * (index + 1)) -> Some(measurement)), world.revisionAsOfs.last)
         }
       }
 
       Prop.proved
+    })
+  }
+
+  it should "detect the application of measurements that would attempt to define a future item whose existence would overlap with and conflict with an existing item that is subsequently annihilated - with a twist." in {
+    val testCaseGenerator = for {world <- worldGenerator
+                                 referencedHistoryRecordingsGroupedById <- referencedHistoryRecordingsGroupedByIdGenerator(forbidAnnihilations = false)
+                                 seed <- seedGenerator
+                                 random = new Random(seed)
+                                 bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, referencedHistoryRecordingsGroupedById).zipWithIndex)
+                                 asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
+                                 referencingEventWhen <- unboundedInstantGenerator
+    } yield (world, referencedHistoryRecordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, referencingEventWhen)
+    check(Prop.forAllNoShrink(testCaseGenerator) { case (world, referencedHistoryRecordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, referencingEventWhen) =>
+      val checks = for {RecordingsNoLaterThan(referencedHistoryId: History#Id, _, _, _, whenAnnihilated) <-
+                        referencedHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(referencingEventWhen))
+                        whenMeasurementCausingConflictIsCarriedOut <- whenAnnihilated.toList}
+        yield (referencedHistoryId, whenMeasurementCausingConflictIsCarriedOut)
+
+      val theReferrerIdBase = "The Referrer"
+
+      val unimportantReferencedHistoryId = "Groucho"
+
+      for (((referencedHistoryId, whenMeasurementCausingConflictIsCarriedOut), index) <- checks zipWithIndex){
+        val theReferrerId = s"$theReferrerIdBase - $index"
+
+        val change = Change.forTwoItems[ReferringHistory, History](referencingEventWhen)(theReferrerId, unimportantReferencedHistoryId.asInstanceOf[History#Id], spore {(referringHistory: ReferringHistory, referencedItem: History) => {
+          referringHistory.referTo(referencedItem)
+        }})
+
+        val measurement = Measurement.forTwoItems[ReferringHistory, MoreSpecificFooHistory](whenMeasurementCausingConflictIsCarriedOut)(theReferrerId, referencedHistoryId.asInstanceOf[MoreSpecificFooHistory#Id], spore {(referringHistory: ReferringHistory, referencedItem: MoreSpecificFooHistory) => {
+          referringHistory.referTo(referencedItem)
+        }})
+
+        world.revise(Map(-1 - (2 * index) -> Some(change), -(2 * (index + 1)) -> Some(measurement)), asOfs.head)
+      }
+
+      try{
+        recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfs, world)
+        Prop.undecided
+      } catch {
+        case _: RuntimeException => Prop.proved
+      }
     })
   }
 
