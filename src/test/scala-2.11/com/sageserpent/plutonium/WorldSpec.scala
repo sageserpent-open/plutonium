@@ -392,19 +392,43 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
   it should "detect the application of measurements that would attempt to define a future item whose existence would overlap with and conflict with an existing item that is subsequently annihilated." in {
     val testCaseGenerator = for {world <- worldGenerator
                                  referencedHistoryRecordingsGroupedById <- referencedHistoryRecordingsGroupedByIdGenerator(forbidAnnihilations = false)
-                                 referringHistoryRecordingsGroupedById <- referringHistoryRecordingsGroupedByIdGenerator(forbidMeasurements = false)
                                  seed <- seedGenerator
                                  random = new Random(seed)
-                                 bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, referencedHistoryRecordingsGroupedById ++ referringHistoryRecordingsGroupedById).zipWithIndex)
+                                 bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, referencedHistoryRecordingsGroupedById).zipWithIndex)
                                  asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
-    } yield (world, referencedHistoryRecordingsGroupedById, referringHistoryRecordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs)
-    check(Prop.forAllNoShrink(testCaseGenerator) { case (world, _, _, bigShuffledHistoryOverLotsOfThings, asOfs) =>
-      try{
-        recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfs, world)
-        Prop.undecided
-      } catch {
-        case _: RuntimeException => Prop.proved
+                                 referencingEventWhen <- unboundedInstantGenerator
+    } yield (world, referencedHistoryRecordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, referencingEventWhen)
+    check(Prop.forAllNoShrink(testCaseGenerator) { case (world, referencedHistoryRecordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, referencingEventWhen) =>
+      recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfs, world)
+
+      val checks = for {RecordingsNoLaterThan(referencedHistoryId: History#Id, _, _, _, whenAnnihilated) <-
+                        referencedHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(referencingEventWhen))
+
+                        whenMeasurementCausingConflictIsCarriedOut <- whenAnnihilated.toList}
+        yield (referencedHistoryId, whenMeasurementCausingConflictIsCarriedOut)
+
+      val theReferrerId = "The Referrer"
+
+      val unimportantReferencedHistoryId = "Groucho"
+
+      for (((referencedHistoryId, whenMeasurementCausingConflictIsCarriedOut), index) <- checks zipWithIndex){
+        val change = Change.forTwoItems[ReferringHistory, History](referencingEventWhen)(theReferrerId, unimportantReferencedHistoryId.asInstanceOf[History#Id], spore {(referringHistory: ReferringHistory, referencedItem: History) => {
+          referringHistory.referTo(referencedItem)
+        }})
+
+        val measurement = Measurement.forTwoItems[ReferringHistory, AnotherSpecificFooHistory](whenMeasurementCausingConflictIsCarriedOut)(theReferrerId, referencedHistoryId.asInstanceOf[AnotherSpecificFooHistory#Id], spore {(referringHistory: ReferringHistory, referencedItem: AnotherSpecificFooHistory) => {
+          referringHistory.referTo(referencedItem)
+        }})
+
+        world.revise(Map(-1 - (2 * index) -> Some(change), -(2 * (index + 1)) -> Some(measurement)), world.revisionAsOfs.last)
       }
+
+      if (checks.nonEmpty) {
+        Prop.all(checks.map { case (referencedHistoryId, laterQueryWhenAtAnnihilation) => {
+          Prop.undecided
+       }
+        }: _*)
+      } else Prop.undecided
     })
   }
 
@@ -423,7 +447,7 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
      val checks = for {RecordingsNoLaterThan(referencedHistoryId: History#Id, _, _, _, whenAnnihilated) <-
                           referencedHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(referencingEventWhen))
 
-                       // Have to make sure the referenced item is annihilated *after* the final event for the referring one,
+                       // Have to make sure the referenced item is annihilated *after* the event making the reference to it,
                        // in case that event caused the creation of a new lifecycle for the referenced item.
                        laterQueryWhenAtAnnihilation <- whenAnnihilated.toList if laterQueryWhenAtAnnihilation > referencingEventWhen}
       yield (referencedHistoryId, laterQueryWhenAtAnnihilation)
