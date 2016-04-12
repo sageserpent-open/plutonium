@@ -288,8 +288,8 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
 
   it should "reveal all the history of a related item up to the 'when' limit of a scope made from it" in {
     val testCaseGenerator = for {world <- worldGenerator
-                                 referencedHistoryRecordingsGroupedById <- referencedHistoryRecordingsGroupedByIdGenerator
-                                 referringHistoryRecordingsGroupedById <- referringHistoryRecordingsGroupedByIdGenerator
+                                 referencedHistoryRecordingsGroupedById <- referencedHistoryRecordingsGroupedByIdGenerator(forbidAnnihilations = true)
+                                 referringHistoryRecordingsGroupedById <- referringHistoryRecordingsGroupedByIdGenerator(forbidMeasurements = true)
                                  seed <- seedGenerator
                                  random = new Random(seed)
                                  bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, referencedHistoryRecordingsGroupedById ++ referringHistoryRecordingsGroupedById).zipWithIndex)
@@ -365,8 +365,8 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
 
   it should "consider a reference to a related item in an event as being defining" in {
     val testCaseGenerator = for {world <- worldGenerator
-                                 referencedHistoryRecordingsGroupedById <- referencedHistoryRecordingsGroupedByIdGenerator
-                                 referringHistoryRecordingsGroupedById <- referringHistoryRecordingsGroupedByIdGenerator
+                                 referencedHistoryRecordingsGroupedById <- referencedHistoryRecordingsGroupedByIdGenerator(forbidAnnihilations = true)
+                                 referringHistoryRecordingsGroupedById <- referringHistoryRecordingsGroupedByIdGenerator(forbidMeasurements = true)
                                  seed <- seedGenerator
                                  random = new Random(seed)
                                  bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, referencedHistoryRecordingsGroupedById ++ referringHistoryRecordingsGroupedById).zipWithIndex)
@@ -390,38 +390,44 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
 
   it should "treat an annihilated item accessed via a reference to a related item as being a ghost" in {
     val testCaseGenerator = for {world <- worldGenerator
-                                 referencedHistoryRecordingsGroupedById <- referencedHistoryRecordingsGroupedByIdGenerator
-                                 referringHistoryRecordingsGroupedById <- referringHistoryRecordingsGroupedByIdGenerator
+                                 referencedHistoryRecordingsGroupedById <- referencedHistoryRecordingsGroupedByIdGenerator(forbidAnnihilations = false)
+                                 referringHistoryRecordingsGroupedById <- referringHistoryRecordingsGroupedByIdGenerator(forbidMeasurements = true)
                                  seed <- seedGenerator
                                  random = new Random(seed)
                                  bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, referencedHistoryRecordingsGroupedById ++ referringHistoryRecordingsGroupedById).zipWithIndex)
                                  asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
-                                 queryWhen <- unboundedInstantGenerator
-    } yield (world, referencedHistoryRecordingsGroupedById, referringHistoryRecordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
-    check(Prop.forAllNoShrink(testCaseGenerator) { case (world, referencedHistoryRecordingsGroupedById, referringHistoryRecordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
+    } yield (world, referencedHistoryRecordingsGroupedById, referringHistoryRecordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs)
+    check(Prop.forAllNoShrink(testCaseGenerator) { case (world, referencedHistoryRecordingsGroupedById, referringHistoryRecordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs) =>
       recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfs, world)
 
-      val scope = world.scopeFor(queryWhen, world.nextRevision)
+     val checks = for {(whenFinalEventForReferrerHappened, RecordingsNoLaterThan(originalReferringHistoryId, referringHistoriesFrom, _, _, _)) <-
+                       referringHistoryRecordingsGroupedById flatMap (recordingsForAnId => {
+                         val whenFinalEventHappened = recordingsForAnId.whenFinalEventHappened
+                         recordingsForAnId.thePartNoLaterThan(whenFinalEventHappened) map (whenFinalEventHappened -> _)
+                       })
 
-      val checks = for {RecordingsNoLaterThan(originalReferencedHistoryId, _, _, _, whenAnnihilated) <-
-                          referencedHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(queryWhen)) if whenAnnihilated.isDefined
-                        laterQueryWhenAtAnnihilation = whenAnnihilated.get
-                        RecordingsNoLaterThan(referringHistoryId, referringHistoriesFrom, _, _, _) <- referringHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(laterQueryWhenAtAnnihilation))
-                        NonExistentRecordings(referencedHistoryId, _, _) <-
-                          referencedHistoryRecordingsGroupedById flatMap (_.doesNotExistAt(laterQueryWhenAtAnnihilation)) if originalReferencedHistoryId == referencedHistoryId
-                        scopeInWhichReferencedItemIsAnnihilated = world.scopeFor(laterQueryWhenAtAnnihilation, world.nextRevision)
-                        Seq(referringHistory: ReferringHistory) = referringHistoriesFrom(scopeInWhichReferencedItemIsAnnihilated) if referringHistory.referencedHistories.contains(referencedHistoryId)}
-        yield (referencedHistoryId, referringHistory, laterQueryWhenAtAnnihilation)
+                       RecordingsNoLaterThan(referencedHistoryId, _, _, _, whenAnnihilated) <-
+                          referencedHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(whenFinalEventForReferrerHappened))
 
-      Prop.all(checks.map { case (referencedHistoryId, referringHistory, laterQueryWhenAtAnnihilation) => {
-        val ghostItem = referringHistory.referencedHistories(referencedHistoryId)
-        ghostItem.id // That should be OK for a ghost.
-        intercept[RuntimeException] {
-          ghostItem.shouldBeUnchanged
+                       // Have to make sure the referenced item is annihilated *after* the final event for the referring one,
+                       // in case that event caused the creation of a new lifecycle for the referenced item.
+                       laterQueryWhenAtAnnihilation <- whenAnnihilated.toList if laterQueryWhenAtAnnihilation > whenFinalEventForReferrerHappened
+
+                       scopeInWhichReferencedItemIsAnnihilated = world.scopeFor(laterQueryWhenAtAnnihilation, world.nextRevision)
+                       referringHistory <- referringHistoriesFrom(scopeInWhichReferencedItemIsAnnihilated) map (_.asInstanceOf[ReferringHistory]) if referringHistory.referencedHistories.contains(referencedHistoryId)}
+        yield (referencedHistoryId, referringHistory, laterQueryWhenAtAnnihilation, whenFinalEventForReferrerHappened)
+
+      if (checks.nonEmpty) {
+        Prop.all(checks.map { case (referencedHistoryId, referringHistory, laterQueryWhenAtAnnihilation, whenFinalEventForReferrerHappened) => {
+          val ghostItem = referringHistory.referencedHistories(referencedHistoryId)
+          ghostItem.id // That should be OK for a ghost.
+/*          intercept[RuntimeException] {
+            ghostItem.shouldBeUnchanged
+          }*/
+          ghostItem.isGhost :| s"Expected referenced item of id: '$referencedHistoryId' referred to by item of id: '${referringHistory.id}' to be a ghost at time: $laterQueryWhenAtAnnihilation - the final event for the referrer was at: $whenFinalEventForReferrerHappened."
         }
-        ghostItem.isGhost :| s"Expected referenced item of id: '$referencedHistoryId' referred to by item of id: '${referringHistory.id}' to be a ghost at time: $laterQueryWhenAtAnnihilation."
-      }
-      }: _*)
+        }: _*)
+      } else Prop.undecided
     })
   }
 
