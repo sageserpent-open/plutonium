@@ -304,7 +304,7 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
 
       val checks = for {RecordingsNoLaterThan(referringHistoryId, referringHistoriesFrom, _, _, _) <- referringHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(queryWhen))
                         RecordingsNoLaterThan(referencedHistoryId, _, pertinentRecordings, _, _) <- referencedHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(queryWhen))
-                        Seq(referringHistory: ReferringHistory) = referringHistoriesFrom(scope) if referringHistory.referencedDatums.contains(referencedHistoryId)}
+                        Seq(referringHistory: ReferringHistory) = referringHistoriesFrom(scope) if referringHistory.referencedDatums.contains(referencedHistoryId)  && !referringHistory.referencedHistories(referencedHistoryId).isGhost}
         yield (referringHistoryId, referencedHistoryId, referringHistory.referencedDatums(referencedHistoryId), pertinentRecordings.map(_._1))
 
       Prop.all(checks.map { case (referringHistoryId, referencedHistoryId, actualHistory, expectedHistory) => ((actualHistory.length == expectedHistory.length) :| s"For referring history id: ${referringHistoryId}, referenced history id: ${referencedHistoryId}, the number of datums: ${actualHistory.length} was expected to be to: ${expectedHistory.length}") &&
