@@ -94,10 +94,10 @@ abstract class PatchRecorderImplementation(when: Unbounded[Instant]) extends Pat
 
     idToItemStatesMap.clear()
 
-    playPatchesUntil(when)
+    applyPatches()
   }
 
-  private def playPatchesUntil(when: Unbounded[Instant]): Unit = {
+  private def applyPatches(): Unit = {
     while (actionQueue.nonEmpty && (actionQueue.head match {
       case (_, _, whenForAction) => whenForAction <= when
     })) {
