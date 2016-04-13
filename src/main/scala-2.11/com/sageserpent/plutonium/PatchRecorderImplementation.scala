@@ -14,10 +14,19 @@ import scala.reflect.runtime.universe._
 /**
   * Created by Gerard on 10/01/2016.
   */
+
+object PatchRecorderImplementation{
+  private type SequenceIndex = Long
+  val initialSequenceIndex: SequenceIndex = 0L
+}
+
+
 trait PatchRecorderImplementation extends PatchRecorder {
   // This class makes no pretence at exception safety - it doesn't need to in the context
   // of the client 'WorldReferenceImplementation', which provides exception safety at a higher level.
   self: BestPatchSelection =>
+  import PatchRecorderImplementation._
+
   val identifiedItemsScope: WorldReferenceImplementation.IdentifiedItemsScopeImplementation
   val itemsAreLockedResource: ManagedResource[Unit]
 
@@ -59,13 +68,14 @@ trait PatchRecorderImplementation extends PatchRecorder {
         val expectedTypeTag = typeTag[Raw]
         val compatibleItemStates = itemStates filter (_.canBeAnnihilatedAs(expectedTypeTag))
 
+
+        val sequenceIndex = nextSequenceIndex()
+
         if (compatibleItemStates.nonEmpty) {
           for (itemState <- compatibleItemStates) {
             itemState.submitCandidatePatches()
-            itemState.noteAnnihilation(liftedWhen)
+            itemState.noteAnnihilation(sequenceIndex)
           }
-
-          val sequenceIndex = nextSequenceIndex()
 
           actionQueue.enqueue((sequenceIndex, Unit => for (itemStateToBeAnnihilated <- compatibleItemStates) {
             val typeTagForSpecificItem = itemStateToBeAnnihilated.lowerBoundTypeTag
@@ -99,17 +109,17 @@ trait PatchRecorderImplementation extends PatchRecorder {
   private type CandidatePatches = mutable.MutableList[CandidatePatchTuple]
 
   private class ItemState(initialTypeTag: TypeTag[_ <: Identified],
-                          private var _itemWouldConflictWithEarlierLifecyclePriorTo: Unbounded[Instant] = NegativeInfinity()) {
+                          private var _itemWouldConflictWithEarlierLifecyclePriorTo: SequenceIndex = initialSequenceIndex) {
     def itemWouldConflictWithEarlierLifecyclePriorTo = _itemWouldConflictWithEarlierLifecyclePriorTo
 
-    def refineCutoffForEarliestExistence(itemCannotExistEarlierThan: Unbounded[Instant]) = {
+    def refineCutoffForEarliestExistence(itemCannotExistEarlierThan: SequenceIndex) = {
       if (itemCannotExistEarlierThan > _itemWouldConflictWithEarlierLifecyclePriorTo){
         _itemWouldConflictWithEarlierLifecyclePriorTo = itemCannotExistEarlierThan
       }
     }
 
-    def noteAnnihilation(when: Unbounded[Instant]) = {
-      _itemIsAnnihilatedAt = Some(when)
+    def noteAnnihilation(sequenceIndex: SequenceIndex) = {
+      _itemIsAnnihilatedAt = Some(sequenceIndex)
     }
 
     private var _lowerBoundTypeTag = initialTypeTag
@@ -175,7 +185,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
     def itemIsAnnihilatedAt = _itemIsAnnihilatedAt
 
-    private var _itemIsAnnihilatedAt: Option[Unbounded[Instant]] = None
+    private var _itemIsAnnihilatedAt: Option[SequenceIndex] = None
   }
 
   private val idToItemStatesMap = mutable.Map.empty[Any, mutable.Set[ItemState]]
@@ -184,9 +194,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
   private val patchToItemStatesMap = mutable.Map.empty[AbstractPatch, ItemReconstitutionDataToItemStateMap]
 
-  private type SequenceIndex = Long
-
-  private var _nextSequenceIndex: SequenceIndex = 0L
+  private var _nextSequenceIndex: SequenceIndex = initialSequenceIndex
 
   private type IndexedAction = (SequenceIndex, Unbounded[Instant] => Unit, Unbounded[Instant])
 
@@ -208,7 +216,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
       val reconstitutionDataToItemStateMap = patchToItemStatesMap.remove(bestPatch).get
 
       for (((id, _), itemState) <- reconstitutionDataToItemStateMap){
-        if (itemState.itemWouldConflictWithEarlierLifecyclePriorTo > whenPatchOccurs){
+        if (itemState.itemWouldConflictWithEarlierLifecyclePriorTo > sequenceIndex){
           throw new RuntimeException(s"Attempt to execute patch involving id: '$id' of type: '${itemState.lowerBoundTypeTag.tpe}' for a later lifecycle that cannot exist at time: $whenPatchOccurs, as there is at least one item from a previous lifecycle up until: ${itemState.itemWouldConflictWithEarlierLifecyclePriorTo}.")
         }
       }
@@ -269,7 +277,7 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
     val itemStatesFromPreviousLifecyclesThatEstablishALowerBoundOnTheNewLifecycle = itemStatesFromPreviousLifecyclesThatAreNotConsistentWithTheTypeUnderConsideration ++ itemStatesFromPreviousLifecyclesThatAreFusibleWithTheTypeUnderConsideration
 
-    val itemCannotExistEarlierThan: Unbounded[Instant] = if (itemStatesFromPreviousLifecyclesThatEstablishALowerBoundOnTheNewLifecycle.nonEmpty) itemStatesFromPreviousLifecyclesThatEstablishALowerBoundOnTheNewLifecycle map (_.itemIsAnnihilatedAt.get) max else NegativeInfinity()
+    val itemCannotExistEarlierThan = if (itemStatesFromPreviousLifecyclesThatEstablishALowerBoundOnTheNewLifecycle.nonEmpty) itemStatesFromPreviousLifecyclesThatEstablishALowerBoundOnTheNewLifecycle map (_.itemIsAnnihilatedAt.get) max else initialSequenceIndex
 
     val compatibleItemStates = itemStates filter (_.isFusibleWith(typeTag))
 
