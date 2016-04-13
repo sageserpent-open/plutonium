@@ -198,6 +198,12 @@ trait PatchRecorderImplementation extends PatchRecorder {
   private def enqueueBestCandidatePatchFrom(candidatePatchTuples: CandidatePatches): Unit = {
     val bestPatch = self(candidatePatchTuples.map(_._2))
 
+    val patchRepresentingTheEvent = candidatePatchTuples.head
+
+    // The best patch has to be applied as if it occurred when the patch representing
+    // the event would have taken place - so it steals the latter's sequence index.
+    val (sequenceIndex, _, whenPatchOccurs) = patchRepresentingTheEvent
+
     class IdentifiedItemAccessImplementation extends IdentifiedItemAccess {
       val reconstitutionDataToItemStateMap = patchToItemStatesMap.remove(bestPatch).get
 
@@ -207,8 +213,8 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
         val lowerBoundTypeTag = itemState.lowerBoundTypeTag
 
-        if (itemState.itemWouldConflictWithEarlierLifecyclePriorTo > when){
-          throw new RuntimeException(s"Attempt to execute patch involving id: '$id' of type: '${lowerBoundTypeTag.tpe}' for a later lifecycle that cannot exist at time: $when, as there is at least one item from a previous lifecycle up until: ${itemState.itemWouldConflictWithEarlierLifecyclePriorTo}.")
+        if (itemState.itemWouldConflictWithEarlierLifecyclePriorTo > whenPatchOccurs){
+          throw new RuntimeException(s"Attempt to execute patch involving id: '$id' of type: '${lowerBoundTypeTag.tpe}' for a later lifecycle that cannot exist at time: $whenPatchOccurs, as there is at least one item from a previous lifecycle up until: ${itemState.itemWouldConflictWithEarlierLifecyclePriorTo}.")
         }
 
         itemFor_(id, lowerBoundTypeTag).asInstanceOf[Raw]
@@ -220,11 +226,6 @@ trait PatchRecorderImplementation extends PatchRecorder {
     }
 
     val identifiedItemAccess = new IdentifiedItemAccessImplementation with IdentifiedItemAccessContracts
-
-    // The best patch has to be applied as if it occurred when the original
-    // patch would have taken place - so it steals the latter's sequence index.
-
-    val (sequenceIndex, _, whenPatchOccurs) = candidatePatchTuples.head
 
     actionQueue.enqueue((sequenceIndex, (when: Unbounded[Instant]) => {
 
