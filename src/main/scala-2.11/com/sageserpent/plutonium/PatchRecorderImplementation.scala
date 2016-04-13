@@ -207,17 +207,17 @@ trait PatchRecorderImplementation extends PatchRecorder {
     class IdentifiedItemAccessImplementation extends IdentifiedItemAccess {
       val reconstitutionDataToItemStateMap = patchToItemStatesMap.remove(bestPatch).get
 
-      override def reconstitute[Raw <: Identified](itemReconstitutionData: Recorder#ItemReconstitutionData[Raw], when: Unbounded[Instant]): Raw = {
+      for (((id, _), itemState) <- reconstitutionDataToItemStateMap){
+        if (itemState.itemWouldConflictWithEarlierLifecyclePriorTo > whenPatchOccurs){
+          throw new RuntimeException(s"Attempt to execute patch involving id: '$id' of type: '${itemState.lowerBoundTypeTag.tpe}' for a later lifecycle that cannot exist at time: $whenPatchOccurs, as there is at least one item from a previous lifecycle up until: ${itemState.itemWouldConflictWithEarlierLifecyclePriorTo}.")
+        }
+      }
+
+      override def reconstitute[Raw <: Identified](itemReconstitutionData: Recorder#ItemReconstitutionData[Raw]): Raw = {
         val id = itemReconstitutionData._1
         val itemState = reconstitutionDataToItemStateMap(itemReconstitutionData)
 
-        val lowerBoundTypeTag = itemState.lowerBoundTypeTag
-
-        if (itemState.itemWouldConflictWithEarlierLifecyclePriorTo > whenPatchOccurs){
-          throw new RuntimeException(s"Attempt to execute patch involving id: '$id' of type: '${lowerBoundTypeTag.tpe}' for a later lifecycle that cannot exist at time: $whenPatchOccurs, as there is at least one item from a previous lifecycle up until: ${itemState.itemWouldConflictWithEarlierLifecyclePriorTo}.")
-        }
-
-        itemFor_(id, lowerBoundTypeTag).asInstanceOf[Raw]
+        itemFor_(id, itemState.lowerBoundTypeTag).asInstanceOf[Raw]
       }
 
       def itemFor_[SubclassOfRaw <: Raw, Raw <: Identified](id: Raw#Id, typeTag: universe.TypeTag[SubclassOfRaw]): SubclassOfRaw = {
@@ -229,9 +229,9 @@ trait PatchRecorderImplementation extends PatchRecorder {
 
     actionQueue.enqueue((sequenceIndex, (when: Unbounded[Instant]) => {
 
-      bestPatch(identifiedItemAccess, when)
+      bestPatch(identifiedItemAccess)
       for (_ <- itemsAreLockedResource) {
-        bestPatch.checkInvariant(identifiedItemAccess, when)
+        bestPatch.checkInvariant(identifiedItemAccess)
       }
     }, whenPatchOccurs))
   }

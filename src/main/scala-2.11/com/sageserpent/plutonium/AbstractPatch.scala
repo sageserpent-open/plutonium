@@ -1,9 +1,6 @@
 package com.sageserpent.plutonium
 
 import java.lang.reflect.Method
-import java.time.Instant
-
-import com.sageserpent.americium.Unbounded
 
 /**
   * Created by Gerard on 10/01/2016.
@@ -23,8 +20,8 @@ abstract class AbstractPatch(val method: Method){
   val argumentReconstitutionDatums: Seq[Recorder#ItemReconstitutionData[_ <: Identified]]
   val targetId: Identified#Id
   val targetTypeTag: scala.reflect.runtime.universe.TypeTag[_ <: Identified]
-  def apply(identifiedItemAccess: IdentifiedItemAccess, when: Unbounded[Instant]): Unit
-  def checkInvariant(identifiedItemAccess: IdentifiedItemAccess, when: Unbounded[Instant]): Unit
+  def apply(identifiedItemAccess: IdentifiedItemAccess): Unit
+  def checkInvariant(identifiedItemAccess: IdentifiedItemAccess): Unit
 }
 
 
