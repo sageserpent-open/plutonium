@@ -2,10 +2,6 @@ package com.sageserpent.plutonium
 
 object ReferringHistory {
   val specialFooIds: Seq[FooHistory#Id] = Seq("Huey", "Duey", "Louie")
-  val specialBarIds: Seq[BarHistory#Id] = Seq(1, 2)
-  val specialIntIds: Seq[IntegerHistory#Id] = Seq("Elmer", "Esmarelda")
-
-  val specialIds: Seq[History#Id] = (specialFooIds ++ specialBarIds ++ specialIntIds).asInstanceOf[Seq[History#Id]]
 }
 
 class ReferringHistory(override val id: ReferringHistory#Id) extends History {
@@ -20,6 +16,8 @@ class ReferringHistory(override val id: ReferringHistory#Id) extends History {
   }
 
   def referencedDatums: collection.Map[Any, Seq[Any]] = _referencedHistories mapValues (_.datums)
+
+  def referencedHistories: collection.Map[Any, History] = _referencedHistories
 
   private val _referencedHistories = collection.mutable.Map.empty[Any, History]
 }

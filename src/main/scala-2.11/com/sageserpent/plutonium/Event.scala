@@ -9,8 +9,8 @@ import scala.reflect.runtime.universe._
 import scala.spores._
 
 /**
- * Created by Gerard on 09/07/2015.
- */
+  * Created by Gerard on 09/07/2015.
+  */
 
 // NOTE: if 'when' is 'NegativeInfinity', the event is taken to be 'at the beginning of time' - this is a way of introducing
 // timeless events, although it permits following events to modify the outcome, which may be quite handy. For now, there is
@@ -39,6 +39,7 @@ object Change {
 
   def forOneItem[Raw <: Identified : TypeTag](id: Raw#Id, update: Spore[Raw, Unit]): Change = forOneItem(americium.NegativeInfinity[Instant]())(id, update)
 
+
   def forTwoItems[Raw1 <: Identified : TypeTag, Raw2 <: Identified : TypeTag](when: Unbounded[Instant])(id1: Raw1#Id, id2: Raw2#Id, update: Spore2[Raw1, Raw2, Unit]): Change = {
     val typeTag1 = implicitly[TypeTag[Raw1]]
     val typeTag2 = implicitly[TypeTag[Raw2]]
@@ -51,9 +52,9 @@ object Change {
     })
   }
 
-  def forOneItem[Raw1 <: Identified : TypeTag, Raw2 <: Identified : TypeTag](when: Instant)(id1: Raw1#Id, id2: Raw2#Id, update: Spore2[Raw1, Raw2, Unit]): Change = forTwoItems(Finite(when))(id1, id2, update)
+  def forTwoItems[Raw1 <: Identified : TypeTag, Raw2 <: Identified : TypeTag](when: Instant)(id1: Raw1#Id, id2: Raw2#Id, update: Spore2[Raw1, Raw2, Unit]): Change = forTwoItems(Finite(when))(id1, id2, update)
 
-  def forOneItem[Raw1 <: Identified : TypeTag, Raw2 <: Identified : TypeTag](id1: Raw1#Id, id2: Raw2#Id, update: Spore2[Raw1, Raw2, Unit]): Change = forTwoItems(americium.NegativeInfinity[Instant]())(id1, id2, update)
+  def forTwoItems[Raw1 <: Identified : TypeTag, Raw2 <: Identified : TypeTag](id1: Raw1#Id, id2: Raw2#Id, update: Spore2[Raw1, Raw2, Unit]): Change = forTwoItems(americium.NegativeInfinity[Instant]())(id1, id2, update)
 }
 
 case class Measurement(val when: Unbounded[Instant], reading: Spore[RecorderFactory, Unit]) extends Event {
@@ -75,6 +76,7 @@ object Measurement {
 
   def forOneItem[Raw <: Identified : TypeTag](id: Raw#Id, update: Spore[Raw, Unit]): Measurement = forOneItem(americium.NegativeInfinity[Instant]())(id, update)
 
+
   def forTwoItems[Raw1 <: Identified : TypeTag, Raw2 <: Identified : TypeTag](when: Unbounded[Instant])(id1: Raw1#Id, id2: Raw2#Id, update: Spore2[Raw1, Raw2, Unit]): Measurement = {
     val typeTag1 = implicitly[TypeTag[Raw1]]
     val typeTag2 = implicitly[TypeTag[Raw2]]
@@ -85,12 +87,11 @@ object Measurement {
         capture(update)(recorder1, recorder2)
       }
     })
-
   }
 
-  def forOneItem[Raw1 <: Identified : TypeTag, Raw2 <: Identified : TypeTag](when: Instant)(id1: Raw1#Id, id2: Raw2#Id, update: Spore2[Raw1, Raw2, Unit]): Measurement = forTwoItems(Finite(when))(id1, id2, update)
+  def forTwoItems[Raw1 <: Identified : TypeTag, Raw2 <: Identified : TypeTag](when: Instant)(id1: Raw1#Id, id2: Raw2#Id, update: Spore2[Raw1, Raw2, Unit]): Measurement = forTwoItems(Finite(when))(id1, id2, update)
 
-  def forOneItem[Raw1 <: Identified : TypeTag, Raw2 <: Identified : TypeTag](id1: Raw1#Id, id2: Raw2#Id, update: Spore2[Raw1, Raw2, Unit]): Measurement = forTwoItems(americium.NegativeInfinity[Instant]())(id1, id2, update)
+  def forTwoItems[Raw1 <: Identified : TypeTag, Raw2 <: Identified : TypeTag](id1: Raw1#Id, id2: Raw2#Id, update: Spore2[Raw1, Raw2, Unit]): Measurement = forTwoItems(americium.NegativeInfinity[Instant]())(id1, id2, update)
 }
 
 
@@ -101,7 +102,7 @@ object Measurement {
 // NOTE: it is OK to have annihilations and other events occurring at the same time: the documentation of 'World.revise'
 // covers how coincident events are resolved. So an item referred to by an id may be changed, then annihilated, then
 // recreated and so on all at the same time.
-case class Annihilation[Raw <: Identified: TypeTag](definiteWhen: Instant, id: Raw#Id) extends Event {
+case class Annihilation[Raw <: Identified : TypeTag](definiteWhen: Instant, id: Raw#Id) extends Event {
   val when = Finite(definiteWhen)
   val capturedTypeTag = typeTag[Raw]
 }
