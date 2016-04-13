@@ -42,7 +42,6 @@ trait PatchRecorder {
   // TODO - fuse this with 'playPatchesUntil', but keep the contract checking...
   def noteThatThereAreNoFollowingRecordings(): Unit
 
-  def playPatchesUntil(when: Unbounded[Instant])
 }
 
 trait PatchRecorderContracts extends PatchRecorder {
@@ -70,11 +69,6 @@ trait PatchRecorderContracts extends PatchRecorder {
   abstract override def noteThatThereAreNoFollowingRecordings(): Unit = {
     require(!allRecordingsAreCaptured)
     super.noteThatThereAreNoFollowingRecordings()
-  }
-
-  abstract override def playPatchesUntil(when: Unbounded[Instant]): Unit = {
-    require(allRecordingsAreCaptured)
-    super.playPatchesUntil(when)
   }
 }
 

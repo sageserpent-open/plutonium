@@ -21,7 +21,7 @@ object PatchRecorderImplementation{
 }
 
 
-trait PatchRecorderImplementation extends PatchRecorder {
+abstract class PatchRecorderImplementation(when: Unbounded[Instant]) extends PatchRecorder {
   // This class makes no pretence at exception safety - it doesn't need to in the context
   // of the client 'WorldReferenceImplementation', which provides exception safety at a higher level.
   self: BestPatchSelection =>
@@ -93,9 +93,11 @@ trait PatchRecorderImplementation extends PatchRecorder {
     }
 
     idToItemStatesMap.clear()
+
+    playPatchesUntil(when)
   }
 
-  override def playPatchesUntil(when: Unbounded[Instant]): Unit = {
+  private def playPatchesUntil(when: Unbounded[Instant]): Unit = {
     while (actionQueue.nonEmpty && (actionQueue.head match {
       case (_, _, whenForAction) => whenForAction <= when
     })) {

@@ -149,7 +149,7 @@ object WorldReferenceImplementation {
         itemsAreLocked = false
       } { _ => itemsAreLocked = true
       }(List.empty)) {
-        val patchRecorder = new PatchRecorderImplementation with PatchRecorderContracts
+        val patchRecorder = new PatchRecorderImplementation(_when) with PatchRecorderContracts
           with BestPatchSelectionImplementation with BestPatchSelectionContracts {
           override val identifiedItemsScope: IdentifiedItemsScopeImplementation = identifiedItemsScopeThis
           override val itemsAreLockedResource: ManagedResource[Unit] = makeManagedResource {
@@ -210,8 +210,6 @@ object WorldReferenceImplementation {
         }
 
         patchRecorder.noteThatThereAreNoFollowingRecordings()
-
-        patchRecorder.playPatchesUntil(_when)
       }
     }
 
