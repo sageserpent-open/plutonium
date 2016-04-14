@@ -51,14 +51,18 @@ trait WorldSpecSupport {
 
   val integerHistoryIdGenerator = stringIdGenerator
 
+  var referringHistoryIdGenerator = stringIdGenerator
+
   val moreSpecificFooHistoryIdGenerator = fooHistoryIdGenerator // Just making a point that both kinds of bitemporal will use the same type of ids.
 
-  private def eventConstructor[AHistory <: History : TypeTag](makeAChange: Boolean)(when: Unbounded[Instant])(id: AHistory#Id, effect: Spore[AHistory, Unit]) =
-  // Yeuch!! Why can't I just partially apply Change.apply and then return that, dropping the extra arguments?
-    if (makeAChange) Change(when)(id, effect) else Measurement(when)(id, effect)
+  private def eventConstructorReferringToOneItem[AHistory <: History : TypeTag](makeAChange: Boolean)(when: Unbounded[Instant]): (AHistory#Id, Spore[AHistory, Unit]) => Event =
+    if (makeAChange) Change.forOneItem(when)(_, _) else Measurement.forOneItem(when)(_, _)
+
+  private def eventConstructorReferringToTwoItems[AHistory <: History : TypeTag, AnotherHistory <: History : TypeTag](makeAChange: Boolean)(when: Unbounded[Instant]): (AHistory#Id, AnotherHistory#Id, Spore2[AHistory, AnotherHistory, Unit]) => Event =
+    if (makeAChange) Change.forTwoItems(when)(_, _, _) else Measurement.forTwoItems(when)(_, _, _)
 
   def dataSampleGenerator1(faulty: Boolean) = for {data <- Arbitrary.arbitrary[String]} yield (data, (when: americium.Unbounded[Instant], makeAChange: Boolean, fooHistoryId: FooHistory#Id) => if (!faulty) {
-    eventConstructor[FooHistory](makeAChange)(when)(fooHistoryId, (fooHistory: FooHistory) => {
+    eventConstructorReferringToOneItem[FooHistory](makeAChange)(when).apply(fooHistoryId, (fooHistory: FooHistory) => {
       try {
         fooHistory.id
         fooHistory.datums
@@ -73,7 +77,7 @@ trait WorldSpecSupport {
       fooHistory.property1 = capture(data)
     })
   } else {
-    eventConstructor[BadFooHistory](makeAChange)(when)(fooHistoryId, (fooHistory: BadFooHistory) => {
+    eventConstructorReferringToOneItem[BadFooHistory](makeAChange)(when).apply(fooHistoryId, (fooHistory: BadFooHistory) => {
       try {
         fooHistory.id
         fooHistory.datums
@@ -89,7 +93,8 @@ trait WorldSpecSupport {
     })
   })
 
-  def dataSampleGenerator2(faulty: Boolean) = for {data <- Arbitrary.arbitrary[Boolean]} yield (data, (when: Unbounded[Instant], makeAChange: Boolean, fooHistoryId: FooHistory#Id) => eventConstructor[FooHistory](makeAChange)(when)(fooHistoryId, (fooHistory: FooHistory) => {
+  def dataSampleGenerator2(faulty: Boolean) = for {data <- Arbitrary.arbitrary[Boolean]}
+    yield (data, (when: Unbounded[Instant], makeAChange: Boolean, fooHistoryId: FooHistory#Id) => eventConstructorReferringToOneItem[FooHistory](makeAChange)(when).apply(fooHistoryId, (fooHistory: FooHistory) => {
     try{
       fooHistory.id
       fooHistory.datums
@@ -105,7 +110,8 @@ trait WorldSpecSupport {
     if (capture(faulty)) throw changeError // Modelling an admissible postcondition failure.
   }))
 
-  def dataSampleGenerator3(faulty: Boolean) = for {data <- Arbitrary.arbitrary[Double]} yield (data, (when: Unbounded[Instant], makeAChange: Boolean, barHistoryId: BarHistory#Id) => eventConstructor[BarHistory](makeAChange)(when)(barHistoryId, (barHistory: BarHistory) => {
+  def dataSampleGenerator3(faulty: Boolean) = for {data <- Arbitrary.arbitrary[Double]}
+    yield (data, (when: Unbounded[Instant], makeAChange: Boolean, barHistoryId: BarHistory#Id) => eventConstructorReferringToOneItem[BarHistory](makeAChange)(when).apply(barHistoryId, (barHistory: BarHistory) => {
     if (capture(faulty)) throw changeError // Modelling a precondition failure.
     try{
       barHistory.id
@@ -121,7 +127,8 @@ trait WorldSpecSupport {
   }))
 
   def dataSampleGenerator4(faulty: Boolean) = for {data1 <- Arbitrary.arbitrary[String]
-                                                   data2 <- Arbitrary.arbitrary[Int]} yield (data1 -> data2, (when: americium.Unbounded[Instant], makeAChange: Boolean, barHistoryId: BarHistory#Id) => eventConstructor[BarHistory](makeAChange)(when)(barHistoryId, (barHistory: BarHistory) => {
+                                                   data2 <- Arbitrary.arbitrary[Int]}
+    yield (data1 -> data2, (when: americium.Unbounded[Instant], makeAChange: Boolean, barHistoryId: BarHistory#Id) => eventConstructorReferringToOneItem[BarHistory](makeAChange)(when).apply(barHistoryId, (barHistory: BarHistory) => {
     try{
       barHistory.id
       barHistory.datums
@@ -138,7 +145,8 @@ trait WorldSpecSupport {
 
   def dataSampleGenerator5(faulty: Boolean) = for {data1 <- Arbitrary.arbitrary[Int]
                                                    data2 <- Arbitrary.arbitrary[String]
-                                                   data3 <- Arbitrary.arbitrary[Boolean]} yield ((data1, data2, data3), (when: Unbounded[Instant], makeAChange: Boolean, barHistoryId: BarHistory#Id) => eventConstructor[BarHistory](makeAChange)(when)(barHistoryId, (barHistory: BarHistory) => {
+                                                   data3 <- Arbitrary.arbitrary[Boolean]}
+    yield ((data1, data2, data3), (when: Unbounded[Instant], makeAChange: Boolean, barHistoryId: BarHistory#Id) => eventConstructorReferringToOneItem[BarHistory](makeAChange)(when).apply(barHistoryId, (barHistory: BarHistory) => {
     try{
       barHistory.id
       barHistory.datums
@@ -153,15 +161,29 @@ trait WorldSpecSupport {
     if (capture(faulty)) throw changeError // Modelling an admissible postcondition failure.
   }))
 
-  def integerDataSampleGenerator(faulty: Boolean) = for {data <- Arbitrary.arbitrary[Int]} yield (data, (when: americium.Unbounded[Instant], makeAChange: Boolean, integerHistoryId: IntegerHistory#Id) => eventConstructor[IntegerHistory](makeAChange)(when)(integerHistoryId, (integerHistory: IntegerHistory) => {
+  def integerDataSampleGenerator(faulty: Boolean) = for {data <- Arbitrary.arbitrary[Int]}
+    yield (data, (when: americium.Unbounded[Instant], makeAChange: Boolean, integerHistoryId: IntegerHistory#Id) => eventConstructorReferringToOneItem[IntegerHistory](makeAChange)(when).apply(integerHistoryId, (integerHistory: IntegerHistory) => {
     if (capture(faulty)) throw changeError // Modelling a precondition failure.
     integerHistory.integerProperty = capture(data)
   }))
 
-  def moreSpecificFooDataSampleGenerator(faulty: Boolean) = for {data <- Arbitrary.arbitrary[String]} yield (data, (when: americium.Unbounded[Instant], makeAChange: Boolean, fooHistoryId: MoreSpecificFooHistory#Id) => eventConstructor[MoreSpecificFooHistory](makeAChange)(when)(fooHistoryId, (fooHistory: MoreSpecificFooHistory) => {
+  def moreSpecificFooDataSampleGenerator(faulty: Boolean) = for {data <- Arbitrary.arbitrary[String]}
+    yield (data, (when: americium.Unbounded[Instant], makeAChange: Boolean, fooHistoryId: MoreSpecificFooHistory#Id) => eventConstructorReferringToOneItem[MoreSpecificFooHistory](makeAChange)(when).apply(fooHistoryId, (fooHistory: MoreSpecificFooHistory) => {
     if (capture(faulty)) throw changeError // Modelling a precondition failure.
     fooHistory.property1 = capture(data)
   }))
+
+  def referringToItemDataSampleGenerator(faulty: Boolean) = for {idToReferToAnotherItem <- Gen.oneOf(ReferringHistory.specialFooIds)}
+    yield (idToReferToAnotherItem, (when: americium.Unbounded[Instant], makeAChange: Boolean, referringHistoryId: ReferringHistory#Id) => eventConstructorReferringToTwoItems[ReferringHistory, FooHistory](makeAChange)(when).apply(referringHistoryId, idToReferToAnotherItem, spore {(referringHistory: ReferringHistory, referencedItem: FooHistory) => {
+    if (capture(faulty)) throw changeError // Modelling a precondition failure.
+    referringHistory.referTo(referencedItem)
+  }}))
+
+  def forgettingItemDataSampleGenerator(faulty: Boolean) = for {idToReferToAnotherItem <- Gen.oneOf(ReferringHistory.specialFooIds)}
+    yield (idToReferToAnotherItem, (when: americium.Unbounded[Instant], makeAChange: Boolean, referringHistoryId: ReferringHistory#Id) => eventConstructorReferringToTwoItems[ReferringHistory, FooHistory](makeAChange)(when).apply(referringHistoryId, idToReferToAnotherItem, spore {(referringHistory: ReferringHistory, referencedItem: FooHistory) => {
+      if (capture(faulty)) throw changeError // Modelling a precondition failure.
+      referringHistory.forget(referencedItem)
+    }}))
 
   def dataSamplesForAnIdGenerator_[AHistory <: History : TypeTag]( historyIdGenerator: Gen[AHistory#Id], dataSampleGenerators: Gen[(_, (Unbounded[Instant], Boolean, AHistory#Id) => Event)] *) = {
     // It makes no sense to have an id without associated data samples - the act of
@@ -169,10 +191,16 @@ trait WorldSpecSupport {
     val dataSamplesGenerator = Gen.nonEmptyListOf(Gen.frequency(dataSampleGenerators.zipWithIndex map {case (generator, index) => generator map (sample => index -> sample)} map (1 -> _): _*))
 
     for {dataSamples <- dataSamplesGenerator
-         historyId <- historyIdGenerator} yield (historyId,
+         historyId <- historyIdGenerator
+         headsItIs <- Gen.oneOf(false, true)
+    } yield (historyId,
       (scope: Scope) => scope.render(Bitemporal.zeroOrOneOf[AHistory](historyId)): Seq[History],
       for {(index, (data, changeFor: ((Unbounded[Instant], Boolean, AHistory#Id) => Event))) <- dataSamples} yield (index, data, changeFor(_: Unbounded[Instant], _: Boolean, historyId)),
-      Annihilation(_: Instant, historyId))
+      Annihilation(_: Instant, historyId), if (headsItIs) Change.forOneItem(_: Unbounded[Instant])(historyId, (item: AHistory ) => {
+      // A useless event: nothing changes!
+    }) else Measurement.forOneItem(_: Unbounded[Instant])(historyId, (item: AHistory ) => {
+      // A useless event: nothing is measured!
+    }))
   }
 
   trait RecordingsForAnId {
@@ -182,7 +210,7 @@ trait WorldSpecSupport {
 
     val events: List[(Unbounded[Instant], Event)]
 
-    val whenEarliestChangeHappened: Unbounded[Instant]
+    val whenFinalEventHappened: Unbounded[Instant]
 
     def thePartNoLaterThan(when: Unbounded[Instant]): Option[RecordingsNoLaterThan]
 
@@ -195,13 +223,14 @@ trait WorldSpecSupport {
     require(eventWhens zip eventWhens.tail forall {case (lhs, rhs) => lhs <= rhs})
   }
 
-  case class RecordingsNoLaterThan(historyId: Any, historiesFrom: Scope => Seq[History], datums: List[(Any, Unbounded[Instant])])
+  case class RecordingsNoLaterThan(historyId: Any, historiesFrom: Scope => Seq[History], datums: List[(Any, Unbounded[Instant])], ineffectiveEventFor: Unbounded[Instant] => Event, whenAnnihilated: Option[Unbounded[Instant]])
 
-  case class NonExistentRecordings(historyId: Any, historiesFrom: Scope => Seq[History])
+  case class NonExistentRecordings(historyId: Any, historiesFrom: Scope => Seq[History], ineffectiveEventFor: Unbounded[Instant] => Event)
 
   class RecordingsForAPhoenixId(override val historyId: Any,
                                 override val historiesFrom: Scope => Seq[History],
                                 annihilationFor: Instant => Annihilation[_ <: Identified],
+                                ineffectiveEventFor: Unbounded[Instant] => Event,
                                 dataSamplesGroupedForLifespans: Stream[Traversable[(Int, Any, (Unbounded[Instant], Boolean) => Event)]],
                                 sampleWhensGroupedForLifespans: Stream[List[Unbounded[Instant]]],
                                 forbidMeasurements: Boolean) extends RecordingsForAnId {
@@ -255,7 +284,7 @@ trait WorldSpecSupport {
     private val lastLifespanIsLimited = sampleWhensGroupedForLifespans.last.size > dataSamplesGroupedForLifespans.last.size
 
     override def doesNotExistAt(when: Unbounded[Instant]): Option[NonExistentRecordings] = {
-      lazy val doesNotExist = Some(NonExistentRecordings(historyId = historyId, historiesFrom = historiesFrom))
+      lazy val doesNotExist = Some(NonExistentRecordings(historyId = historyId, historiesFrom = historiesFrom, ineffectiveEventFor = ineffectiveEventFor))
       val searchResult = sampleWhensGroupedForLifespans map (_.last) search when
       searchResult match {
         case Found(foundGroupIndex) =>
@@ -304,9 +333,13 @@ trait WorldSpecSupport {
         val dataSampleAndWhenPairsForALifespanPickedFromRuns = ((dataSampleAndWhenPairsForALifespanWithIndicesAndWhetherToMakeChanges groupBy { case ((((classifier, _), _), _), _) => classifier }).values flatMap
           dataSampleAndWhenPairsForALifespanPickedFromRunsWithIndices).toList sortBy (_._2) map (_._1)
 
+        val whenAnnihilated = if (1 + relevantGroupIndex < sampleWhensGroupedForLifespans.size || lastLifespanIsLimited) Some(sampleWhensGroupedForLifespans(relevantGroupIndex).last) else None
+
         Some(RecordingsNoLaterThan(historyId = historyId,
           historiesFrom = historiesFrom,
-          datums = dataSampleAndWhenPairsForALifespanPickedFromRuns takeWhile { case (_, eventWhen) => eventWhen <= when }))
+          datums = dataSampleAndWhenPairsForALifespanPickedFromRuns takeWhile { case (_, eventWhen) => eventWhen <= when },
+          ineffectiveEventFor = ineffectiveEventFor,
+          whenAnnihilated = whenAnnihilated))
       }
 
       val searchResult = sampleWhensGroupedForLifespans map (_.last) search when
@@ -335,13 +368,13 @@ trait WorldSpecSupport {
       }
     }
 
-    override val whenEarliestChangeHappened: Unbounded[Instant] = sampleWhensGroupedForLifespans.head.head
+    override val whenFinalEventHappened: Unbounded[Instant] = sampleWhensGroupedForLifespans.last.last
   }
 
-  def recordingsGroupedByIdGenerator_(dataSamplesForAnIdGenerator: Gen[(Any, Scope => Seq[History], List[(Int, Any, (Unbounded[Instant], Boolean) => Event)], Instant => Annihilation[_ <: Identified])],
+  def recordingsGroupedByIdGenerator_(dataSamplesForAnIdGenerator: Gen[(Any, Scope => Seq[History], List[(Int, Any, (Unbounded[Instant], Boolean) => Event)], Instant => Annihilation[_ <: Identified], Unbounded[Instant] => Event)],
                                       forbidAnnihilations: Boolean = false,
                                       forbidMeasurements: Boolean = false) = {
-    val unconstrainedParametersGenerator = for {(historyId, historiesFrom, dataSamples, annihilationFor) <- dataSamplesForAnIdGenerator
+    val unconstrainedParametersGenerator = for {(historyId, historiesFrom, dataSamples, annihilationFor, ineffectiveEventFor) <- dataSamplesForAnIdGenerator
                                                 seed <- seedGenerator
                                                 random = new Random(seed)
                                                 dataSamplesGroupedForLifespans = if (forbidAnnihilations) Stream(dataSamples) else random.splitIntoNonEmptyPieces(dataSamples)
@@ -369,12 +402,12 @@ trait WorldSpecSupport {
                                                 noAnnihilationsToWorryAbout = finalLifespanIsOngoing && 1 == sampleWhensGroupedForLifespans.size
                                                 firstAnnihilationHasBeenAlignedWithADefiniteWhen = noAnnihilationsToWorryAbout ||
                                                   PartialFunction.cond(sampleWhensGroupedForLifespans.head.last) { case Finite(_) => true }
-    } yield firstAnnihilationHasBeenAlignedWithADefiniteWhen ->(historyId, historiesFrom, annihilationFor, dataSamplesGroupedForLifespans, sampleWhensGroupedForLifespans)
+    } yield firstAnnihilationHasBeenAlignedWithADefiniteWhen ->(historyId, historiesFrom, annihilationFor, ineffectiveEventFor, dataSamplesGroupedForLifespans, sampleWhensGroupedForLifespans)
 
     val parametersGenerator = unconstrainedParametersGenerator retryUntil { case (firstAnnihilationHasBeenAlignedWithADefiniteWhen, _) => firstAnnihilationHasBeenAlignedWithADefiniteWhen } map (_._2)
 
-    val recordingsForAnIdGenerator = for ((historyId, historiesFrom, annihilationFor, dataSamplesGroupedForLifespans, sampleWhensGroupedForLifespans) <- parametersGenerator)
-      yield new RecordingsForAPhoenixId(historyId, historiesFrom, annihilationFor, dataSamplesGroupedForLifespans, sampleWhensGroupedForLifespans, forbidMeasurements) with RecordingsForAnIdContracts
+    val recordingsForAnIdGenerator = for ((historyId, historiesFrom, annihilationFor, ineffectiveEventFor, dataSamplesGroupedForLifespans, sampleWhensGroupedForLifespans) <- parametersGenerator)
+      yield new RecordingsForAPhoenixId(historyId, historiesFrom, annihilationFor, ineffectiveEventFor, dataSamplesGroupedForLifespans, sampleWhensGroupedForLifespans, forbidMeasurements) with RecordingsForAnIdContracts
 
     def idsAreNotRepeated(recordingsForVariousIds: List[RecordingsForAnId]) = {
       recordingsForVariousIds groupBy (_.historyId) forall { case (_, repeatedIdGroup) => 1 == repeatedIdGroup.size }
@@ -508,4 +541,12 @@ trait WorldSpecSupport {
 
   val integerDataSamplesForAnIdGenerator = dataSamplesForAnIdGenerator_[IntegerHistory](integerHistoryIdGenerator, integerDataSampleGenerator(faulty = false))
   val integerHistoryRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(integerDataSamplesForAnIdGenerator)
+
+  val referenceToItemDataSamplesForAnIdGenerator = dataSamplesForAnIdGenerator_[ReferringHistory](referringHistoryIdGenerator, referringToItemDataSampleGenerator(faulty = false), forgettingItemDataSampleGenerator(faulty = false))
+
+  def referringHistoryRecordingsGroupedByIdGenerator(forbidMeasurements: Boolean) = recordingsGroupedByIdGenerator_(referenceToItemDataSamplesForAnIdGenerator, forbidMeasurements = forbidMeasurements)
+
+  val mixedRecordingsForReferencedIdGenerator = dataSamplesForAnIdGenerator_[FooHistory](Gen.oneOf(ReferringHistory.specialFooIds), Gen.oneOf(dataSampleGenerator1(faulty = false), moreSpecificFooDataSampleGenerator(faulty = false)), dataSampleGenerator2(faulty = false))
+
+  def referencedHistoryRecordingsGroupedByIdGenerator(forbidAnnihilations: Boolean) = recordingsGroupedByIdGenerator_(mixedRecordingsForReferencedIdGenerator, forbidAnnihilations = forbidAnnihilations)
 }

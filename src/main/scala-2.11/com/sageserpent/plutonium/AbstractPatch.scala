@@ -2,25 +2,26 @@ package com.sageserpent.plutonium
 
 import java.lang.reflect.Method
 
-import scala.reflect.runtime.universe._
-
 /**
   * Created by Gerard on 10/01/2016.
   */
 
 object AbstractPatch {
-  def patchesAreRelated(lhs: AbstractPatch[_], rhs: AbstractPatch[_]): Boolean = {
-    val bothReferToTheSameItem = lhs.id == rhs.id && (lhs.capturedTypeTag.tpe <:< rhs.capturedTypeTag.tpe || rhs.capturedTypeTag.tpe <:< lhs.capturedTypeTag.tpe)
+  def patchesAreRelated(lhs: AbstractPatch, rhs: AbstractPatch): Boolean = {
+    val bothReferToTheSameItem = lhs.targetId == rhs.targetId && (lhs.targetTypeTag.tpe <:< rhs.targetTypeTag.tpe || rhs.targetTypeTag.tpe <:< lhs.targetTypeTag.tpe)
     val bothReferToTheSameMethod = WorldReferenceImplementation.firstMethodIsOverrideCompatibleWithSecond(lhs.method, rhs.method) ||
       WorldReferenceImplementation.firstMethodIsOverrideCompatibleWithSecond(rhs.method, lhs.method)
     bothReferToTheSameItem && bothReferToTheSameMethod
   }
 }
 
-abstract class AbstractPatch[Raw <: Identified: TypeTag](val id: Raw#Id, val method: Method){
-  val capturedTypeTag = typeTag[Raw]
-  def apply(identifiedItemFactory: IdentifiedItemAccess): Unit
-  def checkInvariant(scope: Scope): Unit
+abstract class AbstractPatch(val method: Method){
+  val targetReconstitutionData: Recorder#ItemReconstitutionData[_ <: Identified]
+  val argumentReconstitutionDatums: Seq[Recorder#ItemReconstitutionData[_ <: Identified]]
+  val targetId: Identified#Id
+  val targetTypeTag: scala.reflect.runtime.universe.TypeTag[_ <: Identified]
+  def apply(identifiedItemAccess: IdentifiedItemAccess): Unit
+  def checkInvariant(identifiedItemAccess: IdentifiedItemAccess): Unit
 }
 
 

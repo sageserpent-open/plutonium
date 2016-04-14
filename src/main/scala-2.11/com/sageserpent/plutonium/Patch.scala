@@ -4,30 +4,35 @@ import java.lang.reflect.Method
 
 import net.sf.cglib.proxy.MethodProxy
 
-import scala.reflect.runtime.universe._
+import scalaz.{-\/, \/, \/-}
 
 
 /**
   * Created by Gerard on 23/01/2016.
   */
-class Patch[Raw <: Identified : TypeTag](id: Raw#Id, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy) extends AbstractPatch(id, method) {
-  def apply(identifiedItemFactory: IdentifiedItemAccess): Unit = {
-    val targetToBePatched = identifiedItemFactory.itemFor[Raw](id)
-    methodProxy.invoke(targetToBePatched, arguments)
+class Patch(targetRecorder: Recorder, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy) extends AbstractPatch(method) {
+  override val targetReconstitutionData = targetRecorder.itemReconstitutionData
+
+  override val argumentReconstitutionDatums: Seq[Recorder#ItemReconstitutionData[_ <: Identified]] = arguments collect {case argumentRecorder: Recorder => argumentRecorder.itemReconstitutionData}
+
+  override val (targetId, targetTypeTag) = targetReconstitutionData
+
+  type WrappedArgument = \/[AnyRef, Recorder#ItemReconstitutionData[_ <: Identified]]
+
+  def wrap(argument: AnyRef): WrappedArgument = argument match {
+    case argumentRecorder: Recorder => \/-(argumentRecorder.itemReconstitutionData)
+    case _ => -\/(argument)
   }
 
-  def checkInvariant(scope: Scope): Unit = {
-    val bitemporalCheckInvariant = for {
-      target <- Bitemporal.singleOneOf[Raw](id)
-      checkInvariant <- target.checkInvariant
-    } yield checkInvariant
+  val wrappedArguments = arguments map wrap
 
-    val checkInvariantsForPotentiallySeveralOrNoItems = scope.render(bitemporalCheckInvariant)
-    assert(checkInvariantsForPotentiallySeveralOrNoItems match {
-      case Stream(_) => true
-      case _ => false
-    })
-    val checkInvariant = checkInvariantsForPotentiallySeveralOrNoItems.head
-    checkInvariant()
+  def unwrap(identifiedItemAccess: IdentifiedItemAccess)(wrappedArgument: WrappedArgument) = wrappedArgument.fold(identity, identifiedItemAccess.reconstitute(_))
+
+  def apply(identifiedItemAccess: IdentifiedItemAccess): Unit = {
+    methodProxy.invoke(identifiedItemAccess.reconstitute(targetReconstitutionData), wrappedArguments map unwrap(identifiedItemAccess))
+  }
+
+  def checkInvariant(identifiedItemAccess: IdentifiedItemAccess): Unit = {
+    identifiedItemAccess.reconstitute(targetReconstitutionData).checkInvariant()
   }
 }

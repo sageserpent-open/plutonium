@@ -180,9 +180,9 @@ class ExperimentalWorldSpec extends FlatSpec with Matchers with Checkers with Wo
 
       val scopeFromExperimentalWorldAfterForkWhen = experimentalWorld.scopeFor(queryWhenAfterFork, queryAsOfNoLaterThanFork)
 
-      val experimentalWorldHistoryAfterRokeWhen = historyFrom(experimentalWorld, recordingsGroupedById)(scopeFromExperimentalWorldAfterForkWhen)
+      val experimentalWorldHistoryAfterForkWhen = historyFrom(experimentalWorld, recordingsGroupedById)(scopeFromExperimentalWorldAfterForkWhen)
 
-      ((experimentalWorldHistory.length == experimentalWorldHistoryAfterRokeWhen.length) :| s"${experimentalWorldHistory.length} == experimentalWorldHistoryAfterRokeWhen.length") && Prop.all(experimentalWorldHistory zip experimentalWorldHistoryAfterRokeWhen map { case (experimentalWorldCase, experimentalWorldCaseAfterBaseWorldRevised) => (experimentalWorldCase === experimentalWorldCaseAfterBaseWorldRevised) :| s"${experimentalWorldCase} === experimentalWorldCaseAfterBaseWorldRevised" }: _*)
+      ((experimentalWorldHistory.length == experimentalWorldHistoryAfterForkWhen.length) :| s"${experimentalWorldHistory.length} == experimentalWorldHistoryAfterForkWhen.length") && Prop.all(experimentalWorldHistory zip experimentalWorldHistoryAfterForkWhen map { case (experimentalWorldCase, experimentalWorldCaseAfterBaseWorldRevised) => (experimentalWorldCase === experimentalWorldCaseAfterBaseWorldRevised) :| s"${experimentalWorldCase} === experimentalWorldCaseAfterBaseWorldRevised" }: _*)
     })
   }
 
@@ -222,7 +222,7 @@ class ExperimentalWorldSpec extends FlatSpec with Matchers with Checkers with Wo
 
       val scopeFromExperimentalWorld = experimentalWorld.scopeFor(queryWhen, experimentalWorld.nextRevision)
 
-      val checks = for {RecordingsNoLaterThan(historyId, historiesFrom, pertinentRecordings) <- followingRecordingsGroupedById flatMap (_.thePartNoLaterThan(queryWhen))
+      val checks = for {RecordingsNoLaterThan(historyId, historiesFrom, pertinentRecordings, _, _) <- followingRecordingsGroupedById flatMap (_.thePartNoLaterThan(queryWhen))
                         Seq(history) = historiesFrom(scopeFromExperimentalWorld)}
         yield (historyId, history.datums, pertinentRecordings.map(_._1))
 
@@ -262,7 +262,7 @@ class ExperimentalWorldSpec extends FlatSpec with Matchers with Checkers with Wo
 
       val scopeFromBaseWorld = baseWorld.scopeFor(queryWhen, baseWorld.nextRevision)
 
-      val checks = for {RecordingsNoLaterThan(historyId, historiesFrom, pertinentRecordings) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(queryWhen))
+      val checks = for {RecordingsNoLaterThan(historyId, historiesFrom, pertinentRecordings, _, _) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(queryWhen))
                         Seq(history) = historiesFrom(scopeFromBaseWorld)}
         yield (historyId, history.datums, pertinentRecordings.map(_._1))
 

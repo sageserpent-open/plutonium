@@ -9,7 +9,7 @@ import org.scalatest.prop.Checkers
 import scala.reflect.runtime.universe._
 import scala.util.Random
 import scalaz.scalacheck._
-import scalaz.{Equal, MonadPlus}
+import scalaz.{ApplicativePlus, Equal}
 
 
 /**
@@ -20,7 +20,7 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
   implicit override val generatorDrivenConfig =
     PropertyCheckConfig(maxSize = 30)
 
-  "The class Bitemporal" should "be a monad plus instance" in {
+  "The class Bitemporal" should "be an applicative plus instance" in {
     val testCaseGenerator = for {world <- worldGenerator
                                  integerHistoryRecordingsGroupedById <- integerHistoryRecordingsGroupedByIdGenerator
                                  obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
@@ -43,13 +43,13 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
       val idsInExistence = integerHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(queryWhen)) map (_.historyId.asInstanceOf[IntegerHistory#Id])
 
       implicit def arbitraryGenericBitemporal[Raw](implicit rawArbitrary: Arbitrary[Raw]): Arbitrary[Bitemporal[Raw]] = Arbitrary {
-        Arbitrary.arbitrary[Raw] map (MonadPlus[Bitemporal].point(_))
+        Arbitrary.arbitrary[Raw] map (ApplicativePlus[Bitemporal].point(_))
       }
 
       implicit def arbitraryBitemporalOfInt(implicit rawArbitrary: Arbitrary[Int]): Arbitrary[Bitemporal[Int]] = {
         def intFrom(item: IntegerHistory) = item.datums.hashCode()
         Arbitrary(
-          Gen.frequency(5 -> (Arbitrary.arbitrary[Int] map (MonadPlus[Bitemporal].point(_))),
+          Gen.frequency(5 -> (Arbitrary.arbitrary[Int] map (ApplicativePlus[Bitemporal].point(_))),
             10 -> (Gen.oneOf(ids) map (Bitemporal.zeroOrOneOf[IntegerHistory](_) map (_.integerProperty))),
             10 -> (Gen.oneOf(idsInExistence) map (Bitemporal.singleOneOf[IntegerHistory](_) map (_.integerProperty))),
             10 -> (Gen.oneOf(ids) map (Bitemporal.withId[IntegerHistory](_) map (_.integerProperty))),
@@ -66,7 +66,7 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
         override def equal(lhs: Bitemporal[Raw], rhs: Bitemporal[Raw]): Boolean = scope.render(lhs) == scope.render(rhs)
       }
 
-      ScalazProperties.monadPlus.strongLaws[Bitemporal]
+      ScalazProperties.applicative.laws[Bitemporal] && ScalazProperties.plusEmpty.laws[Bitemporal]
     })
   }
 
