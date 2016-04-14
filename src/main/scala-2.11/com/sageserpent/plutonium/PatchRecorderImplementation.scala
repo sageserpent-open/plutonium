@@ -83,6 +83,8 @@ abstract class PatchRecorderImplementation(when: Unbounded[Instant]) extends Pat
           }, liftedWhen, () => true))
 
           outstandingSequenceIndices -= sequenceIndex
+
+          applyPatches(drainDownQueue = false)
         } else throw new RuntimeException(s"Attempt to annihilate item of id: $id that does not exist with the expected type of '${expectedTypeTag.tpe}' at: $when, the items that do exist have types: '${compatibleItemStates map (_.lowerBoundTypeTag.tpe) toList}'.")
     }
   }
