@@ -80,7 +80,9 @@ abstract class PatchRecorderImplementation(when: Unbounded[Instant]) extends Pat
           actionQueue.enqueue((sequenceIndex, Unit => for (itemStateToBeAnnihilated <- compatibleItemStates) {
             val typeTagForSpecificItem = itemStateToBeAnnihilated.lowerBoundTypeTag
             annihilateItemFor_(id, typeTagForSpecificItem, when)
-          }, liftedWhen))
+          }, liftedWhen, () => true))
+
+          outstandingSequenceIndices -= sequenceIndex
         } else throw new RuntimeException(s"Attempt to annihilate item of id: $id that does not exist with the expected type of '${expectedTypeTag.tpe}' at: $when, the items that do exist have types: '${compatibleItemStates map (_.lowerBoundTypeTag.tpe) toList}'.")
     }
   }
@@ -94,16 +96,24 @@ abstract class PatchRecorderImplementation(when: Unbounded[Instant]) extends Pat
 
     idToItemStatesMap.clear()
 
-    applyPatches()
+    applyPatches(drainDownQueue = true)
   }
 
-  private def applyPatches(): Unit = {
+  private def applyPatches(drainDownQueue: Boolean): Unit = {
+    if (drainDownQueue){
+      assert(outstandingSequenceIndices.isEmpty)
+    }
+
     while (actionQueue.nonEmpty && (actionQueue.head match {
-      case (sequenceIndex, _, whenForAction) => nextSequenceIndexToHitToUnblockPatchApplication == sequenceIndex && whenForAction <= when
+      case (sequenceIndex, _, whenForAction, incrementalApplicationCanProceed) =>
+        {
+          val actionIsNotOutOfSequence = outstandingSequenceIndices.isEmpty || sequenceIndex < outstandingSequenceIndices.min
+          val actionIsRelevantToCutoffTime = whenForAction <= when
+          actionIsNotOutOfSequence && actionIsRelevantToCutoffTime && (drainDownQueue || incrementalApplicationCanProceed())
+        }
     })) {
-      val (sequenceIndex, actionToBeExecuted, whenForAction) = actionQueue.dequeue()
+      val (sequenceIndex, actionToBeExecuted, whenForAction, _) = actionQueue.dequeue()
       actionToBeExecuted(whenForAction)
-      nextSequenceIndexToHitToUnblockPatchApplication = 1 + sequenceIndex
     }
   }
 
@@ -201,13 +211,13 @@ abstract class PatchRecorderImplementation(when: Unbounded[Instant]) extends Pat
 
   private var _nextSequenceIndex: SequenceIndex = initialSequenceIndex
 
-  private var nextSequenceIndexToHitToUnblockPatchApplication: SequenceIndex = initialSequenceIndex
-
-  private type IndexedAction = (SequenceIndex, Unbounded[Instant] => Unit, Unbounded[Instant])
+  private type IndexedAction = (SequenceIndex, Unbounded[Instant] => Unit, Unbounded[Instant], () => Boolean)
 
   implicit val indexedActionOrdering = Ordering.by[IndexedAction, SequenceIndex](-_._1)
 
   private val actionQueue = mutable.PriorityQueue[IndexedAction]()
+
+  private val outstandingSequenceIndices = mutable.SortedSet.empty[SequenceIndex]
 
 
   private def enqueueBestCandidatePatchFrom(candidatePatchTuples: CandidatePatches): Unit = {
@@ -219,9 +229,9 @@ abstract class PatchRecorderImplementation(when: Unbounded[Instant]) extends Pat
     // the event would have taken place - so it steals the latter's sequence index.
     val (sequenceIndexForBestPatch, _, whenTheBestPatchOccurs) = patchRepresentingTheEvent
 
-    class IdentifiedItemAccessImplementation extends IdentifiedItemAccess {
-      val reconstitutionDataToItemStateMap = patchToItemStatesMap.remove(bestPatch).get
+    val reconstitutionDataToItemStateMap = patchToItemStatesMap.remove(bestPatch).get
 
+    class IdentifiedItemAccessImplementation extends IdentifiedItemAccess {
       for (((id, _), itemState) <- reconstitutionDataToItemStateMap){
         if (itemState.itemWouldConflictWithEarlierLifecyclePriorTo > sequenceIndexForBestPatch){
           throw new RuntimeException(s"Attempt to execute patch involving id: '$id' of type: '${itemState.lowerBoundTypeTag.tpe}' for a later lifecycle that cannot exist at time: $whenTheBestPatchOccurs, as there is at least one item from a previous lifecycle up until: ${itemState.itemWouldConflictWithEarlierLifecyclePriorTo}.")
@@ -242,18 +252,19 @@ abstract class PatchRecorderImplementation(when: Unbounded[Instant]) extends Pat
 
     val identifiedItemAccess = new IdentifiedItemAccessImplementation with IdentifiedItemAccessContracts
 
-    actionQueue.enqueue((sequenceIndexForBestPatch, (when: Unbounded[Instant]) => {
+    val itemStatesReferencedByBestPatch = reconstitutionDataToItemStateMap.values
 
+    actionQueue.enqueue((sequenceIndexForBestPatch, (when: Unbounded[Instant]) => {
       bestPatch(identifiedItemAccess)
       for (_ <- itemsAreLockedResource) {
         bestPatch.checkInvariant(identifiedItemAccess)
       }
-    }, whenTheBestPatchOccurs))
+    }, whenTheBestPatchOccurs, () => {
+      itemStatesReferencedByBestPatch.forall(_.itemAnnihilationHasBeenNoted)
+    }))
 
-    // This is a horrible hack - add dummy actions to ensure that the action queue
-    // doesn't jam up due to the sequence indices being discontiguous.
-    for ((sequenceIndex, _, whenThePatchOccurs) <- candidatePatchTuples if sequenceIndexForBestPatch != sequenceIndex){
-      actionQueue.enqueue((sequenceIndex, (when: Unbounded[Instant]) => {}, whenThePatchOccurs))
+    for ((sequenceIndex, _, whenThePatchOccurs) <- candidatePatchTuples){
+      outstandingSequenceIndices -= sequenceIndex
     }
   }
 
@@ -313,6 +324,7 @@ abstract class PatchRecorderImplementation(when: Unbounded[Instant]) extends Pat
 
   private def nextSequenceIndex() = {
     val result = _nextSequenceIndex
+    outstandingSequenceIndices += result
     _nextSequenceIndex += 1
     result
   }
