@@ -16,6 +16,8 @@ import org.scalacheck.{Gen, Prop}
 import org.scalatest.prop.Checkers
 import org.scalatest.{FlatSpec, Matchers}
 
+import scalaz.syntax.applicativePlus._
+
 import scala.collection.immutable.{::, TreeMap}
 import scala.spores._
 import scala.util.Random
@@ -330,13 +332,15 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
 
       val checks = for {RecordingsNoLaterThan(referringHistoryId, referringHistoriesFrom, _, _, _) <- referringHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(queryWhen))
                         RecordingsNoLaterThan(referencedHistoryId, referencedHistoriesFrom, pertinentRecordings, _, _) <- referencedHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(queryWhen))
-                        Seq(referringHistory: ReferringHistory) = referringHistoriesFrom(scope) if referringHistory.referencedDatums.contains(referencedHistoryId)  && !referringHistory.referencedHistories(referencedHistoryId).isGhost
-                        Seq(referencedHistory) = referencedHistoriesFrom(scope)}
-        yield (referringHistoryId, referencedHistoryId, referringHistory, referencedHistory)
+                        Seq(referringHistory: ReferringHistory) = referringHistoriesFrom(scope) if referringHistory.referencedDatums.contains(referencedHistoryId)  && !referringHistory.referencedHistories(referencedHistoryId).isGhost}
+        yield (referringHistoryId, referencedHistoryId)
 
-      Prop.all(checks.map { case (referringHistoryId, referencedHistoryId, referringHistory, referencedHistory) =>
-        val indirectlyAccessedReferencedHistory = referringHistory.referencedHistories(referencedHistoryId)
-        (indirectlyAccessedReferencedHistory eq referencedHistory) :| s"Expected item: '$indirectlyAccessedReferencedHistory' accessed indirectly via referring item of id: '$referringHistoryId' to have the same object identity as '$referencedHistory' accessed directly via id: '$referencedHistoryId'."}: _*)
+      Prop.all(checks.map { case (referringHistoryId, referencedHistoryId) =>
+        val directAccessBitemporaQuery: Bitemporal[History] = Bitemporal.withId[History](referencedHistoryId.asInstanceOf[History#Id])
+        val indirectAccessBitemporalQuery: Bitemporal[History] = Bitemporal.withId[ReferringHistory](referringHistoryId.asInstanceOf[ReferringHistory#Id]) map (_.referencedHistories(referencedHistoryId))
+        val agglomeratedBitemporalQuery: Bitemporal[(History, History)] = (directAccessBitemporaQuery |@| indirectAccessBitemporalQuery) ((_: History, _: History))
+        val Seq((directlyAccessedReferencedHistory: History, indirectlyAccessedReferencedHistory: History)) = scope.render(agglomeratedBitemporalQuery)
+        (directlyAccessedReferencedHistory eq indirectlyAccessedReferencedHistory) :| s"Expected item: '$indirectlyAccessedReferencedHistory' accessed indirectly via referring item of id: '$referringHistoryId' to have the same object identity as '$directlyAccessedReferencedHistory' accessed directly via id: '$referencedHistoryId'."}: _*)
     })
   }
 
