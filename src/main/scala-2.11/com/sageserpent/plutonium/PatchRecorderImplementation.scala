@@ -80,6 +80,14 @@ abstract class PatchRecorderImplementation(when: Unbounded[Instant]) extends Pat
           actionQueue.enqueue((sequenceIndex, Unit => for (itemStateToBeAnnihilated <- compatibleItemStates) {
             val typeTagForSpecificItem = itemStateToBeAnnihilated.lowerBoundTypeTag
             annihilateItemFor_(id, typeTagForSpecificItem, when)
+
+            val itemStates = idToItemStatesMap(id)
+
+            itemStates -= itemStateToBeAnnihilated
+
+            if (itemStates.isEmpty){
+              idToItemStatesMap -= id
+            }
           }, liftedWhen, () => true))
 
           outstandingSequenceIndices -= sequenceIndex
@@ -96,9 +104,9 @@ abstract class PatchRecorderImplementation(when: Unbounded[Instant]) extends Pat
       itemState.submitCandidatePatches()
     }
 
-    idToItemStatesMap.clear()
-
     applyPatches(drainDownQueue = true)
+
+    idToItemStatesMap.clear()
   }
 
   private def applyPatches(drainDownQueue: Boolean): Unit = {
