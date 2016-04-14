@@ -99,10 +99,11 @@ abstract class PatchRecorderImplementation(when: Unbounded[Instant]) extends Pat
 
   private def applyPatches(): Unit = {
     while (actionQueue.nonEmpty && (actionQueue.head match {
-      case (_, _, whenForAction) => whenForAction <= when
+      case (sequenceIndex, _, whenForAction) => nextSequenceIndexToHitToUnblockPatchApplication == sequenceIndex && whenForAction <= when
     })) {
-      val (_, actionToBeExecuted, whenForAction) = actionQueue.dequeue()
+      val (sequenceIndex, actionToBeExecuted, whenForAction) = actionQueue.dequeue()
       actionToBeExecuted(whenForAction)
+      nextSequenceIndexToHitToUnblockPatchApplication = 1 + sequenceIndex
     }
   }
 
@@ -111,7 +112,7 @@ abstract class PatchRecorderImplementation(when: Unbounded[Instant]) extends Pat
   private type CandidatePatches = mutable.MutableList[CandidatePatchTuple]
 
   private class ItemState(initialTypeTag: TypeTag[_ <: Identified],
-                          private var _itemWouldConflictWithEarlierLifecyclePriorTo: SequenceIndex = initialSequenceIndex) {
+                          private var _itemWouldConflictWithEarlierLifecyclePriorTo: SequenceIndex) {
     def itemWouldConflictWithEarlierLifecyclePriorTo = _itemWouldConflictWithEarlierLifecyclePriorTo
 
     def refineCutoffForEarliestExistence(itemCannotExistEarlierThan: SequenceIndex) = {
@@ -198,6 +199,8 @@ abstract class PatchRecorderImplementation(when: Unbounded[Instant]) extends Pat
 
   private var _nextSequenceIndex: SequenceIndex = initialSequenceIndex
 
+  private var nextSequenceIndexToHitToUnblockPatchApplication: SequenceIndex = initialSequenceIndex
+
   private type IndexedAction = (SequenceIndex, Unbounded[Instant] => Unit, Unbounded[Instant])
 
   implicit val indexedActionOrdering = Ordering.by[IndexedAction, SequenceIndex](-_._1)
@@ -212,14 +215,14 @@ abstract class PatchRecorderImplementation(when: Unbounded[Instant]) extends Pat
 
     // The best patch has to be applied as if it occurred when the patch representing
     // the event would have taken place - so it steals the latter's sequence index.
-    val (sequenceIndex, _, whenPatchOccurs) = patchRepresentingTheEvent
+    val (sequenceIndexForBestPatch, _, whenTheBestPatchOccurs) = patchRepresentingTheEvent
 
     class IdentifiedItemAccessImplementation extends IdentifiedItemAccess {
       val reconstitutionDataToItemStateMap = patchToItemStatesMap.remove(bestPatch).get
 
       for (((id, _), itemState) <- reconstitutionDataToItemStateMap){
-        if (itemState.itemWouldConflictWithEarlierLifecyclePriorTo > sequenceIndex){
-          throw new RuntimeException(s"Attempt to execute patch involving id: '$id' of type: '${itemState.lowerBoundTypeTag.tpe}' for a later lifecycle that cannot exist at time: $whenPatchOccurs, as there is at least one item from a previous lifecycle up until: ${itemState.itemWouldConflictWithEarlierLifecyclePriorTo}.")
+        if (itemState.itemWouldConflictWithEarlierLifecyclePriorTo > sequenceIndexForBestPatch){
+          throw new RuntimeException(s"Attempt to execute patch involving id: '$id' of type: '${itemState.lowerBoundTypeTag.tpe}' for a later lifecycle that cannot exist at time: $whenTheBestPatchOccurs, as there is at least one item from a previous lifecycle up until: ${itemState.itemWouldConflictWithEarlierLifecyclePriorTo}.")
         }
       }
 
@@ -237,13 +240,19 @@ abstract class PatchRecorderImplementation(when: Unbounded[Instant]) extends Pat
 
     val identifiedItemAccess = new IdentifiedItemAccessImplementation with IdentifiedItemAccessContracts
 
-    actionQueue.enqueue((sequenceIndex, (when: Unbounded[Instant]) => {
+    actionQueue.enqueue((sequenceIndexForBestPatch, (when: Unbounded[Instant]) => {
 
       bestPatch(identifiedItemAccess)
       for (_ <- itemsAreLockedResource) {
         bestPatch.checkInvariant(identifiedItemAccess)
       }
-    }, whenPatchOccurs))
+    }, whenTheBestPatchOccurs))
+
+    // This is a horrible hack - add dummy actions to ensure that the action queue
+    // doesn't jam up due to the sequence indices being discontiguous.
+    for ((sequenceIndex, _, whenThePatchOccurs) <- candidatePatchTuples if sequenceIndexForBestPatch != sequenceIndex){
+      actionQueue.enqueue((sequenceIndex, (when: Unbounded[Instant]) => {}, whenThePatchOccurs))
+    }
   }
 
   private def refineRelevantItemStatesAndYieldTarget(patch: AbstractPatch): ItemState = {
