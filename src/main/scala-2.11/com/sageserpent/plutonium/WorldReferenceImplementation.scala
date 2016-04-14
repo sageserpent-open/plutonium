@@ -326,7 +326,7 @@ object WorldReferenceImplementation {
       }
     }
 
-    override def numberOf[Raw <: Identified : TypeTag](id: Raw#Id): Int = ???
+    override def numberOf[Raw <: Identified : TypeTag](id: Raw#Id): Int = identifiedItemsScope.itemsFor(id).size
   }
 
 }
