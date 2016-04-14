@@ -207,7 +207,7 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
           val agglomeratedBitemporalQuery: Bitemporal[(AHistory, AHistory)] = (bitemporalQueryOne |@| bitemporalQueryTwo) ((_: AHistory, _: AHistory))
           val numberOfItems = scope.numberOf[AHistory](id)
           val itemsFromAgglomeratedQuery = scope.render(agglomeratedBitemporalQuery).toSet
-          val repeatedItemPairs: Set[(AHistory, AHistory)] = itemsFromAgglomeratedQuery filter ((_: AHistory) == (_: AHistory)).tupled
+          val repeatedItemPairs: Set[(AHistory, AHistory)] = itemsFromAgglomeratedQuery filter ((_: AHistory) eq (_: AHistory)).tupled
           (numberOfItems == repeatedItemPairs.size) :| s"Expected to have $numberOfItems pairs of the same item repeated, but got: '$repeatedItemPairs'."
         }): _*)
       }

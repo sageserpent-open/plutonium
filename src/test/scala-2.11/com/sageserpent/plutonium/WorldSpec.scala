@@ -313,6 +313,33 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
     })
   }
 
+  it should "yield the same identity for a related item as when that item is directly queried for" in {
+    val testCaseGenerator = for {world <- worldGenerator
+                                 referencedHistoryRecordingsGroupedById <- referencedHistoryRecordingsGroupedByIdGenerator(forbidAnnihilations = false)
+                                 referringHistoryRecordingsGroupedById <- referringHistoryRecordingsGroupedByIdGenerator(forbidMeasurements = true)
+                                 seed <- seedGenerator
+                                 random = new Random(seed)
+                                 bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, referencedHistoryRecordingsGroupedById ++ referringHistoryRecordingsGroupedById).zipWithIndex)
+                                 asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
+                                 queryWhen <- unboundedInstantGenerator
+    } yield (world, referencedHistoryRecordingsGroupedById, referringHistoryRecordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
+    check(Prop.forAllNoShrink(testCaseGenerator) { case (world, referencedHistoryRecordingsGroupedById, referringHistoryRecordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
+      recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfs, world)
+
+      val scope = world.scopeFor(queryWhen, world.nextRevision)
+
+      val checks = for {RecordingsNoLaterThan(referringHistoryId, referringHistoriesFrom, _, _, _) <- referringHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(queryWhen))
+                        RecordingsNoLaterThan(referencedHistoryId, referencedHistoriesFrom, pertinentRecordings, _, _) <- referencedHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(queryWhen))
+                        Seq(referringHistory: ReferringHistory) = referringHistoriesFrom(scope) if referringHistory.referencedDatums.contains(referencedHistoryId)  && !referringHistory.referencedHistories(referencedHistoryId).isGhost
+                        Seq(referencedHistory) = referencedHistoriesFrom(scope)}
+        yield (referringHistoryId, referencedHistoryId, referringHistory, referencedHistory)
+
+      Prop.all(checks.map { case (referringHistoryId, referencedHistoryId, referringHistory, referencedHistory) =>
+        val indirectlyAccessedReferencedHistory = referringHistory.referencedHistories(referencedHistoryId)
+        (indirectlyAccessedReferencedHistory eq referencedHistory) :| s"Expected item: '$indirectlyAccessedReferencedHistory' accessed indirectly via referring item of id: '$referringHistoryId' to have the same object identity as '$referencedHistory' accessed directly via id: '$referencedHistoryId'."}: _*)
+    })
+  }
+
   it should "not reveal an item at a query time coming before its first defining event" in {
     val testCaseGenerator = for {world <- worldGenerator
                                  recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
@@ -519,7 +546,6 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
           val Seq(referringHistory) = scope.render(Bitemporal.singleOneOf[ReferringHistory](theReferrerId))
           val ghostItem = referringHistory.referencedHistories(referencedHistoryId)
 
-          ghostItem.id // That should be OK for a ghost.
           ghostItem.isGhost :| s"Expected referenced item of id: '$referencedHistoryId' referred to by item of id: '${referringHistory.id}' to be a ghost at time: $laterQueryWhenAtAnnihilation - the event causing referral was at: $referencingEventWhen."
         }
         }: _*)
