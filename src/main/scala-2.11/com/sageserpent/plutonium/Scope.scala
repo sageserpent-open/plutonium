@@ -4,6 +4,8 @@ import java.time.Instant
 
 import com.sageserpent.americium.Unbounded
 
+import scala.reflect.runtime.universe._
+
 /**
  * Created by Gerard on 09/07/2015.
  */
@@ -29,4 +31,6 @@ trait Scope {
   // then what about non-identifiable bitemporals computed on the fly? Seems like this invariant is a sop to an imperative programming background where equality
   // has to be done via object identity - don't want to encourage this. Let's wait and see...
   def render[Raw](bitemporal: Bitemporal[Raw]): Stream[Raw]
+
+  def numberOf[Raw <: Identified : TypeTag](id: Raw#Id): Int
 }

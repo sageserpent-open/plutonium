@@ -39,6 +39,7 @@ case class WildcardBitemporalResult[Raw <: Identified : TypeTag]() extends Bitem
   val capturedTypeTag = typeTag[Raw]
 }
 
+
 // This companion object can produce a bitemporal instance that refers to zero, one or many raw instances depending
 // how many of those raw instances match the id or wildcard.
 object Bitemporal {
@@ -53,8 +54,6 @@ object Bitemporal {
   def wildcard[Raw <: Identified : TypeTag](): Bitemporal[Raw] = WildcardBitemporalResult[Raw]
 
   def none[Raw]: Bitemporal[Raw] = NoneBitemporalResult[Raw]
-
-  def numberOf[Raw <: Identified : TypeTag](id: Raw#Id): Bitemporal[Int] = ??? // TODO - this counts the items.
 
   // TODO - a Bitemporal[Instant] that yields the query scope's 'when' from within the monad.
 

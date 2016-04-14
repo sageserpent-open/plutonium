@@ -325,6 +325,8 @@ object WorldReferenceImplementation {
         }
       }
     }
+
+    override def numberOf[Raw <: Identified : TypeTag](id: Raw#Id): Int = ???
   }
 
 }
