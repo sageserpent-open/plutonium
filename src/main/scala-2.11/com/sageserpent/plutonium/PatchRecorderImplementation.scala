@@ -62,7 +62,7 @@ abstract class PatchRecorderImplementation(when: Unbounded[Instant]) extends Pat
     val liftedWhen = Finite(when)
     _whenEventPertainedToByLastRecordingTookPlace = Some(liftedWhen)
 
-    idToItemStatesMap.get(id).toSeq.flatten filter (_.itemIsAnnihilatedAt.isEmpty) match {
+    idToItemStatesMap.get(id).toSeq.flatten filter (!_.itemAnnihilationHasBeenNoted) match {
       case Seq() => throw new RuntimeException(s"Attempt to annihilate item of id: $id that does not exist at all at: $when.")
       case itemStates =>
         val expectedTypeTag = typeTag[Raw]
@@ -88,7 +88,7 @@ abstract class PatchRecorderImplementation(when: Unbounded[Instant]) extends Pat
   override def noteThatThereAreNoFollowingRecordings(): Unit = {
     _allRecordingsAreCaptured = true
 
-    for (itemState <- idToItemStatesMap.values.flatten filter (_.itemIsAnnihilatedAt.isEmpty)) {
+    for (itemState <- idToItemStatesMap.values.flatten filter (!_.itemAnnihilationHasBeenNoted)) {
       itemState.submitCandidatePatches()
     }
 
@@ -122,7 +122,7 @@ abstract class PatchRecorderImplementation(when: Unbounded[Instant]) extends Pat
     }
 
     def noteAnnihilation(sequenceIndex: SequenceIndex) = {
-      _itemIsAnnihilatedAt = Some(sequenceIndex)
+      _sequenceIndexForAnnihilation = Some(sequenceIndex)
     }
 
     private var _lowerBoundTypeTag = initialTypeTag
@@ -186,9 +186,11 @@ abstract class PatchRecorderImplementation(when: Unbounded[Instant]) extends Pat
 
     private val exemplarMethodToCandidatePatchesMap: mutable.Map[Method, CandidatePatches] = mutable.Map.empty
 
-    def itemIsAnnihilatedAt = _itemIsAnnihilatedAt
+    def sequenceIndexForAnnihilation = _sequenceIndexForAnnihilation.get
 
-    private var _itemIsAnnihilatedAt: Option[SequenceIndex] = None
+    def itemAnnihilationHasBeenNoted = _sequenceIndexForAnnihilation.isDefined
+
+    private var _sequenceIndexForAnnihilation: Option[SequenceIndex] = None
   }
 
   private val idToItemStatesMap = mutable.Map.empty[Any, mutable.Set[ItemState]]
@@ -272,7 +274,7 @@ abstract class PatchRecorderImplementation(when: Unbounded[Instant]) extends Pat
   private def itemStateFor(itemReconstitutionData: Recorder#ItemReconstitutionData[_ <: Identified]): ItemState = {
     val (id, typeTag) = itemReconstitutionData
 
-    val (itemStates, itemStatesFromPreviousLifecycles) = idToItemStatesMap.get(id).toSeq.flatten partition (_.itemIsAnnihilatedAt.isEmpty)
+    val (itemStatesFromPreviousLifecycles, itemStates) = idToItemStatesMap.get(id).toSeq.flatten partition (_.itemAnnihilationHasBeenNoted)
 
     val clashingItemStates = itemStates filter (_.isInconsistentWith(typeTag))
 
@@ -288,7 +290,7 @@ abstract class PatchRecorderImplementation(when: Unbounded[Instant]) extends Pat
 
     val itemStatesFromPreviousLifecyclesThatEstablishALowerBoundOnTheNewLifecycle = itemStatesFromPreviousLifecyclesThatAreNotConsistentWithTheTypeUnderConsideration ++ itemStatesFromPreviousLifecyclesThatAreFusibleWithTheTypeUnderConsideration
 
-    val itemCannotExistEarlierThan = if (itemStatesFromPreviousLifecyclesThatEstablishALowerBoundOnTheNewLifecycle.nonEmpty) itemStatesFromPreviousLifecyclesThatEstablishALowerBoundOnTheNewLifecycle map (_.itemIsAnnihilatedAt.get) max else initialSequenceIndex
+    val itemCannotExistEarlierThan = if (itemStatesFromPreviousLifecyclesThatEstablishALowerBoundOnTheNewLifecycle.nonEmpty) itemStatesFromPreviousLifecyclesThatEstablishALowerBoundOnTheNewLifecycle map (_.sequenceIndexForAnnihilation) max else initialSequenceIndex
 
     val compatibleItemStates = itemStates filter (_.isFusibleWith(typeTag))
 
