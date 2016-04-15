@@ -127,7 +127,12 @@ object WorldReferenceImplementation {
         enhancer.setSuperclass(clazz)
         enhancer.setInterfaces(additionalInterfaces)
 
-        enhancer.setCallbackType(classOf[MethodInterceptor])
+        val callbackHelper = new CallbackHelper(clazz, additionalInterfaces) {
+          override def getCallback(method: Method): AnyRef = classOf[MethodInterceptor]
+        }
+
+        enhancer.setCallbackFilter(callbackHelper)
+        enhancer.setCallbackTypes(callbackHelper.getCallbackTypes)
 
         val proxyClazz = enhancer.createClass()
 
