@@ -96,21 +96,28 @@ object WorldReferenceImplementation {
 
     var itemsAreLocked = false
 
-    class LocalMethodInterceptor extends MethodInterceptor with AnnihilationHook {
+    val idsOfGhosts = mutable.Set.empty[Identified#Id]
+
+    class LocalMethodInterceptor extends MethodInterceptor {
       override def intercept(target: Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy): AnyRef = {
         if (itemsAreLocked && method.getReturnType == classOf[Unit] && !WorldReferenceImplementation.isInvariantCheck(method))
           throw new UnsupportedOperationException(s"Attempt to write via: '$method' to an item: '$target' rendered from a bitemporal query.")
 
         if (firstMethodIsOverrideCompatibleWithSecond(method, IdentifiedItemsScopeImplementation.isGhostProperty)) {
-          boolean2Boolean(isGhost)
+          boolean2Boolean(idsOfGhosts.contains(target.asInstanceOf[Identified].id))
         } else if (firstMethodIsOverrideCompatibleWithSecond(method, IdentifiedItemsScopeImplementation.isRecordAnnihilationMethod)) {
-          recordAnnihilation()
+          idsOfGhosts += target.asInstanceOf[Identified].id
           null
         } else {
+          if (method.getName == "finalize"){
+            idsOfGhosts -= target.asInstanceOf[Identified].id
+          }
           methodProxy.invokeSuper(target, arguments)
         }
       }
     }
+
+    val localMethodInterceptor = new LocalMethodInterceptor
 
     val cachedProxyConstructors = scala.collection.mutable.Map.empty[(Type, Array[Class[_]]), (universe.MethodMirror, RuntimeClass)]
 
@@ -231,7 +238,7 @@ object WorldReferenceImplementation {
 
     def itemFor[Raw <: Identified : TypeTag](id: Raw#Id): Raw = {
       def constructAndCacheItem(): Raw = {
-        val item = constructFrom(id, new LocalMethodInterceptor, isForRecordingOnly = false, Array(classOf[AnnihilationHook]))
+        val item = constructFrom(id, localMethodInterceptor, isForRecordingOnly = false, Array(classOf[AnnihilationHook]))
         idToItemsMultiMap.addBinding(id, item)
         item
       }
