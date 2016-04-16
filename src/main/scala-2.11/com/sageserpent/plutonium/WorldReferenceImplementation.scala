@@ -70,9 +70,52 @@ object WorldReferenceImplementation {
       firstMethodIsOverrideCompatibleWithSecond(method, exclusionMethod)
     })
 
+
+
     val nonMutableMembersThatCanAlwaysBeReadFrom = classOf[Identified].getMethods ++ classOf[AnyRef].getMethods ++ classOf[Recorder].getMethods
 
     val itemReconstitutionDataProperty = classOf[Recorder].getMethod("itemReconstitutionData")
+
+    val isGhostProperty = classOf[Identified].getMethod("isGhost")
+
+    val isRecordAnnihilationMethod = classOf[AnnihilationHook].getMethod("recordAnnihilation")
+  }
+
+  object RecordingCallbackStuff {
+    val itemReconstitutionDataIndex = 0
+    val permittedReadAccessIndex = 1
+    val forbiddenReadAccessIndex = 2
+    val mutationIndex = 3
+
+    val additionalInterfaces: Array[Class[_]] = Array(classOf[Recorder])
+
+    val filter = new CallbackFilter {
+      override def accept(method: Method): Revision = {
+        def isFinalizer: Boolean = method.getName == "finalize" && method.getParameterCount == 0 && method.getReturnType == classOf[Unit]
+        if (firstMethodIsOverrideCompatibleWithSecond(method, IdentifiedItemsScopeImplementation.itemReconstitutionDataProperty)) itemReconstitutionDataIndex
+        else if (IdentifiedItemsScopeImplementation.alwaysAllowsReadAccessTo(method) || isFinalizer) permittedReadAccessIndex
+        else if (method.getReturnType != classOf[Unit]) forbiddenReadAccessIndex
+        else mutationIndex
+      }
+    }
+  }
+
+  object QueryCallbackStuff {
+    val mutationIndex = 0
+    val isGhostIndex = 1
+    val recordAnnihilationIndex = 2
+    val readAccessIndex = 3
+
+    val additionalInterfaces: Array[Class[_]] = Array(classOf[AnnihilationHook])
+
+    val filter = new CallbackFilter {
+      override def accept(method: Method): Revision = {
+        if (firstMethodIsOverrideCompatibleWithSecond(method, IdentifiedItemsScopeImplementation.isRecordAnnihilationMethod)) recordAnnihilationIndex
+        else if (method.getReturnType == classOf[Unit] && !WorldReferenceImplementation.isInvariantCheck(method)) mutationIndex
+        else if (firstMethodIsOverrideCompatibleWithSecond(method, IdentifiedItemsScopeImplementation.isGhostProperty)) isGhostIndex
+        else readAccessIndex
+      }
+    }
   }
 
   def firstMethodIsOverrideCompatibleWithSecond(firstMethod: Method, secondMethod: Method): Boolean = {
@@ -92,32 +135,23 @@ object WorldReferenceImplementation {
 
     var itemsAreLocked = false
 
-    class LocalMethodInterceptor extends MethodInterceptor {
-      override def intercept(target: Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy): AnyRef = {
-        if (itemsAreLocked && method.getReturnType == classOf[Unit] && !WorldReferenceImplementation.isInvariantCheck(method))
-          throw new UnsupportedOperationException(s"Attempt to write via: '$method' to an item: '$target' rendered from a bitemporal query.")
+    val cachedProxyConstructors = scala.collection.mutable.Map.empty[(Type, Array[Class[_]], CallbackFilter), (universe.MethodMirror, RuntimeClass)]
 
-        methodProxy.invokeSuper(target, arguments)
-      }
-    }
-
-    val localMethodInterceptor = new LocalMethodInterceptor
-
-    val cachedProxyConstructors = scala.collection.mutable.Map.empty[Type, (universe.MethodMirror, RuntimeClass)]
-
-    def constructFrom[Raw <: Identified : TypeTag](id: Raw#Id, methodInterceptor: MethodInterceptor, isForRecordingOnly: Boolean) = {
+    def constructFrom[Raw <: Identified : TypeTag](id: Raw#Id, callbackFilter: CallbackFilter, callbacks: Array[Callback], isForRecordingOnly: Boolean, additionalInterfaces: Array[Class[_]]) = {
       // NOTE: this returns items that are proxies to raw values, rather than the raw values themselves. Depending on the
       // context (using a scope created by a client from a world, as opposed to while building up that scope from patches),
       // the items may forbid certain operations on them - e.g. for rendering from a client's scope, the items should be
       // read-only.
+
       def constructorFor(identifiableType: Type) = {
         val clazz = currentMirror.runtimeClass(identifiableType.typeSymbol.asClass)
+
         val enhancer = new Enhancer
         enhancer.setInterceptDuringConstruction(false)
         enhancer.setSuperclass(clazz)
-        enhancer.setInterfaces(Array(classOf[Recorder]))
-
-        enhancer.setCallbackType(classOf[MethodInterceptor])
+        enhancer.setInterfaces(additionalInterfaces)
+        enhancer.setCallbackFilter(callbackFilter)
+        enhancer.setCallbackTypes(callbacks map (_.getClass))
 
         val proxyClazz = enhancer.createClass()
 
@@ -127,10 +161,10 @@ object WorldReferenceImplementation {
         classMirror.reflectConstructor(constructor.asMethod) -> clazz
       }
       val typeOfRaw = typeOf[Raw]
-      val (constructor, clazz) = cachedProxyConstructors.get(typeOfRaw) match {
+      val (constructor, clazz) = cachedProxyConstructors.get((typeOfRaw, additionalInterfaces, callbackFilter)) match {
         case Some(cachedProxyConstructorData) => cachedProxyConstructorData
         case None => val (constructor, clazz) = constructorFor(typeOfRaw)
-          cachedProxyConstructors += (typeOfRaw ->(constructor, clazz))
+          cachedProxyConstructors += ((typeOfRaw, additionalInterfaces, callbackFilter) -> (constructor, clazz))
           constructor -> clazz
       }
       if (!isForRecordingOnly && Modifier.isAbstract(clazz.getModifiers)) {
@@ -138,7 +172,7 @@ object WorldReferenceImplementation {
       }
       val proxy = constructor(id).asInstanceOf[Raw]
       val proxyFactoryApi = proxy.asInstanceOf[Factory]
-      proxyFactoryApi.setCallback(0, methodInterceptor)
+      proxyFactoryApi.setCallbacks(callbacks)
       proxy
     }
 
@@ -164,26 +198,28 @@ object WorldReferenceImplementation {
 
           class LocalRecorderFactory extends RecorderFactory {
             override def apply[Raw <: Identified : TypeTag](id: Raw#Id): Raw = {
-              class LocalMethodInterceptor extends MethodInterceptor {
+              val itemReconstitutionCallback = new FixedValue {
+                override def loadObject(): AnyRef = id -> typeTag[Raw]
+              }
+
+              val permittedReadAccessCallback = NoOp.INSTANCE
+
+              val forbiddenReadAccessCallback = new FixedValue {
+                override def loadObject(): AnyRef = throw new UnsupportedOperationException("Attempt to call method: '$method' with a non-unit return type on a recorder proxy: '$target' while capturing a change or measurement.")
+              }
+
+              val mutationCallback = new MethodInterceptor {
                 override def intercept(target: Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy): AnyRef = {
-                  def isFinalizer: Boolean = method.getName == "finalize" && method.getParameterCount == 0 && method.getReturnType == classOf[Unit]
-                  if (firstMethodIsOverrideCompatibleWithSecond(method, IdentifiedItemsScopeImplementation.itemReconstitutionDataProperty)) {
-                    id -> typeTag[Raw]
-                  } else if (IdentifiedItemsScopeImplementation.alwaysAllowsReadAccessTo(method) || isFinalizer) {
-                    methodProxy.invokeSuper(target, arguments)
-                  } else if (method.getReturnType != classOf[Unit]) {
-                    throw new UnsupportedOperationException("Attempt to call method: '$method' with a non-unit return type on a recorder proxy: '$target' while capturing a change or measurement.")
-                  } else {
-                    val item = target.asInstanceOf[Recorder] // Remember, the outer context is making a proxy of type 'Raw'.
-                    val capturedPatch = new Patch(item, method, arguments, methodProxy)
-                    patchesPickedUpFromAnEventBeingApplied += capturedPatch
-                    null // Representation of a unit value by a CGLIB interceptor.
-                  }
+                  val item = target.asInstanceOf[Recorder] // Remember, the outer context is making a proxy of type 'Raw'.
+                  val capturedPatch = new Patch(item, method, arguments, methodProxy)
+                  patchesPickedUpFromAnEventBeingApplied += capturedPatch
+                  null // Representation of a unit value by a CGLIB interceptor.
                 }
               }
 
-              val localMethodInterceptor = new LocalMethodInterceptor
-              constructFrom[Raw](id, localMethodInterceptor, isForRecordingOnly = true)
+              val callbacks = Array(itemReconstitutionCallback, permittedReadAccessCallback, forbiddenReadAccessCallback, mutationCallback)
+
+              constructFrom[Raw](id, RecordingCallbackStuff.filter, callbacks, isForRecordingOnly = true, RecordingCallbackStuff.additionalInterfaces)
             }
           }
 
@@ -219,9 +255,36 @@ object WorldReferenceImplementation {
 
     val idToItemsMultiMap = new MultiMap[Identified#Id, Identified]
 
+    val mutationCallback = new MethodInterceptor {
+      override def intercept(target: Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy): AnyRef = {
+        if (itemsAreLocked) {
+          throw new UnsupportedOperationException(s"Attempt to write via: '$method' to an item: '$target' rendered from a bitemporal query.")
+        }
+
+        methodProxy.invokeSuper(target, arguments)
+      }
+    }
+
+    val readAccessCallback = NoOp.INSTANCE
+
     def itemFor[Raw <: Identified : TypeTag](id: Raw#Id): Raw = {
       def constructAndCacheItem(): Raw = {
-        val item = constructFrom(id, localMethodInterceptor, isForRecordingOnly = false)
+        val isGhostCallback = new FixedValue with AnnihilationHook {
+          override def loadObject(): AnyRef = {
+            boolean2Boolean(isGhost)
+          }
+        }
+
+        val recordAnnihilationCallback = new FixedValue {
+          override def loadObject(): AnyRef = {
+            isGhostCallback.recordAnnihilation()
+            null
+          }
+        }
+
+        val callbacks = Array(mutationCallback, isGhostCallback, recordAnnihilationCallback, readAccessCallback)
+
+        val item = constructFrom(id, QueryCallbackStuff.filter, callbacks, isForRecordingOnly = false, QueryCallbackStuff.additionalInterfaces)
         idToItemsMultiMap.addBinding(id, item)
         item
       }
@@ -256,7 +319,7 @@ object WorldReferenceImplementation {
 
           val itemToBeAnnihilated = itemsSelectedForAnnihilation.head
 
-          itemToBeAnnihilated.recordAnnihilation()
+          itemToBeAnnihilated.asInstanceOf[AnnihilationHook].recordAnnihilation()
 
           items -= itemToBeAnnihilated
 
