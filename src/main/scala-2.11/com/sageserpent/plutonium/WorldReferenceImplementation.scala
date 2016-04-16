@@ -87,6 +87,8 @@ object WorldReferenceImplementation {
     val forbiddenReadAccessIndex = 2
     val mutationIndex = 3
 
+    val additionalInterfaces: Array[Class[_]] = Array(classOf[Recorder])
+
     val filter = new CallbackFilter {
       override def accept(method: Method): Revision = {
         def isFinalizer: Boolean = method.getName == "finalize" && method.getParameterCount == 0 && method.getReturnType == classOf[Unit]
@@ -103,6 +105,8 @@ object WorldReferenceImplementation {
     val isGhostIndex = 1
     val recordAnnihilationIndex = 2
     val readAccessIndex = 3
+
+    val additionalInterfaces: Array[Class[_]] = Array(classOf[AnnihilationHook])
 
     val filter = new CallbackFilter {
       override def accept(method: Method): Revision = {
@@ -215,7 +219,7 @@ object WorldReferenceImplementation {
 
               val callbacks = Array(itemReconstitutionCallback, permittedReadAccessCallback, forbiddenReadAccessCallback, mutationCallback)
 
-              constructFrom[Raw](id, RecordingCallbackStuff.filter, callbacks, isForRecordingOnly = true, Array(classOf[Recorder]))
+              constructFrom[Raw](id, RecordingCallbackStuff.filter, callbacks, isForRecordingOnly = true, RecordingCallbackStuff.additionalInterfaces)
             }
           }
 
@@ -279,7 +283,8 @@ object WorldReferenceImplementation {
         }
 
         val callbacks = Array(mutationCallback, isGhostCallback, recordAnnihilationCallback, readAccessCallback)
-        val item = constructFrom(id, QueryCallbackStuff.filter, callbacks, isForRecordingOnly = false, Array(classOf[AnnihilationHook]))
+
+        val item = constructFrom(id, QueryCallbackStuff.filter, callbacks, isForRecordingOnly = false, QueryCallbackStuff.additionalInterfaces)
         idToItemsMultiMap.addBinding(id, item)
         item
       }
