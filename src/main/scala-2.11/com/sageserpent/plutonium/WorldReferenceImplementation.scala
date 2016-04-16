@@ -99,8 +99,18 @@ object WorldReferenceImplementation {
   }
 
   object QueryCallbackStuff {
+    val mutationIndex = 0
+    val isGhostIndex = 1
+    val recordAnnihilationIndex = 2
+    val readAccessIndex = 3
+
     val filter = new CallbackFilter {
-      override def accept(method: Method): Revision = 0
+      override def accept(method: Method): Revision = {
+        if (firstMethodIsOverrideCompatibleWithSecond(method, IdentifiedItemsScopeImplementation.isRecordAnnihilationMethod)) recordAnnihilationIndex
+        else if (method.getReturnType == classOf[Unit] && !WorldReferenceImplementation.isInvariantCheck(method)) mutationIndex
+        else if (firstMethodIsOverrideCompatibleWithSecond(method, IdentifiedItemsScopeImplementation.isGhostProperty)) isGhostIndex
+        else readAccessIndex
+      }
     }
   }
 
@@ -241,25 +251,35 @@ object WorldReferenceImplementation {
 
     val idToItemsMultiMap = new MultiMap[Identified#Id, Identified]
 
-    class LocalMethodInterceptor extends MethodInterceptor with AnnihilationHook {
+    val mutationCallback = new MethodInterceptor {
       override def intercept(target: Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy): AnyRef = {
-        if (itemsAreLocked && method.getReturnType == classOf[Unit] && !WorldReferenceImplementation.isInvariantCheck(method))
+        if (itemsAreLocked) {
           throw new UnsupportedOperationException(s"Attempt to write via: '$method' to an item: '$target' rendered from a bitemporal query.")
-
-        if (firstMethodIsOverrideCompatibleWithSecond(method, IdentifiedItemsScopeImplementation.isGhostProperty)) {
-          boolean2Boolean(isGhost)
-        } else if (firstMethodIsOverrideCompatibleWithSecond(method, IdentifiedItemsScopeImplementation.isRecordAnnihilationMethod)) {
-          recordAnnihilation()
-          null
-        } else {
-          methodProxy.invokeSuper(target, arguments)
         }
+
+        methodProxy.invokeSuper(target, arguments)
       }
     }
 
+    val readAccessCallback = NoOp.INSTANCE
+
     def itemFor[Raw <: Identified : TypeTag](id: Raw#Id): Raw = {
       def constructAndCacheItem(): Raw = {
-        val item = constructFrom(id, QueryCallbackStuff.filter, Array(new LocalMethodInterceptor), isForRecordingOnly = false, Array(classOf[AnnihilationHook]))
+        val isGhostCallback = new FixedValue with AnnihilationHook {
+          override def loadObject(): AnyRef = {
+            boolean2Boolean(isGhost)
+          }
+        }
+
+        val recordAnnihilationCallback = new FixedValue {
+          override def loadObject(): AnyRef = {
+            isGhostCallback.recordAnnihilation()
+            null
+          }
+        }
+
+        val callbacks = Array(mutationCallback, isGhostCallback, recordAnnihilationCallback, readAccessCallback)
+        val item = constructFrom(id, QueryCallbackStuff.filter, callbacks, isForRecordingOnly = false, Array(classOf[AnnihilationHook]))
         idToItemsMultiMap.addBinding(id, item)
         item
       }
