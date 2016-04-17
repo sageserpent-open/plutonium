@@ -549,8 +549,13 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
           val scope = world.scopeFor(laterQueryWhenAtAnnihilation, world.nextRevision)
           val Seq(referringHistory) = scope.render(Bitemporal.singleOneOf[ReferringHistory](theReferrerId))
           val ghostItem = referringHistory.referencedHistories(referencedHistoryId)
-
-          ghostItem.isGhost :| s"Expected referenced item of id: '$referencedHistoryId' referred to by item of id: '${referringHistory.id}' to be a ghost at time: $laterQueryWhenAtAnnihilation - the event causing referral was at: $referencingEventWhen."
+          val idOfGhost = ghostItem.id  // It's OK to ask a ghost what its name is.
+          val itIsAGhost = ghostItem.isGhost // It's OK to to ask a ghost to prove its ghostliness.
+          intercept[RuntimeException]{
+            ghostItem.datums  // It's not OK to ask any other questions - it will just go 'Whooh' at you.
+          }
+          (idOfGhost == referencedHistoryId) :| s"Expected referenced item of id: '$referencedHistoryId' referred to by item of id: '${referringHistory.id}' to reveal its id correctly - but got '$idOfGhost' instead."
+          itIsAGhost :| s"Expected referenced item of id: '$referencedHistoryId' referred to by item of id: '${referringHistory.id}' to be a ghost at time: $laterQueryWhenAtAnnihilation - the event causing referral was at: $referencingEventWhen."
         }
         }: _*)
       } else Prop.undecided
