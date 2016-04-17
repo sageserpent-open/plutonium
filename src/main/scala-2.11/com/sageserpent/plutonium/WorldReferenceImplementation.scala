@@ -70,9 +70,7 @@ object WorldReferenceImplementation {
       firstMethodIsOverrideCompatibleWithSecond(method, exclusionMethod)
     })
 
-
-    // TODO - remove 'Recorder' from the classes below - it is only relevant for patch recording, so should be part of that alone.
-    val nonMutableMembersThatCanAlwaysBeReadFrom = classOf[Identified].getMethods ++ classOf[AnyRef].getMethods ++ classOf[Recorder].getMethods
+    val nonMutableMembersThatCanAlwaysBeReadFrom = classOf[Identified].getMethods ++ classOf[AnyRef].getMethods
 
     val itemReconstitutionDataProperty = classOf[Recorder].getMethod("itemReconstitutionData")
 
@@ -304,6 +302,7 @@ object WorldReferenceImplementation {
         idToItemsMultiMap.addBinding(id, item)
         item
       }
+
       idToItemsMultiMap.get(id) match {
         case None =>
           constructAndCacheItem()
