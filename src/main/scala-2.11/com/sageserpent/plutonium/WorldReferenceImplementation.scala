@@ -71,7 +71,7 @@ object WorldReferenceImplementation {
     })
 
 
-
+    // TODO - remove 'Recorder' from the classes below - it is only relevant for patch recording, so should be part of that alone.
     val nonMutableMembersThatCanAlwaysBeReadFrom = classOf[Identified].getMethods ++ classOf[AnyRef].getMethods ++ classOf[Recorder].getMethods
 
     val itemReconstitutionDataProperty = classOf[Recorder].getMethod("itemReconstitutionData")
@@ -104,7 +104,8 @@ object WorldReferenceImplementation {
     val mutationIndex = 0
     val isGhostIndex = 1
     val recordAnnihilationIndex = 2
-    val readAccessIndex = 3
+    val checkedReadAccessIndex = 3
+    val unconditionalReadAccessIndex = 4
 
     val additionalInterfaces: Array[Class[_]] = Array(classOf[AnnihilationHook])
 
@@ -113,7 +114,8 @@ object WorldReferenceImplementation {
         if (firstMethodIsOverrideCompatibleWithSecond(method, IdentifiedItemsScopeImplementation.isRecordAnnihilationMethod)) recordAnnihilationIndex
         else if (method.getReturnType == classOf[Unit] && !WorldReferenceImplementation.isInvariantCheck(method)) mutationIndex
         else if (firstMethodIsOverrideCompatibleWithSecond(method, IdentifiedItemsScopeImplementation.isGhostProperty)) isGhostIndex
-        else readAccessIndex
+        else if (IdentifiedItemsScopeImplementation.alwaysAllowsReadAccessTo(method)) unconditionalReadAccessIndex
+        else checkedReadAccessIndex
       }
     }
   }
@@ -121,7 +123,7 @@ object WorldReferenceImplementation {
   def firstMethodIsOverrideCompatibleWithSecond(firstMethod: Method, secondMethod: Method): Boolean = {
     secondMethod.getName == firstMethod.getName &&
       secondMethod.getDeclaringClass.isAssignableFrom(firstMethod.getDeclaringClass) &&
-      secondMethod.getReturnType == firstMethod.getReturnType &&
+      secondMethod.getReturnType.isAssignableFrom(firstMethod.getReturnType) &&
       secondMethod.getParameterCount == firstMethod.getParameterCount &&
       secondMethod.getParameterTypes.toSeq == firstMethod.getParameterTypes.toSeq // What about contravariance? Hmmm...
   }
@@ -255,18 +257,6 @@ object WorldReferenceImplementation {
 
     val idToItemsMultiMap = new MultiMap[Identified#Id, Identified]
 
-    val mutationCallback = new MethodInterceptor {
-      override def intercept(target: Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy): AnyRef = {
-        if (itemsAreLocked) {
-          throw new UnsupportedOperationException(s"Attempt to write via: '$method' to an item: '$target' rendered from a bitemporal query.")
-        }
-
-        methodProxy.invokeSuper(target, arguments)
-      }
-    }
-
-    val readAccessCallback = NoOp.INSTANCE
-
     def itemFor[Raw <: Identified : TypeTag](id: Raw#Id): Raw = {
       def constructAndCacheItem(): Raw = {
         val isGhostCallback = new FixedValue with AnnihilationHook {
@@ -282,7 +272,33 @@ object WorldReferenceImplementation {
           }
         }
 
-        val callbacks = Array(mutationCallback, isGhostCallback, recordAnnihilationCallback, readAccessCallback)
+        val mutationCallback = new MethodInterceptor {
+          override def intercept(target: Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy): AnyRef = {
+            if (itemsAreLocked) {
+              throw new UnsupportedOperationException(s"Attempt to write via: '$method' to an item: '$target' rendered from a bitemporal query.")
+            }
+
+            if (isGhostCallback.isGhost) {
+              throw new UnsupportedOperationException(s"Attempt to write via: '$method' to a ghost item of id: '$id' and type '${typeOf[Raw]}'.")
+            }
+
+            methodProxy.invokeSuper(target, arguments)
+          }
+        }
+
+        val checkedReadAccessCallback = new MethodInterceptor {
+          override def intercept(target: Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy): AnyRef = {
+            if (isGhostCallback.isGhost) {
+              throw new UnsupportedOperationException(s"Attempt to read via: '$method' from a ghost item of id: '$id' and type '${typeOf[Raw]}'.")
+            }
+
+            methodProxy.invokeSuper(target, arguments)
+          }
+        }
+
+        val unconditionalReadAccessCallback = NoOp.INSTANCE
+
+        val callbacks = Array(mutationCallback, isGhostCallback, recordAnnihilationCallback, checkedReadAccessCallback, unconditionalReadAccessCallback)
 
         val item = constructFrom(id, QueryCallbackStuff.filter, callbacks, isForRecordingOnly = false, QueryCallbackStuff.additionalInterfaces)
         idToItemsMultiMap.addBinding(id, item)
