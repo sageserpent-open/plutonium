@@ -126,10 +126,12 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
 
         val itemsFromWildcardQuery = scope.render(Bitemporal.wildcard[AHistory]) toSet
 
-        Prop.all(ids.toSeq map (id => {
-          val itemsFromSpecificQuery = scope.render(Bitemporal.withId[AHistory](id)).toSet
-          itemsFromSpecificQuery.subsetOf(itemsFromWildcardQuery) :| s"itemsFromSpecificQuery.subsetOf(${itemsFromWildcardQuery})"
-        }): _*)
+        if (ids.nonEmpty) {
+          Prop.all(ids.toSeq map (id => {
+            val itemsFromSpecificQuery = scope.render(Bitemporal.withId[AHistory](id)).toSet
+            itemsFromSpecificQuery.subsetOf(itemsFromWildcardQuery) :| s"itemsFromSpecificQuery.subsetOf(${itemsFromWildcardQuery})"
+          }): _*)
+        } else Prop.undecided
       }
 
       holdsFor[History] && holdsFor[BarHistory] &&
@@ -163,11 +165,13 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
         // because the queries we are checking allow the possibility that there are no items of the specific type to match them.
         val idsInExistence = (recordingsGroupedById flatMap (_.thePartNoLaterThan(queryWhen)) map (_.historyId) filter (_.isInstanceOf[AHistory#Id]) map (_.asInstanceOf[AHistory#Id])).toSet
 
-        Prop.all(idsInExistence.toSeq map (id => {
-          val itemsFromSpecificQuery = scope.render(Bitemporal.withId[AHistory](id)).toSet
-          val idsFromItems = itemsFromSpecificQuery map (_.id)
-          (idsFromItems.isEmpty || id == idsFromItems.head) :| s"idsFromItems.isEmpty || ${id} == idsFromItems.head"
-        }): _*)
+        if (idsInExistence.nonEmpty) {
+          Prop.all(idsInExistence.toSeq map (id => {
+            val itemsFromSpecificQuery = scope.render(Bitemporal.withId[AHistory](id)).toSet
+            val idsFromItems = itemsFromSpecificQuery map (_.id)
+            (idsFromItems.isEmpty || id == idsFromItems.head) :| s"idsFromItems.isEmpty || ${id} == idsFromItems.head"
+          }): _*)
+        } else Prop.undecided
       }
 
       holdsFor[History] && holdsFor[BarHistory] &&
@@ -201,15 +205,17 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
         // because the queries we are checking allow the possibility that there are no items of the specific type to match them.
         val idsInExistence = (recordingsGroupedById flatMap (_.thePartNoLaterThan(queryWhen)) map (_.historyId) filter (_.isInstanceOf[AHistory#Id]) map (_.asInstanceOf[AHistory#Id])).toSet
 
-        Prop.all(idsInExistence.toSeq map (id => {
-          val bitemporalQueryOne = Bitemporal.withId[AHistory](id)
-          val bitemporalQueryTwo = Bitemporal.withId[AHistory](id)
-          val agglomeratedBitemporalQuery: Bitemporal[(AHistory, AHistory)] = (bitemporalQueryOne |@| bitemporalQueryTwo) ((_: AHistory, _: AHistory))
-          val numberOfItems = scope.numberOf[AHistory](id)
-          val itemsFromAgglomeratedQuery = scope.render(agglomeratedBitemporalQuery).toSet
-          val repeatedItemPairs: Set[(AHistory, AHistory)] = itemsFromAgglomeratedQuery filter ((_: AHistory) eq (_: AHistory)).tupled
-          (numberOfItems == repeatedItemPairs.size) :| s"Expected to have $numberOfItems pairs of the same item repeated, but got: '$repeatedItemPairs'."
-        }): _*)
+        if (idsInExistence.nonEmpty) {
+          Prop.all(idsInExistence.toSeq map (id => {
+            val bitemporalQueryOne = Bitemporal.withId[AHistory](id)
+            val bitemporalQueryTwo = Bitemporal.withId[AHistory](id)
+            val agglomeratedBitemporalQuery: Bitemporal[(AHistory, AHistory)] = (bitemporalQueryOne |@| bitemporalQueryTwo) ((_: AHistory, _: AHistory))
+            val numberOfItems = scope.numberOf[AHistory](id)
+            val itemsFromAgglomeratedQuery = scope.render(agglomeratedBitemporalQuery).toSet
+            val repeatedItemPairs: Set[(AHistory, AHistory)] = itemsFromAgglomeratedQuery filter ((_: AHistory) eq (_: AHistory)).tupled
+            (numberOfItems == repeatedItemPairs.size) :| s"Expected to have $numberOfItems pairs of the same item repeated, but got: '$repeatedItemPairs'."
+          }): _*)
+        } else Prop.undecided
       }
 
       holdsFor[History] && holdsFor[BarHistory] &&
@@ -242,24 +248,26 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
         // because the queries we are cross checking allow the possibility that there are no items of the specific type to match them.
         val ids = (recordingsGroupedById map (_.historyId) filter (_.isInstanceOf[AHistory#Id]) map (_.asInstanceOf[AHistory#Id])).toSet
 
-        Prop.all(ids.toSeq map (id => {
-          val itemsFromGenericQueryById = scope.render(Bitemporal.withId[History](id)).toSet
-          (if (2 > itemsFromGenericQueryById.size) {
-            val itemsFromZeroOrOneOfQuery = scope.render(Bitemporal.zeroOrOneOf[History](id)).toSet
-            (itemsFromGenericQueryById == itemsFromZeroOrOneOfQuery) :| s"${itemsFromGenericQueryById} == itemsFromZeroOrOneOfQuery"
-          }
-          else {
-            intercept[RuntimeException](scope.render(Bitemporal.zeroOrOneOf[History](id)))
-            Prop.proved
-          }) && (if (1 == itemsFromGenericQueryById.size) {
-            val itemsFromSingleOneOfQuery = scope.render(Bitemporal.singleOneOf[History](id)).toSet
-            (itemsFromGenericQueryById == itemsFromSingleOneOfQuery) :| s"${itemsFromGenericQueryById} == itemsFromSingleOneOfQuery"
-          }
-          else {
-            intercept[RuntimeException](scope.render(Bitemporal.singleOneOf[History](id)))
-            Prop.proved
-          })
-        }): _*)
+        if (ids.nonEmpty) {
+          Prop.all(ids.toSeq map (id => {
+            val itemsFromGenericQueryById = scope.render(Bitemporal.withId[History](id)).toSet
+            (if (2 > itemsFromGenericQueryById.size) {
+              val itemsFromZeroOrOneOfQuery = scope.render(Bitemporal.zeroOrOneOf[History](id)).toSet
+              (itemsFromGenericQueryById == itemsFromZeroOrOneOfQuery) :| s"${itemsFromGenericQueryById} == itemsFromZeroOrOneOfQuery"
+            }
+            else {
+              intercept[RuntimeException](scope.render(Bitemporal.zeroOrOneOf[History](id)))
+              Prop.proved
+            }) && (if (1 == itemsFromGenericQueryById.size) {
+              val itemsFromSingleOneOfQuery = scope.render(Bitemporal.singleOneOf[History](id)).toSet
+              (itemsFromGenericQueryById == itemsFromSingleOneOfQuery) :| s"${itemsFromGenericQueryById} == itemsFromSingleOneOfQuery"
+            }
+            else {
+              intercept[RuntimeException](scope.render(Bitemporal.singleOneOf[History](id)))
+              Prop.proved
+            })
+          }): _*)
+        } else Prop.undecided
       }
 
       holdsFor[History] && holdsFor[BarHistory] &&
@@ -292,10 +300,12 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
         // because the queries we are cross checking allow the possibility that there are no items of the specific type to match them.
         val ids = (recordingsGroupedById map (_.historyId) filter (_.isInstanceOf[AHistory#Id]) map (_.asInstanceOf[AHistory#Id])).toSet
 
-        Prop.all(ids.toSeq map (id => {
-          val itemsFromGenericQueryById = scope.render(Bitemporal.withId[History](id)).toSet
-          (itemsFromGenericQueryById.size == scope.numberOf[History](id)) :| s""
-        }): _*)
+        if (ids.nonEmpty) {
+          Prop.all(ids.toSeq map (id => {
+            val itemsFromGenericQueryById = scope.render(Bitemporal.withId[History](id)).toSet
+            (itemsFromGenericQueryById.size == scope.numberOf[History](id)) :| s""
+          }): _*)
+        } else Prop.undecided
       }
 
       holdsFor[History] && holdsFor[BarHistory] &&
@@ -346,18 +356,20 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
 
       def itemsFromWildcardQuery[AHistory <: History : TypeTag] = scope.render(Bitemporal.wildcard[AHistory]) toSet
 
-      val wildcardProperty = Prop((itemsFromWildcardQuery[MoreSpecificFooHistory] map (_.asInstanceOf[FooHistory])).subsetOf(itemsFromWildcardQuery[FooHistory])) &&
-        Prop((itemsFromWildcardQuery[FooHistory] map (_.asInstanceOf[History])).subsetOf(itemsFromWildcardQuery[History]))
-
       val ids = (recordingsGroupedById map (_.historyId) filter (_.isInstanceOf[MoreSpecificFooHistory#Id]) map (_.asInstanceOf[MoreSpecificFooHistory#Id])).toSet
 
-      val genericQueryByIdProperty = Prop.all(ids.toSeq map (id => {
-        def itemsFromGenericQueryById[AHistory >: MoreSpecificFooHistory <: History : TypeTag] = scope.render(Bitemporal.withId[AHistory](id.asInstanceOf[AHistory#Id])).toSet
-        Prop((itemsFromGenericQueryById[MoreSpecificFooHistory] map (_.asInstanceOf[FooHistory])).subsetOf(itemsFromGenericQueryById[FooHistory])) &&
-          Prop((itemsFromGenericQueryById[FooHistory] map (_.asInstanceOf[History])).subsetOf(itemsFromGenericQueryById[History]))
-      }): _*)
+      if (itemsFromWildcardQuery.nonEmpty || ids.nonEmpty) {
+        val wildcardProperty = Prop((itemsFromWildcardQuery[MoreSpecificFooHistory] map (_.asInstanceOf[FooHistory])).subsetOf(itemsFromWildcardQuery[FooHistory])) &&
+          Prop((itemsFromWildcardQuery[FooHistory] map (_.asInstanceOf[History])).subsetOf(itemsFromWildcardQuery[History]))
 
-      wildcardProperty && genericQueryByIdProperty
+        val genericQueryByIdProperty = Prop.all(ids.toSeq map (id => {
+          def itemsFromGenericQueryById[AHistory >: MoreSpecificFooHistory <: History : TypeTag] = scope.render(Bitemporal.withId[AHistory](id.asInstanceOf[AHistory#Id])).toSet
+          Prop((itemsFromGenericQueryById[MoreSpecificFooHistory] map (_.asInstanceOf[FooHistory])).subsetOf(itemsFromGenericQueryById[FooHistory])) &&
+            Prop((itemsFromGenericQueryById[FooHistory] map (_.asInstanceOf[History])).subsetOf(itemsFromGenericQueryById[History]))
+        }): _*)
+
+        wildcardProperty && genericQueryByIdProperty
+      } else Prop.undecided
     })
   }
 
@@ -403,10 +415,12 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
         item.shouldBeUnchanged :| s"${item}.shouldBeUnchanged"
       }
 
-      Prop.all(allItemsFromWildcard map isReadonly: _*) && Prop.all(allIdsFromWildcard flatMap { id =>
-        val items = scope.render(Bitemporal.withId(id))
-        items map isReadonly
-      }: _*)
+      if (allIdsFromWildcard.nonEmpty) {
+        Prop.all(allItemsFromWildcard map isReadonly: _*) && Prop.all(allIdsFromWildcard flatMap { id =>
+          val items = scope.render(Bitemporal.withId(id))
+          items map isReadonly
+        }: _*)
+      } else Prop.undecided
     })
   }
 }

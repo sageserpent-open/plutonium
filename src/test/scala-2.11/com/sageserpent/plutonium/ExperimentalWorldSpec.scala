@@ -226,9 +226,11 @@ class ExperimentalWorldSpec extends FlatSpec with Matchers with Checkers with Wo
                         Seq(history) = historiesFrom(scopeFromExperimentalWorld)}
         yield (historyId, history.datums, pertinentRecordings.map(_._1))
 
-      Prop.all(checks.map { case (historyId, actualHistory, expectedHistory) => ((actualHistory.length == expectedHistory.length) :| s"For ${historyId}, ${actualHistory.length} == expectedHistory.length") &&
-        Prop.all((actualHistory zip expectedHistory zipWithIndex) map { case ((actual, expected), step) => (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}" }: _*)
-      }: _*)
+      if (checks.nonEmpty) {
+        Prop.all(checks.map { case (historyId, actualHistory, expectedHistory) => ((actualHistory.length == expectedHistory.length) :| s"For ${historyId}, ${actualHistory.length} == expectedHistory.length") &&
+          Prop.all((actualHistory zip expectedHistory zipWithIndex) map { case ((actual, expected), step) => (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}" }: _*)
+        }: _*)
+      } else Prop.undecided
     })
   }
 
@@ -266,9 +268,11 @@ class ExperimentalWorldSpec extends FlatSpec with Matchers with Checkers with Wo
                         Seq(history) = historiesFrom(scopeFromBaseWorld)}
         yield (historyId, history.datums, pertinentRecordings.map(_._1))
 
-      Prop.all(checks.map { case (historyId, actualHistory, expectedHistory) => ((actualHistory.length == expectedHistory.length) :| s"For ${historyId}, ${actualHistory.length} == expectedHistory.length") &&
-        Prop.all((actualHistory zip expectedHistory zipWithIndex) map { case ((actual, expected), step) => (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}" }: _*)
-      }: _*)
+      if (checks.nonEmpty) {
+        Prop.all(checks.map { case (historyId, actualHistory, expectedHistory) => ((actualHistory.length == expectedHistory.length) :| s"For ${historyId}, ${actualHistory.length} == expectedHistory.length") &&
+          Prop.all((actualHistory zip expectedHistory zipWithIndex) map { case ((actual, expected), step) => (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}" }: _*)
+        }: _*)
+      } else Prop.undecided
     })
   }
 }
