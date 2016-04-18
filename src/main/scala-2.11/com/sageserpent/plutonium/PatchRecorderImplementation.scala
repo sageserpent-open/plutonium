@@ -21,10 +21,10 @@ object PatchRecorderImplementation{
 }
 
 
-abstract class PatchRecorderImplementation(when: Unbounded[Instant]) extends PatchRecorder {
+abstract class PatchRecorderImplementation[FBoundedOperationClassifier <: OperationClassifier[FBoundedOperationClassifier]](when: Unbounded[Instant]) extends PatchRecorder[FBoundedOperationClassifier] {
   // This class makes no pretence at exception safety - it doesn't need to in the context
   // of the client 'WorldReferenceImplementation', which provides exception safety at a higher level.
-  self: BestPatchSelection =>
+  self: BestPatchSelection[FBoundedOperationClassifier] =>
   import PatchRecorderImplementation._
 
   val identifiedItemsScope: WorldReferenceImplementation.IdentifiedItemsScopeImplementation
@@ -38,17 +38,17 @@ abstract class PatchRecorderImplementation(when: Unbounded[Instant]) extends Pat
 
   override def allRecordingsAreCaptured: Boolean = _allRecordingsAreCaptured
 
-  override def recordPatchFromChange(when: Unbounded[Instant], patch: AbstractPatch): Unit = {
+  override def recordPatchFromChange(when: Unbounded[Instant], patch: AbstractPatch[FBoundedOperationClassifier]): Unit = {
     _whenEventPertainedToByLastRecordingTookPlace = Some(when)
 
     val itemState = refineRelevantItemStatesAndYieldTarget(patch)
 
-    itemState.submitCandidatePatches(patch.method)
+    itemState.submitCandidatePatches(patch.operationClassifier)
 
     itemState.addPatch(when, patch)
   }
 
-  override def recordPatchFromMeasurement(when: Unbounded[Instant], patch: AbstractPatch): Unit = {
+  override def recordPatchFromMeasurement(when: Unbounded[Instant], patch: AbstractPatch[FBoundedOperationClassifier]): Unit = {
     _whenEventPertainedToByLastRecordingTookPlace = Some(when)
 
     refineRelevantItemStatesAndYieldTarget(patch).addPatch(when, patch)
@@ -127,7 +127,7 @@ abstract class PatchRecorderImplementation(when: Unbounded[Instant]) extends Pat
     }
   }
 
-  type CandidatePatchTuple = (SequenceIndex, AbstractPatch, Unbounded[Instant])
+  type CandidatePatchTuple = (SequenceIndex, AbstractPatch[FBoundedOperationClassifier], Unbounded[Instant])
 
   private type CandidatePatches = mutable.MutableList[CandidatePatchTuple]
 
@@ -158,21 +158,21 @@ abstract class PatchRecorderImplementation(when: Unbounded[Instant]) extends Pat
     def canBeAnnihilatedAs(typeTag: TypeTag[_ <: Identified]) =
       this._lowerBoundTypeTag.tpe <:< typeTag.tpe
 
-    def addPatch(when: Unbounded[Instant], patch: AbstractPatch) = {
+    def addPatch(when: Unbounded[Instant], patch: AbstractPatch[FBoundedOperationClassifier]) = {
       val candidatePatchTuple = (nextSequenceIndex(), patch, when)
-      methodAndItsCandidatePatchTuplesFor(patch.method) match {
-        case (Some((exemplarMethod, candidatePatchTuples))) =>
+      operationClassifierAndItsCandidatePatchTuplesFor(patch.operationClassifier) match {
+        case (Some((exemplarOperationClassifier, candidatePatchTuples))) =>
           candidatePatchTuples += candidatePatchTuple
-          if (WorldReferenceImplementation.firstMethodIsOverrideCompatibleWithSecond(exemplarMethod, patch.method)) {
-            exemplarMethodToCandidatePatchesMap -= exemplarMethod
-            exemplarMethodToCandidatePatchesMap += (patch.method -> candidatePatchTuples)
+          if (exemplarOperationClassifier.isCompatibleWith(patch.operationClassifier)) {
+            exemplarOperationClassifierToCandidatePatchesMap -= exemplarOperationClassifier
+            exemplarOperationClassifierToCandidatePatchesMap += (patch.operationClassifier -> candidatePatchTuples)
           }
         case None =>
-          exemplarMethodToCandidatePatchesMap += (patch.method -> mutable.MutableList(candidatePatchTuple))
+          exemplarOperationClassifierToCandidatePatchesMap += (patch.operationClassifier -> mutable.MutableList(candidatePatchTuple))
       }
     }
 
-    def refineType(typeTag: _root_.scala.reflect.runtime.universe.TypeTag[_ <: Identified]): Unit = {
+    def refineType(typeTag: TypeTag[_ <: Identified]): Unit = {
       if (typeTag.tpe <:< this._lowerBoundTypeTag.tpe) {
         this._lowerBoundTypeTag = typeTag
       } else if (this._upperBoundTypeTag.tpe <:< typeTag.tpe) {
@@ -180,31 +180,31 @@ abstract class PatchRecorderImplementation(when: Unbounded[Instant]) extends Pat
       }
     }
 
-    private def methodAndItsCandidatePatchTuplesFor(method: Method): Option[(Method, CandidatePatches)] = {
+    private def operationClassifierAndItsCandidatePatchTuplesFor(operationClassifier: FBoundedOperationClassifier): Option[(FBoundedOperationClassifier, CandidatePatches)] = {
       // Direct use of key into map...
-      exemplarMethodToCandidatePatchesMap.get(method) map (method -> _) orElse
+      exemplarOperationClassifierToCandidatePatchesMap.get(operationClassifier) map (operationClassifier -> _) orElse
         // ... fallback to doing a linear search if the methods are not equal, but are related.
-        exemplarMethodToCandidatePatchesMap.find {
-          case (exemplarMethod, _) => WorldReferenceImplementation.firstMethodIsOverrideCompatibleWithSecond(method, exemplarMethod) ||
-            WorldReferenceImplementation.firstMethodIsOverrideCompatibleWithSecond(exemplarMethod, method)
+        exemplarOperationClassifierToCandidatePatchesMap.find {
+          case (exemplarOperationClassifier, _) => operationClassifier.isCompatibleWith(exemplarOperationClassifier) ||
+            exemplarOperationClassifier.isCompatibleWith(operationClassifier)
         }
     }
 
     def submitCandidatePatches(): Unit = {
-      for ((exemplarMethod, candidatePatchTuples) <- exemplarMethodToCandidatePatchesMap) {
+      for ((exemplarMethod, candidatePatchTuples) <- exemplarOperationClassifierToCandidatePatchesMap) {
         enqueueBestCandidatePatchFrom(candidatePatchTuples)
       }
-      exemplarMethodToCandidatePatchesMap.clear()
+      exemplarOperationClassifierToCandidatePatchesMap.clear()
     }
 
-    def submitCandidatePatches(method: Method): Unit = methodAndItsCandidatePatchTuplesFor(method) match {
-      case Some((exemplarMethod, candidatePatchTuples)) =>
+    def submitCandidatePatches(operationClassifier: FBoundedOperationClassifier): Unit = operationClassifierAndItsCandidatePatchTuplesFor(operationClassifier) match {
+      case Some((exemplarOperationClassifier, candidatePatchTuples)) =>
         enqueueBestCandidatePatchFrom(candidatePatchTuples)
-        exemplarMethodToCandidatePatchesMap -= exemplarMethod
+        exemplarOperationClassifierToCandidatePatchesMap -= exemplarOperationClassifier
       case None =>
     }
 
-    private val exemplarMethodToCandidatePatchesMap: mutable.Map[Method, CandidatePatches] = mutable.Map.empty
+    private val exemplarOperationClassifierToCandidatePatchesMap: mutable.Map[FBoundedOperationClassifier, CandidatePatches] = mutable.Map.empty
 
     def sequenceIndexForAnnihilation = _sequenceIndexForAnnihilation.get
 
@@ -217,7 +217,7 @@ abstract class PatchRecorderImplementation(when: Unbounded[Instant]) extends Pat
 
   private type ItemReconstitutionDataToItemStateMap = mutable.Map[Recorder#ItemReconstitutionData[_ <: Identified], ItemState]
 
-  private val patchToItemStatesMap = mutable.Map.empty[AbstractPatch, ItemReconstitutionDataToItemStateMap]
+  private val patchToItemStatesMap = mutable.Map.empty[AbstractPatch[FBoundedOperationClassifier], ItemReconstitutionDataToItemStateMap]
 
   private var _nextSequenceIndex: SequenceIndex = initialSequenceIndex
 
@@ -278,7 +278,7 @@ abstract class PatchRecorderImplementation(when: Unbounded[Instant]) extends Pat
     }
   }
 
-  private def refineRelevantItemStatesAndYieldTarget(patch: AbstractPatch): ItemState = {
+  private def refineRelevantItemStatesAndYieldTarget(patch: AbstractPatch[FBoundedOperationClassifier]): ItemState = {
     def refinedItemStateFor(reconstitutionData: Recorder#ItemReconstitutionData[_ <: Identified]) = {
       val itemState = itemStateFor(reconstitutionData)
       itemState.refineType(reconstitutionData._2)

@@ -10,7 +10,14 @@ import scalaz.{-\/, \/, \/-}
 /**
   * Created by Gerard on 23/01/2016.
   */
-class Patch(targetRecorder: Recorder, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy) extends AbstractPatch(method) {
+
+class MethodClassifier(val method: Method) extends OperationClassifier[MethodClassifier] {
+  override def isCompatibleWith(another: MethodClassifier): Boolean = WorldReferenceImplementation.firstMethodIsOverrideCompatibleWithSecond(method, another.method)
+}
+
+class MethodPatch(targetRecorder: Recorder, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy) extends AbstractPatch[MethodClassifier] {
+  override val operationClassifier: MethodClassifier = new MethodClassifier(method)
+
   override val targetReconstitutionData = targetRecorder.itemReconstitutionData
 
   override val argumentReconstitutionDatums: Seq[Recorder#ItemReconstitutionData[_ <: Identified]] = arguments collect {case argumentRecorder: Recorder => argumentRecorder.itemReconstitutionData}

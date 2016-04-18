@@ -12,13 +12,13 @@ import scala.reflect.runtime.universe._
   * Created by Gerard on 09/01/2016.
   */
 
-trait BestPatchSelection {
-  def apply(relatedPatches: Seq[AbstractPatch]): AbstractPatch
+trait BestPatchSelection[FBoundedOperationClassifier <: OperationClassifier[FBoundedOperationClassifier]] {
+  def apply(relatedPatches: Seq[AbstractPatch[FBoundedOperationClassifier]]): AbstractPatch[FBoundedOperationClassifier]
 }
 
 
-trait BestPatchSelectionContracts extends BestPatchSelection {
-  abstract override def apply(relatedPatches: Seq[AbstractPatch]): AbstractPatch = {
+trait BestPatchSelectionContracts[FBoundedOperationClassifier <: OperationClassifier[FBoundedOperationClassifier]] extends BestPatchSelection[FBoundedOperationClassifier] {
+  abstract override def apply(relatedPatches: Seq[AbstractPatch[FBoundedOperationClassifier]]): AbstractPatch[FBoundedOperationClassifier] = {
     require(relatedPatches.nonEmpty)
     require(1 == (relatedPatches map (_.targetId) distinct).size)
     require((for {lhs <- relatedPatches
@@ -28,31 +28,31 @@ trait BestPatchSelectionContracts extends BestPatchSelection {
 }
 
 
-trait PatchRecorder {
+trait PatchRecorder[FBoundedOperationClassifier <: OperationClassifier[FBoundedOperationClassifier]] {
   def whenEventPertainedToByLastRecordingTookPlace: Option[Unbounded[Instant]]
 
   def allRecordingsAreCaptured: Boolean
 
-  def recordPatchFromChange(when: Unbounded[Instant], patch: AbstractPatch): Unit
+  def recordPatchFromChange(when: Unbounded[Instant], patch: AbstractPatch[FBoundedOperationClassifier]): Unit
 
-  def recordPatchFromMeasurement(when: Unbounded[Instant], patch: AbstractPatch): Unit
+  def recordPatchFromMeasurement(when: Unbounded[Instant], patch: AbstractPatch[FBoundedOperationClassifier]): Unit
 
   def recordAnnihilation[Raw <: Identified : TypeTag](when: Instant, id: Raw#Id): Unit
 
   def noteThatThereAreNoFollowingRecordings(): Unit
 }
 
-trait PatchRecorderContracts extends PatchRecorder {
+trait PatchRecorderContracts[FBoundedOperationClassifier <: OperationClassifier[FBoundedOperationClassifier]] extends PatchRecorder[FBoundedOperationClassifier] {
   require(whenEventPertainedToByLastRecordingTookPlace.isEmpty)
   require(!allRecordingsAreCaptured)
 
-  abstract override def recordPatchFromChange(when: Unbounded[Instant], patch: AbstractPatch): Unit = {
+  abstract override def recordPatchFromChange(when: Unbounded[Instant], patch: AbstractPatch[FBoundedOperationClassifier]): Unit = {
     require(whenEventPertainedToByLastRecordingTookPlace.cata(some = when >= _, none = true))
     require(!allRecordingsAreCaptured)
     super.recordPatchFromChange(when, patch)
   }
 
-  abstract override def recordPatchFromMeasurement(when: Unbounded[Instant], patch: AbstractPatch): Unit = {
+  abstract override def recordPatchFromMeasurement(when: Unbounded[Instant], patch: AbstractPatch[FBoundedOperationClassifier]): Unit = {
     require(whenEventPertainedToByLastRecordingTookPlace.cata(some = when >= _, none = true))
     require(!allRecordingsAreCaptured)
     super.recordPatchFromMeasurement(when, patch)

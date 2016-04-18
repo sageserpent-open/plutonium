@@ -183,8 +183,8 @@ object WorldReferenceImplementation {
         itemsAreLocked = false
       } { _ => itemsAreLocked = true
       }(List.empty)) {
-        val patchRecorder = new PatchRecorderImplementation(_when) with PatchRecorderContracts
-          with BestPatchSelectionImplementation with BestPatchSelectionContracts {
+        val patchRecorder = new PatchRecorderImplementation[MethodClassifier](_when) with PatchRecorderContracts[MethodClassifier]
+          with BestPatchSelectionImplementation[MethodClassifier] with BestPatchSelectionContracts[MethodClassifier] {
           override val identifiedItemsScope: IdentifiedItemsScopeImplementation = identifiedItemsScopeThis
           override val itemsAreLockedResource: ManagedResource[Unit] = makeManagedResource {
             itemsAreLocked = true
@@ -194,7 +194,7 @@ object WorldReferenceImplementation {
 
         val relevantEvents = eventTimeline.bucketsIterator flatMap (_.toArray.sortBy(_._2) map (_._1))
         for (event <- relevantEvents) {
-          val patchesPickedUpFromAnEventBeingApplied = mutable.MutableList.empty[AbstractPatch]
+          val patchesPickedUpFromAnEventBeingApplied = mutable.MutableList.empty[MethodPatch]
 
           class LocalRecorderFactory extends RecorderFactory {
             override def apply[Raw <: Identified : TypeTag](id: Raw#Id): Raw = {
@@ -211,7 +211,7 @@ object WorldReferenceImplementation {
               val mutationCallback = new MethodInterceptor {
                 override def intercept(target: Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy): AnyRef = {
                   val item = target.asInstanceOf[Recorder] // Remember, the outer context is making a proxy of type 'Raw'.
-                  val capturedPatch = new Patch(item, method, arguments, methodProxy)
+                  val capturedPatch = new MethodPatch(item, method, arguments, methodProxy)
                   patchesPickedUpFromAnEventBeingApplied += capturedPatch
                   null // Representation of a unit value by a CGLIB interceptor.
                 }

@@ -1,21 +1,25 @@
 package com.sageserpent.plutonium
 
-import java.lang.reflect.Method
-
 /**
   * Created by Gerard on 10/01/2016.
   */
 
 object AbstractPatch {
-  def patchesAreRelated(lhs: AbstractPatch, rhs: AbstractPatch): Boolean = {
+  def patchesAreRelated[FBoundedOperationClassifier <: OperationClassifier[FBoundedOperationClassifier]](lhs: AbstractPatch[FBoundedOperationClassifier], rhs: AbstractPatch[FBoundedOperationClassifier]): Boolean = {
     val bothReferToTheSameItem = lhs.targetId == rhs.targetId && (lhs.targetTypeTag.tpe <:< rhs.targetTypeTag.tpe || rhs.targetTypeTag.tpe <:< lhs.targetTypeTag.tpe)
-    val bothReferToTheSameMethod = WorldReferenceImplementation.firstMethodIsOverrideCompatibleWithSecond(lhs.method, rhs.method) ||
-      WorldReferenceImplementation.firstMethodIsOverrideCompatibleWithSecond(rhs.method, lhs.method)
+    val bothReferToTheSameMethod = lhs.operationClassifier.isCompatibleWith(rhs.operationClassifier) || rhs.operationClassifier.isCompatibleWith(lhs.operationClassifier)
     bothReferToTheSameItem && bothReferToTheSameMethod
   }
 }
 
-abstract class AbstractPatch(val method: Method){
+trait OperationClassifier[FBoundedOperationClassifier <: OperationClassifier[FBoundedOperationClassifier]] {
+  self: FBoundedOperationClassifier =>
+    def isCompatibleWith(another: FBoundedOperationClassifier): Boolean
+}
+
+abstract trait AbstractPatch[FBoundedOperationClassifier <: OperationClassifier[FBoundedOperationClassifier]] {
+  val operationClassifier: FBoundedOperationClassifier
+
   val targetReconstitutionData: Recorder#ItemReconstitutionData[_ <: Identified]
   val argumentReconstitutionDatums: Seq[Recorder#ItemReconstitutionData[_ <: Identified]]
   val targetId: Identified#Id
