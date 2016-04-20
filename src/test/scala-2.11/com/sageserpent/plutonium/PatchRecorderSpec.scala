@@ -145,12 +145,12 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
   "A smoke test" should "make the computer catch fire" in {
     check(Prop.forAllNoShrink(testCaseGenerator){
       case TestCase(recordingActions, patchesThatAreExpectedToBeApplied, identifiedItemsScopeFromTestCase) =>
-        trait BestSelectionStubImplementation extends BestPatchSelection  {
+        trait BestPatchSelectionStubImplementation extends BestPatchSelection  {
           // This implementation conspires to agree with the setup on the mocked patches.
           def apply(relatedPatches: Seq[AbstractPatch]): AbstractPatch = relatedPatches.find(patchesThatAreExpectedToBeApplied.contains).get
         }
 
-        val patchRecorder = new PatchRecorderImplementation (PositiveInfinity()) with BestSelectionStubImplementation with BestPatchSelectionContracts {
+        val patchRecorder = new PatchRecorderImplementation (PositiveInfinity()) with BestPatchSelectionStubImplementation with BestPatchSelectionContracts {
           override val identifiedItemsScope = identifiedItemsScopeFromTestCase
           override val itemsAreLockedResource: ManagedResource[Unit] = makeManagedResource(())(Unit => ())(List.empty)
         }
@@ -159,8 +159,10 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
           recordingAction(patchRecorder)
         }
 
+        println("Ouch")
+
         Prop.proved
-    })
+    }, maxSize(30))
   }
 
 
