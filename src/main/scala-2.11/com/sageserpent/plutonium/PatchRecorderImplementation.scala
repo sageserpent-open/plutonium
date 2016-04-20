@@ -21,7 +21,7 @@ object PatchRecorderImplementation{
 }
 
 
-abstract class PatchRecorderImplementation(when: Unbounded[Instant]) extends PatchRecorder {
+abstract class PatchRecorderImplementation(eventsHaveEffectNoLaterThan: Unbounded[Instant]) extends PatchRecorder {
   // This class makes no pretence at exception safety - it doesn't need to in the context
   // of the client 'WorldReferenceImplementation', which provides exception safety at a higher level.
   self: BestPatchSelection =>
@@ -118,7 +118,7 @@ abstract class PatchRecorderImplementation(when: Unbounded[Instant]) extends Pat
       case (sequenceIndex, _, whenForAction, incrementalApplicationCanProceed) =>
         {
           val actionIsNotOutOfSequence = outstandingSequenceIndices.isEmpty || sequenceIndex < outstandingSequenceIndices.min
-          val actionIsRelevantToCutoffTime = whenForAction <= when
+          val actionIsRelevantToCutoffTime = whenForAction <= eventsHaveEffectNoLaterThan
           actionIsNotOutOfSequence && actionIsRelevantToCutoffTime && (drainDownQueue || incrementalApplicationCanProceed())
         }
     })) {
