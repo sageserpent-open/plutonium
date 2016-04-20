@@ -11,8 +11,8 @@ import org.scalatest.prop.Checkers
 import org.scalatest.{FlatSpec, Matchers}
 import resource.{ManagedResource, makeManagedResource}
 
-import scala.util.Random
 import scala.reflect.runtime.universe._
+import scala.util.Random
 
 
 /**
@@ -57,12 +57,12 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
     patch
   }
 
-  def patchesOfTheSameKindForAnIdGenerator(id: FooHistory#Id, seed: Long): Gen[PatchesOfTheSameKindForAnId] = for {
-    patches <- Gen.nonEmptyListOf(patchGeneratorOne(id))
+  def patchesOfTheSameKindForAnIdGenerator(id: FooHistory#Id, seed: Long, patchGenerator: FooHistory#Id => Gen[AbstractPatch]): Gen[PatchesOfTheSameKindForAnId] = for {
+    patches <- Gen.nonEmptyListOf(patchGenerator(id))
     initialPatchInLifecycleIsChange <- Gen.oneOf(false, true)
   } yield {
     val randomBehaviour = new Random(seed)
-    val clumpsOfPatches = randomBehaviour.splitIntoNonEmptyPieces(patches)
+    val clumpsOfPatches = randomBehaviour.splitIntoNonEmptyPieces(patches).force
     val patchesThatAreExpectedToBeApplied = (clumpsOfPatches map (randomBehaviour.chooseOneOf(_))).toSet
 
     def recordingChange(patch: AbstractPatch)(when: Instant)(patchRecorder: PatchRecorder): Unit = {
@@ -82,7 +82,8 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
   }
 
   def lifecycleForAnIdGenerator(id: FooHistory#Id, seed: Long): Gen[LifecycleForAnId] = for {
-    (recordingActionFactoriesOverSeveralKinds, patchesThatAreExpectedToBeAppliedOverSeveralKinds) <- Gen.nonEmptyListOf(patchesOfTheSameKindForAnIdGenerator(id, seed)) map (_.unzip)
+    (recordingActionFactoriesOverSeveralKinds, patchesThatAreExpectedToBeAppliedOverSeveralKinds) <-
+    Gen.sequence[Seq[PatchesOfTheSameKindForAnId], PatchesOfTheSameKindForAnId](Seq(patchGeneratorOne _) map (patchesOfTheSameKindForAnIdGenerator(id, seed, _))) map (_.unzip)
   } yield {
     val randomBehaviour = new Random(seed)
     val recordingActionFactories = randomBehaviour.pickAlternatelyFrom(recordingActionFactoriesOverSeveralKinds)
