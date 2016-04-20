@@ -1,18 +1,18 @@
 package com.sageserpent.plutonium
 
-import java.lang.reflect.Method
 import java.time.Instant
 
-import com.sageserpent.americium.{Finite, PositiveInfinity}
 import com.sageserpent.americium.randomEnrichment._
+import com.sageserpent.americium.{Finite, PositiveInfinity}
 import com.sageserpent.plutonium.WorldReferenceImplementation.IdentifiedItemsScopeImplementation
-import org.scalacheck.{Gen, Prop}
+import org.scalacheck.{Arbitrary, Gen, Prop}
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.prop.Checkers
 import org.scalatest.{FlatSpec, Matchers}
 import resource.{ManagedResource, makeManagedResource}
 
 import scala.util.Random
+import scala.reflect.runtime.universe._
 
 
 /**
@@ -38,11 +38,26 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
   val fooProperty1 = fooClazz.getMethod("property1_$eq")
   val fooProperty2 = fooClazz.getMethod("property2_$eq")
 
-  def patchGenerator(id: FooHistory#Id, method: Method): Gen[AbstractPatch] = ???
+  def patchGeneratorOne(id: FooHistory#Id): Gen[AbstractPatch] = for {
+    aString <- Arbitrary.arbitrary[String]
+  } yield {
+    val patch = new AbstractPatch(fooProperty1) {
+      override val targetReconstitutionData: Recorder#ItemReconstitutionData[FooHistory] = id -> typeTag[FooHistory]
+
+      override def checkInvariant(identifiedItemAccess: IdentifiedItemAccess): Unit = {
+      }
+
+      override def apply(identifiedItemAccess: IdentifiedItemAccess): Unit = {
+      }
+
+      override val argumentReconstitutionDatums = Seq.empty
+    }
+
+    patch
+  }
 
   def patchesOfTheSameKindForAnId(id: FooHistory#Id, seed: Long): Gen[PatchesOfTheSameKindForAnId] = for {
-    method <- Gen.oneOf(fooProperty1, fooProperty2)
-    patches <- Gen.nonEmptyListOf(patchGenerator(id, method))
+    patches <- Gen.nonEmptyListOf(patchGeneratorOne(id))
     initialPatchInLifecycleIsChange <- Gen.oneOf(false, true)
   } yield {
     val randomBehaviour = new Random(seed)

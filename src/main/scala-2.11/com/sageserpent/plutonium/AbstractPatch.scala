@@ -18,8 +18,7 @@ object AbstractPatch {
 abstract class AbstractPatch(val method: Method){
   val targetReconstitutionData: Recorder#ItemReconstitutionData[_ <: Identified]
   val argumentReconstitutionDatums: Seq[Recorder#ItemReconstitutionData[_ <: Identified]]
-  val targetId: Identified#Id
-  val targetTypeTag: scala.reflect.runtime.universe.TypeTag[_ <: Identified]
+  val (targetId, targetTypeTag) = targetReconstitutionData
   def apply(identifiedItemAccess: IdentifiedItemAccess): Unit
   def checkInvariant(identifiedItemAccess: IdentifiedItemAccess): Unit
 }

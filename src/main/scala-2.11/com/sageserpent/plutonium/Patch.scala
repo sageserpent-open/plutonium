@@ -15,8 +15,6 @@ class Patch(targetRecorder: Recorder, method: Method, arguments: Array[AnyRef], 
 
   override val argumentReconstitutionDatums: Seq[Recorder#ItemReconstitutionData[_ <: Identified]] = arguments collect {case argumentRecorder: Recorder => argumentRecorder.itemReconstitutionData}
 
-  override val (targetId, targetTypeTag) = targetReconstitutionData
-
   type WrappedArgument = \/[AnyRef, Recorder#ItemReconstitutionData[_ <: Identified]]
 
   def wrap(argument: AnyRef): WrappedArgument = argument match {
