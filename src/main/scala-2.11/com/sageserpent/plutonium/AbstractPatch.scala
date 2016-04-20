@@ -18,7 +18,7 @@ object AbstractPatch {
 abstract class AbstractPatch(val method: Method){
   val targetReconstitutionData: Recorder#ItemReconstitutionData[_ <: Identified]
   val argumentReconstitutionDatums: Seq[Recorder#ItemReconstitutionData[_ <: Identified]]
-  val (targetId, targetTypeTag) = targetReconstitutionData
+  lazy val (targetId, targetTypeTag) = targetReconstitutionData
   def apply(identifiedItemAccess: IdentifiedItemAccess): Unit
   def checkInvariant(identifiedItemAccess: IdentifiedItemAccess): Unit
 }

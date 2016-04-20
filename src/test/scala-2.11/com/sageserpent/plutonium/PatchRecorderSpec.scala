@@ -4,7 +4,7 @@ import java.time.Instant
 
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.{Finite, PositiveInfinity}
-import com.sageserpent.plutonium.WorldReferenceImplementation.IdentifiedItemsScopeImplementation
+import com.sageserpent.plutonium.WorldReferenceImplementation.IdentifiedItemsScope
 import org.scalacheck.{Arbitrary, Gen, Prop}
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.prop.Checkers
@@ -31,12 +31,13 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
   type RecordingAction = (PatchRecorder) => Unit
 
   case class TestCase(recordingActions: Seq[RecordingAction],
-                      patchesThatAreExpectedToBeApplied: Set[AbstractPatch])
+                      patchesThatAreExpectedToBeApplied: Set[AbstractPatch],
+                      identifiedItemsScope: IdentifiedItemsScope)
 
   val fooClazz = classOf[FooHistory]
 
-  val fooProperty1 = fooClazz.getMethod("property1_$eq")
-  val fooProperty2 = fooClazz.getMethod("property2_$eq")
+  val fooProperty1 = fooClazz.getMethod("property1")
+  val fooProperty2 = fooClazz.getMethod("property2")
 
   def patchGeneratorOne(id: FooHistory#Id): Gen[AbstractPatch] = for {
     aString <- Arbitrary.arbitrary[String]
@@ -56,7 +57,7 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
     patch
   }
 
-  def patchesOfTheSameKindForAnId(id: FooHistory#Id, seed: Long): Gen[PatchesOfTheSameKindForAnId] = for {
+  def patchesOfTheSameKindForAnIdGenerator(id: FooHistory#Id, seed: Long): Gen[PatchesOfTheSameKindForAnId] = for {
     patches <- Gen.nonEmptyListOf(patchGeneratorOne(id))
     initialPatchInLifecycleIsChange <- Gen.oneOf(false, true)
   } yield {
@@ -80,8 +81,8 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
     recordingActionFactories.flatten -> patchesThatAreExpectedToBeApplied
   }
 
-  def lifecycleForAnId(id: FooHistory#Id, seed: Long): Gen[LifecycleForAnId] = for {
-    (recordingActionFactoriesOverSeveralKinds, patchesThatAreExpectedToBeAppliedOverSeveralKinds) <- Gen.listOf(patchesOfTheSameKindForAnId(id, seed)) map (_.unzip)
+  def lifecycleForAnIdGenerator(id: FooHistory#Id, seed: Long): Gen[LifecycleForAnId] = for {
+    (recordingActionFactoriesOverSeveralKinds, patchesThatAreExpectedToBeAppliedOverSeveralKinds) <- Gen.nonEmptyListOf(patchesOfTheSameKindForAnIdGenerator(id, seed)) map (_.unzip)
   } yield {
     val randomBehaviour = new Random(seed)
     val recordingActionFactories = randomBehaviour.pickAlternatelyFrom(recordingActionFactoriesOverSeveralKinds)
@@ -89,34 +90,38 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
     recordingActionFactories -> patchesThatAreExpectedToBeApplied
   }
 
-  def finiteLifecycleForAnId(id: FooHistory#Id, seed: Long): Gen[LifecycleForAnId] = for {
-    (recordingActionFactories, patchesThatAreExpectedToBeApplied) <- lifecycleForAnId(id, seed)
+  def finiteLifecycleForAnIdGenerator(id: FooHistory#Id, seed: Long, identifiedItemsScope: IdentifiedItemsScope): Gen[LifecycleForAnId] = for {
+    (recordingActionFactories, patchesThatAreExpectedToBeApplied) <- lifecycleForAnIdGenerator(id, seed)
   } yield {
     def recordingFinalAnnihilation(when: Instant)(patchRecorder: PatchRecorder): Unit = {
+      (identifiedItemsScope.annihilateItemFor[FooHistory](_: FooHistory#Id, _: Instant)(_: TypeTag[FooHistory])).expects(id, when, *).once
       patchRecorder.recordAnnihilation[FooHistory](when, id)
     }
 
     (recordingActionFactories :+ (recordingFinalAnnihilation _)) -> patchesThatAreExpectedToBeApplied
   }
 
-  def lifecyclesForAnId(id: FooHistory#Id, seed: Long): Gen[LifecyclesForAnId] = for {
-    (recordingsItemFactoriesForFiniteLifecycles, patchesThatAreExpectedToBeAppliedForFiniteLifecycles) <- Gen.listOf(finiteLifecycleForAnId(id, seed)) map (_.unzip)
-    finalUnboundedLifecycle <- Gen.option(finiteLifecycleForAnId(id, seed))
-  } yield {
-    val recordingActionFactories = recordingsItemFactoriesForFiniteLifecycles reduce (_ ++ _)
-    val patchesThatAreExpectedToBeApplied = patchesThatAreExpectedToBeAppliedForFiniteLifecycles.toSet.flatten
+  def lifecyclesForAnIdGenerator(id: FooHistory#Id, seed: Long, identifiedItemsScope: IdentifiedItemsScope): Gen[LifecyclesForAnId] = {
+    val unconstrainedGenerator = for {
+      (recordingsItemFactoriesForFiniteLifecycles, patchesThatAreExpectedToBeAppliedForFiniteLifecycles) <- Gen.listOf(finiteLifecycleForAnIdGenerator(id, seed, identifiedItemsScope)) map (_.unzip)
+      finalUnboundedLifecycle <- Gen.option(finiteLifecycleForAnIdGenerator(id, seed, identifiedItemsScope))
+    } yield {
+      val recordingActionFactories = (recordingsItemFactoriesForFiniteLifecycles :\ Seq.empty[RecordingActionFactory]) (_ ++ _)
+      val patchesThatAreExpectedToBeApplied = patchesThatAreExpectedToBeAppliedForFiniteLifecycles.toSet.flatten
 
-    finalUnboundedLifecycle match {
-      case Some((finalRecordingActionFactories, finalPatchesThatAreExpectedToBeApplied)) =>
-        recordingActionFactories ++ finalRecordingActionFactories -> patchesThatAreExpectedToBeApplied.union(finalPatchesThatAreExpectedToBeApplied)
-      case None =>
-        recordingActionFactories -> patchesThatAreExpectedToBeApplied
+      finalUnboundedLifecycle match {
+        case Some((finalRecordingActionFactories, finalPatchesThatAreExpectedToBeApplied)) =>
+          recordingActionFactories ++ finalRecordingActionFactories -> patchesThatAreExpectedToBeApplied.union(finalPatchesThatAreExpectedToBeApplied)
+        case None =>
+          recordingActionFactories -> patchesThatAreExpectedToBeApplied
+      }
     }
+    unconstrainedGenerator filter (_._2.nonEmpty)
   }
 
-  def recordingActionFactoriesGenerator(seed: Long): Gen[(Seq[RecordingActionFactory], Set[AbstractPatch])] = for {
-    ids <- Gen.containerOf[Set, FooHistory#Id](fooHistoryIdGenerator)
-    (recordingActionFactoriesOverSeveralIds, patchesThatAreExpectedToBeAppliedOverSeveralIds) <- Gen.sequence[Seq[LifecyclesForAnId], LifecyclesForAnId](ids.toSeq map (lifecyclesForAnId(_, seed))) map (_.unzip)
+  def recordingActionFactoriesGenerator(seed: Long, identifiedItemsScope: IdentifiedItemsScope): Gen[(Seq[RecordingActionFactory], Set[AbstractPatch])] = for {
+    ids <- Gen.nonEmptyContainerOf[Set, FooHistory#Id](fooHistoryIdGenerator)
+    (recordingActionFactoriesOverSeveralIds, patchesThatAreExpectedToBeAppliedOverSeveralIds) <- Gen.sequence[Seq[LifecyclesForAnId], LifecyclesForAnId](ids.toSeq map (lifecyclesForAnIdGenerator(_, seed, identifiedItemsScope))) map (_.unzip)
   } yield {
     val randomBehaviour = new Random(seed)
     val recordingActionFactories = randomBehaviour.pickAlternatelyFrom(recordingActionFactoriesOverSeveralIds)
@@ -127,24 +132,26 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
   val testCaseGenerator: Gen[TestCase] =
     for {
       seed <- seedGenerator
-      (recordingActionFactories, patchesThatAreExpectedToBeApplied) <- recordingActionFactoriesGenerator(seed)
+      identifiedItemsScope = mock[IdentifiedItemsScope]
+      (recordingActionFactories, patchesThatAreExpectedToBeApplied) <- recordingActionFactoriesGenerator(seed, identifiedItemsScope)
       recordingTimes <- Gen.listOfN(recordingActionFactories.size, instantGenerator)
     } yield {
       val recordingActions = recordingActionFactories zip recordingTimes map { case (recordingActionFactory, recordingTime) => recordingActionFactory(recordingTime) }
       TestCase(recordingActions = recordingActions,
-        patchesThatAreExpectedToBeApplied = patchesThatAreExpectedToBeApplied)
+        patchesThatAreExpectedToBeApplied = patchesThatAreExpectedToBeApplied,
+        identifiedItemsScope = identifiedItemsScope)
     }
 
   "A smoke test" should "make the computer catch fire" in {
     check(Prop.forAllNoShrink(testCaseGenerator){
-      case TestCase(recordingActions, patchesThatAreExpectedToBeApplied) =>
+      case TestCase(recordingActions, patchesThatAreExpectedToBeApplied, identifiedItemsScopeFromTestCase) =>
         trait BestSelectionStubImplementation extends BestPatchSelection  {
           // This implementation conspires to agree with the setup on the mocked patches.
-          def apply(relatedPatches: Seq[AbstractPatch]): AbstractPatch = relatedPatches.find(patchesThatAreExpectedToBeApplied.contains(_)).get
+          def apply(relatedPatches: Seq[AbstractPatch]): AbstractPatch = relatedPatches.find(patchesThatAreExpectedToBeApplied.contains).get
         }
 
         val patchRecorder = new PatchRecorderImplementation (PositiveInfinity()) with BestSelectionStubImplementation with BestPatchSelectionContracts {
-          override val identifiedItemsScope: IdentifiedItemsScopeImplementation = mock[IdentifiedItemsScopeImplementation]
+          override val identifiedItemsScope = identifiedItemsScopeFromTestCase
           override val itemsAreLockedResource: ManagedResource[Unit] = makeManagedResource(())(Unit => ())(List.empty)
         }
 
@@ -152,7 +159,7 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
           recordingAction(patchRecorder)
         }
 
-        Prop.undecided
+        Prop.proved
     })
   }
 

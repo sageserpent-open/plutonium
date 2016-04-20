@@ -27,7 +27,7 @@ abstract class PatchRecorderImplementation(eventsHaveEffectNoLaterThan: Unbounde
   self: BestPatchSelection =>
   import PatchRecorderImplementation._
 
-  val identifiedItemsScope: WorldReferenceImplementation.IdentifiedItemsScopeImplementation
+  val identifiedItemsScope: WorldReferenceImplementation.IdentifiedItemsScope
   val itemsAreLockedResource: ManagedResource[Unit]
 
   private var _whenEventPertainedToByLastRecordingTookPlace: Option[Unbounded[Instant]] = None
