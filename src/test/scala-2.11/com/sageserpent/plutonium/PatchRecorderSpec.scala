@@ -1,11 +1,12 @@
 package com.sageserpent.plutonium
 
+import java.lang.reflect.Method
 import java.time.Instant
 
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.{Finite, PositiveInfinity}
 import com.sageserpent.plutonium.WorldReferenceImplementation.IdentifiedItemsScope
-import org.scalacheck.{Arbitrary, Gen, Prop}
+import org.scalacheck.{Gen, Prop}
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.prop.Checkers
 import org.scalatest.{FlatSpec, Matchers}
@@ -39,10 +40,9 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
   val fooProperty1 = fooClazz.getMethod("property1")
   val fooProperty2 = fooClazz.getMethod("property2")
 
-  def patchGeneratorOne(id: FooHistory#Id): Gen[AbstractPatch] = for {
-    aString <- Arbitrary.arbitrary[String]
-  } yield {
-    val patch = new AbstractPatch(fooProperty1) {
+  def patchGenerator(method: Method)(id: FooHistory#Id) = Gen.const (() =>
+  {
+    val patch = new AbstractPatch(method) {
       override val targetReconstitutionData: Recorder#ItemReconstitutionData[FooHistory] = id -> typeTag[FooHistory]
 
       override def checkInvariant(identifiedItemAccess: IdentifiedItemAccess): Unit = {
@@ -55,7 +55,7 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
     }
 
     patch
-  }
+  }) map (_.apply)
 
   def patchesOfTheSameKindForAnIdGenerator(id: FooHistory#Id, seed: Long, patchGenerator: FooHistory#Id => Gen[AbstractPatch]): Gen[PatchesOfTheSameKindForAnId] = for {
     patches <- Gen.nonEmptyListOf(patchGenerator(id))
@@ -83,7 +83,7 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
 
   def lifecycleForAnIdGenerator(id: FooHistory#Id, seed: Long): Gen[LifecycleForAnId] = for {
     (recordingActionFactoriesOverSeveralKinds, patchesThatAreExpectedToBeAppliedOverSeveralKinds) <-
-    Gen.sequence[Seq[PatchesOfTheSameKindForAnId], PatchesOfTheSameKindForAnId](Seq(patchGeneratorOne _) map (patchesOfTheSameKindForAnIdGenerator(id, seed, _))) map (_.unzip)
+    Gen.sequence[Seq[PatchesOfTheSameKindForAnId], PatchesOfTheSameKindForAnId](Seq(patchGenerator(fooProperty1) _, patchGenerator(fooProperty2) _) map (patchesOfTheSameKindForAnIdGenerator(id, seed, _))) map (_.unzip)
   } yield {
     val randomBehaviour = new Random(seed)
     val recordingActionFactories = randomBehaviour.pickAlternatelyFrom(recordingActionFactoriesOverSeveralKinds)
