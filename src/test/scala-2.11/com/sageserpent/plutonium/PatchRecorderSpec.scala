@@ -4,7 +4,7 @@ import java.lang.reflect.Method
 import java.time.Instant
 
 import com.sageserpent.americium.randomEnrichment._
-import com.sageserpent.americium.{Finite, PositiveInfinity}
+import com.sageserpent.americium.{Finite, PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.WorldReferenceImplementation.IdentifiedItemsScope
 import org.scalacheck.{Gen, Prop}
 import org.scalamock.scalatest.MockFactory
@@ -33,7 +33,8 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
 
   case class TestCase(recordingActions: Seq[RecordingAction],
                       identifiedItemsScope: IdentifiedItemsScope,
-                      bestPatchSelection: BestPatchSelection)
+                      bestPatchSelection: BestPatchSelection,
+                      eventsHaveEffectNoLaterThan: Unbounded[Instant])
 
   val fooClazz = classOf[FooHistory]
 
@@ -53,6 +54,7 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
   def patchesOfTheSameKindForAnIdGenerator(id: FooHistory#Id,
                                            seed: Long,
                                            bestPatchSelection: BestPatchSelection,
+                                           eventsHaveEffectNoLaterThan: Unbounded[Instant],
                                            patchGenerator: FooHistory#Id => Gen[AbstractPatch]): Gen[PatchesOfTheSameKindForAnId] = for {
     patches <- Gen.nonEmptyListOf(patchGenerator(id))
     initialPatchInLifecycleIsChange <- Gen.oneOf(false, true)
@@ -77,8 +79,10 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
       }
     }
 
-    def setupInteractionWithBestPatchApplication(patch: AbstractPatch): Unit = {
-      if (bestPatches.contains(patch)) {
+    def setupInteractionWithBestPatchApplication(patch: AbstractPatch, eventsHaveEffectNoLaterThan: Unbounded[Instant], when: Instant): Unit = {
+      val patchApplicationDoesNotBreachTheCutoff = Finite(when) <= eventsHaveEffectNoLaterThan
+
+      if (patchApplicationDoesNotBreachTheCutoff && bestPatches.contains(patch)) {
         (patch.apply _).expects(*).once
         (patch.checkInvariant _).expects(*).once
       } else {
@@ -88,12 +92,12 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
     }
 
     def recordingChange(patch: AbstractPatch)(when: Instant)(patchRecorder: PatchRecorder): Unit = {
-      setupInteractionWithBestPatchApplication(patch)
+      setupInteractionWithBestPatchApplication(patch, eventsHaveEffectNoLaterThan, when)
       patchRecorder.recordPatchFromChange(Finite(when), patch)
     }
 
     def recordingMeasurement(patch: AbstractPatch)(when: Instant)(patchRecorder: PatchRecorder): Unit = {
-      setupInteractionWithBestPatchApplication(patch)
+      setupInteractionWithBestPatchApplication(patch, eventsHaveEffectNoLaterThan, when)
       patchRecorder.recordPatchFromMeasurement(Finite(when), patch)
     }
 
@@ -106,10 +110,11 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
 
   def lifecycleForAnIdGenerator(id: FooHistory#Id,
                                 seed: Long,
-                                bestPatchSelection: BestPatchSelection): Gen[LifecycleForAnId] = inAnyOrder {
+                                bestPatchSelection: BestPatchSelection,
+                                eventsHaveEffectNoLaterThan: Unbounded[Instant]): Gen[LifecycleForAnId] = inAnyOrder {
     for {
       recordingActionFactoriesOverSeveralKinds <-
-      Gen.sequence[Seq[PatchesOfTheSameKindForAnId], PatchesOfTheSameKindForAnId](Seq(patchGenerator(fooProperty1) _, patchGenerator(fooProperty2) _) map (patchesOfTheSameKindForAnIdGenerator(id, seed, bestPatchSelection, _)))
+      Gen.sequence[Seq[PatchesOfTheSameKindForAnId], PatchesOfTheSameKindForAnId](Seq(patchGenerator(fooProperty1) _, patchGenerator(fooProperty2) _) map (patchesOfTheSameKindForAnIdGenerator(id, seed, bestPatchSelection, eventsHaveEffectNoLaterThan, _)))
     } yield {
       val randomBehaviour = new Random(seed)
       randomBehaviour.pickAlternatelyFrom(recordingActionFactoriesOverSeveralKinds)
@@ -119,8 +124,9 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
   def finiteLifecycleForAnIdGenerator(id: FooHistory#Id,
                                       seed: Long,
                                       identifiedItemsScope: IdentifiedItemsScope,
-                                      bestPatchSelection: BestPatchSelection): Gen[LifecycleForAnId] = for {
-    recordingActionFactories <- lifecycleForAnIdGenerator(id, seed, bestPatchSelection)
+                                      bestPatchSelection: BestPatchSelection,
+                                      eventsHaveEffectNoLaterThan: Unbounded[Instant]): Gen[LifecycleForAnId] = for {
+    recordingActionFactories <- lifecycleForAnIdGenerator(id, seed, bestPatchSelection, eventsHaveEffectNoLaterThan)
   } yield {
     def recordingFinalAnnihilation(when: Instant)(patchRecorder: PatchRecorder): Unit = {
       (identifiedItemsScope.annihilateItemFor[FooHistory](_: FooHistory#Id, _: Instant)(_: TypeTag[FooHistory])).expects(id, when, *).once
@@ -133,10 +139,11 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
   def lifecyclesForAnIdGenerator(id: FooHistory#Id,
                                  seed: Long,
                                  identifiedItemsScope: IdentifiedItemsScope,
-                                 bestPatchSelection: BestPatchSelection): Gen[LifecyclesForAnId] = inSequence {
+                                 bestPatchSelection: BestPatchSelection,
+                                 eventsHaveEffectNoLaterThan: Unbounded[Instant]): Gen[LifecyclesForAnId] = inSequence {
     val unconstrainedGenerator = for {
-      recordingsItemFactoriesForFiniteLifecycles <- Gen.listOf(finiteLifecycleForAnIdGenerator(id, seed, identifiedItemsScope, bestPatchSelection))
-      finalUnboundedLifecycle <- Gen.option(lifecycleForAnIdGenerator(id, seed, bestPatchSelection))
+      recordingsItemFactoriesForFiniteLifecycles <- Gen.listOf(finiteLifecycleForAnIdGenerator(id, seed, identifiedItemsScope, bestPatchSelection, eventsHaveEffectNoLaterThan))
+      finalUnboundedLifecycle <- Gen.option(lifecycleForAnIdGenerator(id, seed, bestPatchSelection, eventsHaveEffectNoLaterThan))
     } yield {
       val recordingActionFactories = (recordingsItemFactoriesForFiniteLifecycles :\ Seq.empty[RecordingActionFactory]) (_ ++ _)
 
@@ -152,10 +159,11 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
 
   def recordingActionFactoriesGenerator(seed: Long,
                                         identifiedItemsScope: IdentifiedItemsScope,
-                                        bestPatchSelection: BestPatchSelection): Gen[Seq[RecordingActionFactory]] = inAnyOrder {
+                                        bestPatchSelection: BestPatchSelection,
+                                        eventsHaveEffectNoLaterThan: Unbounded[Instant]): Gen[Seq[RecordingActionFactory]] = inAnyOrder {
     for {
       ids <- Gen.nonEmptyContainerOf[Set, FooHistory#Id](fooHistoryIdGenerator)
-      recordingActionFactoriesOverSeveralIds <- Gen.sequence[Seq[LifecyclesForAnId], LifecyclesForAnId](ids.toSeq map (lifecyclesForAnIdGenerator(_, seed, identifiedItemsScope, bestPatchSelection)))
+      recordingActionFactoriesOverSeveralIds <- Gen.sequence[Seq[LifecyclesForAnId], LifecyclesForAnId](ids.toSeq map (lifecyclesForAnIdGenerator(_, seed, identifiedItemsScope, bestPatchSelection, eventsHaveEffectNoLaterThan)))
     } yield {
       val randomBehaviour = new Random(seed)
       randomBehaviour.pickAlternatelyFrom(recordingActionFactoriesOverSeveralIds)
@@ -167,19 +175,21 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
         seed <- seedGenerator
         identifiedItemsScope = mock[IdentifiedItemsScope]
         bestPatchSelection = mock[BestPatchSelection]
-        recordingActionFactories <- recordingActionFactoriesGenerator(seed, identifiedItemsScope, bestPatchSelection)
+        eventsHaveEffectNoLaterThan <- unboundedInstantGenerator
+        recordingActionFactories <- recordingActionFactoriesGenerator(seed, identifiedItemsScope, bestPatchSelection, eventsHaveEffectNoLaterThan)
         recordingTimes <- Gen.listOfN(recordingActionFactories.size, instantGenerator) map (_.sorted)
       } yield {
         val recordingActions = recordingActionFactories zip recordingTimes map { case (recordingActionFactory, recordingTime) => recordingActionFactory(recordingTime) }
         TestCase(recordingActions = recordingActions,
           identifiedItemsScope = identifiedItemsScope,
-          bestPatchSelection = bestPatchSelection)
+          bestPatchSelection = bestPatchSelection,
+          eventsHaveEffectNoLaterThan = eventsHaveEffectNoLaterThan)
       }
     }
 
   "A smoke test" should "make the computer catch fire" in {
     check(Prop.forAllNoShrink(testCaseGenerator) {
-      case TestCase(recordingActions, identifiedItemsScopeFromTestCase, bestPatchSelection) =>
+      case TestCase(recordingActions, identifiedItemsScopeFromTestCase, bestPatchSelection, eventsHaveEffectNoLaterThan) =>
         // NOTE: the reason for this local trait is to allow mocking / stubbing of best patch selection, while keeping the contracts on the API.
         // Otherwise if the patch recorder's implementation of 'BestPatchSelection' were to be mocked, there would be no contracts on it.
         trait DelegatingBestPatchSelectionImplementation extends BestPatchSelection {
