@@ -4,7 +4,7 @@ import java.lang.reflect.Method
 import java.time.Instant
 
 import com.sageserpent.americium.randomEnrichment._
-import com.sageserpent.americium.{Finite, PositiveInfinity, Unbounded}
+import com.sageserpent.americium.{Finite, Unbounded}
 import com.sageserpent.plutonium.WorldReferenceImplementation.IdentifiedItemsScope
 import org.scalacheck.{Gen, Prop}
 import org.scalamock.scalatest.MockFactory
@@ -200,7 +200,7 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
           def apply(relatedPatches: Seq[AbstractPatch]): AbstractPatch = bestPatchSelection(relatedPatches)
         }
 
-        val patchRecorder = new PatchRecorderImplementation(PositiveInfinity()) with PatchRecorderContracts with DelegatingBestPatchSelectionImplementation with BestPatchSelectionContracts {
+        val patchRecorder = new PatchRecorderImplementation(eventsHaveEffectNoLaterThan) with PatchRecorderContracts with DelegatingBestPatchSelectionImplementation with BestPatchSelectionContracts {
           override val identifiedItemsScope = identifiedItemsScopeFromTestCase
           override val itemsAreLockedResource: ManagedResource[Unit] = makeManagedResource(())(Unit => ())(List.empty)
         }
