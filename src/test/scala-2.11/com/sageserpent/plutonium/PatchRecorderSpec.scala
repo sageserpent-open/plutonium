@@ -42,19 +42,13 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
 
   def patchGenerator(method: Method)(id: FooHistory#Id) = Gen.const (() =>
   {
-    val patch = new AbstractPatch(method) {
+    abstract class WorkaroundToMakeAbstractPatchMockable extends AbstractPatch(method){
       override val targetReconstitutionData: Recorder#ItemReconstitutionData[FooHistory] = id -> typeTag[FooHistory]
-
-      override def checkInvariant(identifiedItemAccess: IdentifiedItemAccess): Unit = {
-      }
-
-      override def apply(identifiedItemAccess: IdentifiedItemAccess): Unit = {
-      }
 
       override val argumentReconstitutionDatums = Seq.empty
     }
 
-    patch
+    mock[WorkaroundToMakeAbstractPatchMockable]
   }) map (_.apply)
 
   def patchesOfTheSameKindForAnIdGenerator(id: FooHistory#Id,
@@ -67,10 +61,34 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
     val randomBehaviour = new Random(seed)
     val clumpsOfPatches = randomBehaviour.splitIntoNonEmptyPieces(patches).force
 
-    inSequence {
-      for (clumpOfPatches <- clumpsOfPatches) {
-        val bestPatch = randomBehaviour.chooseOneOf(clumpOfPatches)
+    val (setupInteractionsWithBestPatchSelection, setupInteractionsWithBestPatchApplication) =
+      (for (clumpOfPatches <- clumpsOfPatches) yield {
+      val bestPatch = randomBehaviour.chooseOneOf(clumpOfPatches)
+
+      def setupInteractionWithBestPatchSelection() {
         (bestPatchSelection.apply _).expects(clumpOfPatches.toSeq).returns(bestPatch).once
+      }
+
+      def setupInteractionWithBestPatchApplication(): Unit = {
+        // TODO - pass in the mocked identified item access.
+        (bestPatch.apply _).expects(*).once
+        (bestPatch.checkInvariant _).expects(*).once
+      }
+
+      setupInteractionWithBestPatchSelection _ -> setupInteractionWithBestPatchApplication _
+    }) unzip
+
+    inAnyOrder {
+      inSequence {
+        for (setupInteraction <- setupInteractionsWithBestPatchSelection) {
+          setupInteraction()
+        }
+      }
+
+      inSequence {
+        for (setupInteraction <- setupInteractionsWithBestPatchApplication) {
+          setupInteraction()
+        }
       }
     }
 
@@ -120,7 +138,7 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
                                  bestPatchSelection: BestPatchSelection): Gen[LifecyclesForAnId] = {
     val unconstrainedGenerator = for {
       recordingsItemFactoriesForFiniteLifecycles <- Gen.listOf(finiteLifecycleForAnIdGenerator(id, seed, identifiedItemsScope, bestPatchSelection))
-      finalUnboundedLifecycle <- Gen.option(finiteLifecycleForAnIdGenerator(id, seed, identifiedItemsScope, bestPatchSelection))
+      finalUnboundedLifecycle <- Gen.option(lifecycleForAnIdGenerator(id, seed, bestPatchSelection))
     } yield {
       val recordingActionFactories = (recordingsItemFactoriesForFiniteLifecycles :\ Seq.empty[RecordingActionFactory]) (_ ++ _)
 
@@ -176,10 +194,12 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
           recordingAction(patchRecorder)
         }
 
+        patchRecorder.noteThatThereAreNoFollowingRecordings()
+
         println("Ouch")
 
         Prop.proved
-    }, maxSize(17))
+    }, maxSize(10))
   }
 
 
