@@ -135,11 +135,9 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
   def lifecyclesForAnIdGenerator(id: FooHistory#Id,
                                  seed: Long,
                                  identifiedItemsScope: IdentifiedItemsScope,
-                                 bestPatchSelection: BestPatchSelection): Gen[LifecyclesForAnId] = {
+                                 bestPatchSelection: BestPatchSelection): Gen[LifecyclesForAnId] = inSequence {
     val unconstrainedGenerator = for {
-      recordingsItemFactoriesForFiniteLifecycles <- inSequence {
-        Gen.listOf(finiteLifecycleForAnIdGenerator(id, seed, identifiedItemsScope, bestPatchSelection))
-      }
+      recordingsItemFactoriesForFiniteLifecycles <- Gen.listOf(finiteLifecycleForAnIdGenerator(id, seed, identifiedItemsScope, bestPatchSelection))
       finalUnboundedLifecycle <- Gen.option(lifecycleForAnIdGenerator(id, seed, bestPatchSelection))
     } yield {
       val recordingActionFactories = (recordingsItemFactoriesForFiniteLifecycles :\ Seq.empty[RecordingActionFactory]) (_ ++ _)
@@ -156,12 +154,14 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
 
   def recordingActionFactoriesGenerator(seed: Long,
                                         identifiedItemsScope: IdentifiedItemsScope,
-                                        bestPatchSelection: BestPatchSelection): Gen[Seq[RecordingActionFactory]] = for {
-    ids <- Gen.nonEmptyContainerOf[Set, FooHistory#Id](fooHistoryIdGenerator)
-    recordingActionFactoriesOverSeveralIds <- Gen.sequence[Seq[LifecyclesForAnId], LifecyclesForAnId](ids.toSeq map (lifecyclesForAnIdGenerator(_, seed, identifiedItemsScope, bestPatchSelection)))
-  } yield {
-    val randomBehaviour = new Random(seed)
-    randomBehaviour.pickAlternatelyFrom(recordingActionFactoriesOverSeveralIds)
+                                        bestPatchSelection: BestPatchSelection): Gen[Seq[RecordingActionFactory]] = inAnyOrder {
+    for {
+      ids <- Gen.nonEmptyContainerOf[Set, FooHistory#Id](fooHistoryIdGenerator)
+      recordingActionFactoriesOverSeveralIds <- Gen.sequence[Seq[LifecyclesForAnId], LifecyclesForAnId](ids.toSeq map (lifecyclesForAnIdGenerator(_, seed, identifiedItemsScope, bestPatchSelection)))
+    } yield {
+      val randomBehaviour = new Random(seed)
+      randomBehaviour.pickAlternatelyFrom(recordingActionFactoriesOverSeveralIds)
+    }
   }
 
   val testCaseGenerator: Gen[TestCase] =
