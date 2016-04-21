@@ -7,6 +7,7 @@ import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.{Finite, Unbounded}
 import com.sageserpent.plutonium.WorldReferenceImplementation.IdentifiedItemsScope
 import org.scalacheck.{Gen, Prop}
+import org.scalacheck.Prop.BooleanOperators
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.prop.Checkers
 import org.scalatest.{FlatSpec, Matchers}
@@ -29,7 +30,7 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
 
   type LifecyclesForAnId = Seq[RecordingActionFactory]
 
-  type RecordingAction = (PatchRecorder) => Unit
+  type RecordingAction = (PatchRecorder, Int, scala.collection.mutable.ListBuffer[Int]) => Unit
 
   case class TestCase(recordingActions: Seq[RecordingAction],
                       identifiedItemsScope: IdentifiedItemsScope,
@@ -85,33 +86,40 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
           val changeInsteadOfMeasurementDecisionsInClumps = (initialPatchInLifecycleIsChange #:: Stream.continually(false)) +: Stream.continually(true #:: Stream.continually(false))
 
           val recordingActionFactories = clumpsOfPatches zip bestPatches zip changeInsteadOfMeasurementDecisionsInClumps map {
-            case ((clumpOfPatches, bestPatch), decisions)  =>
+            case ((clumpOfPatches, bestPatch), decisions) =>
               // HACK: this next variable and how it is used is truly horrible...
-              var bestPatchIsExpectedToBeAppliedNoLaterThanCutoff: Option[Boolean] = None
+              var uglyWayOfCapturingStateAssociatedWithThePatchThatStandsInForTheBestPatch: Option[(Boolean, Int)] = None
+
               clumpOfPatches.toSeq zip decisions map {
                 case (patch, makeAChange) =>
-                  def setupInteractionWithBestPatchApplication(patch: AbstractPatch, eventsHaveEffectNoLaterThan: Unbounded[Instant], when: Instant): Unit = {
-                    bestPatchIsExpectedToBeAppliedNoLaterThanCutoff match {
-                      case None => bestPatchIsExpectedToBeAppliedNoLaterThanCutoff = Some(Finite(when) <= eventsHaveEffectNoLaterThan)
+                  def setupInteractionWithBestPatchApplication(patch: AbstractPatch, eventsHaveEffectNoLaterThan: Unbounded[Instant], when: Instant, masterSequenceIndex: Int, sequenceIndicesFromAppliedPatches: scala.collection.mutable.ListBuffer[Int]): Unit = {
+                    uglyWayOfCapturingStateAssociatedWithThePatchThatStandsInForTheBestPatch match {
+                      case None => uglyWayOfCapturingStateAssociatedWithThePatchThatStandsInForTheBestPatch = Some((Finite(when) <= eventsHaveEffectNoLaterThan) -> masterSequenceIndex)
                       case Some(_) =>
                     }
 
-                    if (bestPatchIsExpectedToBeAppliedNoLaterThanCutoff.get && bestPatches.contains(patch)) {
-                      (patch.apply _).expects(*).once
-                      (patch.checkInvariant _).expects(*).once
-                    } else {
-                      (patch.apply _).expects(*).never
-                      (patch.checkInvariant _).expects(*).never
+                    uglyWayOfCapturingStateAssociatedWithThePatchThatStandsInForTheBestPatch match {
+                      case Some((patchStandInIsNotForbiddenByEventTimeCutoff, sequenceIndexOfPatchStandin)) =>
+                      if (patchStandInIsNotForbiddenByEventTimeCutoff && bestPatches.contains(patch)) {
+                        (patch.apply _).expects(*).onCall {
+                          (_: IdentifiedItemAccess) =>
+                            sequenceIndicesFromAppliedPatches += sequenceIndexOfPatchStandin: Unit
+                        }.once
+                        (patch.checkInvariant _).expects(*).once
+                      } else {
+                        (patch.apply _).expects(*).never
+                        (patch.checkInvariant _).expects(*).never
+                      }
                     }
                   }
 
-                  def recordingChange(patch: AbstractPatch)(when: Instant)(patchRecorder: PatchRecorder): Unit = {
-                    setupInteractionWithBestPatchApplication(patch, eventsHaveEffectNoLaterThan, when)
+                  def recordingChange(patch: AbstractPatch)(when: Instant)(patchRecorder: PatchRecorder, masterSequenceIndex: Int, sequenceIndicesFromAppliedPatches: scala.collection.mutable.ListBuffer[Int]): Unit = {
+                    setupInteractionWithBestPatchApplication(patch, eventsHaveEffectNoLaterThan, when, masterSequenceIndex, sequenceIndicesFromAppliedPatches)
                     patchRecorder.recordPatchFromChange(Finite(when), patch)
                   }
 
-                  def recordingMeasurement(patch: AbstractPatch)(when: Instant)(patchRecorder: PatchRecorder): Unit = {
-                    setupInteractionWithBestPatchApplication(patch, eventsHaveEffectNoLaterThan, when)
+                  def recordingMeasurement(patch: AbstractPatch)(when: Instant)(patchRecorder: PatchRecorder, masterSequenceIndex: Int, sequenceIndicesFromAppliedPatches: scala.collection.mutable.ListBuffer[Int]): Unit = {
+                    setupInteractionWithBestPatchApplication(patch, eventsHaveEffectNoLaterThan, when, masterSequenceIndex, sequenceIndicesFromAppliedPatches)
                     patchRecorder.recordPatchFromMeasurement(Finite(when), patch)
                   }
                   if (makeAChange) recordingChange(patch) _ else recordingMeasurement(patch) _
@@ -133,11 +141,14 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
       def finiteLifecycleForAnIdGenerator(id: FooHistory#Id): Gen[LifecycleForAnId] = for {
         recordingActionFactories <- lifecycleForAnIdGenerator(id)
       } yield {
-        def recordingFinalAnnihilation(when: Instant)(patchRecorder: PatchRecorder): Unit = {
+        def recordingFinalAnnihilation(when: Instant)(patchRecorder: PatchRecorder, masterSequenceIndex: Int, sequenceIndicesFromAppliedPatches: scala.collection.mutable.ListBuffer[Int]): Unit = {
           val patchApplicationDoesNotBreachTheCutoff = Finite(when) <= eventsHaveEffectNoLaterThan
 
           if (patchApplicationDoesNotBreachTheCutoff) {
-            (identifiedItemsScope.annihilateItemFor[FooHistory](_: FooHistory#Id, _: Instant)(_: TypeTag[FooHistory])).expects(id, when, *).once
+            (identifiedItemsScope.annihilateItemFor[FooHistory](_: FooHistory#Id, _: Instant)(_: TypeTag[FooHistory])).expects(id, when, *).onCall {
+              (_, _, _) =>
+                sequenceIndicesFromAppliedPatches += masterSequenceIndex
+            }.once
           }
           patchRecorder.recordAnnihilation[FooHistory](when, id)
         }
@@ -171,21 +182,21 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
   }
 
   val testCaseGenerator: Gen[TestCase] = inSequence {
-      for {
-        seed <- seedGenerator
-        identifiedItemsScope = mock[IdentifiedItemsScope]
-        bestPatchSelection = mock[BestPatchSelection]
-        eventsHaveEffectNoLaterThan <- unboundedInstantGenerator
-        recordingActionFactories <- recordingActionFactoriesGenerator(seed, identifiedItemsScope, bestPatchSelection, eventsHaveEffectNoLaterThan)
-        recordingTimes <- Gen.listOfN(recordingActionFactories.size, instantGenerator) map (_.sorted)
-      } yield {
-        val recordingActions = recordingActionFactories zip recordingTimes map { case (recordingActionFactory, recordingTime) => recordingActionFactory(recordingTime) }
-        TestCase(recordingActions = recordingActions,
-          identifiedItemsScope = identifiedItemsScope,
-          bestPatchSelection = bestPatchSelection,
-          eventsHaveEffectNoLaterThan = eventsHaveEffectNoLaterThan)
-      }
+    for {
+      seed <- seedGenerator
+      identifiedItemsScope = mock[IdentifiedItemsScope]
+      bestPatchSelection = mock[BestPatchSelection]
+      eventsHaveEffectNoLaterThan <- unboundedInstantGenerator
+      recordingActionFactories <- recordingActionFactoriesGenerator(seed, identifiedItemsScope, bestPatchSelection, eventsHaveEffectNoLaterThan)
+      recordingTimes <- Gen.listOfN(recordingActionFactories.size, instantGenerator) map (_.sorted)
+    } yield {
+      val recordingActions = recordingActionFactories zip recordingTimes map { case (recordingActionFactory, recordingTime) => recordingActionFactory(recordingTime) }
+      TestCase(recordingActions = recordingActions,
+        identifiedItemsScope = identifiedItemsScope,
+        bestPatchSelection = bestPatchSelection,
+        eventsHaveEffectNoLaterThan = eventsHaveEffectNoLaterThan)
     }
+  }
 
   "A patch recorder" should "select and apply the best patches, but not cause any effects beyond the event cutoff time" in {
     check(Prop.forAllNoShrink(testCaseGenerator) {
@@ -201,15 +212,17 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
           override val itemsAreLockedResource: ManagedResource[Unit] = makeManagedResource(())(Unit => ())(List.empty)
         }
 
-        for (recordingAction <- recordingActions) {
-          recordingAction(patchRecorder)
+        val sequenceIndicesFromAppliedPatches = scala.collection.mutable.ListBuffer.empty[Int]
+
+        for ((recordingAction, masterSequenceIndex) <- recordingActions zip Stream.from(0)) {
+          recordingAction(patchRecorder, masterSequenceIndex, sequenceIndicesFromAppliedPatches)
         }
 
         patchRecorder.noteThatThereAreNoFollowingRecordings()
 
-        println("Ouch")
-
-        Prop.proved
-    }, maxSize(10))
+        (sequenceIndicesFromAppliedPatches.isEmpty ||
+          (sequenceIndicesFromAppliedPatches zip sequenceIndicesFromAppliedPatches.tail forall { case (first, second) => first < second })) :|
+          s"Indices from applied patches and annihilations should be a subsequence of the master sequence."
+    }, maxSize(14))
   }
 }
