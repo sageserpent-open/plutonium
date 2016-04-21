@@ -72,7 +72,9 @@ trait PatchRecorderContracts extends PatchRecorder {
 
   abstract override def noteThatThereAreNoFollowingRecordings(): Unit = {
     require(!allRecordingsAreCaptured)
-    super.noteThatThereAreNoFollowingRecordings()
+    val result = super.noteThatThereAreNoFollowingRecordings()
+    require(allRecordingsAreCaptured)
+    result
   }
 }
 
