@@ -79,31 +79,41 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
       }
     }
 
-    def setupInteractionWithBestPatchApplication(patch: AbstractPatch, eventsHaveEffectNoLaterThan: Unbounded[Instant], when: Instant): Unit = {
-      val patchApplicationDoesNotBreachTheCutoff = Finite(when) <= eventsHaveEffectNoLaterThan
+    val changeInsteadOfMeasurementDecisionsInClumps = (initialPatchInLifecycleIsChange #:: Stream.continually(false)) +: Stream.continually(true #:: Stream.continually(false))
 
-      if (patchApplicationDoesNotBreachTheCutoff && bestPatches.contains(patch)) {
-        (patch.apply _).expects(*).once
-        (patch.checkInvariant _).expects(*).once
-      } else {
-        (patch.apply _).expects(*).never
-        (patch.checkInvariant _).expects(*).never
-      }
+    val recordingActionFactories = clumpsOfPatches zip bestPatches zip changeInsteadOfMeasurementDecisionsInClumps map {
+      case ((clumpOfPatches, bestPatch), decisions)  =>
+        // HACK: this next variable and how it is used is truly horrible...
+        var bestPatchIsExpectedToBeAppliedNoLaterThanCutoff: Option[Boolean] = None
+        clumpOfPatches.toSeq zip decisions map {
+          case (patch, makeAChange) =>
+            def setupInteractionWithBestPatchApplication(patch: AbstractPatch, eventsHaveEffectNoLaterThan: Unbounded[Instant], when: Instant): Unit = {
+              bestPatchIsExpectedToBeAppliedNoLaterThanCutoff match {
+                case None => bestPatchIsExpectedToBeAppliedNoLaterThanCutoff = Some(Finite(when) <= eventsHaveEffectNoLaterThan)
+                case Some(_) =>
+              }
+
+              if (bestPatchIsExpectedToBeAppliedNoLaterThanCutoff.get && bestPatches.contains(patch)) {
+                (patch.apply _).expects(*).once
+                (patch.checkInvariant _).expects(*).once
+              } else {
+                (patch.apply _).expects(*).never
+                (patch.checkInvariant _).expects(*).never
+              }
+            }
+
+            def recordingChange(patch: AbstractPatch)(when: Instant)(patchRecorder: PatchRecorder): Unit = {
+              setupInteractionWithBestPatchApplication(patch, eventsHaveEffectNoLaterThan, when)
+              patchRecorder.recordPatchFromChange(Finite(when), patch)
+            }
+
+            def recordingMeasurement(patch: AbstractPatch)(when: Instant)(patchRecorder: PatchRecorder): Unit = {
+              setupInteractionWithBestPatchApplication(patch, eventsHaveEffectNoLaterThan, when)
+              patchRecorder.recordPatchFromMeasurement(Finite(when), patch)
+            }
+            if (makeAChange) recordingChange(patch) _ else recordingMeasurement(patch) _
+        }
     }
-
-    def recordingChange(patch: AbstractPatch)(when: Instant)(patchRecorder: PatchRecorder): Unit = {
-      setupInteractionWithBestPatchApplication(patch, eventsHaveEffectNoLaterThan, when)
-      patchRecorder.recordPatchFromChange(Finite(when), patch)
-    }
-
-    def recordingMeasurement(patch: AbstractPatch)(when: Instant)(patchRecorder: PatchRecorder): Unit = {
-      setupInteractionWithBestPatchApplication(patch, eventsHaveEffectNoLaterThan, when)
-      patchRecorder.recordPatchFromMeasurement(Finite(when), patch)
-    }
-
-    val changeInsteadOfMeasurementDecisionsInClumps = (initialPatchInLifecycleIsChange +: Stream.continually(false)) +: Stream.continually(true +: Stream.continually(false))
-
-    val recordingActionFactories = clumpsOfPatches zip changeInsteadOfMeasurementDecisionsInClumps map { case (clumpOfPatches, decisions) => clumpOfPatches.toSeq zip decisions map { case (patch, makeAChange) => if (makeAChange) recordingChange(patch) _ else recordingMeasurement(patch) _ } }
 
     recordingActionFactories.flatten
   }
