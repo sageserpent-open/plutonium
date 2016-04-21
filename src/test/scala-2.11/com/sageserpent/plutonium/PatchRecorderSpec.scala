@@ -168,7 +168,7 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
         identifiedItemsScope = mock[IdentifiedItemsScope]
         bestPatchSelection = mock[BestPatchSelection]
         recordingActionFactories <- recordingActionFactoriesGenerator(seed, identifiedItemsScope, bestPatchSelection)
-        recordingTimes <- Gen.listOfN(recordingActionFactories.size, instantGenerator)
+        recordingTimes <- Gen.listOfN(recordingActionFactories.size, instantGenerator) map (_.sorted)
       } yield {
         val recordingActions = recordingActionFactories zip recordingTimes map { case (recordingActionFactory, recordingTime) => recordingActionFactory(recordingTime) }
         TestCase(recordingActions = recordingActions,
@@ -186,7 +186,7 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
           def apply(relatedPatches: Seq[AbstractPatch]): AbstractPatch = bestPatchSelection(relatedPatches)
         }
 
-        val patchRecorder = new PatchRecorderImplementation(PositiveInfinity()) with DelegatingBestPatchSelectionImplementation with BestPatchSelectionContracts {
+        val patchRecorder = new PatchRecorderImplementation(PositiveInfinity()) with PatchRecorderContracts with DelegatingBestPatchSelectionImplementation with BestPatchSelectionContracts {
           override val identifiedItemsScope = identifiedItemsScopeFromTestCase
           override val itemsAreLockedResource: ManagedResource[Unit] = makeManagedResource(())(Unit => ())(List.empty)
         }

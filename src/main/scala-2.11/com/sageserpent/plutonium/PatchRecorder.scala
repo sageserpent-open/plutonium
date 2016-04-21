@@ -49,19 +49,25 @@ trait PatchRecorderContracts extends PatchRecorder {
   abstract override def recordPatchFromChange(when: Unbounded[Instant], patch: AbstractPatch): Unit = {
     require(whenEventPertainedToByLastRecordingTookPlace.cata(some = when >= _, none = true))
     require(!allRecordingsAreCaptured)
-    super.recordPatchFromChange(when, patch)
+    val result = super.recordPatchFromChange(when, patch)
+    require(whenEventPertainedToByLastRecordingTookPlace == Some(when))
+    result
   }
 
   abstract override def recordPatchFromMeasurement(when: Unbounded[Instant], patch: AbstractPatch): Unit = {
     require(whenEventPertainedToByLastRecordingTookPlace.cata(some = when >= _, none = true))
     require(!allRecordingsAreCaptured)
-    super.recordPatchFromMeasurement(when, patch)
+    val result = super.recordPatchFromMeasurement(when, patch)
+    require(whenEventPertainedToByLastRecordingTookPlace == Some(when))
+    result
   }
 
   abstract override def recordAnnihilation[Raw <: Identified : TypeTag](when: Instant, id: Raw#Id): Unit = {
     require(whenEventPertainedToByLastRecordingTookPlace.cata(some = Finite(when) >= _, none = true))
     require(!allRecordingsAreCaptured)
-    super.recordAnnihilation(when, id)
+    val result = super.recordAnnihilation(when, id)
+    require(whenEventPertainedToByLastRecordingTookPlace.contains(Finite(when)))
+    result
   }
 
   abstract override def noteThatThereAreNoFollowingRecordings(): Unit = {
