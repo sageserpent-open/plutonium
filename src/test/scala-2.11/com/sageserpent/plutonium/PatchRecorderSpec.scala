@@ -179,7 +179,7 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
         println("Ouch")
 
         Prop.proved
-    }, maxSize(30))
+    }, maxSize(17))
   }
 
 
