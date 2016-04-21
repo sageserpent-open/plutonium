@@ -40,9 +40,8 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
   val fooProperty1 = fooClazz.getMethod("property1")
   val fooProperty2 = fooClazz.getMethod("property2")
 
-  def patchGenerator(method: Method)(id: FooHistory#Id) = Gen.const (() =>
-  {
-    abstract class WorkaroundToMakeAbstractPatchMockable extends AbstractPatch(method){
+  def patchGenerator(method: Method)(id: FooHistory#Id) = Gen.const(() => {
+    abstract class WorkaroundToMakeAbstractPatchMockable extends AbstractPatch(method) {
       override val targetReconstitutionData: Recorder#ItemReconstitutionData[FooHistory] = id -> typeTag[FooHistory]
 
       override val argumentReconstitutionDatums = Seq.empty
@@ -61,61 +60,60 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
     val randomBehaviour = new Random(seed)
     val clumpsOfPatches = randomBehaviour.splitIntoNonEmptyPieces(patches).force
 
-    val (setupInteractionsWithBestPatchSelection, setupInteractionsWithBestPatchApplication) =
+    val (setupInteractionsWithBestPatchSelection, bestPatches) =
       (for (clumpOfPatches <- clumpsOfPatches) yield {
-      val bestPatch = randomBehaviour.chooseOneOf(clumpOfPatches)
+        val bestPatch = randomBehaviour.chooseOneOf(clumpOfPatches)
 
-      def setupInteractionWithBestPatchSelection() {
-        (bestPatchSelection.apply _).expects(clumpOfPatches.toSeq).returns(bestPatch).once
-      }
-
-      def setupInteractionWithBestPatchApplication(): Unit = {
-        // TODO - pass in the mocked identified item access.
-        (bestPatch.apply _).expects(*).once
-        (bestPatch.checkInvariant _).expects(*).once
-      }
-
-      setupInteractionWithBestPatchSelection _ -> setupInteractionWithBestPatchApplication _
-    }) unzip
-
-    inAnyOrder {
-      inSequence {
-        for (setupInteraction <- setupInteractionsWithBestPatchSelection) {
-          setupInteraction()
+        def setupInteractionWithBestPatchSelection() {
+          (bestPatchSelection.apply _).expects(clumpOfPatches.toSeq).returns(bestPatch).once
         }
-      }
 
-      inSequence {
-        for (setupInteraction <- setupInteractionsWithBestPatchApplication) {
-          setupInteraction()
-        }
+        setupInteractionWithBestPatchSelection _ -> bestPatch
+      }) unzip
+
+    inSequence {
+      for (setupInteraction <- setupInteractionsWithBestPatchSelection) {
+        setupInteraction()
+      }
+    }
+
+    def setupInteractionWithBestPatchApplication(patch: AbstractPatch): Unit = {
+      if (bestPatches.contains(patch)) {
+        (patch.apply _).expects(*).once
+        (patch.checkInvariant _).expects(*).once
+      } else {
+        (patch.apply _).expects(*).never
+        (patch.checkInvariant _).expects(*).never
       }
     }
 
     def recordingChange(patch: AbstractPatch)(when: Instant)(patchRecorder: PatchRecorder): Unit = {
+      setupInteractionWithBestPatchApplication(patch)
       patchRecorder.recordPatchFromChange(Finite(when), patch)
     }
 
     def recordingMeasurement(patch: AbstractPatch)(when: Instant)(patchRecorder: PatchRecorder): Unit = {
+      setupInteractionWithBestPatchApplication(patch)
       patchRecorder.recordPatchFromMeasurement(Finite(when), patch)
     }
 
     val changeInsteadOfMeasurementDecisionsInClumps = (initialPatchInLifecycleIsChange +: Stream.continually(false)) +: Stream.continually(true +: Stream.continually(false))
 
-    val recordingActionFactories = clumpsOfPatches zip changeInsteadOfMeasurementDecisionsInClumps map
-      {case (clumpOfPatches, decisions) => clumpOfPatches.toSeq zip decisions map {case (patch, makeAChange) => if (makeAChange) recordingChange(patch) _ else recordingMeasurement(patch) _}}
+    val recordingActionFactories = clumpsOfPatches zip changeInsteadOfMeasurementDecisionsInClumps map { case (clumpOfPatches, decisions) => clumpOfPatches.toSeq zip decisions map { case (patch, makeAChange) => if (makeAChange) recordingChange(patch) _ else recordingMeasurement(patch) _ } }
 
     recordingActionFactories.flatten
   }
 
   def lifecycleForAnIdGenerator(id: FooHistory#Id,
                                 seed: Long,
-                                bestPatchSelection: BestPatchSelection): Gen[LifecycleForAnId] = for {
-    recordingActionFactoriesOverSeveralKinds <-
-    Gen.sequence[Seq[PatchesOfTheSameKindForAnId], PatchesOfTheSameKindForAnId](Seq(patchGenerator(fooProperty1) _, patchGenerator(fooProperty2) _) map (patchesOfTheSameKindForAnIdGenerator(id, seed, bestPatchSelection, _)))
-  } yield {
-    val randomBehaviour = new Random(seed)
-    randomBehaviour.pickAlternatelyFrom(recordingActionFactoriesOverSeveralKinds)
+                                bestPatchSelection: BestPatchSelection): Gen[LifecycleForAnId] = inAnyOrder {
+    for {
+      recordingActionFactoriesOverSeveralKinds <-
+      Gen.sequence[Seq[PatchesOfTheSameKindForAnId], PatchesOfTheSameKindForAnId](Seq(patchGenerator(fooProperty1) _, patchGenerator(fooProperty2) _) map (patchesOfTheSameKindForAnIdGenerator(id, seed, bestPatchSelection, _)))
+    } yield {
+      val randomBehaviour = new Random(seed)
+      randomBehaviour.pickAlternatelyFrom(recordingActionFactoriesOverSeveralKinds)
+    }
   }
 
   def finiteLifecycleForAnIdGenerator(id: FooHistory#Id,
@@ -164,30 +162,31 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
     }
   }
 
-  val testCaseGenerator: Gen[TestCase] =
-    for {
-      seed <- seedGenerator
-      identifiedItemsScope = mock[IdentifiedItemsScope]
-      bestPatchSelection = mock[BestPatchSelection]
-      recordingActionFactories <- recordingActionFactoriesGenerator(seed, identifiedItemsScope, bestPatchSelection)
-      recordingTimes <- Gen.listOfN(recordingActionFactories.size, instantGenerator)
-    } yield {
-      val recordingActions = recordingActionFactories zip recordingTimes map { case (recordingActionFactory, recordingTime) => recordingActionFactory(recordingTime) }
-      TestCase(recordingActions = recordingActions,
-        identifiedItemsScope = identifiedItemsScope,
-        bestPatchSelection = bestPatchSelection)
+  val testCaseGenerator: Gen[TestCase] = inSequence {
+      for {
+        seed <- seedGenerator
+        identifiedItemsScope = mock[IdentifiedItemsScope]
+        bestPatchSelection = mock[BestPatchSelection]
+        recordingActionFactories <- recordingActionFactoriesGenerator(seed, identifiedItemsScope, bestPatchSelection)
+        recordingTimes <- Gen.listOfN(recordingActionFactories.size, instantGenerator)
+      } yield {
+        val recordingActions = recordingActionFactories zip recordingTimes map { case (recordingActionFactory, recordingTime) => recordingActionFactory(recordingTime) }
+        TestCase(recordingActions = recordingActions,
+          identifiedItemsScope = identifiedItemsScope,
+          bestPatchSelection = bestPatchSelection)
+      }
     }
 
   "A smoke test" should "make the computer catch fire" in {
-    check(Prop.forAllNoShrink(testCaseGenerator){
+    check(Prop.forAllNoShrink(testCaseGenerator) {
       case TestCase(recordingActions, identifiedItemsScopeFromTestCase, bestPatchSelection) =>
         // NOTE: the reason for this local trait is to allow mocking / stubbing of best patch selection, while keeping the contracts on the API.
         // Otherwise if the patch recorder's implementation of 'BestPatchSelection' were to be mocked, there would be no contracts on it.
-        trait DelegatingBestPatchSelectionImplementation extends BestPatchSelection  {
+        trait DelegatingBestPatchSelectionImplementation extends BestPatchSelection {
           def apply(relatedPatches: Seq[AbstractPatch]): AbstractPatch = bestPatchSelection(relatedPatches)
         }
 
-        val patchRecorder = new PatchRecorderImplementation (PositiveInfinity()) with DelegatingBestPatchSelectionImplementation with BestPatchSelectionContracts {
+        val patchRecorder = new PatchRecorderImplementation(PositiveInfinity()) with DelegatingBestPatchSelectionImplementation with BestPatchSelectionContracts {
           override val identifiedItemsScope = identifiedItemsScopeFromTestCase
           override val itemsAreLockedResource: ManagedResource[Unit] = makeManagedResource(())(Unit => ())(List.empty)
         }
