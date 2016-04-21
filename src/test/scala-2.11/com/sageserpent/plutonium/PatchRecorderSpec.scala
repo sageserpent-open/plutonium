@@ -129,7 +129,7 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
       patchRecorder.recordAnnihilation[FooHistory](when, id)
     }
 
-    (recordingActionFactories :+ (recordingFinalAnnihilation _))
+    recordingActionFactories :+ (recordingFinalAnnihilation _)
   }
 
   def lifecyclesForAnIdGenerator(id: FooHistory#Id,
@@ -137,7 +137,9 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
                                  identifiedItemsScope: IdentifiedItemsScope,
                                  bestPatchSelection: BestPatchSelection): Gen[LifecyclesForAnId] = {
     val unconstrainedGenerator = for {
-      recordingsItemFactoriesForFiniteLifecycles <- Gen.listOf(finiteLifecycleForAnIdGenerator(id, seed, identifiedItemsScope, bestPatchSelection))
+      recordingsItemFactoriesForFiniteLifecycles <- inSequence {
+        Gen.listOf(finiteLifecycleForAnIdGenerator(id, seed, identifiedItemsScope, bestPatchSelection))
+      }
       finalUnboundedLifecycle <- Gen.option(lifecycleForAnIdGenerator(id, seed, bestPatchSelection))
     } yield {
       val recordingActionFactories = (recordingsItemFactoriesForFiniteLifecycles :\ Seq.empty[RecordingActionFactory]) (_ ++ _)
