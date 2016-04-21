@@ -28,7 +28,7 @@ object WorldReferenceImplementation {
 
   implicit val eventBagConfiguration = SortedBagConfiguration.keepAll
 
-  object IdentifiedItemsScopeImplementation {
+  object IdentifiedItemsScope {
     def hasItemOfSupertypeOf[Raw <: Identified : TypeTag](items: scala.collection.mutable.Set[Identified]) = {
       val reflectedType = typeTag[Raw].tpe
       val clazzOfRaw = currentMirror.runtimeClass(reflectedType)
@@ -90,8 +90,8 @@ object WorldReferenceImplementation {
     val filter = new CallbackFilter {
       override def accept(method: Method): Revision = {
         def isFinalizer: Boolean = method.getName == "finalize" && method.getParameterCount == 0 && method.getReturnType == classOf[Unit]
-        if (firstMethodIsOverrideCompatibleWithSecond(method, IdentifiedItemsScopeImplementation.itemReconstitutionDataProperty)) itemReconstitutionDataIndex
-        else if (IdentifiedItemsScopeImplementation.alwaysAllowsReadAccessTo(method) || isFinalizer) permittedReadAccessIndex
+        if (firstMethodIsOverrideCompatibleWithSecond(method, IdentifiedItemsScope.itemReconstitutionDataProperty)) itemReconstitutionDataIndex
+        else if (IdentifiedItemsScope.alwaysAllowsReadAccessTo(method) || isFinalizer) permittedReadAccessIndex
         else if (method.getReturnType != classOf[Unit]) forbiddenReadAccessIndex
         else mutationIndex
       }
@@ -109,10 +109,10 @@ object WorldReferenceImplementation {
 
     val filter = new CallbackFilter {
       override def accept(method: Method): Revision = {
-        if (firstMethodIsOverrideCompatibleWithSecond(method, IdentifiedItemsScopeImplementation.isRecordAnnihilationMethod)) recordAnnihilationIndex
+        if (firstMethodIsOverrideCompatibleWithSecond(method, IdentifiedItemsScope.isRecordAnnihilationMethod)) recordAnnihilationIndex
         else if (method.getReturnType == classOf[Unit] && !WorldReferenceImplementation.isInvariantCheck(method)) mutationIndex
-        else if (firstMethodIsOverrideCompatibleWithSecond(method, IdentifiedItemsScopeImplementation.isGhostProperty)) isGhostIndex
-        else if (IdentifiedItemsScopeImplementation.alwaysAllowsReadAccessTo(method)) unconditionalReadAccessIndex
+        else if (firstMethodIsOverrideCompatibleWithSecond(method, IdentifiedItemsScope.isGhostProperty)) isGhostIndex
+        else if (IdentifiedItemsScope.alwaysAllowsReadAccessTo(method)) unconditionalReadAccessIndex
         else checkedReadAccessIndex
       }
     }
@@ -130,7 +130,7 @@ object WorldReferenceImplementation {
 
   def isInvariantCheck(method: Method): Boolean = firstMethodIsOverrideCompatibleWithSecond(method, invariantCheckMethod)
 
-  class IdentifiedItemsScopeImplementation {
+  class IdentifiedItemsScope {
     identifiedItemsScopeThis =>
 
     var itemsAreLocked = false
@@ -185,7 +185,7 @@ object WorldReferenceImplementation {
       }(List.empty)) {
         val patchRecorder = new PatchRecorderImplementation(_when) with PatchRecorderContracts
           with BestPatchSelectionImplementation with BestPatchSelectionContracts {
-          override val identifiedItemsScope: IdentifiedItemsScopeImplementation = identifiedItemsScopeThis
+          override val identifiedItemsScope: IdentifiedItemsScope = identifiedItemsScopeThis
           override val itemsAreLockedResource: ManagedResource[Unit] = makeManagedResource {
             itemsAreLocked = true
           } { _ => itemsAreLocked = false
@@ -308,9 +308,9 @@ object WorldReferenceImplementation {
           constructAndCacheItem()
         case Some(items) => {
           assert(items.nonEmpty)
-          val conflictingItems = IdentifiedItemsScopeImplementation.yieldOnlyItemsOfSupertypeOf[Raw](items)
+          val conflictingItems = IdentifiedItemsScope.yieldOnlyItemsOfSupertypeOf[Raw](items)
           assert(conflictingItems.isEmpty, s"Found conflicting items for id: '$id' with type tag: '${typeTag[Raw].tpe}', these are: '${conflictingItems.toList}'.")
-          val itemsOfDesiredType = IdentifiedItemsScopeImplementation.yieldOnlyItemsOfType[Raw](items).force
+          val itemsOfDesiredType = IdentifiedItemsScope.yieldOnlyItemsOfType[Raw](items).force
           if (itemsOfDesiredType.isEmpty)
             constructAndCacheItem()
           else {
@@ -329,7 +329,7 @@ object WorldReferenceImplementation {
           // Have to force evaluation of the stream so that the call to '--=' below does not try to incrementally
           // evaluate the stream as the underlying source collection, namely 'items' is being mutated. This is
           // what you get when you go back to imperative programming after too much referential transparency.
-          val itemsSelectedForAnnihilation: Stream[Raw] = IdentifiedItemsScopeImplementation.yieldOnlyItemsOfType(items).force
+          val itemsSelectedForAnnihilation: Stream[Raw] = IdentifiedItemsScope.yieldOnlyItemsOfType(items).force
           assert(1 == itemsSelectedForAnnihilation.size)
 
           val itemToBeAnnihilated = itemsSelectedForAnnihilation.head
@@ -349,14 +349,14 @@ object WorldReferenceImplementation {
     def itemsFor[Raw <: Identified : TypeTag](id: Raw#Id): Stream[Raw] = {
       val items = idToItemsMultiMap.getOrElse(id, Set.empty[Raw])
 
-      IdentifiedItemsScopeImplementation.yieldOnlyItemsOfType(items)
+      IdentifiedItemsScope.yieldOnlyItemsOfType(items)
     }
 
-    def allItems[Raw <: Identified : TypeTag](): Stream[Raw] = IdentifiedItemsScopeImplementation.yieldOnlyItemsOfType(idToItemsMultiMap.values.flatten)
+    def allItems[Raw <: Identified : TypeTag](): Stream[Raw] = IdentifiedItemsScope.yieldOnlyItemsOfType(idToItemsMultiMap.values.flatten)
   }
 
   trait ScopeImplementation extends com.sageserpent.plutonium.Scope {
-    val identifiedItemsScope: IdentifiedItemsScopeImplementation
+    val identifiedItemsScope: IdentifiedItemsScope
 
     override def render[Raw](bitemporal: Bitemporal[Raw]): Stream[Raw] = {
       def itemsFor[Raw <: Identified : TypeTag](id: Raw#Id): Stream[Raw] = {
@@ -458,8 +458,8 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
 
   trait SelfPopulatedScope extends ScopeImplementation {
     val identifiedItemsScope = nextRevision match {
-      case World.initialRevision => new IdentifiedItemsScopeImplementation
-      case _ => new IdentifiedItemsScopeImplementation(when, nextRevision, asOf, mutableState.revisionToEventDataMap(nextRevision - 1)._1)
+      case World.initialRevision => new IdentifiedItemsScope
+      case _ => new IdentifiedItemsScope(when, nextRevision, asOf, mutableState.revisionToEventDataMap(nextRevision - 1)._1)
     }
   }
 
@@ -492,7 +492,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
     // This does a check for consistency of the world's history as per this new revision as part of construction.
     // We then throw away the resulting history if succcessful, the idea being for now to rebuild it as part of
     // constructing a scope to apply queries on.
-    new IdentifiedItemsScopeImplementation(PositiveInfinity[Instant], nextRevisionPostThisOne, Finite(asOf), newEventTimeline)
+    new IdentifiedItemsScope(PositiveInfinity[Instant], nextRevisionPostThisOne, Finite(asOf), newEventTimeline)
 
     val newEventIdToEventMap = baselineEventIdToEventMap -- eventIdsMadeObsoleteByThisRevision ++ newEvents
 
