@@ -129,7 +129,11 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
     recordingActionFactories <- lifecycleForAnIdGenerator(id, seed, bestPatchSelection, eventsHaveEffectNoLaterThan)
   } yield {
     def recordingFinalAnnihilation(when: Instant)(patchRecorder: PatchRecorder): Unit = {
-      (identifiedItemsScope.annihilateItemFor[FooHistory](_: FooHistory#Id, _: Instant)(_: TypeTag[FooHistory])).expects(id, when, *).once
+      val patchApplicationDoesNotBreachTheCutoff = Finite(when) <= eventsHaveEffectNoLaterThan
+
+      if (patchApplicationDoesNotBreachTheCutoff) {
+        (identifiedItemsScope.annihilateItemFor[FooHistory](_: FooHistory#Id, _: Instant)(_: TypeTag[FooHistory])).expects(id, when, *).once
+      }
       patchRecorder.recordAnnihilation[FooHistory](when, id)
     }
 
