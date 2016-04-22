@@ -14,7 +14,8 @@ lazy val settings = Seq(organization := "com.sageserpent",
   libraryDependencies += "com.sageserpent" %% "americium" % "0.1.0",
   libraryDependencies += "com.jsuereth" %% "scala-arm" % "1.4",
   libraryDependencies += "org.scalamock" %% "scalamock-scalatest-support" % "3.2" % "test",
-  publishMavenStyle := true)
+  publishMavenStyle := true,
+  publishTo := Some(Resolver.file("file",  new File(Path.userHome.absolutePath+"/.m2/repository"))))
 
 
 lazy val plutonium = (project in file(".")).settings(settings: _*)
