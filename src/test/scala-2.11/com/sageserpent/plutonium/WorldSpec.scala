@@ -439,6 +439,8 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
                                               Seq(referencedHistory) = referencedHistoriesFrom(scope)}
         yield (referencedHistoryId, referencedHistory)
 
+      // WON'T FIX: this test doesn't guarantee the generation of at least one useful test case where 'checks' is non-empty - but inspection shows that it does.
+      // Cutting over to marking the property as undecided when 'checks' is empty causes ScalaCheck to exhaust - after trying various configuration tweaks, I'm giving up for now.
       Prop.all(checks.map { case (historyId, actualHistory) => (actualHistory.datums.isEmpty :| s"For ${historyId}, the datums: ${actualHistory.datums} was supposed to be empty") }: _*)
     })
   }
