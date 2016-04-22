@@ -435,7 +435,9 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
   abstract class ScopeBasedOnNextRevision(val when: Unbounded[Instant], val nextRevision: Revision) extends com.sageserpent.plutonium.Scope {
     val asOf = nextRevision match {
       case World.initialRevision => NegativeInfinity[Instant]
-      case _ => Finite(revisionAsOfs(nextRevision - 1))
+      case _ => if (nextRevision <= revisionAsOfs.size)
+        Finite(revisionAsOfs(nextRevision - 1))
+      else throw new RuntimeException(s"Scope based the revision prior to: $nextRevision can't be constructed - there are only ${revisionAsOfs.size} revisions of the world.")
     }
   }
 
