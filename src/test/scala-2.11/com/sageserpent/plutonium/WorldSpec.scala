@@ -45,7 +45,7 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
   }
 
   it should "have no current revision" in {
-    check(Prop.forAllNoShrink(worldGenerator){world => (World.initialRevision == world.nextRevision) :| s"Initial revision of a world ${world.nextRevision} should be: ${World.initialRevision}."})
+    check(Prop.forAllNoShrink(worldGenerator) { world => (World.initialRevision == world.nextRevision) :| s"Initial revision of a world ${world.nextRevision} should be: ${World.initialRevision}." })
   }
 
   val faultyRecordingsGroupedByIdGenerator = mixedRecordingsGroupedByIdGenerator(faulty = true, forbidAnnihilations = false)
@@ -91,9 +91,11 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
                         }}
         yield (historyId, history.datums, pertinentRecordings.map(_._1))
 
-      Prop.all(checks.map { case (historyId, actualHistory, expectedHistory) => ((actualHistory.length == expectedHistory.length) :| s"For ${historyId}, ${actualHistory.length} == expectedHistory.length") &&
-        Prop.all((actualHistory zip expectedHistory zipWithIndex) map { case ((actual, expected), step) => (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}" }: _*)
-      }: _*)
+      if (checks.nonEmpty) {
+        Prop.all(checks.map { case (historyId, actualHistory, expectedHistory) => ((actualHistory.length == expectedHistory.length) :| s"For ${historyId}, ${actualHistory.length} == expectedHistory.length") &&
+          Prop.all((actualHistory zip expectedHistory zipWithIndex) map { case ((actual, expected), step) => (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}" }: _*)
+        }: _*)
+      } else Prop.undecided
     })
   }
 
@@ -124,8 +126,10 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
       }
         yield (historyId, historiesFrom, baselineScope, scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne)
 
-      Prop.all(checks.map { case (historyId, historiesFrom, baselineScope, scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne) => (historiesFrom(scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne).isEmpty) :| s"For ${historyId}, neither scope should yield a history."
-      }: _*)
+      if (checks.nonEmpty) {
+        Prop.all(checks.map { case (historyId, historiesFrom, baselineScope, scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne) => (historiesFrom(scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne).isEmpty) :| s"For ${historyId}, neither scope should yield a history."
+        }: _*)
+      } else Prop.undecided
     })
   }
 
@@ -156,7 +160,9 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
                          Seq(historyUnderTest) = historiesFrom(scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne)}
         yield baselineHistory.datums.zip(historyUnderTest.datums).zipWithIndex map (historyId -> _)) flatten
 
-      Prop.all(checks.map { case (historyId, ((actual, expected), step)) => (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}" }: _*)
+      if (checks.nonEmpty) {
+        Prop.all(checks.map { case (historyId, ((actual, expected), step)) => (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}" }: _*)
+      } else Prop.undecided
     })
   }
 
@@ -185,7 +191,9 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
       }
         yield (baselineScope, scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne)
 
-      Prop.all(checks.map { case (baselineScope, scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne) => (baselineScope.nextRevision === scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne.nextRevision) :| s"${baselineScope.nextRevision} === ${scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne}.nextRevision" }: _*)
+      if (checks.nonEmpty) {
+        Prop.all(checks.map { case (baselineScope, scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne) => (baselineScope.nextRevision === scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne.nextRevision) :| s"${baselineScope.nextRevision} === ${scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne}.nextRevision" }: _*)
+      } else Prop.undecided
     })
   }
 
@@ -227,9 +235,11 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
                         Seq(history) = historiesFrom(scope)}
         yield (historyId, history.datums, pertinentRecordings.map(_._1))
 
-      Prop.all(checks.map { case (historyId, actualHistory, expectedHistory) => ((actualHistory.length == expectedHistory.length) :| s"For ${historyId}, the number of datums: ${actualHistory.length} was expected to be to: ${expectedHistory.length}") &&
-        Prop.all((actualHistory zip expectedHistory zipWithIndex) map { case ((actual, expected), step) => (actual == expected) :| s"For ${historyId}, @step ${step}, the datum: ${actual}, was expected to be: ${expected}" }: _*)
-      }: _*)
+      if (checks.nonEmpty) {
+        Prop.all(checks.map { case (historyId, actualHistory, expectedHistory) => ((actualHistory.length == expectedHistory.length) :| s"For ${historyId}, the number of datums: ${actualHistory.length} was expected to be to: ${expectedHistory.length}") &&
+          Prop.all((actualHistory zip expectedHistory zipWithIndex) map { case ((actual, expected), step) => (actual == expected) :| s"For ${historyId}, @step ${step}, the datum: ${actual}, was expected to be: ${expected}" }: _*)
+        }: _*)
+      } else Prop.undecided
     })
   }
 
@@ -250,12 +260,14 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
       val checks = for {RecordingsNoLaterThan(historyId, historiesFrom, _, _, _) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(queryWhen))}
         yield (historiesFrom, historyId)
 
-      Prop.all(checks.map { case (historiesFrom, historyId) => {
-        (historiesFrom(scope) match {
-          case Seq(_) => true
-        }) :| s"Could not find a history for id: ${historyId}."
-      }
-      }: _*)
+      if (checks.nonEmpty) {
+        Prop.all(checks.map { case (historiesFrom, historyId) => {
+          (historiesFrom(scope) match {
+            case Seq(_) => true
+          }) :| s"Could not find a history for id: ${historyId}."
+        }
+        }: _*)
+      } else Prop.undecided
     })
   }
 
@@ -271,7 +283,7 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
     check(Prop.forAllNoShrink(testCaseGenerator) { case (world, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
       recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfs, world)
 
-      for ((RecordingsNoLaterThan(historyId, _, _, ineffectiveEventFor, _)) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(queryWhen))){
+      for ((RecordingsNoLaterThan(historyId, _, _, ineffectiveEventFor, _)) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(queryWhen))) {
         world.revise(Map(-1 -> Some(ineffectiveEventFor(queryWhen))), asOfs.last)
       }
 
@@ -280,12 +292,14 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
       val checks = for {RecordingsNoLaterThan(historyId, historiesFrom, _, _, _) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(queryWhen))}
         yield (historiesFrom, historyId)
 
-      Prop.all(checks.map { case (historiesFrom, historyId) => {
-        (historiesFrom(scope) match {
-          case Seq(_) => true
-        }) :| s"Could not find a history for id: ${historyId}."
-      }
-      }: _*)
+      if (checks.nonEmpty) {
+        Prop.all(checks.map { case (historiesFrom, historyId) => {
+          (historiesFrom(scope) match {
+            case Seq(_) => true
+          }) :| s"Could not find a history for id: ${historyId}."
+        }
+        }: _*)
+      } else Prop.undecided
     })
   }
 
@@ -306,13 +320,15 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
 
       val checks = for {RecordingsNoLaterThan(referringHistoryId, referringHistoriesFrom, _, _, _) <- referringHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(queryWhen))
                         RecordingsNoLaterThan(referencedHistoryId, _, pertinentRecordings, _, _) <- referencedHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(queryWhen))
-                        Seq(referringHistory: ReferringHistory) = referringHistoriesFrom(scope) if referringHistory.referencedDatums.contains(referencedHistoryId)  && !referringHistory.referencedHistories(referencedHistoryId).isGhost}
+                        Seq(referringHistory: ReferringHistory) = referringHistoriesFrom(scope) if referringHistory.referencedDatums.contains(referencedHistoryId) && !referringHistory.referencedHistories(referencedHistoryId).isGhost}
         yield (referringHistoryId, referencedHistoryId, referringHistory.referencedDatums(referencedHistoryId), pertinentRecordings.map(_._1))
 
-      Prop.all(checks.map { case (referringHistoryId, referencedHistoryId, actualHistory, expectedHistory) => ((actualHistory.length == expectedHistory.length) :| s"For referring history id: ${referringHistoryId}, referenced history id: ${referencedHistoryId}, the number of datums: ${actualHistory.length} was expected to be to: ${expectedHistory.length}") &&
-        Prop.all((actualHistory zip expectedHistory zipWithIndex) map { case ((actual, expected), step) => (actual == expected) :| s"For referring history id: ${referringHistoryId}, referenced history id: ${referencedHistoryId}, @step ${step}, the datum: ${actual}, was expected to be: ${expected}" }: _*)
-      }: _*)
-    })
+      if (checks.nonEmpty) {
+        Prop.all(checks.map { case (referringHistoryId, referencedHistoryId, actualHistory, expectedHistory) => ((actualHistory.length == expectedHistory.length) :| s"For referring history id: ${referringHistoryId}, referenced history id: ${referencedHistoryId}, the number of datums: ${actualHistory.length} was expected to be to: ${expectedHistory.length}") &&
+          Prop.all((actualHistory zip expectedHistory zipWithIndex) map { case ((actual, expected), step) => (actual == expected) :| s"For referring history id: ${referringHistoryId}, referenced history id: ${referencedHistoryId}, @step ${step}, the datum: ${actual}, was expected to be: ${expected}" }: _*)
+        }: _*)
+      } else Prop.undecided
+    }, minSuccessful(12))
   }
 
   it should "yield the same identity for a related item as when that item is directly queried for" in {
@@ -332,16 +348,19 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
 
       val checks = for {RecordingsNoLaterThan(referringHistoryId, referringHistoriesFrom, _, _, _) <- referringHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(queryWhen))
                         RecordingsNoLaterThan(referencedHistoryId, referencedHistoriesFrom, pertinentRecordings, _, _) <- referencedHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(queryWhen))
-                        Seq(referringHistory: ReferringHistory) = referringHistoriesFrom(scope) if referringHistory.referencedDatums.contains(referencedHistoryId)  && !referringHistory.referencedHistories(referencedHistoryId).isGhost}
+                        Seq(referringHistory: ReferringHistory) = referringHistoriesFrom(scope) if referringHistory.referencedDatums.contains(referencedHistoryId) && !referringHistory.referencedHistories(referencedHistoryId).isGhost}
         yield (referringHistoryId, referencedHistoryId)
 
-      Prop.all(checks.map { case (referringHistoryId, referencedHistoryId) =>
-        val directAccessBitemporaQuery: Bitemporal[History] = Bitemporal.withId[History](referencedHistoryId.asInstanceOf[History#Id])
-        val indirectAccessBitemporalQuery: Bitemporal[History] = Bitemporal.withId[ReferringHistory](referringHistoryId.asInstanceOf[ReferringHistory#Id]) map (_.referencedHistories(referencedHistoryId))
-        val agglomeratedBitemporalQuery: Bitemporal[(History, History)] = (directAccessBitemporaQuery |@| indirectAccessBitemporalQuery) ((_: History, _: History))
-        val Seq((directlyAccessedReferencedHistory: History, indirectlyAccessedReferencedHistory: History)) = scope.render(agglomeratedBitemporalQuery)
-        (directlyAccessedReferencedHistory eq indirectlyAccessedReferencedHistory) :| s"Expected item: '$indirectlyAccessedReferencedHistory' accessed indirectly via referring item of id: '$referringHistoryId' to have the same object identity as '$directlyAccessedReferencedHistory' accessed directly via id: '$referencedHistoryId'."}: _*)
-    })
+      if (checks.nonEmpty) {
+        Prop.all(checks.map { case (referringHistoryId, referencedHistoryId) =>
+          val directAccessBitemporaQuery: Bitemporal[History] = Bitemporal.withId[History](referencedHistoryId.asInstanceOf[History#Id])
+          val indirectAccessBitemporalQuery: Bitemporal[History] = Bitemporal.withId[ReferringHistory](referringHistoryId.asInstanceOf[ReferringHistory#Id]) map (_.referencedHistories(referencedHistoryId))
+          val agglomeratedBitemporalQuery: Bitemporal[(History, History)] = (directAccessBitemporaQuery |@| indirectAccessBitemporalQuery) ((_: History, _: History))
+          val Seq((directlyAccessedReferencedHistory: History, indirectlyAccessedReferencedHistory: History)) = scope.render(agglomeratedBitemporalQuery)
+          (directlyAccessedReferencedHistory eq indirectlyAccessedReferencedHistory) :| s"Expected item: '$indirectlyAccessedReferencedHistory' accessed indirectly via referring item of id: '$referringHistoryId' to have the same object identity as '$directlyAccessedReferencedHistory' accessed directly via id: '$referencedHistoryId'."
+        }: _*)
+      } else Prop.undecided
+    }, minSuccessful(12))
   }
 
   it should "not reveal an item at a query time coming before its first defining event" in {
@@ -362,7 +381,9 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
                         histories = historiesFrom(scope)}
         yield (historyId, histories)
 
-      Prop.all(checks.map { case (historyId, histories) => histories.isEmpty :| s"For ${historyId}, ${histories}.isEmpty" }: _*)
+      if (checks.nonEmpty) {
+        Prop.all(checks.map { case (historyId, histories) => histories.isEmpty :| s"For ${historyId}, ${histories}.isEmpty" }: _*)
+      } else Prop.undecided
     })
   }
 
@@ -378,9 +399,9 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
     check(Prop.forAllNoShrink(testCaseGenerator) { case (world, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
       recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfs, world)
 
-      for ((NonExistentRecordings(historyId, _, ineffectiveEventFor)) <- recordingsGroupedById flatMap (_.doesNotExistAt(queryWhen))){
+      for ((NonExistentRecordings(historyId, _, ineffectiveEventFor)) <- recordingsGroupedById flatMap (_.doesNotExistAt(queryWhen))) {
         world.revise(Map(-1 -> Some(ineffectiveEventFor(NegativeInfinity()))), asOfs.last)
-        if (queryWhen < PositiveInfinity()){
+        if (queryWhen < PositiveInfinity()) {
           world.revise(Map(-2 -> Some(ineffectiveEventFor(queryWhen))), asOfs.last)
         }
       }
@@ -391,7 +412,9 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
                         histories = historiesFrom(scope)}
         yield (historyId, histories)
 
-      Prop.all(checks.map { case (historyId, histories) => histories.isEmpty :| s"For ${historyId}, ${histories}.isEmpty" }: _*)
+      if (checks.nonEmpty) {
+        Prop.all(checks.map { case (historyId, histories) => histories.isEmpty :| s"For ${historyId}, ${histories}.isEmpty" }: _*)
+      } else Prop.undecided
     })
   }
 
@@ -416,7 +439,9 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
                                               Seq(referencedHistory) = referencedHistoriesFrom(scope)}
         yield (referencedHistoryId, referencedHistory)
 
-      Prop.all(checks.map { case (historyId, actualHistory) => (actualHistory.datums.isEmpty :| s"For ${historyId}, the datums: ${actualHistory.datums} was supposed to be empty")}: _*)
+      // WON'T FIX: this test doesn't guarantee the generation of at least one useful test case where 'checks' is non-empty - but inspection shows that it does.
+      // Cutting over to marking the property as undecided when 'checks' is empty causes ScalaCheck to exhaust - after trying various configuration tweaks, I'm giving up for now.
+      Prop.all(checks.map { case (historyId, actualHistory) => (actualHistory.datums.isEmpty :| s"For ${historyId}, the datums: ${actualHistory.datums} was supposed to be empty") }: _*)
     })
   }
 
@@ -528,20 +553,21 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
     check(Prop.forAllNoShrink(testCaseGenerator) { case (world, referencedHistoryRecordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, referencingEventWhen) =>
       recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThings), asOfs, world)
 
-     val checks = for {RecordingsNoLaterThan(referencedHistoryId: History#Id, _, _, _, whenAnnihilated) <-
-                          referencedHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(referencingEventWhen))
+      val checks = for {RecordingsNoLaterThan(referencedHistoryId: History#Id, _, _, _, whenAnnihilated) <-
+                        referencedHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(referencingEventWhen))
 
-                       // Have to make sure the referenced item is annihilated *after* the event making the reference to it,
-                       // in case that event caused the creation of a new lifecycle for the referenced item.
-                       laterQueryWhenAtAnnihilation <- whenAnnihilated.toList if laterQueryWhenAtAnnihilation > referencingEventWhen}
-      yield (referencedHistoryId, laterQueryWhenAtAnnihilation)
+                        // Have to make sure the referenced item is annihilated *after* the event making the reference to it,
+                        // in case that event caused the creation of a new lifecycle for the referenced item.
+                        laterQueryWhenAtAnnihilation <- whenAnnihilated.toList if laterQueryWhenAtAnnihilation > referencingEventWhen}
+        yield (referencedHistoryId, laterQueryWhenAtAnnihilation)
 
       val theReferrerId = "The Referrer"
 
-      for (((referencedHistoryId, _), index) <- checks zipWithIndex){
-        world.revise(Map(-1 - index -> Some(Change.forTwoItems[ReferringHistory, History](referencingEventWhen)(theReferrerId, referencedHistoryId, spore {(referringHistory: ReferringHistory, referencedItem: History) => {
+      for (((referencedHistoryId, _), index) <- checks zipWithIndex) {
+        world.revise(Map(-1 - index -> Some(Change.forTwoItems[ReferringHistory, History](referencingEventWhen)(theReferrerId, referencedHistoryId, spore { (referringHistory: ReferringHistory, referencedItem: History) => {
           referringHistory.referTo(referencedItem)
-        }}))), world.revisionAsOfs.last)
+        }
+        }))), world.revisionAsOfs.last)
       }
 
       if (checks.nonEmpty) {
@@ -549,8 +575,13 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
           val scope = world.scopeFor(laterQueryWhenAtAnnihilation, world.nextRevision)
           val Seq(referringHistory) = scope.render(Bitemporal.singleOneOf[ReferringHistory](theReferrerId))
           val ghostItem = referringHistory.referencedHistories(referencedHistoryId)
-
-          ghostItem.isGhost :| s"Expected referenced item of id: '$referencedHistoryId' referred to by item of id: '${referringHistory.id}' to be a ghost at time: $laterQueryWhenAtAnnihilation - the event causing referral was at: $referencingEventWhen."
+          val idOfGhost = ghostItem.id // It's OK to ask a ghost what its name is.
+          val itIsAGhost = ghostItem.isGhost // It's OK to to ask a ghost to prove its ghostliness.
+          intercept[RuntimeException] {
+            ghostItem.datums // It's not OK to ask any other questions - it will just go 'Whooh' at you.
+          }
+          (idOfGhost == referencedHistoryId) :| s"Expected referenced item of id: '$referencedHistoryId' referred to by item of id: '${referringHistory.id}' to reveal its id correctly - but got '$idOfGhost' instead."
+          itIsAGhost :| s"Expected referenced item of id: '$referencedHistoryId' referred to by item of id: '${referringHistory.id}' to be a ghost at time: $laterQueryWhenAtAnnihilation - the event causing referral was at: $referencingEventWhen."
         }
         }: _*)
       } else Prop.undecided
@@ -715,11 +746,13 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
       } yield (asOf, nextRevision, scopeViaNextRevision)
 
 
-      Prop.all(checksViaNextRevision map { case (asOf, nextRevision, scopeViaNextRevision) =>
-        (asOf === scopeViaNextRevision.asOf) :| s"${asOf} === scopeViaNextRevision.asOf" &&
-          (nextRevision === scopeViaNextRevision.nextRevision) :| s"${nextRevision} === scopeViaNextRevision.nextRevision" &&
-          (queryWhen === scopeViaNextRevision.when) :| s"${queryWhen} === scopeViaNextRevision.when"
-      }: _*)
+      if (checksViaNextRevision.nonEmpty) {
+        Prop.all(checksViaNextRevision map { case (asOf, nextRevision, scopeViaNextRevision) =>
+          (asOf === scopeViaNextRevision.asOf) :| s"${asOf} === scopeViaNextRevision.asOf" &&
+            (nextRevision === scopeViaNextRevision.nextRevision) :| s"${nextRevision} === scopeViaNextRevision.nextRevision" &&
+            (queryWhen === scopeViaNextRevision.when) :| s"${queryWhen} === scopeViaNextRevision.when"
+        }: _*)
+      } else Prop.undecided
 
       // TODO - perturb the 'asOf' values so as not to go the next revision and see how that plays with the two ways of constructing a scope.
     })
@@ -751,14 +784,16 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
                                nextRevision = 1 + revision
       } yield (earlierAsOfCorrespondingToRevision, laterAsOfSharingTheSameRevisionAsTheEarlierOne, nextRevision, scopeViaEarlierAsOfCorrespondingToRevision, scopeViaLaterAsOfSharingTheSameRevisionAsTheEarlierOne)
 
-      Prop.all(checksViaAsOf map { case (earlierAsOfCorrespondingToRevision, laterAsOfSharingTheSameRevisionAsTheEarlierOne, nextRevision, scopeViaEarlierAsOfCorrespondingToRevision, scopeViaLaterAsOfSharingTheSameRevisionAsTheEarlierOne) =>
-        (Finite(earlierAsOfCorrespondingToRevision) === scopeViaEarlierAsOfCorrespondingToRevision.asOf) :| s"Finite(${earlierAsOfCorrespondingToRevision}) === scopeViaEarlierAsOfCorrespondingToRevision.asOf" &&
-          (Finite(laterAsOfSharingTheSameRevisionAsTheEarlierOne) === scopeViaLaterAsOfSharingTheSameRevisionAsTheEarlierOne.asOf) :| s"Finite(${laterAsOfSharingTheSameRevisionAsTheEarlierOne}) === scopeViaLaterAsOfSharingTheSameRevisionAsTheEarlierOne.asOf" &&
-          (nextRevision === scopeViaEarlierAsOfCorrespondingToRevision.nextRevision) :| s"${nextRevision} === scopeViaEarlierAsOfCorrespondingToRevision.nextRevision" &&
-          (nextRevision === scopeViaLaterAsOfSharingTheSameRevisionAsTheEarlierOne.nextRevision) :| s"${nextRevision} === scopeViaLaterAsOfSharingTheSameRevisionAsTheEarlierOne.nextRevision" &&
-          (queryWhen == scopeViaEarlierAsOfCorrespondingToRevision.when) :| s"${queryWhen} == scopeViaEarlierAsOfCorrespondingToRevision.when" &&
-          (queryWhen == scopeViaLaterAsOfSharingTheSameRevisionAsTheEarlierOne.when) :| s"${queryWhen} == scopeViaLaterAsOfSharingTheSameRevisionAsTheEarlierOne.when"
-      }: _*)
+      if (checksViaAsOf.nonEmpty) {
+        Prop.all(checksViaAsOf map { case (earlierAsOfCorrespondingToRevision, laterAsOfSharingTheSameRevisionAsTheEarlierOne, nextRevision, scopeViaEarlierAsOfCorrespondingToRevision, scopeViaLaterAsOfSharingTheSameRevisionAsTheEarlierOne) =>
+          (Finite(earlierAsOfCorrespondingToRevision) === scopeViaEarlierAsOfCorrespondingToRevision.asOf) :| s"Finite(${earlierAsOfCorrespondingToRevision}) === scopeViaEarlierAsOfCorrespondingToRevision.asOf" &&
+            (Finite(laterAsOfSharingTheSameRevisionAsTheEarlierOne) === scopeViaLaterAsOfSharingTheSameRevisionAsTheEarlierOne.asOf) :| s"Finite(${laterAsOfSharingTheSameRevisionAsTheEarlierOne}) === scopeViaLaterAsOfSharingTheSameRevisionAsTheEarlierOne.asOf" &&
+            (nextRevision === scopeViaEarlierAsOfCorrespondingToRevision.nextRevision) :| s"${nextRevision} === scopeViaEarlierAsOfCorrespondingToRevision.nextRevision" &&
+            (nextRevision === scopeViaLaterAsOfSharingTheSameRevisionAsTheEarlierOne.nextRevision) :| s"${nextRevision} === scopeViaLaterAsOfSharingTheSameRevisionAsTheEarlierOne.nextRevision" &&
+            (queryWhen == scopeViaEarlierAsOfCorrespondingToRevision.when) :| s"${queryWhen} == scopeViaEarlierAsOfCorrespondingToRevision.when" &&
+            (queryWhen == scopeViaLaterAsOfSharingTheSameRevisionAsTheEarlierOne.when) :| s"${queryWhen} == scopeViaLaterAsOfSharingTheSameRevisionAsTheEarlierOne.when"
+        }: _*)
+      } else Prop.undecided
     })
   }
 
@@ -790,7 +825,9 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
         scopeViaAsOfToHistoryMap += (scopeViaAsOf -> historyFrom(world, recordingsGroupedById)(scopeViaAsOf))
       }
 
-      Prop.all(results: _*)
+      if (results.nonEmpty) {
+        Prop.all(results: _*)
+      } else Prop.undecided
     })
   }
 
@@ -887,9 +924,11 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
                           Seq(history) = historiesFrom(scope)}
           yield (historyId, history.datums, pertinentRecordings.map(_._1))
 
-        Prop.all(checks.map { case (historyId, actualHistory, expectedHistory) => ((actualHistory.length == expectedHistory.length) :| s"For ${historyId}, ${actualHistory.length} == expectedHistory.length") &&
-          Prop.all((actualHistory zip expectedHistory zipWithIndex) map { case ((actual, expected), step) => (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}" }: _*)
-        }: _*)
+        if (checks.nonEmpty) {
+          Prop.all(checks.map { case (historyId, actualHistory, expectedHistory) => ((actualHistory.length == expectedHistory.length) :| s"For ${historyId}, ${actualHistory.length} == expectedHistory.length") &&
+            Prop.all((actualHistory zip expectedHistory zipWithIndex) map { case ((actual, expected), step) => (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}" }: _*)
+          }: _*)
+        } else Prop.undecided
       })
     }
   }
@@ -949,9 +988,11 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
                           Seq(history) = historiesFrom(scope)}
           yield (historyId, history.datums, pertinentRecordings.map(_._1))
 
-        Prop.all(checks.map { case (historyId, actualHistory, expectedHistory) => ((actualHistory.length == expectedHistory.length) :| s"For ${historyId}, ${actualHistory.length} == expectedHistory.length") &&
-          Prop.all((actualHistory zip expectedHistory zipWithIndex) map { case ((actual, expected), step) => (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}" }: _*)
-        }: _*)
+        if (checks.nonEmpty) {
+          Prop.all(checks.map { case (historyId, actualHistory, expectedHistory) => ((actualHistory.length == expectedHistory.length) :| s"For ${historyId}, ${actualHistory.length} == expectedHistory.length") &&
+            Prop.all((actualHistory zip expectedHistory zipWithIndex) map { case ((actual, expected), step) => (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}" }: _*)
+          }: _*)
+        } else Prop.undecided
       })
     }
   }
@@ -1013,9 +1054,11 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
                         Seq(history) = historiesFrom(scope)}
         yield (historyId, history.datums, pertinentRecordings.map(_._1))
 
-      Prop.all(checks.map { case (historyId, actualHistory, expectedHistory) => ((actualHistory.length == expectedHistory.length) :| s"${actualHistory.length} == expectedHistory.length") &&
-        Prop.all((actualHistory zip expectedHistory zipWithIndex) map { case ((actual, expected), step) => (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}" }: _*)
-      }: _*)
+      if (checks.nonEmpty) {
+        Prop.all(checks.map { case (historyId, actualHistory, expectedHistory) => ((actualHistory.length == expectedHistory.length) :| s"${actualHistory.length} == expectedHistory.length") &&
+          Prop.all((actualHistory zip expectedHistory zipWithIndex) map { case ((actual, expected), step) => (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}" }: _*)
+        }: _*)
+      } else Prop.undecided
     })
   }
 
@@ -1095,9 +1138,11 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
                         Seq(history) = historiesFrom(scope)}
         yield (historyId, history.datums, pertinentRecordings.map(_._1))
 
-      Prop.all(checks.map { case (historyId, actualHistory, expectedHistory) => ((actualHistory.length == expectedHistory.length) :| s"${actualHistory.length} == expectedHistory.length") &&
-        Prop.all((actualHistory zip expectedHistory zipWithIndex) map { case ((actual, expected), step) => (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}" }: _*)
-      }: _*)
+      if (checks.nonEmpty) {
+        Prop.all(checks.map { case (historyId, actualHistory, expectedHistory) => ((actualHistory.length == expectedHistory.length) :| s"${actualHistory.length} == expectedHistory.length") &&
+          Prop.all((actualHistory zip expectedHistory zipWithIndex) map { case ((actual, expected), step) => (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}" }: _*)
+        }: _*)
+      } else Prop.undecided
     })
   }
 
@@ -1173,7 +1218,9 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
         }: _*)
       }
 
-      Prop.all(checks: _*)
+      if (checks.nonEmpty) {
+        Prop.all(checks: _*)
+      } else Prop.undecided
     }, minSuccessful(300), maxSize(50))
   }
 

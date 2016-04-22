@@ -11,5 +11,5 @@ trait AnnihilationHook {
     _isGhost = true
   }
 
-  protected def isGhost: Boolean = _isGhost
+  def isGhost: Boolean = _isGhost
 }
