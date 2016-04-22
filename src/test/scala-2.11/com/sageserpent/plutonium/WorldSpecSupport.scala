@@ -185,6 +185,8 @@ trait WorldSpecSupport {
       referringHistory.forget(referencedItem)
     }}))
 
+  def pertainingToAnotherItemDataSampleGenerator(faulty: Boolean) = Gen.frequency(Seq(5 -> referringToItemDataSampleGenerator(faulty), 1 -> forgettingItemDataSampleGenerator(faulty)): _*)
+
   def dataSamplesForAnIdGenerator_[AHistory <: History : TypeTag]( historyIdGenerator: Gen[AHistory#Id], dataSampleGenerators: Gen[(_, (Unbounded[Instant], Boolean, AHistory#Id) => Event)] *) = {
     // It makes no sense to have an id without associated data samples - the act of
     // recording a data sample via a change is what introduces an id into the world.
@@ -542,7 +544,7 @@ trait WorldSpecSupport {
   val integerDataSamplesForAnIdGenerator = dataSamplesForAnIdGenerator_[IntegerHistory](integerHistoryIdGenerator, integerDataSampleGenerator(faulty = false))
   val integerHistoryRecordingsGroupedByIdGenerator = recordingsGroupedByIdGenerator_(integerDataSamplesForAnIdGenerator)
 
-  val referenceToItemDataSamplesForAnIdGenerator = dataSamplesForAnIdGenerator_[ReferringHistory](referringHistoryIdGenerator, referringToItemDataSampleGenerator(faulty = false), forgettingItemDataSampleGenerator(faulty = false))
+  val referenceToItemDataSamplesForAnIdGenerator = dataSamplesForAnIdGenerator_[ReferringHistory](referringHistoryIdGenerator, pertainingToAnotherItemDataSampleGenerator(faulty = false))
 
   def referringHistoryRecordingsGroupedByIdGenerator(forbidMeasurements: Boolean) = recordingsGroupedByIdGenerator_(referenceToItemDataSamplesForAnIdGenerator, forbidMeasurements = forbidMeasurements)
 

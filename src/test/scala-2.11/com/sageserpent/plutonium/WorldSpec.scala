@@ -323,10 +323,12 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
                         Seq(referringHistory: ReferringHistory) = referringHistoriesFrom(scope) if referringHistory.referencedDatums.contains(referencedHistoryId) && !referringHistory.referencedHistories(referencedHistoryId).isGhost}
         yield (referringHistoryId, referencedHistoryId, referringHistory.referencedDatums(referencedHistoryId), pertinentRecordings.map(_._1))
 
-      Prop.all(checks.map { case (referringHistoryId, referencedHistoryId, actualHistory, expectedHistory) => ((actualHistory.length == expectedHistory.length) :| s"For referring history id: ${referringHistoryId}, referenced history id: ${referencedHistoryId}, the number of datums: ${actualHistory.length} was expected to be to: ${expectedHistory.length}") &&
-        Prop.all((actualHistory zip expectedHistory zipWithIndex) map { case ((actual, expected), step) => (actual == expected) :| s"For referring history id: ${referringHistoryId}, referenced history id: ${referencedHistoryId}, @step ${step}, the datum: ${actual}, was expected to be: ${expected}" }: _*)
-      }: _*)
-    })
+      if (checks.nonEmpty) {
+        Prop.all(checks.map { case (referringHistoryId, referencedHistoryId, actualHistory, expectedHistory) => ((actualHistory.length == expectedHistory.length) :| s"For referring history id: ${referringHistoryId}, referenced history id: ${referencedHistoryId}, the number of datums: ${actualHistory.length} was expected to be to: ${expectedHistory.length}") &&
+          Prop.all((actualHistory zip expectedHistory zipWithIndex) map { case ((actual, expected), step) => (actual == expected) :| s"For referring history id: ${referringHistoryId}, referenced history id: ${referencedHistoryId}, @step ${step}, the datum: ${actual}, was expected to be: ${expected}" }: _*)
+        }: _*)
+      } else Prop.undecided
+    }, minSuccessful(12))
   }
 
   it should "yield the same identity for a related item as when that item is directly queried for" in {
@@ -349,14 +351,16 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
                         Seq(referringHistory: ReferringHistory) = referringHistoriesFrom(scope) if referringHistory.referencedDatums.contains(referencedHistoryId) && !referringHistory.referencedHistories(referencedHistoryId).isGhost}
         yield (referringHistoryId, referencedHistoryId)
 
-      Prop.all(checks.map { case (referringHistoryId, referencedHistoryId) =>
-        val directAccessBitemporaQuery: Bitemporal[History] = Bitemporal.withId[History](referencedHistoryId.asInstanceOf[History#Id])
-        val indirectAccessBitemporalQuery: Bitemporal[History] = Bitemporal.withId[ReferringHistory](referringHistoryId.asInstanceOf[ReferringHistory#Id]) map (_.referencedHistories(referencedHistoryId))
-        val agglomeratedBitemporalQuery: Bitemporal[(History, History)] = (directAccessBitemporaQuery |@| indirectAccessBitemporalQuery) ((_: History, _: History))
-        val Seq((directlyAccessedReferencedHistory: History, indirectlyAccessedReferencedHistory: History)) = scope.render(agglomeratedBitemporalQuery)
-        (directlyAccessedReferencedHistory eq indirectlyAccessedReferencedHistory) :| s"Expected item: '$indirectlyAccessedReferencedHistory' accessed indirectly via referring item of id: '$referringHistoryId' to have the same object identity as '$directlyAccessedReferencedHistory' accessed directly via id: '$referencedHistoryId'."
-      }: _*)
-    })
+      if (checks.nonEmpty) {
+        Prop.all(checks.map { case (referringHistoryId, referencedHistoryId) =>
+          val directAccessBitemporaQuery: Bitemporal[History] = Bitemporal.withId[History](referencedHistoryId.asInstanceOf[History#Id])
+          val indirectAccessBitemporalQuery: Bitemporal[History] = Bitemporal.withId[ReferringHistory](referringHistoryId.asInstanceOf[ReferringHistory#Id]) map (_.referencedHistories(referencedHistoryId))
+          val agglomeratedBitemporalQuery: Bitemporal[(History, History)] = (directAccessBitemporaQuery |@| indirectAccessBitemporalQuery) ((_: History, _: History))
+          val Seq((directlyAccessedReferencedHistory: History, indirectlyAccessedReferencedHistory: History)) = scope.render(agglomeratedBitemporalQuery)
+          (directlyAccessedReferencedHistory eq indirectlyAccessedReferencedHistory) :| s"Expected item: '$indirectlyAccessedReferencedHistory' accessed indirectly via referring item of id: '$referringHistoryId' to have the same object identity as '$directlyAccessedReferencedHistory' accessed directly via id: '$referencedHistoryId'."
+        }: _*)
+      } else Prop.undecided
+    }, minSuccessful(12))
   }
 
   it should "not reveal an item at a query time coming before its first defining event" in {
