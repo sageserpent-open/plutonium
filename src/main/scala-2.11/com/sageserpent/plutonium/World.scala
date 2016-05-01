@@ -1,6 +1,8 @@
 package com.sageserpent.plutonium
 
 import java.time.Instant
+import java.util.Optional
+
 import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.World.Revision
 
@@ -43,6 +45,9 @@ trait World[EventId] {
   // the API issues no constraints on when to define an event id key for the first time and when to use it for correction, so why not treat the annulment
   // case the same way?
   def revise(events: Map[EventId, Option[Event]], asOf: Instant): Revision
+
+  // Alien intruder from planet Java!
+  def revise(events: java.util.Map[EventId, Optional[Event]], asOf: Instant): Revision
 
   // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
   // I can imagine queries being set to 'the beginning of time' and 'past the latest event'...

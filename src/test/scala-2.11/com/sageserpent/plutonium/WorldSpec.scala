@@ -19,7 +19,6 @@ import org.scalatest.{FlatSpec, Matchers}
 import scalaz.syntax.applicativePlus._
 
 import scala.collection.immutable.{::, TreeMap}
-import scala.spores._
 import scala.util.Random
 import scalaz.std.stream
 
@@ -470,14 +469,12 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
         for (((referencedHistoryId, whenTheReferencedItemIsAnnihilated), index) <- checks zipWithIndex) {
           val theReferrerId = s"$theReferrerIdBase - $index"
 
-          val change = Change.forTwoItems[ReferringHistory, History](referencingEventWhen)(theReferrerId, unimportantReferencedHistoryId.asInstanceOf[History#Id], spore { (referringHistory: ReferringHistory, referencedItem: History) => {
+          val change = Change.forTwoItems[ReferringHistory, History](referencingEventWhen)(theReferrerId, unimportantReferencedHistoryId.asInstanceOf[History#Id], (referringHistory: ReferringHistory, referencedItem: History) => {
             referringHistory.referTo(referencedItem)
-          }
           })
 
-          val measurement = Measurement.forTwoItems[ReferringHistory, MoreSpecificFooHistory](whenTheReferencedItemIsAnnihilated)(theReferrerId, referencedHistoryId.asInstanceOf[MoreSpecificFooHistory#Id], spore { (referringHistory: ReferringHistory, referencedItem: MoreSpecificFooHistory) => {
+          val measurement = Measurement.forTwoItems[ReferringHistory, MoreSpecificFooHistory](whenTheReferencedItemIsAnnihilated)(theReferrerId, referencedHistoryId.asInstanceOf[MoreSpecificFooHistory#Id], (referringHistory: ReferringHistory, referencedItem: MoreSpecificFooHistory) => {
             referringHistory.referTo(referencedItem)
-          }
           })
 
           intercept[RuntimeException] {
@@ -513,9 +510,8 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
         for (((referencedHistoryId, whenTheReferencedItemIsAnnihilated), index) <- checks zipWithIndex) {
           val theReferrerId = s"$theReferrerIdBase - $index"
 
-          val change = Change.forTwoItems[ReferringHistory, FooHistory](whenTheReferencedItemIsAnnihilated)(theReferrerId, unimportantReferencedHistoryId.asInstanceOf[FooHistory#Id], spore { (referringHistory: ReferringHistory, referencedItem: FooHistory) => {
+          val change = Change.forTwoItems[ReferringHistory, FooHistory](whenTheReferencedItemIsAnnihilated)(theReferrerId, unimportantReferencedHistoryId.asInstanceOf[FooHistory#Id], (referringHistory: ReferringHistory, referencedItem: FooHistory) => {
             referringHistory.referTo(referencedItem)
-          }
           })
 
           world.revise(Map(-1 - (2 * index) -> Some(change)), asOfs.head)
@@ -526,9 +522,8 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
         for (((referencedHistoryId, whenTheReferencedItemIsAnnihilated), index) <- checks zipWithIndex) {
           val theReferrerId = s"$theReferrerIdBase - $index"
 
-          val measurement = Measurement.forTwoItems[ReferringHistory, MoreSpecificFooHistory](whenTheReferencedItemIsAnnihilated)(theReferrerId, referencedHistoryId.asInstanceOf[MoreSpecificFooHistory#Id], spore { (referringHistory: ReferringHistory, referencedItem: MoreSpecificFooHistory) => {
+          val measurement = Measurement.forTwoItems[ReferringHistory, MoreSpecificFooHistory](whenTheReferencedItemIsAnnihilated)(theReferrerId, referencedHistoryId.asInstanceOf[MoreSpecificFooHistory#Id], (referringHistory: ReferringHistory, referencedItem: MoreSpecificFooHistory) => {
             referringHistory.referTo(referencedItem)
-          }
           })
 
           intercept[RuntimeException] {
@@ -564,9 +559,8 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
       val theReferrerId = "The Referrer"
 
       for (((referencedHistoryId, _), index) <- checks zipWithIndex) {
-        world.revise(Map(-1 - index -> Some(Change.forTwoItems[ReferringHistory, History](referencingEventWhen)(theReferrerId, referencedHistoryId, spore { (referringHistory: ReferringHistory, referencedItem: History) => {
+        world.revise(Map(-1 - index -> Some(Change.forTwoItems[ReferringHistory, History](referencingEventWhen)(theReferrerId, referencedHistoryId, (referringHistory: ReferringHistory, referencedItem: History) => {
           referringHistory.referTo(referencedItem)
-        }
         }))), world.revisionAsOfs.last)
       }
 
