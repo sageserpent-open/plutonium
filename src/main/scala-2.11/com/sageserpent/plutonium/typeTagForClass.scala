@@ -8,7 +8,7 @@ import scala.reflect.runtime.universe._
 /**
   * Created by Gerard on 22/04/2016.
   */
-object typeTagForClass {
+private [plutonium] object typeTagForClass {
   def apply[T](clazz: Class[T]): TypeTag[T] = {
     val classSymbol = currentMirror.classSymbol(clazz)
     val classType = classSymbol.toType

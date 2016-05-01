@@ -2,6 +2,7 @@ package com.sageserpent.plutonium
 
 import java.lang.reflect.{Method, Modifier}
 import java.time.Instant
+import java.util.Optional
 
 import com.sageserpent.americium.{Finite, NegativeInfinity, PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.MutableState.{EventIdToEventMap, EventTimeline}
@@ -15,6 +16,7 @@ import scala.collection.mutable
 import scala.collection.mutable.MutableList
 import scala.reflect.runtime._
 import scala.reflect.runtime.universe._
+import scala.collection.JavaConversions._
 
 /**
   * Created by Gerard on 19/07/2015.
@@ -508,7 +510,13 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
     revision
   }
 
-  def eventDataForNewRevision(): (EventTimeline, EventIdToEventMap[EventId]) = {
+  def revise(events: java.util.Map[EventId, Optional[Event]], asOf: Instant): Revision = {
+    val sam: java.util.function.Function[Event, Option[Event]] = event => Some(event): Option[Event]
+    val eventsAsScalaImmutableMap = Map(events mapValues (_.map[Option[Event]](sam).orElse(None)) toSeq: _*)
+    revise(eventsAsScalaImmutableMap, asOf)
+  }
+
+  private def eventDataForNewRevision(): (EventTimeline, EventIdToEventMap[EventId]) = {
     val (baselineEventTimeline, baselineEventIdToEventMap) = nextRevision match {
       case World.initialRevision => TreeBag.empty[(Event, Revision)] -> Map.empty[EventId, (Event, Revision)]
       case _ => mutableState.revisionToEventDataMap(nextRevision - 1)
