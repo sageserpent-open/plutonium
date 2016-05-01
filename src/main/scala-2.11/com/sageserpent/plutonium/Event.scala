@@ -143,3 +143,7 @@ case class Annihilation[Raw <: Identified : TypeTag](definiteWhen: Instant, id: 
   val capturedTypeTag = typeTag[Raw]
 }
 
+object Annihilation {
+  def apply[Raw <: Identified](definiteWhen: Instant, id: Raw#Id, clazz: Class[Raw]): Annihilation[Raw] = Annihilation(definiteWhen, id)(typeTagForClass(clazz))
+}
+
