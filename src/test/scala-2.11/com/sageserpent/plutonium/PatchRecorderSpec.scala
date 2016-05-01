@@ -6,8 +6,10 @@ import java.time.Instant
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.{Finite, Unbounded}
 import com.sageserpent.plutonium.WorldReferenceImplementation.IdentifiedItemsScope
-import org.scalacheck.{Gen, Prop}
 import org.scalacheck.Prop.BooleanOperators
+import org.scalacheck.Test.Parameters.Default
+import org.scalacheck.util.ConsoleReporter
+import org.scalacheck.{Gen, Prop}
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.prop.Checkers
 import org.scalatest.{FlatSpec, Matchers}
@@ -99,17 +101,17 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
                     }
 
                     uglyWayOfCapturingStateAssociatedWithThePatchThatStandsInForTheBestPatch match {
-                      case Some((patchStandInIsNotForbiddenByEventTimeCutoff, sequenceIndexOfPatchStandin)) =>
-                      if (patchStandInIsNotForbiddenByEventTimeCutoff && bestPatches.contains(patch)) {
-                        (patch.apply _).expects(*).onCall {
-                          (_: IdentifiedItemAccess) =>
-                            sequenceIndicesFromAppliedPatches += sequenceIndexOfPatchStandin: Unit
-                        }.once
-                        (patch.checkInvariant _).expects(*).once
-                      } else {
-                        (patch.apply _).expects(*).never
-                        (patch.checkInvariant _).expects(*).never
-                      }
+                      case Some((patchStandInIsNotForbiddenByEventTimeCutoff, sequenceIndexOfPatchStandIn)) =>
+                        if (patchStandInIsNotForbiddenByEventTimeCutoff && bestPatches.contains(patch)) {
+                          (patch.apply _).expects(*).onCall {
+                            (_: IdentifiedItemAccess) =>
+                              sequenceIndicesFromAppliedPatches += sequenceIndexOfPatchStandIn: Unit
+                          }.once
+                          (patch.checkInvariant _).expects(*).once
+                        } else {
+                          (patch.apply _).expects(*).never
+                          (patch.checkInvariant _).expects(*).never
+                        }
                     }
                   }
 
@@ -214,15 +216,25 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
 
         val sequenceIndicesFromAppliedPatches = scala.collection.mutable.ListBuffer.empty[Int]
 
-        for ((recordingAction, masterSequenceIndex) <- recordingActions zip Stream.from(0)) {
+        val rangeOfValidSequenceIndices = 0 until recordingActions.size
+
+        for ((recordingAction, masterSequenceIndex) <- recordingActions zip rangeOfValidSequenceIndices) {
           recordingAction(patchRecorder, masterSequenceIndex, sequenceIndicesFromAppliedPatches)
         }
 
         patchRecorder.noteThatThereAreNoFollowingRecordings()
 
-        (sequenceIndicesFromAppliedPatches.isEmpty ||
-          (sequenceIndicesFromAppliedPatches zip sequenceIndicesFromAppliedPatches.tail forall { case (first, second) => first < second })) :|
-          s"Indices from applied patches and annihilations should be a subsequence of the master sequence."
-    }, maxSize(14))
+        Prop.classify(sequenceIndicesFromAppliedPatches.isEmpty, "No patches were applied") {
+          Prop.collect(sequenceIndicesFromAppliedPatches.size) {
+            (sequenceIndicesFromAppliedPatches.isEmpty ||
+              sequenceIndicesFromAppliedPatches.forall(rangeOfValidSequenceIndices.contains(_)) &&
+                (sequenceIndicesFromAppliedPatches zip sequenceIndicesFromAppliedPatches.tail forall { case (first, second) => first < second })) :|
+              s"Indices from applied patches and annihilations should be a subsequence of the master sequence."
+          }
+        }
+    }, new Default {
+      override val maxSize = 14
+      override val testCallback = ConsoleReporter(verbosity = 2)
+    })
   }
 }
