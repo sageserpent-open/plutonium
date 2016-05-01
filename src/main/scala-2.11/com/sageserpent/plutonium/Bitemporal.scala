@@ -47,11 +47,19 @@ object Bitemporal {
 
   def withId[Raw <: Identified : TypeTag](id: Raw#Id): Bitemporal[Raw] = IdentifiedItemsBitemporalResult(id)
 
+  def withId[Raw <: Identified](id: Raw#Id, clazz: Class[Raw]): Bitemporal[Raw] = withId(id)(typeTagForClass(clazz))
+
   def zeroOrOneOf[Raw <: Identified : TypeTag](id: Raw#Id): Bitemporal[Raw] = ZeroOrOneIdentifiedItemBitemporalResult(id)
+
+  def zeroOrOneOf[Raw <: Identified](id: Raw#Id, clazz: Class[Raw]): Bitemporal[Raw] = zeroOrOneOf(id)(typeTagForClass(clazz))
 
   def singleOneOf[Raw <: Identified : TypeTag](id: Raw#Id): Bitemporal[Raw] = SingleIdentifiedItemBitemporalResult(id)
 
+  def singleOneOf[Raw <: Identified](id: Raw#Id, clazz: Class[Raw]): Bitemporal[Raw] = singleOneOf(id)(typeTagForClass(clazz))
+
   def wildcard[Raw <: Identified : TypeTag](): Bitemporal[Raw] = WildcardBitemporalResult[Raw]
+
+  def wildcard[Raw <: Identified](clazz: Class[Raw]): Bitemporal[Raw] = wildcard()(typeTagForClass(clazz))
 
   def none[Raw]: Bitemporal[Raw] = NoneBitemporalResult[Raw]
 
