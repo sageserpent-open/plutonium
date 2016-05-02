@@ -435,7 +435,7 @@ trait WorldSpecSupport {
     random.pickAlternatelyFrom(recordingsGroupedById map (_.events) map (shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, _)))
   }
 
-  def historyFrom(world: World[_], recordingsGroupedById: List[RecordingsForAnId])(scope: world.Scope): List[(Any, Any)] = (for (recordingsForAnId <- recordingsGroupedById)
+  def historyFrom(world: World[_], recordingsGroupedById: List[RecordingsForAnId])(scope: Scope): List[(Any, Any)] = (for (recordingsForAnId <- recordingsGroupedById)
     yield recordingsForAnId.historiesFrom(scope) flatMap (_.datums) map (recordingsForAnId.historyId -> _)) flatten
 
   def recordEventsInWorld(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[(Option[(Unbounded[Instant], Event)], Int)]], asOfs: List[Instant], world: World[Int]) = {

@@ -425,8 +425,6 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
   // TODO - thread safety.
   import WorldReferenceImplementation._
 
-  type Scope = ScopeImplementation
-
   // Do this as a constructor precondition check.
   eventDataForNewRevision()
 

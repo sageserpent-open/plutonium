@@ -16,9 +16,6 @@ object World {
 }
 
 trait World[EventId] {
-  type Scope <: com.sageserpent.plutonium.Scope
-
-
   def nextRevision: Revision  // NOTE: this is the number of *revisions* that have all been made via 'revise'.
 
   val revisionAsOfs: collection.Seq[Instant]  // Adjacent duplicates are permitted - this is taken to mean that successive revisions were booked in faster than than the time resolution.

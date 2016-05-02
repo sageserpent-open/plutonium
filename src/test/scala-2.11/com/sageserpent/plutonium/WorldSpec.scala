@@ -802,8 +802,8 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
     } yield (world, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
     check(Prop.forAllNoShrink(testCaseGenerator) { case (world, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
       // What's being tested is the imperative behaviour of 'World' wrt its scopes - so use imperative code.
-      val scopeViaRevisionToHistoryMap = scala.collection.mutable.Map.empty[world.Scope, List[(Any, Any)]]
-      val scopeViaAsOfToHistoryMap = scala.collection.mutable.Map.empty[world.Scope, List[(Any, Any)]]
+      val scopeViaRevisionToHistoryMap = scala.collection.mutable.Map.empty[Scope, List[(Any, Any)]]
+      val scopeViaAsOfToHistoryMap = scala.collection.mutable.Map.empty[Scope, List[(Any, Any)]]
 
       val results = scala.collection.mutable.MutableList.empty[Prop]
 
