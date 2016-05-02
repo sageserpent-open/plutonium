@@ -1,7 +1,6 @@
 package com.sageserpent.plutonium
 
 import java.time.Instant
-import java.util.function.{BiConsumer, Consumer}
 
 import com.sageserpent.americium
 import com.sageserpent.americium.{Finite, PositiveInfinity, Unbounded}
@@ -39,17 +38,6 @@ object Change {
   def forOneItem[Raw <: Identified : TypeTag](id: Raw#Id, update: Raw => Unit): Change = forOneItem(americium.NegativeInfinity[Instant]())(id, update)
 
 
-  def forOneItem[Raw <: Identified](when: Unbounded[Instant], id: Raw#Id, clazz: Class[Raw], update: Consumer[Raw]): Change =
-    forOneItem(when)(id, update.accept(_: Raw))(typeTagForClass(clazz))
-
-  def forOneItem[Raw <: Identified](when: Instant, id: Raw#Id, clazz: Class[Raw], update: Consumer[Raw]): Change =
-    forOneItem(when)(id, update.accept(_: Raw))(typeTagForClass(clazz))
-
-  def forOneItem[Raw <: Identified](id: Raw#Id, clazz: Class[Raw], update: Consumer[Raw]): Change =
-    forOneItem(id, update.accept(_: Raw))(typeTagForClass(clazz))
-
-
-
   def forTwoItems[Raw1 <: Identified : TypeTag, Raw2 <: Identified : TypeTag](when: Unbounded[Instant])(id1: Raw1#Id, id2: Raw2#Id, update: (Raw1, Raw2) => Unit): Change = {
     val typeTag1 = implicitly[TypeTag[Raw1]]
     val typeTag2 = implicitly[TypeTag[Raw2]]
@@ -64,20 +52,11 @@ object Change {
   def forTwoItems[Raw1 <: Identified : TypeTag, Raw2 <: Identified : TypeTag](when: Instant)(id1: Raw1#Id, id2: Raw2#Id, update: (Raw1, Raw2) => Unit): Change = forTwoItems(Finite(when))(id1, id2, update)
 
   def forTwoItems[Raw1 <: Identified : TypeTag, Raw2 <: Identified : TypeTag](id1: Raw1#Id, id2: Raw2#Id, update: (Raw1, Raw2) => Unit): Change = forTwoItems(americium.NegativeInfinity[Instant]())(id1, id2, update)
-
-
-  def forTwoItems[Raw1 <: Identified, Raw2 <: Identified](when: Unbounded[Instant], id1: Raw1#Id, clazz1: Class[Raw1], id2: Raw2#Id, clazz2: Class[Raw2], update: BiConsumer[Raw1, Raw2]): Change =
-    forTwoItems(when)(id1, id2, update.accept(_: Raw1, _: Raw2))(typeTagForClass(clazz1), typeTagForClass(clazz2))
-
-  def forTwoItems[Raw1 <: Identified, Raw2 <: Identified](when: Instant, id1: Raw1#Id, clazz1: Class[Raw1], id2: Raw2#Id, clazz2: Class[Raw2], update: BiConsumer[Raw1, Raw2]): Change =
-    forTwoItems(when)(id1, id2, update.accept(_: Raw1, _: Raw2))(typeTagForClass(clazz1), typeTagForClass(clazz2))
-
-  def forTwoItems[Raw1 <: Identified, Raw2 <: Identified](id1: Raw1#Id, clazz1: Class[Raw1], id2: Raw2#Id, clazz2: Class[Raw2], update: BiConsumer[Raw1, Raw2]): Change =
-    forTwoItems(id1, id2, update.accept(_: Raw1, _: Raw2))(typeTagForClass(clazz1), typeTagForClass(clazz2))
 }
 
 case class Measurement(val when: Unbounded[Instant], reading: RecorderFactory => Unit) extends Event {
 }
+
 
 
 object Measurement {
@@ -95,15 +74,6 @@ object Measurement {
   def forOneItem[Raw <: Identified : TypeTag](id: Raw#Id, update: Raw => Unit): Measurement = forOneItem(americium.NegativeInfinity[Instant]())(id, update)
 
 
-  def forOneItem[Raw <: Identified](when: Unbounded[Instant], id: Raw#Id, clazz: Class[Raw], update: Consumer[Raw]): Measurement =
-    forOneItem(when)(id, update.accept(_: Raw))(typeTagForClass(clazz))
-
-  def forOneItem[Raw <: Identified](when: Instant, id: Raw#Id, clazz: Class[Raw], update: Consumer[Raw]): Measurement =
-    forOneItem(when)(id, update.accept(_: Raw))(typeTagForClass(clazz))
-
-  def forOneItem[Raw <: Identified](id: Raw#Id, clazz: Class[Raw], update: Consumer[Raw]): Measurement =
-    forOneItem(id, update.accept(_: Raw))(typeTagForClass(clazz))
-
   def forTwoItems[Raw1 <: Identified : TypeTag, Raw2 <: Identified : TypeTag](when: Unbounded[Instant])(id1: Raw1#Id, id2: Raw2#Id, update: (Raw1, Raw2) => Unit): Measurement = {
     val typeTag1 = implicitly[TypeTag[Raw1]]
     val typeTag2 = implicitly[TypeTag[Raw2]]
@@ -118,16 +88,6 @@ object Measurement {
   def forTwoItems[Raw1 <: Identified : TypeTag, Raw2 <: Identified : TypeTag](when: Instant)(id1: Raw1#Id, id2: Raw2#Id, update: (Raw1, Raw2) => Unit): Measurement = forTwoItems(Finite(when))(id1, id2, update)
 
   def forTwoItems[Raw1 <: Identified : TypeTag, Raw2 <: Identified : TypeTag](id1: Raw1#Id, id2: Raw2#Id, update: (Raw1, Raw2) => Unit): Measurement = forTwoItems(americium.NegativeInfinity[Instant]())(id1, id2, update)
-
-
-  def forTwoItems[Raw1 <: Identified, Raw2 <: Identified](when: Unbounded[Instant], id1: Raw1#Id, clazz1: Class[Raw1], id2: Raw2#Id, clazz2: Class[Raw2], update: BiConsumer[Raw1, Raw2]): Measurement =
-    forTwoItems(when)(id1, id2, update.accept(_: Raw1, _: Raw2))(typeTagForClass(clazz1), typeTagForClass(clazz2))
-
-  def forTwoItems[Raw1 <: Identified, Raw2 <: Identified](when: Instant, id1: Raw1#Id, clazz1: Class[Raw1], id2: Raw2#Id, clazz2: Class[Raw2], update: BiConsumer[Raw1, Raw2]): Measurement =
-    forTwoItems(when)(id1, id2, update.accept(_: Raw1, _: Raw2))(typeTagForClass(clazz1), typeTagForClass(clazz2))
-
-  def forTwoItems[Raw1 <: Identified, Raw2 <: Identified](id1: Raw1#Id, clazz1: Class[Raw1], id2: Raw2#Id, clazz2: Class[Raw2], update: BiConsumer[Raw1, Raw2]): Measurement =
-    forTwoItems(id1, id2, update.accept(_: Raw1, _: Raw2))(typeTagForClass(clazz1), typeTagForClass(clazz2))
 }
 
 
@@ -143,7 +103,4 @@ case class Annihilation[Raw <: Identified : TypeTag](definiteWhen: Instant, id: 
   val capturedTypeTag = typeTag[Raw]
 }
 
-object Annihilation {
-  def apply[Raw <: Identified](definiteWhen: Instant, id: Raw#Id, clazz: Class[Raw]): Annihilation[Raw] = Annihilation(definiteWhen, id)(typeTagForClass(clazz))
-}
 
