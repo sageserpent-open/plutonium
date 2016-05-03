@@ -2,7 +2,7 @@ package com.sageserpent.plutonium
 
 
 
-trait Identified {
+abstract class Identified {
   type Id
   val id: Id
 
