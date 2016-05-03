@@ -5,6 +5,7 @@ import org.scalacheck.{Arbitrary, Gen, Prop}
 import Prop.BooleanOperators
 import org.scalatest.FlatSpec
 import org.scalatest.prop.Checkers
+import org.scalacheck.Properties
 
 import scala.reflect.runtime.universe._
 import scala.util.Random
@@ -67,7 +68,13 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
         override def equal(lhs: Bitemporal[Raw], rhs: Bitemporal[Raw]): Boolean = scope.render(lhs) == scope.render(rhs)
       }
 
-      ScalazProperties.applicative.laws[Bitemporal] && ScalazProperties.plusEmpty.laws[Bitemporal]
+      val properties = new Properties("applicativePlusEmpty")
+
+      properties.include(ScalazProperties.applicative.laws[Bitemporal])
+
+      properties.include(ScalazProperties.plusEmpty.laws[Bitemporal])
+
+      Prop.all(properties.properties map (_._2): _*)
     })
   }
 
