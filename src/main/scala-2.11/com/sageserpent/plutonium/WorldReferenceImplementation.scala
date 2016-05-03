@@ -546,7 +546,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
   // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
   override def scopeFor(when: Unbounded[Instant], asOf: Instant): Scope = new ScopeBasedOnAsOf(when, asOf) with SelfPopulatedScope
 
-  override def forkExperimentalWorld(scope: Scope): World[EventId] = {
+  override def forkExperimentalWorld(scope: javaApi.Scope): World[EventId] = {
     val onePastFinalSharedRevision = scope.nextRevision
     val mutableStateUpToFinalSharedRevision = MutableState[EventId](revisionToEventDataMap = mutable.Map(mutableState.revisionToEventDataMap.filterKeys(_ < onePastFinalSharedRevision).toSeq: _*),
       nextRevision = onePastFinalSharedRevision,
