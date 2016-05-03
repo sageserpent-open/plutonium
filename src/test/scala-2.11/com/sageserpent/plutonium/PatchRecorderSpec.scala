@@ -7,9 +7,7 @@ import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.{Finite, Unbounded}
 import com.sageserpent.plutonium.WorldReferenceImplementation.IdentifiedItemsScope
 import org.scalacheck.Prop.BooleanOperators
-import org.scalacheck.Test.Parameters.Default
-import org.scalacheck.util.ConsoleReporter
-import org.scalacheck.{Gen, Prop}
+import org.scalacheck.{Gen, Prop, Test}
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.prop.Checkers
 import org.scalatest.{FlatSpec, Matchers}
@@ -232,9 +230,6 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
               s"Indices from applied patches and annihilations should be a subsequence of the master sequence."
           }
         }
-    }, new Default {
-      override val maxSize = 14
-      override val testCallback = ConsoleReporter(verbosity = 2)
-    })
+    }, Test.Parameters.defaultVerbose.withMaxSize(14))
   }
 }
