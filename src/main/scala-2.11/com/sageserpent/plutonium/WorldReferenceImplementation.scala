@@ -2,6 +2,7 @@ package com.sageserpent.plutonium
 
 import java.lang.reflect.{Method, Modifier}
 import java.time.Instant
+import java.util.Optional
 
 import com.sageserpent.americium.{Finite, NegativeInfinity, PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.MutableState.{EventIdToEventMap, EventTimeline}
@@ -15,6 +16,7 @@ import scala.collection.mutable
 import scala.collection.mutable.MutableList
 import scala.reflect.runtime._
 import scala.reflect.runtime.universe._
+import scala.collection.JavaConversions._
 
 /**
   * Created by Gerard on 19/07/2015.
@@ -423,8 +425,6 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
   // TODO - thread safety.
   import WorldReferenceImplementation._
 
-  type Scope = ScopeImplementation
-
   // Do this as a constructor precondition check.
   eventDataForNewRevision()
 
@@ -508,7 +508,13 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
     revision
   }
 
-  def eventDataForNewRevision(): (EventTimeline, EventIdToEventMap[EventId]) = {
+  def revise(events: java.util.Map[EventId, Optional[Event]], asOf: Instant): Revision = {
+    val sam: java.util.function.Function[Event, Option[Event]] = event => Some(event): Option[Event]
+    val eventsAsScalaImmutableMap = Map(events mapValues (_.map[Option[Event]](sam).orElse(None)) toSeq: _*)
+    revise(eventsAsScalaImmutableMap, asOf)
+  }
+
+  private def eventDataForNewRevision(): (EventTimeline, EventIdToEventMap[EventId]) = {
     val (baselineEventTimeline, baselineEventIdToEventMap) = nextRevision match {
       case World.initialRevision => TreeBag.empty[(Event, Revision)] -> Map.empty[EventId, (Event, Revision)]
       case _ => mutableState.revisionToEventDataMap(nextRevision - 1)
@@ -540,7 +546,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
   // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
   override def scopeFor(when: Unbounded[Instant], asOf: Instant): Scope = new ScopeBasedOnAsOf(when, asOf) with SelfPopulatedScope
 
-  override def forkExperimentalWorld(scope: Scope): World[EventId] = {
+  override def forkExperimentalWorld(scope: javaApi.Scope): World[EventId] = {
     val onePastFinalSharedRevision = scope.nextRevision
     val mutableStateUpToFinalSharedRevision = MutableState[EventId](revisionToEventDataMap = mutable.Map(mutableState.revisionToEventDataMap.filterKeys(_ < onePastFinalSharedRevision).toSeq: _*),
       nextRevision = onePastFinalSharedRevision,
