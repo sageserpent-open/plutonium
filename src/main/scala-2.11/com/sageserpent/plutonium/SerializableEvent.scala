@@ -6,6 +6,7 @@ import com.sageserpent.americium.Unbounded
 
 // NASTY HACK: This all reeks of coupled hierarchies - 'Event' versus 'SerializableEvent'. What to do?
 sealed abstract class SerializableEvent {
+  def when: Unbounded[Instant]
   def recordOnTo(patchRecorder: PatchRecorder): Unit
 }
 
@@ -27,4 +28,6 @@ case class SerializableAnnihilation(annihilation: Annihilation[_ <: Identified])
       implicit val typeTag = workaroundForUseOfExistentialTypeInAnnihilation.capturedTypeTag
       patchRecorder.recordAnnihilation(when, id)
   }
+
+  override def when: Unbounded[Instant] = annihilation.when
 }
