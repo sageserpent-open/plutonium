@@ -166,7 +166,7 @@ object WorldReferenceImplementation {
       val (constructor, clazz) = cachedProxyConstructors.get((typeOfRaw, additionalInterfaces, callbackFilter)) match {
         case Some(cachedProxyConstructorData) => cachedProxyConstructorData
         case None => val (constructor, clazz) = constructorFor(typeOfRaw)
-          cachedProxyConstructors += ((typeOfRaw, additionalInterfaces, callbackFilter) -> (constructor, clazz))
+          cachedProxyConstructors += ((typeOfRaw, additionalInterfaces, callbackFilter) ->(constructor, clazz))
           constructor -> clazz
       }
       if (!isForRecordingOnly && Modifier.isAbstract(clazz.getModifiers)) {
@@ -227,24 +227,44 @@ object WorldReferenceImplementation {
 
           val recorderFactory = new LocalRecorderFactory
 
-          event match {
+          abstract class SerializableEvent {
+            def recordOnTo(patchRecorder: PatchRecorder): Unit
+          }
+
+          case class SerializableChange(when: Unbounded[Instant], patches: Seq[AbstractPatch]) extends SerializableEvent {
+            override def recordOnTo(patchRecorder: PatchRecorder): Unit = for (patch <- patches) {
+              patchRecorder.recordPatchFromChange(when, patch)
+            }
+          }
+
+          case class SerializableMeasurement(when: Unbounded[Instant], patches: Seq[AbstractPatch]) extends SerializableEvent {
+            override def recordOnTo(patchRecorder: PatchRecorder): Unit = for (patch <- patches) {
+              patchRecorder.recordPatchFromMeasurement(when, patch)
+            }
+          }
+
+          case class SerializableAnnihilation(annihilation: Annihilation[_ <: Identified]) extends SerializableEvent {
+            override def recordOnTo(patchRecorder: PatchRecorder): Unit = annihilation match {
+              case workaroundForUseOfExistentialTypeInAnnihilation@Annihilation(when, id) =>
+                implicit val typeTag = workaroundForUseOfExistentialTypeInAnnihilation.capturedTypeTag
+                patchRecorder.recordAnnihilation(when, id)
+            }
+          }
+
+          val serializableEvent = event match {
             case Change(when, update) =>
               update(recorderFactory)
-              for (patch <- patchesPickedUpFromAnEventBeingApplied) {
-                patchRecorder.recordPatchFromChange(when, patch)
-              }
+              SerializableChange(when, patchesPickedUpFromAnEventBeingApplied)
 
             case Measurement(when, reading) =>
               reading(recorderFactory)
-              for (patch <- patchesPickedUpFromAnEventBeingApplied) {
-                patchRecorder.recordPatchFromMeasurement(when, patch)
-              }
+              SerializableMeasurement(when, patchesPickedUpFromAnEventBeingApplied)
 
-            case annihilation@Annihilation(when, id) => {
-              implicit val typeTag = annihilation.capturedTypeTag
-              patchRecorder.recordAnnihilation(when, id)
-            }
+            case annihilation: Annihilation[_] =>
+              SerializableAnnihilation(annihilation)
           }
+
+          serializableEvent.recordOnTo(patchRecorder)
         }
 
         patchRecorder.noteThatThereAreNoFollowingRecordings()
