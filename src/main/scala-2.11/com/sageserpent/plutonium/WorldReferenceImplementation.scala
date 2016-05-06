@@ -488,7 +488,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
 
     assert(eventIdsMadeObsoleteByThisRevision.size == eventsMadeObsoleteByThisRevision.size)
 
-    val newEvents = for {(eventId, optionalEvent) <- serializableEvents.toSeq
+    val newEvents = for {(eventId, optionalEvent) <- serializableEvents
                          event <- optionalEvent} yield eventId ->(event, nextRevision)
 
     val newEventTimeline = baselineEventTimeline -- eventsMadeObsoleteByThisRevision ++ newEvents.map(_._2)
