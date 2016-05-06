@@ -543,6 +543,8 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
 
     assert(eventTimeline forall { case (_, revision, _) => nextRevision > revision })
     assert(eventIdToEventMap forall { case (_, (_, revision, _)) => nextRevision > revision })
+
+    assert(eventTimeline.isEmpty || 1 == eventTimeline.maxMultiplicity)
   }
 
   // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
