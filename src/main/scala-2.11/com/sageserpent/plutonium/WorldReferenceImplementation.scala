@@ -7,6 +7,7 @@ import java.util.Optional
 import com.sageserpent.americium.{Finite, NegativeInfinity, PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.MutableState.{EventIdToEventMap, EventTimeline}
 import com.sageserpent.plutonium.World.Revision
+
 import net.sf.cglib.proxy._
 import resource.{ManagedResource, makeManagedResource}
 
@@ -25,9 +26,57 @@ import scala.Ordering.Implicits._
 
 
 object WorldReferenceImplementation {
+  type EventOrderingTiebreakerIndex = Int
+
   implicit val eventOrdering = Ordering.by((_: SerializableEvent).when)
 
-  implicit val eventBagConfiguration = SortedBagConfiguration.keepAll[(SerializableEvent, Revision)]
+  implicit val eventBagConfiguration = SortedBagConfiguration.keepAll[(SerializableEvent, Revision, EventOrderingTiebreakerIndex)]
+
+  def serializableEventFrom(event: Event): SerializableEvent = {
+    val patchesPickedUpFromAnEventBeingApplied = mutable.MutableList.empty[AbstractPatch]
+
+    class LocalRecorderFactory extends RecorderFactory {
+      override def apply[Raw <: Identified : TypeTag](id: Raw#Id): Raw = {
+        val itemReconstitutionCallback = new FixedValue {
+          override def loadObject(): AnyRef = id -> typeTag[Raw]
+        }
+
+        val permittedReadAccessCallback = NoOp.INSTANCE
+
+        val forbiddenReadAccessCallback = new FixedValue {
+          override def loadObject(): AnyRef = throw new UnsupportedOperationException("Attempt to call method: '$method' with a non-unit return type on a recorder proxy: '$target' while capturing a change or measurement.")
+        }
+
+        val mutationCallback = new MethodInterceptor {
+          override def intercept(target: Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy): AnyRef = {
+            val item = target.asInstanceOf[Recorder] // Remember, the outer context is making a proxy of type 'Raw'.
+            val capturedPatch = new Patch(item, method, arguments, methodProxy)
+            patchesPickedUpFromAnEventBeingApplied += capturedPatch
+            null // Representation of a unit value by a CGLIB interceptor.
+          }
+        }
+
+        val callbacks = Array(itemReconstitutionCallback, permittedReadAccessCallback, forbiddenReadAccessCallback, mutationCallback)
+
+        constructFrom[Raw](id, RecordingCallbackStuff.filter, callbacks, isForRecordingOnly = true, RecordingCallbackStuff.additionalInterfaces)
+      }
+    }
+
+    val recorderFactory = new LocalRecorderFactory
+
+    event match {
+      case Change(when, update) =>
+        update(recorderFactory)
+        SerializableChange(when, patchesPickedUpFromAnEventBeingApplied)
+
+      case Measurement(when, reading) =>
+        reading(recorderFactory)
+        SerializableMeasurement(when, patchesPickedUpFromAnEventBeingApplied)
+
+      case annihilation: Annihilation[_] =>
+        SerializableAnnihilation(annihilation): SerializableEvent
+    }
+  }
 
   object IdentifiedItemsScope {
     def hasItemOfSupertypeOf[Raw <: Identified : TypeTag](items: scala.collection.mutable.Set[Identified]) = {
@@ -362,8 +411,8 @@ object WorldReferenceImplementation {
 }
 
 object MutableState {
-  type EventTimeline = TreeBag[(SerializableEvent, Revision)]
-  type EventIdToEventMap[EventId] = Map[EventId, (SerializableEvent, Revision)]
+  type EventTimeline = TreeBag[(SerializableEvent, Revision, WorldReferenceImplementation.EventOrderingTiebreakerIndex)]
+  type EventIdToEventMap[EventId] = Map[EventId, (SerializableEvent, Revision, WorldReferenceImplementation.EventOrderingTiebreakerIndex)]
 }
 
 case class MutableState[EventId](revisionToEventDataMap: mutable.Map[Revision, (MutableState.EventTimeline, MutableState.EventIdToEventMap[EventId])],
@@ -419,52 +468,6 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
 
   override val revisionAsOfs: Seq[Instant] = mutableState.revisionAsOfs
 
-  private def serializableEventFrom(event: Event): SerializableEvent = {
-    val patchesPickedUpFromAnEventBeingApplied = mutable.MutableList.empty[AbstractPatch]
-
-    class LocalRecorderFactory extends RecorderFactory {
-      override def apply[Raw <: Identified : TypeTag](id: Raw#Id): Raw = {
-        val itemReconstitutionCallback = new FixedValue {
-          override def loadObject(): AnyRef = id -> typeTag[Raw]
-        }
-
-        val permittedReadAccessCallback = NoOp.INSTANCE
-
-        val forbiddenReadAccessCallback = new FixedValue {
-          override def loadObject(): AnyRef = throw new UnsupportedOperationException("Attempt to call method: '$method' with a non-unit return type on a recorder proxy: '$target' while capturing a change or measurement.")
-        }
-
-        val mutationCallback = new MethodInterceptor {
-          override def intercept(target: Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy): AnyRef = {
-            val item = target.asInstanceOf[Recorder] // Remember, the outer context is making a proxy of type 'Raw'.
-            val capturedPatch = new Patch(item, method, arguments, methodProxy)
-            patchesPickedUpFromAnEventBeingApplied += capturedPatch
-            null // Representation of a unit value by a CGLIB interceptor.
-          }
-        }
-
-        val callbacks = Array(itemReconstitutionCallback, permittedReadAccessCallback, forbiddenReadAccessCallback, mutationCallback)
-
-        constructFrom[Raw](id, RecordingCallbackStuff.filter, callbacks, isForRecordingOnly = true, RecordingCallbackStuff.additionalInterfaces)
-      }
-    }
-
-    val recorderFactory = new LocalRecorderFactory
-
-    event match {
-      case Change(when, update) =>
-        update(recorderFactory)
-        SerializableChange(when, patchesPickedUpFromAnEventBeingApplied)
-
-      case Measurement(when, reading) =>
-        reading(recorderFactory)
-        SerializableMeasurement(when, patchesPickedUpFromAnEventBeingApplied)
-
-      case annihilation: Annihilation[_] =>
-        SerializableAnnihilation(annihilation): SerializableEvent
-    }
-  }
-
   def revise(events: Map[EventId, Option[Event]], asOf: Instant): Revision = {
     if (revisionAsOfs.nonEmpty && revisionAsOfs.last.isAfter(asOf)) throw new IllegalArgumentException(s"'asOf': ${asOf} should be no earlier than that of the last revision: ${revisionAsOfs.last}")
 
@@ -473,8 +476,8 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
     // NOTE: calling '.toSeq' on 'events' to ensure that the map operation preserves the order of the events -
     // this is to keep whatever tiebreaking order was established by the caller for events taking place at the same time
     // in this revision.
-    val serializableEvents = events.toSeq map { case (eventId, event) =>
-      eventId -> (event map serializableEventFrom)
+    val serializableEvents = events.zipWithIndex map { case ((eventId, event), tiebreakerIndex) =>
+      (eventId, (event map serializableEventFrom), tiebreakerIndex)
     }
 
     // NOTE: don't use 'serializableEvents.keys' here - that would result in set-like results,
@@ -482,13 +485,13 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
     // merge together in 'eventsMadeObsoleteByThisRevision', even though they are
     // distinct events with distinct event ids. That in turn breaks the invariant
     // checked by 'checkInvariantWrtEventTimeline'.
-    val (eventIdsMadeObsoleteByThisRevision, eventsMadeObsoleteByThisRevision) = (for {(eventId, _) <- serializableEvents
+    val (eventIdsMadeObsoleteByThisRevision, eventsMadeObsoleteByThisRevision) = (for {(eventId, _, _) <- serializableEvents
                                                                                        obsoleteEvent <- baselineEventIdToEventMap get eventId} yield eventId -> obsoleteEvent) unzip
 
     assert(eventIdsMadeObsoleteByThisRevision.size == eventsMadeObsoleteByThisRevision.size)
 
-    val newEvents = for {(eventId, optionalEvent) <- serializableEvents
-                         event <- optionalEvent} yield eventId ->(event, nextRevision)
+    val newEvents = for {(eventId, optionalEvent, tiebreakerIndex) <- serializableEvents
+                         event <- optionalEvent} yield eventId ->(event, nextRevision, tiebreakerIndex)
 
     val newEventTimeline = baselineEventTimeline -- eventsMadeObsoleteByThisRevision ++ newEvents.map(_._2)
 
@@ -519,7 +522,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
 
   private def eventDataForNewRevision(): (EventTimeline, EventIdToEventMap[EventId]) = {
     val (baselineEventTimeline, baselineEventIdToEventMap) = nextRevision match {
-      case World.initialRevision => TreeBag.empty[(SerializableEvent, Revision)] -> Map.empty[EventId, (SerializableEvent, Revision)]
+      case World.initialRevision => TreeBag.empty[(SerializableEvent, Revision, EventOrderingTiebreakerIndex)] -> Map.empty[EventId, (SerializableEvent, Revision, EventOrderingTiebreakerIndex)]
       case _ => mutableState.revisionToEventDataMap(nextRevision - 1)
     }
 
@@ -527,7 +530,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
     (baselineEventTimeline, baselineEventIdToEventMap)
   }
 
-  private def checkInvariantWrtEventTimeline(eventTimeline: MutableState.EventTimeline, eventIdToEventMap: Map[EventId, (SerializableEvent, Revision)], nextRevision: Revision): Unit = {
+  private def checkInvariantWrtEventTimeline(eventTimeline: MutableState.EventTimeline, eventIdToEventMap: EventIdToEventMap[EventId], nextRevision: Revision): Unit = {
     // Each event in 'eventIdToEventMap' should be in 'eventTimeline' and vice-versa.
 
     val eventsInEventTimeline = eventTimeline toList
@@ -539,8 +542,8 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
 
     // Each event in both 'eventIdToEventMap' and 'eventTimeline' should have been defined in a revision before the next one for the world as a whole.
 
-    assert(eventTimeline forall { case (_, revision) => nextRevision > revision })
-    assert(eventIdToEventMap forall { case (_, (_, revision)) => nextRevision > revision })
+    assert(eventTimeline forall { case (_, revision, _) => nextRevision > revision })
+    assert(eventIdToEventMap forall { case (_, (_, revision, _)) => nextRevision > revision })
   }
 
   // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
@@ -557,8 +560,8 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
     val cutoffWhen = scope.when
     val mutableStateWithEventsNoLaterThanCutoff = mutableStateUpToFinalSharedRevision.copy(revisionToEventDataMap = mutableStateUpToFinalSharedRevision.revisionToEventDataMap map {
       case (revision, (baseEventTimeline, baseEventIdToEventMap)) =>
-        revision ->(baseEventTimeline filter { case (event, _) => cutoffWhen >= event.when },
-          baseEventIdToEventMap filter { case (_, (event, _)) => cutoffWhen >= event.when })
+        revision ->(baseEventTimeline filter { case (event, _, _) => cutoffWhen >= event.when },
+          baseEventIdToEventMap filter { case (_, (event, _, _)) => cutoffWhen >= event.when })
     })
     new WorldReferenceImplementation[EventId](mutableState = mutableStateWithEventsNoLaterThanCutoff)
   }
