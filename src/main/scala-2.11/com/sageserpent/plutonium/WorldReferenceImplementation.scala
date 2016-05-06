@@ -26,11 +26,8 @@ import scala.Ordering.Implicits._
 
 
 object WorldReferenceImplementation {
-  type EventOrderingTiebreakerIndex = Int
-
   implicit val eventOrdering = Ordering.by((_: SerializableEvent).when)
-
-  implicit val eventBagConfiguration = SortedBagConfiguration.keepAll[(SerializableEvent, Revision, EventOrderingTiebreakerIndex)]
+  implicit val eventBagConfiguration = SortedBagConfiguration.compact[MutableState.EventData]
 
   def serializableEventFrom(event: Event): SerializableEvent = {
     val patchesPickedUpFromAnEventBeingApplied = mutable.MutableList.empty[AbstractPatch]
@@ -411,8 +408,10 @@ object WorldReferenceImplementation {
 }
 
 object MutableState {
-  type EventTimeline = TreeBag[(SerializableEvent, Revision, WorldReferenceImplementation.EventOrderingTiebreakerIndex)]
-  type EventIdToEventMap[EventId] = Map[EventId, (SerializableEvent, Revision, WorldReferenceImplementation.EventOrderingTiebreakerIndex)]
+  type EventOrderingTiebreakerIndex = Int
+  type EventData = (SerializableEvent, Revision, EventOrderingTiebreakerIndex)
+  type EventTimeline = TreeBag[EventData]
+  type EventIdToEventMap[EventId] = Map[EventId, EventData]
 }
 
 case class MutableState[EventId](revisionToEventDataMap: mutable.Map[Revision, (MutableState.EventTimeline, MutableState.EventIdToEventMap[EventId])],
@@ -522,7 +521,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
 
   private def eventDataForNewRevision(): (EventTimeline, EventIdToEventMap[EventId]) = {
     val (baselineEventTimeline, baselineEventIdToEventMap) = nextRevision match {
-      case World.initialRevision => TreeBag.empty[(SerializableEvent, Revision, EventOrderingTiebreakerIndex)] -> Map.empty[EventId, (SerializableEvent, Revision, EventOrderingTiebreakerIndex)]
+      case World.initialRevision => TreeBag.empty[MutableState.EventData] -> Map.empty[EventId, MutableState.EventData]
       case _ => mutableState.revisionToEventDataMap(nextRevision - 1)
     }
 
