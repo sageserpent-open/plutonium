@@ -17,6 +17,7 @@ import scala.collection.mutable.MutableList
 import scala.reflect.runtime._
 import scala.reflect.runtime.universe._
 import scala.collection.JavaConversions._
+import scala.Ordering.Implicits._
 
 /**
   * Created by Gerard on 19/07/2015.
@@ -24,11 +25,9 @@ import scala.collection.JavaConversions._
 
 
 object WorldReferenceImplementation {
-  implicit val eventOrdering = new Ordering[(SerializableEvent, Revision)] {
-    override def compare(lhs: (SerializableEvent, Revision), rhs: (SerializableEvent, Revision)) = lhs._1.when.compareTo(rhs._1.when)
-  }
+  implicit val eventOrdering = Ordering.by((_: SerializableEvent).when)
 
-  implicit val eventBagConfiguration = SortedBagConfiguration.keepAll
+  implicit val eventBagConfiguration = SortedBagConfiguration.keepAll[(SerializableEvent, Revision)]
 
   object IdentifiedItemsScope {
     def hasItemOfSupertypeOf[Raw <: Identified : TypeTag](items: scala.collection.mutable.Set[Identified]) = {
@@ -193,7 +192,7 @@ object WorldReferenceImplementation {
           }(List.empty)
         }
 
-        val relevantEvents = eventTimeline.bucketsIterator flatMap (_.toArray.sortBy(_._2) map (_._1))
+        val relevantEvents = eventTimeline map (_._1)
         for (event <- relevantEvents) {
           event.recordOnTo(patchRecorder)
         }
