@@ -26,9 +26,6 @@ import scala.Ordering.Implicits._
 
 
 object WorldReferenceImplementation {
-  implicit val eventOrdering = Ordering.by((_: SerializableEvent).when)
-  implicit val eventBagConfiguration = SortedBagConfiguration.compact[MutableState.EventData]
-
   def serializableEventFrom(event: Event): SerializableEvent = {
     val patchesPickedUpFromAnEventBeingApplied = mutable.MutableList.empty[AbstractPatch]
 
@@ -412,9 +409,12 @@ object MutableState {
   type EventData = (SerializableEvent, Revision, EventOrderingTiebreakerIndex)
   type EventTimeline = TreeBag[EventData]
   type EventIdToEventMap[EventId] = Map[EventId, EventData]
+
+  implicit val eventOrdering = Ordering.by((_: SerializableEvent).when)
+  implicit val eventBagConfiguration = SortedBagConfiguration.compact[EventData]
 }
 
-case class MutableState[EventId](revisionToEventDataMap: mutable.Map[Revision, (MutableState.EventTimeline, MutableState.EventIdToEventMap[EventId])],
+case class MutableState[EventId](revisionToEventDataMap: mutable.Map[Revision, (EventTimeline, EventIdToEventMap[EventId])],
                                  var nextRevision: Revision,
                                  revisionAsOfs: MutableList[Instant]) {
 }
@@ -422,11 +422,12 @@ case class MutableState[EventId](revisionToEventDataMap: mutable.Map[Revision, (
 class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId]) extends World[EventId] {
   // TODO - thread safety.
   import WorldReferenceImplementation._
+  import MutableState._
 
   // Do this as a constructor precondition check.
   eventDataForNewRevision()
 
-  def this() = this(MutableState(revisionToEventDataMap = scala.collection.mutable.Map.empty[Revision, (MutableState.EventTimeline, MutableState.EventIdToEventMap[EventId])],
+  def this() = this(MutableState(revisionToEventDataMap = scala.collection.mutable.Map.empty[Revision, (EventTimeline, EventIdToEventMap[EventId])],
     nextRevision = World.initialRevision,
     revisionAsOfs = MutableList.empty))
 
@@ -521,7 +522,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
 
   private def eventDataForNewRevision(): (EventTimeline, EventIdToEventMap[EventId]) = {
     val (baselineEventTimeline, baselineEventIdToEventMap) = nextRevision match {
-      case World.initialRevision => TreeBag.empty[MutableState.EventData] -> Map.empty[EventId, MutableState.EventData]
+      case World.initialRevision => TreeBag.empty[EventData] -> Map.empty[EventId, EventData]
       case _ => mutableState.revisionToEventDataMap(nextRevision - 1)
     }
 
@@ -529,7 +530,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
     (baselineEventTimeline, baselineEventIdToEventMap)
   }
 
-  private def checkInvariantWrtEventTimeline(eventTimeline: MutableState.EventTimeline, eventIdToEventMap: EventIdToEventMap[EventId], nextRevision: Revision): Unit = {
+  private def checkInvariantWrtEventTimeline(eventTimeline: EventTimeline, eventIdToEventMap: EventIdToEventMap[EventId], nextRevision: Revision): Unit = {
     // Each event in 'eventIdToEventMap' should be in 'eventTimeline' and vice-versa.
 
     val eventsInEventTimeline = eventTimeline toList
