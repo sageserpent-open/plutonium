@@ -7,12 +7,11 @@ import java.util.Optional
 import com.sageserpent.americium.{Finite, NegativeInfinity, PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.MutableState.{EventIdToEventMap, EventTimeline}
 import com.sageserpent.plutonium.World.Revision
-
 import net.sf.cglib.proxy._
 import resource.{ManagedResource, makeManagedResource}
 
 import scala.collection.Searching._
-import scala.collection.immutable.{SortedBagConfiguration, TreeBag}
+import scala.collection.immutable.TreeSet
 import scala.collection.mutable
 import scala.collection.mutable.MutableList
 import scala.reflect.runtime._
@@ -235,7 +234,10 @@ object WorldReferenceImplementation {
           }(List.empty)
         }
 
-        val relevantEvents = eventTimeline map (_._1)
+        // NOTE: the '.toSeq' call is used to prevent the map operation
+        // from building a hash set, thereby scrambling the order of events
+        // established by the timeline.
+        val relevantEvents = eventTimeline.toSeq map (_._1)
         for (event <- relevantEvents) {
           event.recordOnTo(patchRecorder)
         }
@@ -407,11 +409,10 @@ object WorldReferenceImplementation {
 object MutableState {
   type EventOrderingTiebreakerIndex = Int
   type EventData = (SerializableEvent, Revision, EventOrderingTiebreakerIndex)
-  type EventTimeline = TreeBag[EventData]
+  type EventTimeline = TreeSet[EventData]
   type EventIdToEventMap[EventId] = Map[EventId, EventData]
 
   implicit val eventOrdering = Ordering.by((_: SerializableEvent).when)
-  implicit val eventBagConfiguration = SortedBagConfiguration.compact[EventData]
 }
 
 case class MutableState[EventId](revisionToEventDataMap: mutable.Map[Revision, (EventTimeline, EventIdToEventMap[EventId])],
@@ -473,9 +474,6 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
 
     val (baselineEventTimeline: EventTimeline, baselineEventIdToEventMap: EventIdToEventMap[EventId]) = eventDataForNewRevision()
 
-    // NOTE: calling '.toSeq' on 'events' to ensure that the map operation preserves the order of the events -
-    // this is to keep whatever tiebreaking order was established by the caller for events taking place at the same time
-    // in this revision.
     val serializableEvents = events.zipWithIndex map { case ((eventId, event), tiebreakerIndex) =>
       (eventId, (event map serializableEventFrom), tiebreakerIndex)
     }
@@ -522,7 +520,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
 
   private def eventDataForNewRevision(): (EventTimeline, EventIdToEventMap[EventId]) = {
     val (baselineEventTimeline, baselineEventIdToEventMap) = nextRevision match {
-      case World.initialRevision => TreeBag.empty[EventData] -> Map.empty[EventId, EventData]
+      case World.initialRevision => TreeSet.empty[EventData] -> Map.empty[EventId, EventData]
       case _ => mutableState.revisionToEventDataMap(nextRevision - 1)
     }
 
@@ -544,8 +542,6 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
 
     assert(eventTimeline forall { case (_, revision, _) => nextRevision > revision })
     assert(eventIdToEventMap forall { case (_, (_, revision, _)) => nextRevision > revision })
-
-    assert(eventTimeline.isEmpty || 1 == eventTimeline.maxMultiplicity)
   }
 
   // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
