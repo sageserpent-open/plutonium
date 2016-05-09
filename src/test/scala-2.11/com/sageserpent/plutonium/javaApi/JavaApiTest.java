@@ -67,6 +67,18 @@ public class JavaApiTest {
             world.revise(eventMap, asOf);
         }
 
+        {
+            HashMap<Integer, Optional<Event>> eventMap = new HashMap<>();
+
+            eventMap.put(1, Optional.of(Measurement.forOneItem(Instant.ofEpochSecond(0), "Fred", Example.class, exampleItem -> {
+                exampleItem.setAge(3);
+            })));
+
+            Instant asOf = Instant.now();
+
+            world.revise(eventMap, asOf);
+        }
+
 
         Unbounded<Instant> queryTime = Finite.apply(Instant.ofEpochSecond(2));
 
@@ -127,5 +139,14 @@ public class JavaApiTest {
             assert !exampleIterable.iterator().hasNext();
         }
 
+        {
+            int followingRevision = 5;
+
+            com.sageserpent.plutonium.Scope scope = world.scopeFor(agesAgo, followingRevision);
+
+            Example example = scope.render(Bitemporal.withId("Fred", Example.class)).head();
+
+            assertEquals(3, example.getAge());
+        }
     }
 }
