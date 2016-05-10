@@ -1,6 +1,8 @@
 package com.sageserpent.plutonium
 
 import java.time.Instant
+import java.util.Optional
+
 import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.World.Revision
 
@@ -14,9 +16,6 @@ object World {
 }
 
 trait World[EventId] {
-  type Scope <: com.sageserpent.plutonium.Scope
-
-
   def nextRevision: Revision  // NOTE: this is the number of *revisions* that have all been made via 'revise'.
 
   val revisionAsOfs: collection.Seq[Instant]  // Adjacent duplicates are permitted - this is taken to mean that successive revisions were booked in faster than than the time resolution.
@@ -44,6 +43,9 @@ trait World[EventId] {
   // case the same way?
   def revise(events: Map[EventId, Option[Event]], asOf: Instant): Revision
 
+  // Alien intruder from planet Java!
+  def revise(events: java.util.Map[EventId, Optional[Event]], asOf: Instant): Revision
+
   // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
   // I can imagine queries being set to 'the beginning of time' and 'past the latest event'...
   // NOTE: precondition that 'nextRevision' <= 'this.nextRevision' - which implies that a scope makes a *snapshot* of the world when it is created - subsequent revisions to the world are disregarded.
@@ -58,5 +60,5 @@ trait World[EventId] {
   // differences that a) the revision history is truncated after the scope's revision and b) that only events coming no
   // later than the scope's 'when' are included in each revision. Of course, the experimental world can itself be revised
   // in just the same way as any other world, including the definition of events beyond the defining scope's 'when'.
-  def forkExperimentalWorld(scope: Scope): World[EventId]
+  def forkExperimentalWorld(scope: javaApi.Scope): World[EventId]
 }

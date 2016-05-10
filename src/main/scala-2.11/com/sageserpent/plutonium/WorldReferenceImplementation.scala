@@ -2,6 +2,7 @@ package com.sageserpent.plutonium
 
 import java.lang.reflect.{Method, Modifier}
 import java.time.Instant
+import java.util.Optional
 
 import com.sageserpent.americium.{Finite, NegativeInfinity, PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.MutableState.{EventIdToEventMap, EventTimeline}
@@ -10,11 +11,13 @@ import net.sf.cglib.proxy._
 import resource.{ManagedResource, makeManagedResource}
 
 import scala.collection.Searching._
-import scala.collection.immutable.{SortedBagConfiguration, TreeBag}
+import scala.collection.immutable.TreeSet
 import scala.collection.mutable
 import scala.collection.mutable.MutableList
 import scala.reflect.runtime._
 import scala.reflect.runtime.universe._
+import scala.collection.JavaConversions._
+import scala.Ordering.Implicits._
 
 /**
   * Created by Gerard on 19/07/2015.
@@ -22,11 +25,51 @@ import scala.reflect.runtime.universe._
 
 
 object WorldReferenceImplementation {
-  implicit val eventOrdering = new Ordering[(Event, Revision)] {
-    override def compare(lhs: (Event, Revision), rhs: (Event, Revision)) = lhs._1.when.compareTo(rhs._1.when)
-  }
+  def serializableEventFrom(event: Event): SerializableEvent = {
+    val patchesPickedUpFromAnEventBeingApplied = mutable.MutableList.empty[AbstractPatch]
 
-  implicit val eventBagConfiguration = SortedBagConfiguration.keepAll
+    class LocalRecorderFactory extends RecorderFactory {
+      override def apply[Raw <: Identified : TypeTag](id: Raw#Id): Raw = {
+        val itemReconstitutionCallback = new FixedValue {
+          override def loadObject(): AnyRef = id -> typeTag[Raw]
+        }
+
+        val permittedReadAccessCallback = NoOp.INSTANCE
+
+        val forbiddenReadAccessCallback = new FixedValue {
+          override def loadObject(): AnyRef = throw new UnsupportedOperationException("Attempt to call method: '$method' with a non-unit return type on a recorder proxy: '$target' while capturing a change or measurement.")
+        }
+
+        val mutationCallback = new MethodInterceptor {
+          override def intercept(target: Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy): AnyRef = {
+            val item = target.asInstanceOf[Recorder] // Remember, the outer context is making a proxy of type 'Raw'.
+            val capturedPatch = new Patch(item, method, arguments, methodProxy)
+            patchesPickedUpFromAnEventBeingApplied += capturedPatch
+            null // Representation of a unit value by a CGLIB interceptor.
+          }
+        }
+
+        val callbacks = Array(itemReconstitutionCallback, permittedReadAccessCallback, forbiddenReadAccessCallback, mutationCallback)
+
+        constructFrom[Raw](id, RecordingCallbackStuff.filter, callbacks, isForRecordingOnly = true, RecordingCallbackStuff.additionalInterfaces)
+      }
+    }
+
+    val recorderFactory = new LocalRecorderFactory
+
+    event match {
+      case Change(when, update) =>
+        update(recorderFactory)
+        SerializableChange(when, patchesPickedUpFromAnEventBeingApplied)
+
+      case Measurement(when, reading) =>
+        reading(recorderFactory)
+        SerializableMeasurement(when, patchesPickedUpFromAnEventBeingApplied)
+
+      case annihilation: Annihilation[_] =>
+        SerializableAnnihilation(annihilation): SerializableEvent
+    }
+  }
 
   object IdentifiedItemsScope {
     def hasItemOfSupertypeOf[Raw <: Identified : TypeTag](items: scala.collection.mutable.Set[Identified]) = {
@@ -77,6 +120,47 @@ object WorldReferenceImplementation {
     val isGhostProperty = classOf[Identified].getMethod("isGhost")
 
     val isRecordAnnihilationMethod = classOf[AnnihilationHook].getMethod("recordAnnihilation")
+  }
+
+  val cachedProxyConstructors = scala.collection.mutable.Map.empty[(Type, Array[Class[_]], CallbackFilter), (universe.MethodMirror, RuntimeClass)]
+
+  def constructFrom[Raw <: Identified : TypeTag](id: Raw#Id, callbackFilter: CallbackFilter, callbacks: Array[Callback], isForRecordingOnly: Boolean, additionalInterfaces: Array[Class[_]]) = {
+    // NOTE: this returns items that are proxies to raw values, rather than the raw values themselves. Depending on the
+    // context (using a scope created by a client from a world, as opposed to while building up that scope from patches),
+    // the items may forbid certain operations on them - e.g. for rendering from a client's scope, the items should be
+    // read-only.
+
+    def constructorFor(identifiableType: Type) = {
+      val clazz = currentMirror.runtimeClass(identifiableType.typeSymbol.asClass)
+
+      val enhancer = new Enhancer
+      enhancer.setInterceptDuringConstruction(false)
+      enhancer.setSuperclass(clazz)
+      enhancer.setInterfaces(additionalInterfaces)
+      enhancer.setCallbackFilter(callbackFilter)
+      enhancer.setCallbackTypes(callbacks map (_.getClass))
+
+      val proxyClazz = enhancer.createClass()
+
+      val proxyClassSymbol = currentMirror.classSymbol(proxyClazz)
+      val classMirror = currentMirror.reflectClass(proxyClassSymbol.asClass)
+      val constructor = proxyClassSymbol.toType.decls.find(_.isConstructor).get
+      classMirror.reflectConstructor(constructor.asMethod) -> clazz
+    }
+    val typeOfRaw = typeOf[Raw]
+    val (constructor, clazz) = cachedProxyConstructors.get((typeOfRaw, additionalInterfaces, callbackFilter)) match {
+      case Some(cachedProxyConstructorData) => cachedProxyConstructorData
+      case None => val (constructor, clazz) = constructorFor(typeOfRaw)
+        cachedProxyConstructors += ((typeOfRaw, additionalInterfaces, callbackFilter) ->(constructor, clazz))
+        constructor -> clazz
+    }
+    if (!isForRecordingOnly && Modifier.isAbstract(clazz.getModifiers)) {
+      throw new UnsupportedOperationException(s"Attempt to create an instance of an abstract class '$clazz' for id: '$id'.")
+    }
+    val proxy = constructor(id).asInstanceOf[Raw]
+    val proxyFactoryApi = proxy.asInstanceOf[Factory]
+    proxyFactoryApi.setCallbacks(callbacks)
+    proxy
   }
 
   object RecordingCallbackStuff {
@@ -135,48 +219,6 @@ object WorldReferenceImplementation {
 
     var itemsAreLocked = false
 
-    val cachedProxyConstructors = scala.collection.mutable.Map.empty[(Type, Array[Class[_]], CallbackFilter), (universe.MethodMirror, RuntimeClass)]
-
-    def constructFrom[Raw <: Identified : TypeTag](id: Raw#Id, callbackFilter: CallbackFilter, callbacks: Array[Callback], isForRecordingOnly: Boolean, additionalInterfaces: Array[Class[_]]) = {
-      // NOTE: this returns items that are proxies to raw values, rather than the raw values themselves. Depending on the
-      // context (using a scope created by a client from a world, as opposed to while building up that scope from patches),
-      // the items may forbid certain operations on them - e.g. for rendering from a client's scope, the items should be
-      // read-only.
-
-      def constructorFor(identifiableType: Type) = {
-        val clazz = currentMirror.runtimeClass(identifiableType.typeSymbol.asClass)
-
-        val enhancer = new Enhancer
-        enhancer.setInterceptDuringConstruction(false)
-        enhancer.setSuperclass(clazz)
-        enhancer.setInterfaces(additionalInterfaces)
-        enhancer.setCallbackFilter(callbackFilter)
-        enhancer.setCallbackTypes(callbacks map (_.getClass))
-
-        val proxyClazz = enhancer.createClass()
-
-        val proxyClassSymbol = currentMirror.classSymbol(proxyClazz)
-        val classMirror = currentMirror.reflectClass(proxyClassSymbol.asClass)
-        val constructor = proxyClassSymbol.toType.decls.find(_.isConstructor).get
-        classMirror.reflectConstructor(constructor.asMethod) -> clazz
-      }
-      val typeOfRaw = typeOf[Raw]
-      val (constructor, clazz) = cachedProxyConstructors.get((typeOfRaw, additionalInterfaces, callbackFilter)) match {
-        case Some(cachedProxyConstructorData) => cachedProxyConstructorData
-        case None => val (constructor, clazz) = constructorFor(typeOfRaw)
-          cachedProxyConstructors += ((typeOfRaw, additionalInterfaces, callbackFilter) -> (constructor, clazz))
-          constructor -> clazz
-      }
-      if (!isForRecordingOnly && Modifier.isAbstract(clazz.getModifiers)) {
-        throw new UnsupportedOperationException(s"Attempt to create an instance of an abstract class '$clazz' for id: '$id'.")
-      }
-      val proxy = constructor(id).asInstanceOf[Raw]
-      val proxyFactoryApi = proxy.asInstanceOf[Factory]
-      proxyFactoryApi.setCallbacks(callbacks)
-      proxy
-    }
-
-
     def this(_when: Unbounded[Instant], _nextRevision: Revision, _asOf: Unbounded[Instant], eventTimeline: MutableState.EventTimeline) = {
       this()
       for (_ <- makeManagedResource {
@@ -192,57 +234,12 @@ object WorldReferenceImplementation {
           }(List.empty)
         }
 
-        val relevantEvents = eventTimeline.bucketsIterator flatMap (_.toArray.sortBy(_._2) map (_._1))
+        // NOTE: the '.toSeq' call is used to prevent the map operation
+        // from building a hash set, thereby scrambling the order of events
+        // established by the timeline.
+        val relevantEvents = eventTimeline.toSeq map (_._1)
         for (event <- relevantEvents) {
-          val patchesPickedUpFromAnEventBeingApplied = mutable.MutableList.empty[AbstractPatch]
-
-          class LocalRecorderFactory extends RecorderFactory {
-            override def apply[Raw <: Identified : TypeTag](id: Raw#Id): Raw = {
-              val itemReconstitutionCallback = new FixedValue {
-                override def loadObject(): AnyRef = id -> typeTag[Raw]
-              }
-
-              val permittedReadAccessCallback = NoOp.INSTANCE
-
-              val forbiddenReadAccessCallback = new FixedValue {
-                override def loadObject(): AnyRef = throw new UnsupportedOperationException("Attempt to call method: '$method' with a non-unit return type on a recorder proxy: '$target' while capturing a change or measurement.")
-              }
-
-              val mutationCallback = new MethodInterceptor {
-                override def intercept(target: Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy): AnyRef = {
-                  val item = target.asInstanceOf[Recorder] // Remember, the outer context is making a proxy of type 'Raw'.
-                  val capturedPatch = new Patch(item, method, arguments, methodProxy)
-                  patchesPickedUpFromAnEventBeingApplied += capturedPatch
-                  null // Representation of a unit value by a CGLIB interceptor.
-                }
-              }
-
-              val callbacks = Array(itemReconstitutionCallback, permittedReadAccessCallback, forbiddenReadAccessCallback, mutationCallback)
-
-              constructFrom[Raw](id, RecordingCallbackStuff.filter, callbacks, isForRecordingOnly = true, RecordingCallbackStuff.additionalInterfaces)
-            }
-          }
-
-          val recorderFactory = new LocalRecorderFactory
-
-          event match {
-            case Change(when, update) =>
-              update(recorderFactory)
-              for (patch <- patchesPickedUpFromAnEventBeingApplied) {
-                patchRecorder.recordPatchFromChange(when, patch)
-              }
-
-            case Measurement(when, reading) =>
-              reading(recorderFactory)
-              for (patch <- patchesPickedUpFromAnEventBeingApplied) {
-                patchRecorder.recordPatchFromMeasurement(when, patch)
-              }
-
-            case annihilation@Annihilation(when, id) => {
-              implicit val typeTag = annihilation.capturedTypeTag
-              patchRecorder.recordAnnihilation(when, id)
-            }
-          }
+          event.recordOnTo(patchRecorder)
         }
 
         patchRecorder.noteThatThereAreNoFollowingRecordings()
@@ -410,11 +407,15 @@ object WorldReferenceImplementation {
 }
 
 object MutableState {
-  type EventTimeline = TreeBag[(Event, Revision)]
-  type EventIdToEventMap[EventId] = Map[EventId, (Event, Revision)]
+  type EventOrderingTiebreakerIndex = Int
+  type EventData = (SerializableEvent, Revision, EventOrderingTiebreakerIndex)
+  type EventTimeline = TreeSet[EventData]
+  type EventIdToEventMap[EventId] = Map[EventId, EventData]
+
+  implicit val eventOrdering = Ordering.by((_: SerializableEvent).when)
 }
 
-case class MutableState[EventId](revisionToEventDataMap: mutable.Map[Revision, (MutableState.EventTimeline, MutableState.EventIdToEventMap[EventId])],
+case class MutableState[EventId](revisionToEventDataMap: mutable.Map[Revision, (EventTimeline, EventIdToEventMap[EventId])],
                                  var nextRevision: Revision,
                                  revisionAsOfs: MutableList[Instant]) {
 }
@@ -422,13 +423,12 @@ case class MutableState[EventId](revisionToEventDataMap: mutable.Map[Revision, (
 class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId]) extends World[EventId] {
   // TODO - thread safety.
   import WorldReferenceImplementation._
-
-  type Scope = ScopeImplementation
+  import MutableState._
 
   // Do this as a constructor precondition check.
   eventDataForNewRevision()
 
-  def this() = this(MutableState(revisionToEventDataMap = scala.collection.mutable.Map.empty[Revision, (MutableState.EventTimeline, MutableState.EventIdToEventMap[EventId])],
+  def this() = this(MutableState(revisionToEventDataMap = scala.collection.mutable.Map.empty[Revision, (EventTimeline, EventIdToEventMap[EventId])],
     nextRevision = World.initialRevision,
     revisionAsOfs = MutableList.empty))
 
@@ -474,18 +474,22 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
 
     val (baselineEventTimeline: EventTimeline, baselineEventIdToEventMap: EventIdToEventMap[EventId]) = eventDataForNewRevision()
 
-    // NOTE: don't use 'events.keys' here - that would result in set-like results,
+    val serializableEvents = events.zipWithIndex map { case ((eventId, event), tiebreakerIndex) =>
+      (eventId, (event map serializableEventFrom), tiebreakerIndex)
+    }
+
+    // NOTE: don't use 'serializableEvents.keys' here - that would result in set-like results,
     // which will cause annihilations occurring on the same item at the same when to
     // merge together in 'eventsMadeObsoleteByThisRevision', even though they are
     // distinct events with distinct event ids. That in turn breaks the invariant
     // checked by 'checkInvariantWrtEventTimeline'.
-    val (eventIdsMadeObsoleteByThisRevision, eventsMadeObsoleteByThisRevision) = (for {(eventId, _) <- events
+    val (eventIdsMadeObsoleteByThisRevision, eventsMadeObsoleteByThisRevision) = (for {(eventId, _, _) <- serializableEvents
                                                                                        obsoleteEvent <- baselineEventIdToEventMap get eventId} yield eventId -> obsoleteEvent) unzip
 
     assert(eventIdsMadeObsoleteByThisRevision.size == eventsMadeObsoleteByThisRevision.size)
 
-    val newEvents = for {(eventId, optionalEvent) <- events.toSeq
-                         event <- optionalEvent} yield eventId ->(event, nextRevision)
+    val newEvents = for {(eventId, optionalEvent, tiebreakerIndex) <- serializableEvents
+                         event <- optionalEvent} yield eventId ->(event, nextRevision, tiebreakerIndex)
 
     val newEventTimeline = baselineEventTimeline -- eventsMadeObsoleteByThisRevision ++ newEvents.map(_._2)
 
@@ -508,9 +512,15 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
     revision
   }
 
-  def eventDataForNewRevision(): (EventTimeline, EventIdToEventMap[EventId]) = {
+  def revise(events: java.util.Map[EventId, Optional[Event]], asOf: Instant): Revision = {
+    val sam: java.util.function.Function[Event, Option[Event]] = event => Some(event): Option[Event]
+    val eventsAsScalaImmutableMap = Map(events mapValues (_.map[Option[Event]](sam).orElse(None)) toSeq: _*)
+    revise(eventsAsScalaImmutableMap, asOf)
+  }
+
+  private def eventDataForNewRevision(): (EventTimeline, EventIdToEventMap[EventId]) = {
     val (baselineEventTimeline, baselineEventIdToEventMap) = nextRevision match {
-      case World.initialRevision => TreeBag.empty[(Event, Revision)] -> Map.empty[EventId, (Event, Revision)]
+      case World.initialRevision => TreeSet.empty[EventData] -> Map.empty[EventId, EventData]
       case _ => mutableState.revisionToEventDataMap(nextRevision - 1)
     }
 
@@ -518,7 +528,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
     (baselineEventTimeline, baselineEventIdToEventMap)
   }
 
-  private def checkInvariantWrtEventTimeline(eventTimeline: MutableState.EventTimeline, eventIdToEventMap: Map[EventId, (Event, Revision)], nextRevision: Revision): Unit = {
+  private def checkInvariantWrtEventTimeline(eventTimeline: EventTimeline, eventIdToEventMap: EventIdToEventMap[EventId], nextRevision: Revision): Unit = {
     // Each event in 'eventIdToEventMap' should be in 'eventTimeline' and vice-versa.
 
     val eventsInEventTimeline = eventTimeline toList
@@ -530,8 +540,8 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
 
     // Each event in both 'eventIdToEventMap' and 'eventTimeline' should have been defined in a revision before the next one for the world as a whole.
 
-    assert(eventTimeline forall { case (_, revision) => nextRevision > revision })
-    assert(eventIdToEventMap forall { case (_, (_, revision)) => nextRevision > revision })
+    assert(eventTimeline forall { case (_, revision, _) => nextRevision > revision })
+    assert(eventIdToEventMap forall { case (_, (_, revision, _)) => nextRevision > revision })
   }
 
   // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
@@ -540,7 +550,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
   // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
   override def scopeFor(when: Unbounded[Instant], asOf: Instant): Scope = new ScopeBasedOnAsOf(when, asOf) with SelfPopulatedScope
 
-  override def forkExperimentalWorld(scope: Scope): World[EventId] = {
+  override def forkExperimentalWorld(scope: javaApi.Scope): World[EventId] = {
     val onePastFinalSharedRevision = scope.nextRevision
     val mutableStateUpToFinalSharedRevision = MutableState[EventId](revisionToEventDataMap = mutable.Map(mutableState.revisionToEventDataMap.filterKeys(_ < onePastFinalSharedRevision).toSeq: _*),
       nextRevision = onePastFinalSharedRevision,
@@ -548,8 +558,8 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
     val cutoffWhen = scope.when
     val mutableStateWithEventsNoLaterThanCutoff = mutableStateUpToFinalSharedRevision.copy(revisionToEventDataMap = mutableStateUpToFinalSharedRevision.revisionToEventDataMap map {
       case (revision, (baseEventTimeline, baseEventIdToEventMap)) =>
-        revision ->(baseEventTimeline filter { case (event, _) => cutoffWhen >= event.when },
-          baseEventIdToEventMap filter { case (_, (event, _)) => cutoffWhen >= event.when })
+        revision ->(baseEventTimeline filter { case (event, _, _) => cutoffWhen >= event.when },
+          baseEventIdToEventMap filter { case (_, (event, _, _)) => cutoffWhen >= event.when })
     })
     new WorldReferenceImplementation[EventId](mutableState = mutableStateWithEventsNoLaterThanCutoff)
   }

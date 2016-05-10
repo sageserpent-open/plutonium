@@ -40,6 +40,7 @@ case class WildcardBitemporalResult[Raw <: Identified : TypeTag]() extends Bitem
 }
 
 
+
 // This companion object can produce a bitemporal instance that refers to zero, one or many raw instances depending
 // how many of those raw instances match the id or wildcard.
 object Bitemporal {

@@ -6,7 +6,6 @@ import com.sageserpent.americium
 import com.sageserpent.americium.{Finite, PositiveInfinity, Unbounded}
 
 import scala.reflect.runtime.universe._
-import scala.spores._
 
 /**
   * Created by Gerard on 09/07/2015.
@@ -21,77 +20,74 @@ sealed abstract class Event {
 }
 
 
-case class Change(val when: Unbounded[Instant], update: Spore[RecorderFactory, Unit]) extends Event {
+case class Change(val when: Unbounded[Instant], update: RecorderFactory => Unit) extends Event {
 }
 
 object Change {
-  def forOneItem[Raw <: Identified : TypeTag](when: Unbounded[Instant])(id: Raw#Id, update: Spore[Raw, Unit]): Change = {
+  def forOneItem[Raw <: Identified : TypeTag](when: Unbounded[Instant])(id: Raw#Id, update: Raw => Unit): Change = {
     val typeTag = implicitly[TypeTag[Raw]]
-    Change(when, spore {
+    Change(when,
       (recorderFactory: RecorderFactory) => {
-        val recorder = recorderFactory(capture(id))(capture(typeTag))
-        capture(update)(recorder)
-      }
-    })
+        val recorder = recorderFactory(id)(typeTag)
+        update(recorder)
+      })
   }
 
-  def forOneItem[Raw <: Identified : TypeTag](when: Instant)(id: Raw#Id, update: Spore[Raw, Unit]): Change = forOneItem(Finite(when))(id, update)
+  def forOneItem[Raw <: Identified : TypeTag](when: Instant)(id: Raw#Id, update: Raw => Unit): Change = forOneItem(Finite(when))(id, update)
 
-  def forOneItem[Raw <: Identified : TypeTag](id: Raw#Id, update: Spore[Raw, Unit]): Change = forOneItem(americium.NegativeInfinity[Instant]())(id, update)
+  def forOneItem[Raw <: Identified : TypeTag](id: Raw#Id, update: Raw => Unit): Change = forOneItem(americium.NegativeInfinity[Instant]())(id, update)
 
 
-  def forTwoItems[Raw1 <: Identified : TypeTag, Raw2 <: Identified : TypeTag](when: Unbounded[Instant])(id1: Raw1#Id, id2: Raw2#Id, update: Spore2[Raw1, Raw2, Unit]): Change = {
+  def forTwoItems[Raw1 <: Identified : TypeTag, Raw2 <: Identified : TypeTag](when: Unbounded[Instant])(id1: Raw1#Id, id2: Raw2#Id, update: (Raw1, Raw2) => Unit): Change = {
     val typeTag1 = implicitly[TypeTag[Raw1]]
     val typeTag2 = implicitly[TypeTag[Raw2]]
-    Change(when, spore {
+    Change(when,
       (recorderFactory: RecorderFactory) => {
-        val recorder1 = recorderFactory(capture(id1))(capture(typeTag1))
-        val recorder2 = recorderFactory(capture(id2))(capture(typeTag2))
-        capture(update)(recorder1, recorder2)
-      }
-    })
+        val recorder1 = recorderFactory(id1)(typeTag1)
+        val recorder2 = recorderFactory(id2)(typeTag2)
+        update(recorder1, recorder2)
+      })
   }
 
-  def forTwoItems[Raw1 <: Identified : TypeTag, Raw2 <: Identified : TypeTag](when: Instant)(id1: Raw1#Id, id2: Raw2#Id, update: Spore2[Raw1, Raw2, Unit]): Change = forTwoItems(Finite(when))(id1, id2, update)
+  def forTwoItems[Raw1 <: Identified : TypeTag, Raw2 <: Identified : TypeTag](when: Instant)(id1: Raw1#Id, id2: Raw2#Id, update: (Raw1, Raw2) => Unit): Change = forTwoItems(Finite(when))(id1, id2, update)
 
-  def forTwoItems[Raw1 <: Identified : TypeTag, Raw2 <: Identified : TypeTag](id1: Raw1#Id, id2: Raw2#Id, update: Spore2[Raw1, Raw2, Unit]): Change = forTwoItems(americium.NegativeInfinity[Instant]())(id1, id2, update)
+  def forTwoItems[Raw1 <: Identified : TypeTag, Raw2 <: Identified : TypeTag](id1: Raw1#Id, id2: Raw2#Id, update: (Raw1, Raw2) => Unit): Change = forTwoItems(americium.NegativeInfinity[Instant]())(id1, id2, update)
 }
 
-case class Measurement(val when: Unbounded[Instant], reading: Spore[RecorderFactory, Unit]) extends Event {
+case class Measurement(val when: Unbounded[Instant], reading: RecorderFactory => Unit) extends Event {
 }
+
 
 
 object Measurement {
-  def forOneItem[Raw <: Identified : TypeTag](when: Unbounded[Instant])(id: Raw#Id, measurement: Spore[Raw, Unit]): Measurement = {
+  def forOneItem[Raw <: Identified : TypeTag](when: Unbounded[Instant])(id: Raw#Id, measurement: Raw => Unit): Measurement = {
     val typeTag = implicitly[TypeTag[Raw]]
-    Measurement(when, spore {
+    Measurement(when,
       (recorderFactory: RecorderFactory) => {
-        val recorder = recorderFactory(capture(id))(capture(typeTag))
-        capture(measurement)(recorder)
-      }
-    })
+        val recorder = recorderFactory(id)(typeTag)
+        measurement(recorder)
+      })
   }
 
-  def forOneItem[Raw <: Identified : TypeTag](when: Instant)(id: Raw#Id, update: Spore[Raw, Unit]): Measurement = forOneItem(Finite(when))(id, update)
+  def forOneItem[Raw <: Identified : TypeTag](when: Instant)(id: Raw#Id, update: Raw => Unit): Measurement = forOneItem(Finite(when))(id, update)
 
-  def forOneItem[Raw <: Identified : TypeTag](id: Raw#Id, update: Spore[Raw, Unit]): Measurement = forOneItem(americium.NegativeInfinity[Instant]())(id, update)
+  def forOneItem[Raw <: Identified : TypeTag](id: Raw#Id, update: Raw => Unit): Measurement = forOneItem(americium.NegativeInfinity[Instant]())(id, update)
 
 
-  def forTwoItems[Raw1 <: Identified : TypeTag, Raw2 <: Identified : TypeTag](when: Unbounded[Instant])(id1: Raw1#Id, id2: Raw2#Id, update: Spore2[Raw1, Raw2, Unit]): Measurement = {
+  def forTwoItems[Raw1 <: Identified : TypeTag, Raw2 <: Identified : TypeTag](when: Unbounded[Instant])(id1: Raw1#Id, id2: Raw2#Id, update: (Raw1, Raw2) => Unit): Measurement = {
     val typeTag1 = implicitly[TypeTag[Raw1]]
     val typeTag2 = implicitly[TypeTag[Raw2]]
-    Measurement(when, spore {
+    Measurement(when,
       (recorderFactory: RecorderFactory) => {
-        val recorder1 = recorderFactory(capture(id1))(capture(typeTag1))
-        val recorder2 = recorderFactory(capture(id2))(capture(typeTag2))
-        capture(update)(recorder1, recorder2)
-      }
-    })
+        val recorder1 = recorderFactory(id1)(typeTag1)
+        val recorder2 = recorderFactory(id2)(typeTag2)
+        update(recorder1, recorder2)
+      })
   }
 
-  def forTwoItems[Raw1 <: Identified : TypeTag, Raw2 <: Identified : TypeTag](when: Instant)(id1: Raw1#Id, id2: Raw2#Id, update: Spore2[Raw1, Raw2, Unit]): Measurement = forTwoItems(Finite(when))(id1, id2, update)
+  def forTwoItems[Raw1 <: Identified : TypeTag, Raw2 <: Identified : TypeTag](when: Instant)(id1: Raw1#Id, id2: Raw2#Id, update: (Raw1, Raw2) => Unit): Measurement = forTwoItems(Finite(when))(id1, id2, update)
 
-  def forTwoItems[Raw1 <: Identified : TypeTag, Raw2 <: Identified : TypeTag](id1: Raw1#Id, id2: Raw2#Id, update: Spore2[Raw1, Raw2, Unit]): Measurement = forTwoItems(americium.NegativeInfinity[Instant]())(id1, id2, update)
+  def forTwoItems[Raw1 <: Identified : TypeTag, Raw2 <: Identified : TypeTag](id1: Raw1#Id, id2: Raw2#Id, update: (Raw1, Raw2) => Unit): Measurement = forTwoItems(americium.NegativeInfinity[Instant]())(id1, id2, update)
 }
 
 
@@ -106,4 +102,5 @@ case class Annihilation[Raw <: Identified : TypeTag](definiteWhen: Instant, id: 
   val when = Finite(definiteWhen)
   val capturedTypeTag = typeTag[Raw]
 }
+
 
