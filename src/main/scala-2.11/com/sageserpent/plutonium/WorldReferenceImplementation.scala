@@ -237,7 +237,7 @@ object WorldReferenceImplementation {
         // NOTE: the '.toSeq' call is used to prevent the map operation
         // from building a hash set, thereby scrambling the order of events
         // established by the timeline.
-        val relevantEvents = eventTimeline.toSeq map (_._1)
+        val relevantEvents = eventTimeline.toSeq map (_.serializableEvent)
         for (event <- relevantEvents) {
           event.recordOnTo(patchRecorder)
         }
@@ -408,11 +408,13 @@ object WorldReferenceImplementation {
 
 object MutableState {
   type EventOrderingTiebreakerIndex = Int
-  type EventData = (SerializableEvent, Revision, EventOrderingTiebreakerIndex)
+  case class EventData(serializableEvent: SerializableEvent, introducedInRevision: Revision, eventOrderingTiebreakerIndex: EventOrderingTiebreakerIndex)
   type EventTimeline = TreeSet[EventData]
   type EventIdToEventMap[EventId] = Map[EventId, EventData]
 
   implicit val eventOrdering = Ordering.by((_: SerializableEvent).when)
+
+  implicit val eventDataOrdering: Ordering[EventData] = Ordering.by {case EventData(serializableEvent, introducedInRevision, eventOrderingTiebreakerIndex) => (serializableEvent, introducedInRevision, eventOrderingTiebreakerIndex)}
 }
 
 case class MutableState[EventId](revisionToEventDataMap: mutable.Map[Revision, (EventTimeline, EventIdToEventMap[EventId])],
@@ -489,7 +491,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
     assert(eventIdsMadeObsoleteByThisRevision.size == eventsMadeObsoleteByThisRevision.size)
 
     val newEvents = for {(eventId, optionalEvent, tiebreakerIndex) <- serializableEvents
-                         event <- optionalEvent} yield eventId ->(event, nextRevision, tiebreakerIndex)
+                         event <- optionalEvent} yield eventId -> EventData(event, nextRevision, tiebreakerIndex)
 
     val newEventTimeline = baselineEventTimeline -- eventsMadeObsoleteByThisRevision ++ newEvents.map(_._2)
 
@@ -540,8 +542,8 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
 
     // Each event in both 'eventIdToEventMap' and 'eventTimeline' should have been defined in a revision before the next one for the world as a whole.
 
-    assert(eventTimeline forall { case (_, revision, _) => nextRevision > revision })
-    assert(eventIdToEventMap forall { case (_, (_, revision, _)) => nextRevision > revision })
+    assert(eventTimeline forall { case EventData(_, revision, _) => nextRevision > revision })
+    assert(eventIdToEventMap forall { case (_, EventData(_, revision, _)) => nextRevision > revision })
   }
 
   // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
@@ -558,8 +560,8 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
     val cutoffWhen = scope.when
     val mutableStateWithEventsNoLaterThanCutoff = mutableStateUpToFinalSharedRevision.copy(revisionToEventDataMap = mutableStateUpToFinalSharedRevision.revisionToEventDataMap map {
       case (revision, (baseEventTimeline, baseEventIdToEventMap)) =>
-        revision ->(baseEventTimeline filter { case (event, _, _) => cutoffWhen >= event.when },
-          baseEventIdToEventMap filter { case (_, (event, _, _)) => cutoffWhen >= event.when })
+        revision ->(baseEventTimeline filter { case EventData(event, _, _) => cutoffWhen >= event.when },
+          baseEventIdToEventMap filter { case (_, EventData(event, _, _)) => cutoffWhen >= event.when })
     })
     new WorldReferenceImplementation[EventId](mutableState = mutableStateWithEventsNoLaterThanCutoff)
   }
