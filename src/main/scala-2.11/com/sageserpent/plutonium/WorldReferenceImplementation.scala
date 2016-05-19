@@ -412,8 +412,7 @@ object MutableState {
 
   type EventTimeline = TreeSet[EventData]
   type EventIdToEventMap[EventId] = Map[EventId, EventData]
-  type ObsoleteEvents = Bag[EventData]
-  type RevisionData[EventId] = (EventTimeline, EventIdToEventMap[EventId], ObsoleteEvents)
+  type RevisionData[EventId] = (EventTimeline, EventIdToEventMap[EventId])
 
   implicit val eventDataBagConfiguration = collection.immutable.HashedBagConfiguration.compact[EventData]
 
@@ -475,8 +474,8 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
   override val revisionAsOfs: Seq[Instant] = mutableState.revisionAsOfs
 
   private def combineSparseTimelinesFromRevisions(revisionDataAcrossSeveralRevisions: Seq[RevisionData[EventId]]): EventTimeline = {
-    val obsoleteEvents: ObsoleteEvents = revisionDataAcrossSeveralRevisions map (_._3) reduce (_ union _)
-    revisionDataAcrossSeveralRevisions map (_._1  filterNot obsoleteEvents.contains) reduce (_ union _)
+    val eventsRelevantToRevision = revisionDataAcrossSeveralRevisions.last._2.values.toSet
+    revisionDataAcrossSeveralRevisions map (_._1  filter eventsRelevantToRevision.contains) reduce (_ union _)
   }
 
   def revise(events: Map[EventId, Option[Event]], asOf: Instant): Revision = {
@@ -505,15 +504,13 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
                          event <- optionalEvent} yield eventId -> EventData(event, nextRevision, tiebreakerIndex)).toSeq
 
 
-    val eventsMadeObsoleteByThisRevisionAsBag = Bag(eventsMadeObsoleteByThisRevision: _*)
-
     val newEventTimeline = TreeSet(newEvents.map(_._2): _*)
 
     val nextRevisionPostThisOne = 1 + nextRevision
 
     val newEventIdToEventMap = baselineEventIdToEventMap -- eventIdsMadeObsoleteByThisRevision ++ newEvents
 
-    val newRevisionData: RevisionData[EventId] = (newEventTimeline, newEventIdToEventMap, eventsMadeObsoleteByThisRevisionAsBag)
+    val newRevisionData: RevisionData[EventId] = (newEventTimeline, newEventIdToEventMap)
 
     val combinedTimelineIncludingNewRevision = combineSparseTimelinesFromRevisions(mutableState.perRevisionData :+ newRevisionData)
 
@@ -538,7 +535,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
 
   private def checkInvariantWrtEventTimeline(revisionData: RevisionData[EventId], nextRevision: Revision): Unit = revisionData match {
     // Each event in 'eventTimeline' should be in 'eventIdToEventMap'.
-    case (eventTimeline, eventIdToEventMap, obsoleteEvents) =>
+    case (eventTimeline, eventIdToEventMap) =>
       val eventsInEventTimeline = eventTimeline toList
       val eventsInEventIdToEventMap = eventIdToEventMap.values toList
       val rogueEventsInEventTimeline = eventsInEventTimeline filter (!eventsInEventIdToEventMap.contains(_))
@@ -548,23 +545,6 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
 
       assert(eventTimeline forall (_.introducedInRevision < nextRevision))
       assert(eventIdToEventMap forall (_._2.introducedInRevision < nextRevision))
-
-      // No event in 'obsoleteEvents' can be in either 'eventIdToEventMap' or in 'eventTimeline', and vice-versa.
-
-      val events = eventsInEventIdToEventMap ++ eventsInEventTimeline
-      val rogueEvents = events filter obsoleteEvents.contains
-      val rogueObsoleteEvents = obsoleteEvents filter events.contains
-      assert(rogueEvents.isEmpty, rogueEvents)
-      assert(rogueObsoleteEvents.isEmpty, rogueObsoleteEvents)
-
-      // Each event in 'obsoleteEvents' should have been defined in a revision before the current revision of the world.
-
-      if (nextRevision == World.initialRevision) {
-        assert(obsoleteEvents.isEmpty)
-      } else {
-        val currentRevision = nextRevision - 1
-        assert(obsoleteEvents.forall(_.introducedInRevision < currentRevision))
-      }
   }
 
   // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
@@ -579,10 +559,9 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
       revisionAsOfs = mutableState.revisionAsOfs take onePastFinalSharedRevision)
     val cutoffWhen = scope.when
     val mutableStateWithEventsNoLaterThanCutoff = mutableStateUpToFinalSharedRevision.copy(perRevisionData = mutableStateUpToFinalSharedRevision.perRevisionData map {
-      case ((baseEventTimeline, baseEventIdToEventMap, obsoleteEvents)) =>
+      case ((baseEventTimeline, baseEventIdToEventMap)) =>
         (baseEventTimeline filter { case EventData(event, _, _) => cutoffWhen >= event.when },
-          baseEventIdToEventMap filter { case (_, EventData(event, _, _)) => cutoffWhen >= event.when },
-          obsoleteEvents)
+          baseEventIdToEventMap filter { case (_, EventData(event, _, _)) => cutoffWhen >= event.when })
     })
     new WorldReferenceImplementation[EventId](mutableState = mutableStateWithEventsNoLaterThanCutoff)
   }
