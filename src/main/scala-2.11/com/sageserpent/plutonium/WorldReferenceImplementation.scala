@@ -478,9 +478,8 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
   override val revisionAsOfs: Seq[Instant] = mutableState.revisionAsOfs
 
   private def combineSparseTimelinesFromRevisions(revisionDataAcrossSeveralRevisions: Seq[RevisionData[EventId]]): EventTimeline = {
-    val timelineIncludingObsoleteEvents: EventTimeline = revisionDataAcrossSeveralRevisions map (_._1) reduce (_ union _)
     val obsoleteEvents: ObsoleteEvents = revisionDataAcrossSeveralRevisions map (_._3) reduce (_ union _)
-    timelineIncludingObsoleteEvents filterNot obsoleteEvents.contains
+    revisionDataAcrossSeveralRevisions map (_._1  filterNot obsoleteEvents.contains) reduce (_ union _)
   }
 
   def revise(events: Map[EventId, Option[Event]], asOf: Instant): Revision = {
