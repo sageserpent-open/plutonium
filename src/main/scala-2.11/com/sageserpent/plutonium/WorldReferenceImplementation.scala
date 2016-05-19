@@ -432,9 +432,6 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
   import MutableState._
   import WorldReferenceImplementation._
 
-  // Do this as a constructor precondition check.
-  eventDataForNewRevision()
-
   def this() = this(MutableState(perRevisionData = mutable.ArrayBuffer.empty[MutableState.RevisionData[EventId]],
     revisionAsOfs = MutableList.empty))
 
@@ -485,7 +482,10 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
   def revise(events: Map[EventId, Option[Event]], asOf: Instant): Revision = {
     if (revisionAsOfs.nonEmpty && revisionAsOfs.last.isAfter(asOf)) throw new IllegalArgumentException(s"'asOf': ${asOf} should be no earlier than that of the last revision: ${revisionAsOfs.last}")
 
-    val (baselineEventTimeline: EventTimeline, baselineEventIdToEventMap: EventIdToEventMap[EventId], _) = eventDataForNewRevision()
+    val baselineEventIdToEventMap = nextRevision match {
+      case World.initialRevision => Map.empty[EventId, EventData]
+      case _ => mutableState.perRevisionData(nextRevision - 1)._2
+    }
 
     val serializableEvents = events.zipWithIndex map { case ((eventId, event), tiebreakerIndex) =>
       (eventId, (event map serializableEventFrom), tiebreakerIndex)
@@ -497,17 +497,17 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
     // distinct events with distinct event ids. That in turn breaks the invariant
     // checked by 'checkInvariantWrtEventTimeline'.
     val (eventIdsMadeObsoleteByThisRevision, eventsMadeObsoleteByThisRevision) = (for {(eventId, _, _) <- serializableEvents
-                                                                                       obsoleteEvent <- baselineEventIdToEventMap get eventId} yield eventId -> obsoleteEvent) unzip
+                                                                                       obsoleteEvent <- baselineEventIdToEventMap get eventId} yield eventId -> obsoleteEvent).toSeq unzip
 
     assert(eventIdsMadeObsoleteByThisRevision.size == eventsMadeObsoleteByThisRevision.size)
 
-    val newEvents = for {(eventId, optionalEvent, tiebreakerIndex) <- serializableEvents
-                         event <- optionalEvent} yield eventId -> EventData(event, nextRevision, tiebreakerIndex)
+    val newEvents = (for {(eventId, optionalEvent, tiebreakerIndex) <- serializableEvents
+                         event <- optionalEvent} yield eventId -> EventData(event, nextRevision, tiebreakerIndex)).toSeq
 
 
-    val eventsMadeObsoleteByThisRevisionAsBag = Bag(eventsMadeObsoleteByThisRevision.toStream: _*)
+    val eventsMadeObsoleteByThisRevisionAsBag = Bag(eventsMadeObsoleteByThisRevision: _*)
 
-    val newEventTimeline = TreeSet(newEvents.map(_._2).toStream: _*)
+    val newEventTimeline = TreeSet(newEvents.map(_._2): _*)
 
     val nextRevisionPostThisOne = 1 + nextRevision
 
@@ -534,16 +534,6 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
     val sam: java.util.function.Function[Event, Option[Event]] = event => Some(event): Option[Event]
     val eventsAsScalaImmutableMap = Map(events mapValues (_.map[Option[Event]](sam).orElse(None)) toSeq: _*)
     revise(eventsAsScalaImmutableMap, asOf)
-  }
-
-  private def eventDataForNewRevision(): RevisionData[EventId] = {
-    val result = nextRevision match {
-      case World.initialRevision => (TreeSet.empty[EventData], Map.empty[EventId, EventData], Bag.empty[EventData])
-      case _ => mutableState.perRevisionData(nextRevision - 1)
-    }
-
-    checkInvariantWrtEventTimeline(result, nextRevision)
-    result
   }
 
   private def checkInvariantWrtEventTimeline(revisionData: RevisionData[EventId], nextRevision: Revision): Unit = revisionData match {
