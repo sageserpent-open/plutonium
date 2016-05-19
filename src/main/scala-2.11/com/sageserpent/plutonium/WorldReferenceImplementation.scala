@@ -509,11 +509,13 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
 
     val newEventIdToEventMap = baselineEventIdToEventMap -- eventIdsMadeObsoleteByThisRevision ++ newEvents
 
-    checkInvariantWrtEventTimeline(newEventTimeline, newEventIdToEventMap, nextRevisionPostThisOne)
-
     val obsoleteEvents = Bag(eventsMadeObsoleteByThisRevision.toStream: _*)
 
-    mutableState.revisionToEventDataMap += (nextRevision ->(newEventTimeline, newEventIdToEventMap, obsoleteEvents))
+    val newRevisionData = (newEventTimeline, newEventIdToEventMap, obsoleteEvents)
+
+    checkInvariantWrtEventTimeline(newRevisionData, nextRevisionPostThisOne)
+
+    mutableState.revisionToEventDataMap += (nextRevision -> newRevisionData)
 
     mutableState.revisionAsOfs += asOf
     val revision = nextRevision
@@ -528,29 +530,46 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
   }
 
   private def eventDataForNewRevision(): RevisionData[EventId] = {
-    val result@(baselineEventTimeline, baselineEventIdToEventMap, _) = nextRevision match {
+    val result = nextRevision match {
       case World.initialRevision => (TreeSet.empty[EventData], Map.empty[EventId, EventData], Bag.empty[EventData])
       case _ => mutableState.revisionToEventDataMap(nextRevision - 1)
     }
 
-    checkInvariantWrtEventTimeline(baselineEventTimeline, baselineEventIdToEventMap, nextRevision)
+    checkInvariantWrtEventTimeline(result, nextRevision)
     result
   }
 
-  private def checkInvariantWrtEventTimeline(eventTimeline: EventTimeline, eventIdToEventMap: EventIdToEventMap[EventId], nextRevision: Revision): Unit = {
+  private def checkInvariantWrtEventTimeline(revisionData: RevisionData[EventId], nextRevision: Revision): Unit = revisionData match {
     // Each event in 'eventIdToEventMap' should be in 'eventTimeline' and vice-versa.
+    case (eventTimeline, eventIdToEventMap, obsoleteEvents) =>
+      val eventsInEventTimeline = eventTimeline toList
+      val eventsInEventIdToEventMap = eventIdToEventMap.values toList
+      val rogueEventsInEventIdToEventMap = eventsInEventIdToEventMap filter (!eventsInEventTimeline.contains(_))
+      val rogueEventsInEventTimeline = eventsInEventTimeline filter (!eventsInEventIdToEventMap.contains(_))
+      assert(rogueEventsInEventIdToEventMap.isEmpty, rogueEventsInEventIdToEventMap)
+      assert(rogueEventsInEventTimeline.isEmpty, rogueEventsInEventTimeline)
 
-    val eventsInEventTimeline = eventTimeline toList
-    val eventsInEventIdToEventMap = eventIdToEventMap.values toList
-    val rogueEventsInEventIdToEventMap = eventsInEventIdToEventMap filter (!eventsInEventTimeline.contains(_))
-    val rogueEventsInEventTimeline = eventsInEventTimeline filter (!eventsInEventIdToEventMap.contains(_))
-    assert(rogueEventsInEventIdToEventMap.isEmpty, rogueEventsInEventIdToEventMap)
-    assert(rogueEventsInEventTimeline.isEmpty, rogueEventsInEventTimeline)
+      // Each event in both 'eventIdToEventMap' and 'eventTimeline' should have been defined in a revision before the next one for the world as a whole.
 
-    // Each event in both 'eventIdToEventMap' and 'eventTimeline' should have been defined in a revision before the next one for the world as a whole.
+      assert(eventTimeline forall (_.introducedInRevision < nextRevision))
+      assert(eventIdToEventMap forall (_._2.introducedInRevision < nextRevision))
 
-    assert(eventTimeline forall { case EventData(_, revision, _) => nextRevision > revision })
-    assert(eventIdToEventMap forall { case (_, EventData(_, revision, _)) => nextRevision > revision })
+      // No event in 'obsoleteEvents' can be in either 'eventIdToEventMap' or in 'eventTimeline', and vice-versa.
+
+      val events = eventsInEventIdToEventMap ++ eventsInEventTimeline
+      val rogueEvents = events filter obsoleteEvents.contains
+      val rogueObsoleteEvents = obsoleteEvents filter events.contains
+      assert(rogueEvents.isEmpty, rogueEvents)
+      assert(rogueObsoleteEvents.isEmpty, rogueObsoleteEvents)
+
+      // Each event in 'obsoleteEvents' should have been defined in a revision before the current revision of the world.
+
+      if (nextRevision == World.initialRevision){
+        assert(obsoleteEvents.isEmpty)
+      } else {
+        val currentRevision = nextRevision - 1
+        assert(obsoleteEvents.forall(_.introducedInRevision < currentRevision))
+      }
   }
 
   // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
