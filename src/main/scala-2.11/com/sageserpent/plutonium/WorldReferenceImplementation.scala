@@ -5,19 +5,18 @@ import java.time.Instant
 import java.util.Optional
 
 import com.sageserpent.americium.{Finite, NegativeInfinity, PositiveInfinity, Unbounded}
-import com.sageserpent.plutonium.MutableState.{EventIdToEventMap, EventTimeline}
 import com.sageserpent.plutonium.World.Revision
 import net.sf.cglib.proxy._
 import resource.{ManagedResource, makeManagedResource}
 
+import scala.Ordering.Implicits._
+import scala.collection.JavaConversions._
 import scala.collection.Searching._
-import scala.collection.immutable.TreeSet
+import scala.collection.immutable.{Bag, TreeSet}
 import scala.collection.mutable
 import scala.collection.mutable.MutableList
 import scala.reflect.runtime._
 import scala.reflect.runtime.universe._
-import scala.collection.JavaConversions._
-import scala.Ordering.Implicits._
 
 /**
   * Created by Gerard on 19/07/2015.
@@ -408,35 +407,41 @@ object WorldReferenceImplementation {
 
 object MutableState {
   type EventOrderingTiebreakerIndex = Int
+
   case class EventData(serializableEvent: SerializableEvent, introducedInRevision: Revision, eventOrderingTiebreakerIndex: EventOrderingTiebreakerIndex)
+
   type EventTimeline = TreeSet[EventData]
   type EventIdToEventMap[EventId] = Map[EventId, EventData]
+  type ObsoleteEvents = Bag[EventData]
+  type RevisionData[EventId] = (EventTimeline, EventIdToEventMap[EventId], ObsoleteEvents)
+
+  implicit val eventDataBagConfiguration = collection.immutable.HashedBagConfiguration.compact[EventData]
 
   implicit val eventOrdering = Ordering.by((_: SerializableEvent).when)
 
-  implicit val eventDataOrdering: Ordering[EventData] = Ordering.by {case EventData(serializableEvent, introducedInRevision, eventOrderingTiebreakerIndex) => (serializableEvent, introducedInRevision, eventOrderingTiebreakerIndex)}
+  implicit val eventDataOrdering: Ordering[EventData] = Ordering.by { case EventData(serializableEvent, introducedInRevision, eventOrderingTiebreakerIndex) => (serializableEvent, introducedInRevision, eventOrderingTiebreakerIndex) }
 }
 
-case class MutableState[EventId](revisionToEventDataMap: mutable.Map[Revision, (EventTimeline, EventIdToEventMap[EventId])],
+case class MutableState[EventId](revisionToEventDataMap: mutable.Map[Revision, MutableState.RevisionData[EventId]],
                                  var nextRevision: Revision,
                                  revisionAsOfs: MutableList[Instant]) {
 }
 
 class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId]) extends World[EventId] {
   // TODO - thread safety.
-  import WorldReferenceImplementation._
   import MutableState._
+  import WorldReferenceImplementation._
 
   // Do this as a constructor precondition check.
   eventDataForNewRevision()
 
-  def this() = this(MutableState(revisionToEventDataMap = scala.collection.mutable.Map.empty[Revision, (EventTimeline, EventIdToEventMap[EventId])],
+  def this() = this(MutableState(revisionToEventDataMap = scala.collection.mutable.Map.empty[Revision, MutableState.RevisionData[EventId]],
     nextRevision = World.initialRevision,
     revisionAsOfs = MutableList.empty))
 
   abstract class ScopeBasedOnNextRevision(val when: Unbounded[Instant], val nextRevision: Revision) extends com.sageserpent.plutonium.Scope {
     val asOf = nextRevision match {
-      case World.initialRevision => NegativeInfinity[Instant]
+      case World.initialRevision => NegativeInfinity[Instant]()
       case _ => if (nextRevision <= revisionAsOfs.size)
         Finite(revisionAsOfs(nextRevision - 1))
       else throw new RuntimeException(s"Scope based the revision prior to: $nextRevision can't be constructed - there are only ${revisionAsOfs.size} revisions of the world.")
@@ -474,7 +479,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
   def revise(events: Map[EventId, Option[Event]], asOf: Instant): Revision = {
     if (revisionAsOfs.nonEmpty && revisionAsOfs.last.isAfter(asOf)) throw new IllegalArgumentException(s"'asOf': ${asOf} should be no earlier than that of the last revision: ${revisionAsOfs.last}")
 
-    val (baselineEventTimeline: EventTimeline, baselineEventIdToEventMap: EventIdToEventMap[EventId]) = eventDataForNewRevision()
+    val (baselineEventTimeline: EventTimeline, baselineEventIdToEventMap: EventIdToEventMap[EventId], _) = eventDataForNewRevision()
 
     val serializableEvents = events.zipWithIndex map { case ((eventId, event), tiebreakerIndex) =>
       (eventId, (event map serializableEventFrom), tiebreakerIndex)
@@ -506,7 +511,9 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
 
     checkInvariantWrtEventTimeline(newEventTimeline, newEventIdToEventMap, nextRevisionPostThisOne)
 
-    mutableState.revisionToEventDataMap += (nextRevision ->(newEventTimeline, newEventIdToEventMap))
+    val obsoleteEvents = Bag(eventsMadeObsoleteByThisRevision.toStream: _*)
+
+    mutableState.revisionToEventDataMap += (nextRevision ->(newEventTimeline, newEventIdToEventMap, obsoleteEvents))
 
     mutableState.revisionAsOfs += asOf
     val revision = nextRevision
@@ -520,14 +527,14 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
     revise(eventsAsScalaImmutableMap, asOf)
   }
 
-  private def eventDataForNewRevision(): (EventTimeline, EventIdToEventMap[EventId]) = {
-    val (baselineEventTimeline, baselineEventIdToEventMap) = nextRevision match {
-      case World.initialRevision => TreeSet.empty[EventData] -> Map.empty[EventId, EventData]
+  private def eventDataForNewRevision(): RevisionData[EventId] = {
+    val result@(baselineEventTimeline, baselineEventIdToEventMap, _) = nextRevision match {
+      case World.initialRevision => (TreeSet.empty[EventData], Map.empty[EventId, EventData], Bag.empty[EventData])
       case _ => mutableState.revisionToEventDataMap(nextRevision - 1)
     }
 
     checkInvariantWrtEventTimeline(baselineEventTimeline, baselineEventIdToEventMap, nextRevision)
-    (baselineEventTimeline, baselineEventIdToEventMap)
+    result
   }
 
   private def checkInvariantWrtEventTimeline(eventTimeline: EventTimeline, eventIdToEventMap: EventIdToEventMap[EventId], nextRevision: Revision): Unit = {
@@ -559,9 +566,10 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
       revisionAsOfs = mutableState.revisionAsOfs take onePastFinalSharedRevision)
     val cutoffWhen = scope.when
     val mutableStateWithEventsNoLaterThanCutoff = mutableStateUpToFinalSharedRevision.copy(revisionToEventDataMap = mutableStateUpToFinalSharedRevision.revisionToEventDataMap map {
-      case (revision, (baseEventTimeline, baseEventIdToEventMap)) =>
+      case (revision, (baseEventTimeline, baseEventIdToEventMap, obsoleteEvents)) =>
         revision ->(baseEventTimeline filter { case EventData(event, _, _) => cutoffWhen >= event.when },
-          baseEventIdToEventMap filter { case (_, EventData(event, _, _)) => cutoffWhen >= event.when })
+          baseEventIdToEventMap filter { case (_, EventData(event, _, _)) => cutoffWhen >= event.when },
+          obsoleteEvents)
     })
     new WorldReferenceImplementation[EventId](mutableState = mutableStateWithEventsNoLaterThanCutoff)
   }
