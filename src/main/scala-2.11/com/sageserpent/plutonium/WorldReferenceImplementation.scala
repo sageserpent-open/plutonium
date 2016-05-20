@@ -411,7 +411,7 @@ object MutableState {
 
   case class EventData(serializableEvent: SerializableEvent, introducedInRevision: Revision, eventOrderingTiebreakerIndex: EventOrderingTiebreakerIndex)
 
-  type EventTimeline = TreeSet[EventData]
+  type EventTimeline = Seq[EventData]
   type EventCorrections = MutableList[EventData]  // TODO - represent annulments with something other than 'nastyHackToRepresentAnEventAnullment' instance.
   val nastyHackToRepresentAnEventAnullment = SerializableChange(NegativeInfinity[Instant], Seq.empty)
   type EventIdToEventCorrectionsMap[EventId] = mutable.Map[EventId, EventCorrections]
@@ -484,7 +484,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
 
   trait SelfPopulatedScope extends ScopeImplementation {
     val identifiedItemsScope = {
-      val combinedTimeline = eventTimelineFrom(mutableState.eventIdToEventCorrectionsMap, nextRevision)
+      val combinedTimeline = unsortedEventTimelineFrom(mutableState.eventIdToEventCorrectionsMap, nextRevision).sorted
       new IdentifiedItemsScope(when, nextRevision, asOf, combinedTimeline)
     }
   }
@@ -493,7 +493,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
 
   override val revisionAsOfs: Seq[Instant] = mutableState.revisionAsOfs
 
-  private def eventTimelineFrom(eventIdToEventCorrectionsMap: MutableState.EventIdToEventCorrectionsMap[EventId], nextRevision: Revision): EventTimeline = {
+  private def unsortedEventTimelineFrom(eventIdToEventCorrectionsMap: MutableState.EventIdToEventCorrectionsMap[EventId], nextRevision: Revision): EventTimeline = {
     val relevantEvents = eventIdToEventCorrectionsMap.values map {
       eventCorrections =>
         val onePastIndexOfRelevantEventCorrection = numberOfEventCorrectionsPriorToCutoff(eventCorrections, nextRevision)
@@ -502,7 +502,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
         else
           None
     } collect {case Some(event) => event}
-    TreeSet(relevantEvents.toStream: _*)
+    relevantEvents.toSeq
   }
 
   def revise(events: Map[EventId, Option[Event]], asOf: Instant): Revision = {
@@ -519,9 +519,9 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
 
     val nextRevisionPostThisOne = 1 + nextRevision
 
-    val combinedTimelineExcludingNewRevision = eventTimelineFrom(mutableState.eventIdToEventCorrectionsMap, nextRevision)
+    val combinedTimelineExcludingNewRevision = unsortedEventTimelineFrom(mutableState.eventIdToEventCorrectionsMap, nextRevision)
 
-    val combinedTimelineIncludingNewRevision = combinedTimelineExcludingNewRevision diff obsoleteEventDatums union TreeSet(newEventDatums.values.toStream: _*)
+    val combinedTimelineIncludingNewRevision = (combinedTimelineExcludingNewRevision filterNot obsoleteEventDatums.contains union newEventDatums.values.toStream).sorted
 
     // This does a check for consistency of the world's history as per this new revision as part of construction.
     // We then throw away the resulting history if successful, the idea being for now to rebuild it as part of
