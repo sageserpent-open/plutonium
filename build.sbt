@@ -10,6 +10,7 @@ lazy val settings = Seq(organization := "com.sageserpent",
   libraryDependencies += "com.jsuereth" %% "scala-arm" % "1.4",
   libraryDependencies += "org.scala-lang" % "scala-reflect" % "2.11.8",
   libraryDependencies += "net.debasishg" %% "redisclient" % "3.0",
+  libraryDependencies += "io.github.nicolasstucki" %% "multisets" % "0.3",
 
   libraryDependencies += "org.scalatest" %% "scalatest" % "2.2.6" % "test",
   libraryDependencies += "org.scalacheck" %% "scalacheck" % "1.12.5" % "test",
