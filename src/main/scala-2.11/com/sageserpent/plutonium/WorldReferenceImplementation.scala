@@ -234,10 +234,7 @@ object WorldReferenceImplementation {
           }(List.empty)
         }
 
-        // NOTE: the '.toSeq' call is used to prevent the map operation
-        // from building a hash set, thereby scrambling the order of events
-        // established by the timeline.
-        val relevantEvents = eventTimeline.toSeq map (_.serializableEvent)
+        val relevantEvents = eventTimeline map (_.serializableEvent)
         for (event <- relevantEvents) {
           event.recordOnTo(patchRecorder)
         }
@@ -412,8 +409,8 @@ object MutableState {
   case class EventData(serializableEvent: SerializableEvent, introducedInRevision: Revision, eventOrderingTiebreakerIndex: EventOrderingTiebreakerIndex)
 
   type EventTimeline = Seq[EventData]
-  type EventCorrections = MutableList[EventData]  // TODO - represent annulments with something other than 'nastyHackToRepresentAnEventAnullment' instance.
-  val nastyHackToRepresentAnEventAnullment = SerializableChange(NegativeInfinity[Instant], Seq.empty)
+  type EventCorrections = MutableList[EventData]  // TODO - represent annulments with something other than 'nastyHackToRepresentAnEventAnnulment' instance.
+  val nastyHackToRepresentAnEventAnnulment = SerializableChange(NegativeInfinity[Instant], Seq.empty)
   type EventIdToEventCorrectionsMap[EventId] = mutable.Map[EventId, EventCorrections]
 
   implicit val eventDataBagConfiguration = collection.immutable.HashedBagConfiguration.compact[EventData]
@@ -509,7 +506,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
     if (revisionAsOfs.nonEmpty && revisionAsOfs.last.isAfter(asOf)) throw new IllegalArgumentException(s"'asOf': ${asOf} should be no earlier than that of the last revision: ${revisionAsOfs.last}")
 
     val newEventDatums = events.zipWithIndex map { case ((eventId, event), tiebreakerIndex) =>
-      eventId -> EventData((event map serializableEventFrom) getOrElse nastyHackToRepresentAnEventAnullment, nextRevision, tiebreakerIndex)
+      eventId -> EventData((event map serializableEventFrom) getOrElse nastyHackToRepresentAnEventAnnulment, nextRevision, tiebreakerIndex)
     }
 
     val obsoleteEventDatums = TreeSet((for {
