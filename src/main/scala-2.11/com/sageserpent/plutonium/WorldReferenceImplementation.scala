@@ -398,12 +398,13 @@ object WorldReferenceImplementation {
 
     override def numberOf[Raw <: Identified : TypeTag](id: Raw#Id): Int = identifiedItemsScope.itemsFor(id).size
   }
+
 }
 
 object MutableState {
   type EventOrderingTiebreakerIndex = Int
 
-  abstract class AbstractEventData{
+  abstract class AbstractEventData {
     val introducedInRevision: Revision
   }
 
@@ -445,27 +446,7 @@ object MutableState {
 
 case class MutableState[EventId](eventIdToEventCorrectionsMap: MutableState.EventIdToEventCorrectionsMap[EventId],
                                  revisionAsOfs: MutableList[Instant]) {
-  import MutableState._
-
   def nextRevision: Revision = revisionAsOfs.size
-
-  // TODO: pass in cutoffs for revision and event time...
-  def pertinentEventDatums(cutoffRevision: Revision, excludedEventIds: Set[EventId]): Seq[AbstractEventData] = {
-    val eventIdAndDataPairs = eventIdToEventCorrectionsMap map {
-      case (eventId, eventCorrections) =>
-        val onePastIndexOfRelevantEventCorrection = numberOfEventCorrectionsPriorToCutoff(eventCorrections, cutoffRevision)
-        if (0 < onePastIndexOfRelevantEventCorrection)
-          Some(eventId -> eventCorrections(onePastIndexOfRelevantEventCorrection - 1))
-        else
-          None
-    } collect { case Some(idAndDataPair) => idAndDataPair }
-    val (eventIds, eventDatums) = eventIdAndDataPairs.unzip
-
-    eventDatums.toStream
-  }
-
-  def pertinentEventDatums(cutoffRevision: Revision): Seq[AbstractEventData] =
-    pertinentEventDatums(cutoffRevision, Set.empty)
 }
 
 class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId]) extends World[EventId] {
@@ -504,7 +485,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
 
   trait SelfPopulatedScope extends ScopeImplementation {
     val identifiedItemsScope = {
-      val eventTimeline = eventTimelineFrom(mutableState.pertinentEventDatums(nextRevision))
+      val eventTimeline = eventTimelineFrom(pertinentEventDatums(nextRevision))
       new IdentifiedItemsScope(when, nextRevision, asOf, eventTimeline)
     }
   }
@@ -530,7 +511,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
 
     val nextRevisionPostThisOne = 1 + nextRevision
 
-    val pertinentEventDatumsExcludingTheNewRevision = mutableState.pertinentEventDatums(nextRevision)
+    val pertinentEventDatumsExcludingTheNewRevision = pertinentEventDatums(nextRevision)
 
     val eventTimelineIncludingNewRevision = eventTimelineFrom(pertinentEventDatumsExcludingTheNewRevision filterNot obsoleteEventDatums.contains union newEventDatums.values.toStream)
 
@@ -540,7 +521,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
     new IdentifiedItemsScope(PositiveInfinity[Instant], nextRevisionPostThisOne, Finite(asOf), eventTimelineIncludingNewRevision)
 
     val revision = nextRevision
-    for ((eventId, eventDatum) <- newEventDatums){
+    for ((eventId, eventDatum) <- newEventDatums) {
       mutableState.eventIdToEventCorrectionsMap.getOrElseUpdate(eventId, MutableList.empty) += eventDatum
     }
     mutableState.revisionAsOfs += asOf
@@ -559,20 +540,36 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
   // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
   override def scopeFor(when: Unbounded[Instant], asOf: Instant): Scope = new ScopeBasedOnAsOf(when, asOf) with SelfPopulatedScope
 
-  override def forkExperimentalWorld(scope: javaApi.Scope): World[EventId] = {
-    val onePastFinalSharedRevision = scope.nextRevision
-    val mutableStateUpToFinalSharedRevision = MutableState[EventId](eventIdToEventCorrectionsMap =
-      mutableState.eventIdToEventCorrectionsMap map {
-        case (id, eventCorrections) => id -> eventCorrectionsPriorToCutoffRevision(eventCorrections, onePastFinalSharedRevision)
-      },
-      revisionAsOfs = mutableState.revisionAsOfs take onePastFinalSharedRevision)
-    val cutoffWhen = scope.when
-    val mutableStateWithEventsNoLaterThanCutoff =
-      mutableStateUpToFinalSharedRevision.copy(eventIdToEventCorrectionsMap =
-        mutableStateUpToFinalSharedRevision.eventIdToEventCorrectionsMap map {
-          case (id, eventCorrections) => id -> (eventCorrections filterNot (PartialFunction.cond (_){
-            case eventData: EventData => eventData.serializableEvent.when > cutoffWhen}))
-        } filterNot (_._2.isEmpty))
-    new WorldReferenceImplementation[EventId](mutableState = mutableStateWithEventsNoLaterThanCutoff)
+  override def forkExperimentalWorld(scope: javaApi.Scope): World[EventId] =
+    new WorldReferenceImplementation[EventId]() {
+      val baseWorld = WorldReferenceImplementation.this
+      val onePastFinalSharedRevision = scope.nextRevision
+      val cutoffWhenAfterWhichWorldsDiverge = scope.when
+
+      override def pertinentEventDatums(cutoffRevision: Revision, cutoffWhen: Unbounded[Instant], excludedEventIds: Set[EventId]): Seq[AbstractEventData] =
+        if (cutoffRevision > onePastFinalSharedRevision) {
+          val (eventIds, eventDatums) = eventIdsAndTheirDatums(cutoffRevision, cutoffWhen, excludedEventIds)
+          eventDatums ++ baseWorld.pertinentEventDatums(onePastFinalSharedRevision, cutoffWhen min cutoffWhenAfterWhichWorldsDiverge, excludedEventIds union eventIds.toSet)
+        } else baseWorld.pertinentEventDatums(onePastFinalSharedRevision, cutoffWhen min cutoffWhenAfterWhichWorldsDiverge, excludedEventIds)
+    }
+
+  def pertinentEventDatums(cutoffRevision: Revision, cutoffWhen: Unbounded[Instant], excludedEventIds: Set[EventId]): Seq[AbstractEventData] =
+    eventIdsAndTheirDatums(cutoffRevision, cutoffWhen, excludedEventIds)._2
+
+  def eventIdsAndTheirDatums(cutoffRevision: Revision, cutoffWhen: Unbounded[Instant], excludedEventIds: Set[EventId]) = {
+    val eventIdAndDataPairs = mutableState.eventIdToEventCorrectionsMap collect {
+      case (eventId, eventCorrections) if !excludedEventIds.contains(eventId) =>
+        val onePastIndexOfRelevantEventCorrection = numberOfEventCorrectionsPriorToCutoff(eventCorrections, cutoffRevision)
+        if (0 < onePastIndexOfRelevantEventCorrection)
+          Some(eventId -> eventCorrections(onePastIndexOfRelevantEventCorrection - 1))
+        else
+          None
+    } collect { case Some(idAndDataPair) => idAndDataPair }
+    val (eventIds, eventDatums) = eventIdAndDataPairs.unzip
+
+    eventIds -> eventDatums.filterNot (PartialFunction.cond(_) { case eventData: EventData => eventData.serializableEvent.when > cutoffWhen }).toStream
   }
+
+  def pertinentEventDatums(cutoffRevision: Revision): Seq[AbstractEventData] =
+    pertinentEventDatums(cutoffRevision, PositiveInfinity(), Set.empty)
 }
