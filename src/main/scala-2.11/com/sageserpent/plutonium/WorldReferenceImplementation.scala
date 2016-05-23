@@ -438,18 +438,6 @@ object MutableState {
     }
   }
 
-  def pertinentEventDatums(eventIdToEventCorrectionsMap: MutableState.EventIdToEventCorrectionsMap[_], nextRevision: Revision): Seq[AbstractEventData] = {
-    val relevantEvents = eventIdToEventCorrectionsMap.values map {
-      eventCorrections =>
-        val onePastIndexOfRelevantEventCorrection = numberOfEventCorrectionsPriorToCutoff(eventCorrections, nextRevision)
-        if (0 < onePastIndexOfRelevantEventCorrection)
-          Some(eventCorrections(onePastIndexOfRelevantEventCorrection - 1))
-        else
-          None
-    } collect {case Some(eventData) => eventData}
-    relevantEvents.toStream
-  }
-
   def eventTimelineFrom(eventDatums: Seq[AbstractEventData]): Seq[SerializableEvent] = (eventDatums collect {
     case eventData: EventData => eventData
   }).sorted.map(_.serializableEvent)
@@ -457,7 +445,21 @@ object MutableState {
 
 case class MutableState[EventId](eventIdToEventCorrectionsMap: MutableState.EventIdToEventCorrectionsMap[EventId],
                                  revisionAsOfs: MutableList[Instant]) {
+  import MutableState._
+
   def nextRevision: Revision = revisionAsOfs.size
+
+  def pertinentEventDatums(cutoffRevision: Revision): Seq[AbstractEventData] = {
+    val relevantEvents = eventIdToEventCorrectionsMap.values map {
+      eventCorrections =>
+        val onePastIndexOfRelevantEventCorrection = numberOfEventCorrectionsPriorToCutoff(eventCorrections, cutoffRevision)
+        if (0 < onePastIndexOfRelevantEventCorrection)
+          Some(eventCorrections(onePastIndexOfRelevantEventCorrection - 1))
+        else
+          None
+    } collect {case Some(eventData) => eventData}
+    relevantEvents.toStream
+  }
 }
 
 class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId]) extends World[EventId] {
@@ -496,7 +498,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
 
   trait SelfPopulatedScope extends ScopeImplementation {
     val identifiedItemsScope = {
-      val eventTimeline = eventTimelineFrom(pertinentEventDatums(mutableState.eventIdToEventCorrectionsMap, nextRevision))
+      val eventTimeline = eventTimelineFrom(mutableState.pertinentEventDatums(nextRevision))
       new IdentifiedItemsScope(when, nextRevision, asOf, eventTimeline)
     }
   }
@@ -522,7 +524,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
 
     val nextRevisionPostThisOne = 1 + nextRevision
 
-    val pertinentEventDatumsExcludingTheNewRevision = pertinentEventDatums(mutableState.eventIdToEventCorrectionsMap, nextRevision)
+    val pertinentEventDatumsExcludingTheNewRevision = mutableState.pertinentEventDatums(nextRevision)
 
     val eventTimelineIncludingNewRevision = eventTimelineFrom(pertinentEventDatumsExcludingTheNewRevision filterNot obsoleteEventDatums.contains union newEventDatums.values.toStream)
 
