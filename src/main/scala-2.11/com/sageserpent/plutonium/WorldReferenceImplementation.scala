@@ -449,17 +449,23 @@ case class MutableState[EventId](eventIdToEventCorrectionsMap: MutableState.Even
 
   def nextRevision: Revision = revisionAsOfs.size
 
-  def pertinentEventDatums(cutoffRevision: Revision): Seq[AbstractEventData] = {
-    val relevantEvents = eventIdToEventCorrectionsMap.values map {
-      eventCorrections =>
+  // TODO: pass in cutoffs for revision and event time...
+  def pertinentEventDatums(cutoffRevision: Revision, excludedEventIds: Set[EventId]): Seq[AbstractEventData] = {
+    val eventIdAndDataPairs = eventIdToEventCorrectionsMap map {
+      case (eventId, eventCorrections) =>
         val onePastIndexOfRelevantEventCorrection = numberOfEventCorrectionsPriorToCutoff(eventCorrections, cutoffRevision)
         if (0 < onePastIndexOfRelevantEventCorrection)
-          Some(eventCorrections(onePastIndexOfRelevantEventCorrection - 1))
+          Some(eventId -> eventCorrections(onePastIndexOfRelevantEventCorrection - 1))
         else
           None
-    } collect {case Some(eventData) => eventData}
-    relevantEvents.toStream
+    } collect { case Some(idAndDataPair) => idAndDataPair }
+    val (eventIds, eventDatums) = eventIdAndDataPairs.unzip
+
+    eventDatums.toStream
   }
+
+  def pertinentEventDatums(cutoffRevision: Revision): Seq[AbstractEventData] =
+    pertinentEventDatums(cutoffRevision, Set.empty)
 }
 
 class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId]) extends World[EventId] {
