@@ -437,6 +437,22 @@ object MutableState {
       case InsertionPoint(insertionPoint) => insertionPoint
     }
   }
+
+  def pertinentEventDatums(eventIdToEventCorrectionsMap: MutableState.EventIdToEventCorrectionsMap[_], nextRevision: Revision): Seq[AbstractEventData] = {
+    val relevantEvents = eventIdToEventCorrectionsMap.values map {
+      eventCorrections =>
+        val onePastIndexOfRelevantEventCorrection = numberOfEventCorrectionsPriorToCutoff(eventCorrections, nextRevision)
+        if (0 < onePastIndexOfRelevantEventCorrection)
+          Some(eventCorrections(onePastIndexOfRelevantEventCorrection - 1))
+        else
+          None
+    } collect {case Some(eventData) => eventData}
+    relevantEvents.toStream
+  }
+
+  def eventTimelineFrom(eventDatums: Seq[AbstractEventData]): Seq[SerializableEvent] = (eventDatums collect {
+    case eventData: EventData => eventData
+  }).sorted.map(_.serializableEvent)
 }
 
 case class MutableState[EventId](eventIdToEventCorrectionsMap: MutableState.EventIdToEventCorrectionsMap[EventId],
@@ -489,22 +505,6 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
 
   override val revisionAsOfs: Seq[Instant] = mutableState.revisionAsOfs
 
-  private def pertinentEventDatums(eventIdToEventCorrectionsMap: MutableState.EventIdToEventCorrectionsMap[EventId], nextRevision: Revision): Seq[AbstractEventData] = {
-    val relevantEvents = eventIdToEventCorrectionsMap.values map {
-      eventCorrections =>
-        val onePastIndexOfRelevantEventCorrection = numberOfEventCorrectionsPriorToCutoff(eventCorrections, nextRevision)
-        if (0 < onePastIndexOfRelevantEventCorrection)
-          Some(eventCorrections(onePastIndexOfRelevantEventCorrection - 1))
-        else
-          None
-    } collect {case Some(eventData) => eventData}
-    relevantEvents.toSeq
-  }
-
-  private def eventTimelineFrom(eventDatums: Seq[AbstractEventData]): Seq[SerializableEvent] = (eventDatums.collect {
-    case eventData: EventData => eventData
-  }).sorted.map(_.serializableEvent)
-
   def revise(events: Map[EventId, Option[Event]], asOf: Instant): Revision = {
     if (revisionAsOfs.nonEmpty && revisionAsOfs.last.isAfter(asOf)) throw new IllegalArgumentException(s"'asOf': ${asOf} should be no earlier than that of the last revision: ${revisionAsOfs.last}")
 
@@ -524,7 +524,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
 
     val pertinentEventDatumsExcludingTheNewRevision = pertinentEventDatums(mutableState.eventIdToEventCorrectionsMap, nextRevision)
 
-    val eventTimelineIncludingNewRevision = eventTimelineFrom((pertinentEventDatumsExcludingTheNewRevision filterNot obsoleteEventDatums.contains union newEventDatums.values.toStream))
+    val eventTimelineIncludingNewRevision = eventTimelineFrom(pertinentEventDatumsExcludingTheNewRevision filterNot obsoleteEventDatums.contains union newEventDatums.values.toStream)
 
     // This does a check for consistency of the world's history as per this new revision as part of construction.
     // We then throw away the resulting history if successful, the idea being for now to rebuild it as part of
