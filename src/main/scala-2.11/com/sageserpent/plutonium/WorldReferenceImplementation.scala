@@ -558,29 +558,29 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
   override def forkExperimentalWorld(scope: javaApi.Scope): World[EventId] =
     new WorldReferenceImplementation[EventId]() {
       val baseWorld = WorldReferenceImplementation.this
-      val onePastFinalSharedRevision = scope.nextRevision
-      val cutoffWhenAfterWhichWorldsDiverge = scope.when
+      val numberOfRevisionsInCommon = scope.nextRevision
+      val cutoffWhenAfterWhichHistoriesDiverge = scope.when
 
-      override def nextRevision: Revision = onePastFinalSharedRevision + super.nextRevision
+      override def nextRevision: Revision = numberOfRevisionsInCommon + super.nextRevision
 
-      override def revisionAsOfs: Seq[Instant] = (baseWorld.revisionAsOfs take onePastFinalSharedRevision) ++ super.revisionAsOfs
+      override def revisionAsOfs: Seq[Instant] = (baseWorld.revisionAsOfs take numberOfRevisionsInCommon) ++ super.revisionAsOfs
 
       override def mostRecentCorrectionOf(eventId: EventId, cutoffRevision: Revision, cutoffWhen: Unbounded[Instant]): Option[AbstractEventData] = {
-        val cutoffWhenForBaseWorld = cutoffWhen min cutoffWhenAfterWhichWorldsDiverge
-        if (cutoffRevision > onePastFinalSharedRevision){
+        val cutoffWhenForBaseWorld = cutoffWhen min cutoffWhenAfterWhichHistoriesDiverge
+        if (cutoffRevision > numberOfRevisionsInCommon){
           import scalaz.std.option.optionInstance
           import scalaz.syntax.monadPlus._
 
           val superResult = super.mostRecentCorrectionOf(eventId, cutoffRevision, cutoffWhen)
-          superResult <+> baseWorld.mostRecentCorrectionOf(eventId, onePastFinalSharedRevision, cutoffWhenForBaseWorld)
+          superResult <+> baseWorld.mostRecentCorrectionOf(eventId, numberOfRevisionsInCommon, cutoffWhenForBaseWorld)
         } else baseWorld.mostRecentCorrectionOf(eventId, cutoffRevision, cutoffWhenForBaseWorld)
       }
 
       override def pertinentEventDatums(cutoffRevision: Revision, cutoffWhen: Unbounded[Instant], excludedEventIds: Set[EventId]): Seq[AbstractEventData] = {
-        val cutoffWhenForBaseWorld = cutoffWhen min cutoffWhenAfterWhichWorldsDiverge
-        if (cutoffRevision > onePastFinalSharedRevision) {
+        val cutoffWhenForBaseWorld = cutoffWhen min cutoffWhenAfterWhichHistoriesDiverge
+        if (cutoffRevision > numberOfRevisionsInCommon) {
           val (eventIds, eventDatums) = eventIdsAndTheirDatums(cutoffRevision, cutoffWhen, excludedEventIds)
-          eventDatums ++ baseWorld.pertinentEventDatums(onePastFinalSharedRevision, cutoffWhenForBaseWorld, excludedEventIds union eventIds.toSet)
+          eventDatums ++ baseWorld.pertinentEventDatums(numberOfRevisionsInCommon, cutoffWhenForBaseWorld, excludedEventIds union eventIds.toSet)
         } else baseWorld.pertinentEventDatums(cutoffRevision, cutoffWhenForBaseWorld, excludedEventIds)
       }
     }
