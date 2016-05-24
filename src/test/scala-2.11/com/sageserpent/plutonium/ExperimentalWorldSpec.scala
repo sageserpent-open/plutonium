@@ -40,7 +40,7 @@ class ExperimentalWorldSpec extends FlatSpec with Matchers with Checkers with Wo
 
       val filteredRevisionsFromBaseWorld = baseWorld.revisionAsOfs.takeWhile(revisionAsOf => !forkAsOf.isBefore(revisionAsOf)).toList
 
-      (scopeToDefineFork.nextRevision == experimentalWorld.nextRevision) :| s"Expected 'experimentalWorld.nextRevision' to be: ${scopeToDefineFork.nextRevision}, but it was: '${experimentalWorld.nextRevision}'." &&
+      (scopeToDefineFork.nextRevision == experimentalWorld.nextRevision) :| s"Expected 'experimentalWorld.nextRevision' to be: ${scopeToDefineFork.nextRevision}, but it was: ${experimentalWorld.nextRevision}." &&
       (filteredRevisionsFromBaseWorld == experimentalWorld.revisionAsOfs) :| s"Expected 'experimentalWorld.revisionAsOfs' to be: '$filteredRevisionsFromBaseWorld', but they were: '${experimentalWorld.revisionAsOfs}'."
     })
   }
