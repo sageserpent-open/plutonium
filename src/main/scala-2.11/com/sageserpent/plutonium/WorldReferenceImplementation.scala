@@ -492,7 +492,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
 
   override def nextRevision: Revision = mutableState.nextRevision
 
-  override val revisionAsOfs: Seq[Instant] = mutableState.revisionAsOfs
+  override def revisionAsOfs: Seq[Instant] = mutableState.revisionAsOfs
 
   def revise(events: Map[EventId, Option[Event]], asOf: Instant): Revision = {
     if (revisionAsOfs.nonEmpty && revisionAsOfs.last.isAfter(asOf)) throw new IllegalArgumentException(s"'asOf': ${asOf} should be no earlier than that of the last revision: ${revisionAsOfs.last}")
@@ -563,7 +563,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
 
       override def nextRevision: Revision = onePastFinalSharedRevision + super.nextRevision
 
-      override val revisionAsOfs: Seq[Instant] = (baseWorld.revisionAsOfs take onePastFinalSharedRevision) ++ super.revisionAsOfs
+      override def revisionAsOfs: Seq[Instant] = (baseWorld.revisionAsOfs take onePastFinalSharedRevision) ++ super.revisionAsOfs
 
       override def mostRecentCorrectionOf(eventId: EventId, cutoffRevision: Revision, cutoffWhen: Unbounded[Instant]): Option[AbstractEventData] = {
         val cutoffWhenForBaseWorld = cutoffWhen min cutoffWhenAfterWhichWorldsDiverge
@@ -572,7 +572,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
           import scalaz.syntax.monadPlus._
 
           val superResult = super.mostRecentCorrectionOf(eventId, cutoffRevision, cutoffWhen)
-          superResult <+> (baseWorld.mostRecentCorrectionOf(eventId, onePastFinalSharedRevision, cutoffWhenForBaseWorld))
+          superResult <+> baseWorld.mostRecentCorrectionOf(eventId, onePastFinalSharedRevision, cutoffWhenForBaseWorld)
         } else baseWorld.mostRecentCorrectionOf(eventId, cutoffRevision, cutoffWhenForBaseWorld)
       }
 
