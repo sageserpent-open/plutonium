@@ -398,12 +398,13 @@ object WorldReferenceImplementation {
 
     override def numberOf[Raw <: Identified : TypeTag](id: Raw#Id): Int = identifiedItemsScope.itemsFor(id).size
   }
+
 }
 
 object MutableState {
   type EventOrderingTiebreakerIndex = Int
 
-  abstract class AbstractEventData{
+  abstract class AbstractEventData {
     val introducedInRevision: Revision
   }
 
@@ -437,11 +438,55 @@ object MutableState {
       case InsertionPoint(insertionPoint) => insertionPoint
     }
   }
+
+  def eventTimelineFrom(eventDatums: Seq[AbstractEventData]): Seq[SerializableEvent] = (eventDatums collect {
+    case eventData: EventData => eventData
+  }).sorted.map(_.serializableEvent)
 }
 
-case class MutableState[EventId](eventIdToEventCorrectionsMap: MutableState.EventIdToEventCorrectionsMap[EventId],
-                                 revisionAsOfs: MutableList[Instant]) {
-  def nextRevision: Revision = revisionAsOfs.size
+class MutableState[EventId] {
+  import MutableState._
+
+  val eventIdToEventCorrectionsMap: MutableState.EventIdToEventCorrectionsMap[EventId] = mutable.Map.empty
+  val _revisionAsOfs: MutableList[Instant] = MutableList.empty
+  def revisionAsOfs: Seq[Instant] = _revisionAsOfs
+
+  def nextRevision: Revision = _revisionAsOfs.size
+
+  def mostRecentCorrectionOf(eventId: EventId): Option[AbstractEventData] = {
+    mostRecentCorrectionOf(eventId, nextRevision, PositiveInfinity())
+  }
+
+  def mostRecentCorrectionOf(eventId: EventId, cutoffRevision: Revision, cutoffWhen: Unbounded[Instant]): Option[AbstractEventData] = {
+    eventIdToEventCorrectionsMap.get(eventId) flatMap {
+      eventCorrections =>
+        val onePastIndexOfRelevantEventCorrection = numberOfEventCorrectionsPriorToCutoff(eventCorrections, cutoffRevision)
+        if (0 < onePastIndexOfRelevantEventCorrection)
+          Some(eventCorrections(onePastIndexOfRelevantEventCorrection - 1))
+        else
+          None
+    } filterNot (PartialFunction.cond(_) { case eventData: EventData => eventData.serializableEvent.when > cutoffWhen })
+  }
+
+  def pertinentEventDatums(cutoffRevision: Revision, cutoffWhen: Unbounded[Instant], excludedEventIds: Set[EventId]): Seq[AbstractEventData] =
+    eventIdsAndTheirDatums(cutoffRevision, cutoffWhen, excludedEventIds)._2
+
+  def eventIdsAndTheirDatums(cutoffRevision: Revision, cutoffWhen: Unbounded[Instant], excludedEventIds: Set[EventId]) = {
+    val eventIdAndDataPairs = eventIdToEventCorrectionsMap collect {
+      case (eventId, eventCorrections) if !excludedEventIds.contains(eventId) =>
+        val onePastIndexOfRelevantEventCorrection = numberOfEventCorrectionsPriorToCutoff(eventCorrections, cutoffRevision)
+        if (0 < onePastIndexOfRelevantEventCorrection)
+          Some(eventId -> eventCorrections(onePastIndexOfRelevantEventCorrection - 1))
+        else
+          None
+    } collect { case Some(idAndDataPair) => idAndDataPair }
+    val (eventIds, eventDatums) = eventIdAndDataPairs.unzip
+
+    eventIds -> eventDatums.filterNot (PartialFunction.cond(_) { case eventData: EventData => eventData.serializableEvent.when > cutoffWhen }).toStream
+  }
+
+  def pertinentEventDatums(cutoffRevision: Revision): Seq[AbstractEventData] =
+    pertinentEventDatums(cutoffRevision, PositiveInfinity(), Set.empty)
 }
 
 class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId]) extends World[EventId] {
@@ -449,8 +494,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
   import MutableState._
   import WorldReferenceImplementation._
 
-  def this() = this(MutableState(eventIdToEventCorrectionsMap = mutable.Map.empty,
-    revisionAsOfs = MutableList.empty))
+  def this() = this(new MutableState[EventId])
 
   abstract class ScopeBasedOnNextRevision(val when: Unbounded[Instant], val nextRevision: Revision) extends com.sageserpent.plutonium.Scope {
     val asOf = nextRevision match {
@@ -480,30 +524,14 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
 
   trait SelfPopulatedScope extends ScopeImplementation {
     val identifiedItemsScope = {
-      val eventTimeline = eventTimelineFrom(pertinentEventDatums(mutableState.eventIdToEventCorrectionsMap, nextRevision))
+      val eventTimeline = eventTimelineFrom(mutableState.pertinentEventDatums(nextRevision))
       new IdentifiedItemsScope(when, nextRevision, asOf, eventTimeline)
     }
   }
 
   override def nextRevision: Revision = mutableState.nextRevision
 
-  override val revisionAsOfs: Seq[Instant] = mutableState.revisionAsOfs
-
-  private def pertinentEventDatums(eventIdToEventCorrectionsMap: MutableState.EventIdToEventCorrectionsMap[EventId], nextRevision: Revision): Seq[AbstractEventData] = {
-    val relevantEvents = eventIdToEventCorrectionsMap.values map {
-      eventCorrections =>
-        val onePastIndexOfRelevantEventCorrection = numberOfEventCorrectionsPriorToCutoff(eventCorrections, nextRevision)
-        if (0 < onePastIndexOfRelevantEventCorrection)
-          Some(eventCorrections(onePastIndexOfRelevantEventCorrection - 1))
-        else
-          None
-    } collect {case Some(eventData) => eventData}
-    relevantEvents.toSeq
-  }
-
-  private def eventTimelineFrom(eventDatums: Seq[AbstractEventData]): Seq[SerializableEvent] = (eventDatums.collect {
-    case eventData: EventData => eventData
-  }).sorted.map(_.serializableEvent)
+  override def revisionAsOfs: Seq[Instant] = mutableState.revisionAsOfs
 
   def revise(events: Map[EventId, Option[Event]], asOf: Instant): Revision = {
     if (revisionAsOfs.nonEmpty && revisionAsOfs.last.isAfter(asOf)) throw new IllegalArgumentException(s"'asOf': ${asOf} should be no earlier than that of the last revision: ${revisionAsOfs.last}")
@@ -517,14 +545,14 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
 
     val obsoleteEventDatums = Set((for {
       eventId <- events.keys
-      obsoleteEventData <- mutableState.eventIdToEventCorrectionsMap.get(eventId) map (_.last)
+      obsoleteEventData <- mutableState.mostRecentCorrectionOf(eventId)
     } yield obsoleteEventData).toStream: _*)
 
     val nextRevisionPostThisOne = 1 + nextRevision
 
-    val pertinentEventDatumsExcludingTheNewRevision = pertinentEventDatums(mutableState.eventIdToEventCorrectionsMap, nextRevision)
+    val pertinentEventDatumsExcludingTheNewRevision = mutableState.pertinentEventDatums(nextRevision)
 
-    val eventTimelineIncludingNewRevision = eventTimelineFrom((pertinentEventDatumsExcludingTheNewRevision filterNot obsoleteEventDatums.contains union newEventDatums.values.toStream))
+    val eventTimelineIncludingNewRevision = eventTimelineFrom(pertinentEventDatumsExcludingTheNewRevision filterNot obsoleteEventDatums.contains union newEventDatums.values.toStream)
 
     // This does a check for consistency of the world's history as per this new revision as part of construction.
     // We then throw away the resulting history if successful, the idea being for now to rebuild it as part of
@@ -532,10 +560,10 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
     new IdentifiedItemsScope(PositiveInfinity[Instant], nextRevisionPostThisOne, Finite(asOf), eventTimelineIncludingNewRevision)
 
     val revision = nextRevision
-    for ((eventId, eventDatum) <- newEventDatums){
+    for ((eventId, eventDatum) <- newEventDatums) {
       mutableState.eventIdToEventCorrectionsMap.getOrElseUpdate(eventId, MutableList.empty) += eventDatum
     }
-    mutableState.revisionAsOfs += asOf
+    mutableState._revisionAsOfs += asOf
     revision
   }
 
@@ -552,19 +580,36 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
   override def scopeFor(when: Unbounded[Instant], asOf: Instant): Scope = new ScopeBasedOnAsOf(when, asOf) with SelfPopulatedScope
 
   override def forkExperimentalWorld(scope: javaApi.Scope): World[EventId] = {
-    val onePastFinalSharedRevision = scope.nextRevision
-    val mutableStateUpToFinalSharedRevision = MutableState[EventId](eventIdToEventCorrectionsMap =
-      mutableState.eventIdToEventCorrectionsMap map {
-        case (id, eventCorrections) => id -> eventCorrectionsPriorToCutoffRevision(eventCorrections, onePastFinalSharedRevision)
-      },
-      revisionAsOfs = mutableState.revisionAsOfs take onePastFinalSharedRevision)
-    val cutoffWhen = scope.when
-    val mutableStateWithEventsNoLaterThanCutoff =
-      mutableStateUpToFinalSharedRevision.copy(eventIdToEventCorrectionsMap =
-        mutableStateUpToFinalSharedRevision.eventIdToEventCorrectionsMap map {
-          case (id, eventCorrections) => id -> (eventCorrections filterNot (PartialFunction.cond (_){
-            case eventData: EventData => eventData.serializableEvent.when > cutoffWhen}))
-        } filterNot (_._2.isEmpty))
-    new WorldReferenceImplementation[EventId](mutableState = mutableStateWithEventsNoLaterThanCutoff)
+    val forkedMutableState = new MutableState[EventId] {
+      val baseMutableState = mutableState
+      val numberOfRevisionsInCommon = scope.nextRevision
+      val cutoffWhenAfterWhichHistoriesDiverge = scope.when
+
+      override def nextRevision: Revision = numberOfRevisionsInCommon + super.nextRevision
+
+      override def revisionAsOfs: Seq[Instant] = (baseMutableState.revisionAsOfs take numberOfRevisionsInCommon) ++ super.revisionAsOfs
+
+
+      override def mostRecentCorrectionOf(eventId: EventId, cutoffRevision: Revision, cutoffWhen: Unbounded[Instant]): Option[AbstractEventData] = {
+        val cutoffWhenForBaseWorld = cutoffWhen min cutoffWhenAfterWhichHistoriesDiverge
+        if (cutoffRevision > numberOfRevisionsInCommon) {
+          import scalaz.std.option.optionInstance
+          import scalaz.syntax.monadPlus._
+
+          val superResult = super.mostRecentCorrectionOf(eventId, cutoffRevision, cutoffWhen)
+          superResult <+> baseMutableState.mostRecentCorrectionOf(eventId, numberOfRevisionsInCommon, cutoffWhenForBaseWorld)
+        } else baseMutableState.mostRecentCorrectionOf(eventId, cutoffRevision, cutoffWhenForBaseWorld)
+      }
+
+      override def pertinentEventDatums(cutoffRevision: Revision, cutoffWhen: Unbounded[Instant], excludedEventIds: Set[EventId]): Seq[AbstractEventData] = {
+        val cutoffWhenForBaseWorld = cutoffWhen min cutoffWhenAfterWhichHistoriesDiverge
+        if (cutoffRevision > numberOfRevisionsInCommon) {
+          val (eventIds, eventDatums) = eventIdsAndTheirDatums(cutoffRevision, cutoffWhen, excludedEventIds)
+          eventDatums ++ baseMutableState.pertinentEventDatums(numberOfRevisionsInCommon, cutoffWhenForBaseWorld, excludedEventIds union eventIds.toSet)
+        } else baseMutableState.pertinentEventDatums(cutoffRevision, cutoffWhenForBaseWorld, excludedEventIds)
+      }
+    }
+
+    new WorldReferenceImplementation[EventId](forkedMutableState)
   }
 }

@@ -18,7 +18,7 @@ object World {
 trait World[EventId] {
   def nextRevision: Revision  // NOTE: this is the number of *revisions* that have all been made via 'revise'.
 
-  val revisionAsOfs: collection.Seq[Instant]  // Adjacent duplicates are permitted - this is taken to mean that successive revisions were booked in faster than than the time resolution.
+  def revisionAsOfs: collection.Seq[Instant]  // Adjacent duplicates are permitted - this is taken to mean that successive revisions were booked in faster than than the time resolution.
 
   // Can have duplicated instants associated with different events - more than one thing can happen at a given time.
   // Question: does the order of appearance of the events matter, then? - Hmmm - the answer is that they take effect in order
