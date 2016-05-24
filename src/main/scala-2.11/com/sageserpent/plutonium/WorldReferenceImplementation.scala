@@ -546,6 +546,10 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
       val onePastFinalSharedRevision = scope.nextRevision
       val cutoffWhenAfterWhichWorldsDiverge = scope.when
 
+      override def nextRevision: Revision = onePastFinalSharedRevision + super.nextRevision
+
+      override val revisionAsOfs: Seq[Instant] = (baseWorld.revisionAsOfs take onePastFinalSharedRevision) ++ super.revisionAsOfs
+
       override def pertinentEventDatums(cutoffRevision: Revision, cutoffWhen: Unbounded[Instant], excludedEventIds: Set[EventId]): Seq[AbstractEventData] =
         if (cutoffRevision > onePastFinalSharedRevision) {
           val (eventIds, eventDatums) = eventIdsAndTheirDatums(cutoffRevision, cutoffWhen, excludedEventIds)
