@@ -19,7 +19,7 @@ import scala.collection.mutable.Set
 /**
   * Created by Gerard on 13/02/2016.
   */
-class WorldStateSharingSupport extends FlatSpec with Matchers with Checkers with WorldSpecSupport {
+class WorldStateSharingSpec extends FlatSpec with Matchers with Checkers with WorldSpecSupport {
 
   /*
   Can create a new world that shares the same histories as a previous one by virtue of using the same Redis data store.
@@ -79,10 +79,7 @@ class WorldStateSharingSupport extends FlatSpec with Matchers with Checkers with
     } map (worldReferenceImplementationSharedState =>
       () => new WorldReferenceImplementation[Int](mutableState = worldReferenceImplementationSharedState))
 
-
-  behavior of "multiple world instances representing the same world"
-
-  they should "yield the same results to scope queries regardless of which instance is used to define a revision" in {
+  "multiple world instances representing the same world" should "yield the same results to scope queries regardless of which instance is used to define a revision" in {
     val testCaseGenerator = for {
       worldFactory <- worldSharingCommonStateFactoryGenerator
       recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
@@ -115,8 +112,37 @@ class WorldStateSharingSupport extends FlatSpec with Matchers with Checkers with
     })
   }
 
+  private def recordEventsInWorldViaMultipleThreads(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[(Option[(Unbounded[Instant], Event)], Int)]], asOfs: List[Instant], world: World[Int]) = {
+    revisionActions(bigShuffledHistoryOverLotsOfThings, asOfs, world).toParArray map (_.apply) // Actually a piece of imperative code that looks functional - 'world' is being mutated as a side-effect; but the revisions are harvested functionally.
+  }
+
   they should "allow concurrent revisions to be attempted on distinct instances" in {
-    pending
+    val testCaseGenerator = for {
+      worldFactory <- worldSharingCommonStateFactoryGenerator
+      recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
+      obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
+      seed <- seedGenerator
+      random = new Random(seed)
+      shuffledRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, recordingsGroupedById)
+      shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, obsoleteRecordingsGroupedById)
+      shuffledRecordingAndEventPairs = intersperseObsoleteRecordings(random, shuffledRecordings, shuffledObsoleteRecordings)
+      bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(shuffledRecordingAndEventPairs)
+      asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
+    } yield (worldFactory, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, seed)
+    check(Prop.forAllNoShrink(testCaseGenerator) {
+      case (worldFactory, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, seed) =>
+        val demultiplexingWorld = new DemultiplexingWorld(worldFactory, seed)
+
+        try {
+          recordEventsInWorldViaMultipleThreads(bigShuffledHistoryOverLotsOfThings, asOfs, demultiplexingWorld)
+          Prop.proved
+        } catch {
+          case exception: RuntimeException if exception.getMessage.startsWith("Attempt to annihilate") =>
+            Prop.proved
+          case exception: RuntimeException if exception.getMessage.contains("should be no earlier than") =>
+            Prop.proved
+        }
+    })
   }
 
 }
