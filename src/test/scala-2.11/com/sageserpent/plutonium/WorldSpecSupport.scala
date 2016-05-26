@@ -31,7 +31,9 @@ trait WorldSpecSupport {
   import WorldSpecSupport._
 
   // This looks odd, but the idea is *recreate* world instances each time the generator is used.
-  val worldGenerator = Gen.const(() => new WorldReferenceImplementation[Int]) map (_.apply)
+  val worldGenerator: Gen[World[Int]] = Gen.delay {
+    new WorldReferenceImplementation[Int]
+  }
 
   val seedGenerator = Arbitrary.arbitrary[Long]
 
