@@ -20,20 +20,6 @@ import scala.collection.mutable.Set
   * Created by Gerard on 13/02/2016.
   */
 class WorldStateSharingSpec extends FlatSpec with Matchers with Checkers with WorldSpecSupport {
-
-  /*
-  Can create a new world that shares the same histories as a previous one by virtue of using the same Redis data store.
-
-  Can create two worlds side by side that share the same histories by virtue of using the same Redis data store.
-  Making new revisions via either world is reflected in the other one.
-
-  Making concurrent revisions via two worlds sharing the same histories is a safe operation:
-  the worst that can happen is that an attempt to revise is rendered invalid due to a concurrent
-  revision rendering what would have been a consistent set of changes inconsistent with the new history.
-
-  A subtlety: organise the test execution so that some of the instances are forgotten before others are created.
-  */
-
   class DemultiplexingWorld(worldFactory: () => World[Revision], seed: Long) extends World[Int] {
     val random = new scala.util.Random(seed)
 
