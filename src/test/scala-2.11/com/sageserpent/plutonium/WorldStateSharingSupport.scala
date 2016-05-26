@@ -20,6 +20,7 @@ import scala.collection.mutable.Set
   * Created by Gerard on 13/02/2016.
   */
 class WorldStateSharingSupport extends FlatSpec with Matchers with Checkers with WorldSpecSupport {
+
   /*
   Can create a new world that shares the same histories as a previous one by virtue of using the same Redis data store.
 
@@ -38,15 +39,18 @@ class WorldStateSharingSupport extends FlatSpec with Matchers with Checkers with
 
     val worlds: Set[World[Int]] = Set.empty
 
-    def world: World[Int] = if (worlds.nonEmpty && random.nextBoolean()){
-      if (1 < worlds.size && random.nextBoolean()){
+    def world: World[Int] = {
+      if (worlds.nonEmpty && random.nextBoolean()) {
         worlds -= random.chooseOneOf(worlds)
       }
-      random.chooseOneOf(worlds)
-    } else {
-      val newWorldSharingCommonState = worldFactory()
-      worlds += newWorldSharingCommonState
-      newWorldSharingCommonState
+
+      if (worlds.nonEmpty && random.nextBoolean())
+        random.chooseOneOf(worlds)
+      else {
+        val newWorldSharingCommonState = worldFactory()
+        worlds += newWorldSharingCommonState
+        newWorldSharingCommonState
+      }
     }
 
     override def nextRevision: Revision = world.nextRevision
