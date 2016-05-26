@@ -79,7 +79,9 @@ class WorldStateSharingSpec extends FlatSpec with Matchers with Checkers with Wo
     } map (worldReferenceImplementationSharedState =>
       () => new WorldReferenceImplementation[Int](mutableState = worldReferenceImplementationSharedState))
 
-  "multiple world instances representing the same world" should "yield the same results to scope queries regardless of which instance is used to define a revision" in {
+  behavior of "multiple world instances representing the same world"
+
+  they should "yield the same results to scope queries regardless of which instance is used to define a revision" in {
     val testCaseGenerator = for {
       worldFactory <- worldSharingCommonStateFactoryGenerator
       recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)

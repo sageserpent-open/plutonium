@@ -89,6 +89,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
       mutableState.eventIdToEventCorrectionsMap.getOrElseUpdate(eventId, MutableList.empty) += eventDatum
     }
     mutableState._revisionAsOfs += asOf
+    mutableState.checkInvariant()
     revision
   }
 

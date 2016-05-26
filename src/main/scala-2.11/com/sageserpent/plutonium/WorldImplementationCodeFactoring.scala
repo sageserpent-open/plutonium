@@ -487,6 +487,10 @@ class MutableState[EventId] {
 
   def pertinentEventDatums(cutoffRevision: Revision): Seq[AbstractEventData] =
     pertinentEventDatums(cutoffRevision, PositiveInfinity(), Set.empty)
+
+  def checkInvariant() = {
+    assert(revisionAsOfs zip revisionAsOfs.tail forall {case (first, second) => first <= second})
+  }
 }
 
 
