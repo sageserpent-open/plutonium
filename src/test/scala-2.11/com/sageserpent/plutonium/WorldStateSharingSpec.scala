@@ -125,6 +125,8 @@ class WorldStateSharingSpec extends FlatSpec with Matchers with Checkers with Wo
           recordEventsInWorldViaMultipleThreads(bigShuffledHistoryOverLotsOfThings, asOfs, demultiplexingWorld)
           Prop.proved
         } catch {
+          case exception: RuntimeException if exception.getMessage.startsWith("Concurrent revision attempt detected") =>
+            Prop.proved
           case exception: RuntimeException if exception.getMessage.startsWith("Attempt to annihilate") =>
             Prop.proved
           case exception: RuntimeException if exception.getMessage.contains("should be no earlier than") =>
