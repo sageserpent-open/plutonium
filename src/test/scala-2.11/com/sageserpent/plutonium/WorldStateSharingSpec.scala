@@ -26,16 +26,18 @@ class WorldStateSharingSpec extends FlatSpec with Matchers with Checkers with Wo
     val worlds: Set[World[Int]] = Set.empty
 
     def world: World[Int] = {
-      if (worlds.nonEmpty && random.nextBoolean()) {
-        worlds -= random.chooseOneOf(worlds)
-      }
+      worlds.synchronized {
+        if (worlds.nonEmpty && random.nextBoolean()) {
+          worlds -= random.chooseOneOf(worlds)
+        }
 
-      if (worlds.nonEmpty && random.nextBoolean())
-        random.chooseOneOf(worlds)
-      else {
-        val newWorldSharingCommonState = worldFactory()
-        worlds += newWorldSharingCommonState
-        newWorldSharingCommonState
+        if (worlds.nonEmpty && random.nextBoolean())
+          random.chooseOneOf(worlds)
+        else {
+          val newWorldSharingCommonState = worldFactory()
+          worlds += newWorldSharingCommonState
+          newWorldSharingCommonState
+        }
       }
     }
 
