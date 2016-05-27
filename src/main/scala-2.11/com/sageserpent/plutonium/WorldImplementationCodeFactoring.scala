@@ -2,6 +2,7 @@ package com.sageserpent.plutonium
 
 import java.lang.reflect.{Method, Modifier}
 import java.time.Instant
+import java.util.concurrent.atomic.AtomicLong
 
 import com.sageserpent.americium.{PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.World.Revision
@@ -446,6 +447,8 @@ class MutableState[EventId] {
 
   import MutableState._
 
+  var idOfThreadMostRecentlyStartingARevision: Long = -1L
+
   val eventIdToEventCorrectionsMap: MutableState.EventIdToEventCorrectionsMap[EventId] = mutable.Map.empty
   val _revisionAsOfs: MutableList[Instant] = MutableList.empty
 
@@ -487,6 +490,10 @@ class MutableState[EventId] {
 
   def pertinentEventDatums(cutoffRevision: Revision): Seq[AbstractEventData] =
     pertinentEventDatums(cutoffRevision, PositiveInfinity(), Set.empty)
+
+  def checkInvariant() = {
+    assert(revisionAsOfs zip revisionAsOfs.tail forall {case (first, second) => first <= second})
+  }
 }
 
 

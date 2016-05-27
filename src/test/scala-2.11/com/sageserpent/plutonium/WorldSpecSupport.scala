@@ -31,7 +31,9 @@ trait WorldSpecSupport {
   import WorldSpecSupport._
 
   // This looks odd, but the idea is *recreate* world instances each time the generator is used.
-  val worldGenerator = Gen.const(() => new WorldReferenceImplementation[Int]) map (_.apply)
+  val worldGenerator: Gen[World[Int]] = Gen.delay {
+    new WorldReferenceImplementation[Int]
+  }
 
   val seedGenerator = Arbitrary.arbitrary[Long]
 
@@ -456,11 +458,12 @@ trait WorldSpecSupport {
 
   def revisionActions(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[(Option[(Unbounded[Instant], Event)], Int)]], asOfs: List[Instant], world: World[Int]): Stream[() => Revision] = {
     assert(bigShuffledHistoryOverLotsOfThings.length == asOfs.length)
-    for {(pieceOfHistory, asOf) <- bigShuffledHistoryOverLotsOfThings zip asOfs
+    val asOfsQueue = scala.collection.mutable.Queue[Instant](asOfs: _*)
+    for {pieceOfHistory <- bigShuffledHistoryOverLotsOfThings
          events = pieceOfHistory map {
            case (recording, eventId) => eventId -> (for ((_, change) <- recording) yield change)
          } toSeq} yield
-      () => world.revise(TreeMap(events: _*), asOf)
+      () => world.revise(TreeMap(events: _*), asOfsQueue.dequeue())
   }
 
   def intersperseObsoleteRecordings(random: Random, recordings: immutable.Iterable[(Unbounded[Instant], Event)], obsoleteRecordings: immutable.Iterable[(Unbounded[Instant], Event)]): Stream[(Option[(Unbounded[Instant], Event)], Int)] = {

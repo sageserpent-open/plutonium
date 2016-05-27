@@ -59,7 +59,10 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
   override def revisionAsOfs: Seq[Instant] = mutableState.revisionAsOfs
 
   def revise(events: Map[EventId, Option[Event]], asOf: Instant): Revision = {
-    if (revisionAsOfs.nonEmpty && revisionAsOfs.last.isAfter(asOf)) throw new IllegalArgumentException(s"'asOf': ${asOf} should be no earlier than that of the last revision: ${revisionAsOfs.last}")
+    mutableState.synchronized {
+      mutableState.idOfThreadMostRecentlyStartingARevision = Thread.currentThread.getId
+      if (revisionAsOfs.nonEmpty && revisionAsOfs.last.isAfter(asOf)) throw new IllegalArgumentException(s"'asOf': ${asOf} should be no earlier than that of the last revision: ${revisionAsOfs.last}")
+    }
 
     val newEventDatums: Map[EventId, AbstractEventData] = events.zipWithIndex map { case ((eventId, event), tiebreakerIndex) =>
       eventId -> (event match {
@@ -85,10 +88,18 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
     new IdentifiedItemsScope(PositiveInfinity[Instant], nextRevisionPostThisOne, Finite(asOf), eventTimelineIncludingNewRevision)
 
     val revision = nextRevision
-    for ((eventId, eventDatum) <- newEventDatums) {
-      mutableState.eventIdToEventCorrectionsMap.getOrElseUpdate(eventId, MutableList.empty) += eventDatum
+
+    mutableState.synchronized {
+      if (mutableState.idOfThreadMostRecentlyStartingARevision != Thread.currentThread.getId){
+        throw new RuntimeException("Concurrent revision attempt detected.")
+      }
+
+      for ((eventId, eventDatum) <- newEventDatums) {
+        mutableState.eventIdToEventCorrectionsMap.getOrElseUpdate(eventId, MutableList.empty) += eventDatum
+      }
+      mutableState._revisionAsOfs += asOf
+      mutableState.checkInvariant()
     }
-    mutableState._revisionAsOfs += asOf
     revision
   }
 
