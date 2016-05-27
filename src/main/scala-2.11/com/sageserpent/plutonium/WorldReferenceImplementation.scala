@@ -1,56 +1,25 @@
 package com.sageserpent.plutonium
 
 import java.time.Instant
-import java.util.Optional
 
-import com.sageserpent.americium.{Finite, NegativeInfinity, PositiveInfinity, Unbounded}
+import com.sageserpent.americium.{Finite, PositiveInfinity, Unbounded}
 
 import scala.Ordering.Implicits._
-import scala.collection.JavaConversions._
-import scala.collection.Searching._
 import scala.collection.mutable.MutableList
 
 /**
   * Created by Gerard on 25/05/2016.
   */
 class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId]) extends WorldImplementationCodeFactoring[EventId] {
-  // TODO - thread safety.
   import MutableState._
   import World._
   import WorldImplementationCodeFactoring._
 
   def this() = this(new MutableState[EventId])
 
-  abstract class ScopeBasedOnNextRevision(val when: Unbounded[Instant], val nextRevision: Revision) extends com.sageserpent.plutonium.Scope {
-    val asOf = nextRevision match {
-      case World.initialRevision => NegativeInfinity[Instant]()
-      case _ => if (nextRevision <= revisionAsOfs.size)
-        Finite(revisionAsOfs(nextRevision - 1))
-      else throw new RuntimeException(s"Scope based the revision prior to: $nextRevision can't be constructed - there are only ${revisionAsOfs.size} revisions of the world.")
-    }
-  }
-
-  abstract class ScopeBasedOnAsOf(val when: Unbounded[Instant], unliftedAsOf: Instant) extends com.sageserpent.plutonium.Scope {
-    override val asOf = Finite(unliftedAsOf)
-
-    override val nextRevision: Revision = {
-      revisionAsOfs.search(unliftedAsOf) match {
-        case found@Found(_) => {
-          val versionTimelineNotIncludingAllUpToTheMatch = revisionAsOfs drop (1 + found.foundIndex)
-          versionTimelineNotIncludingAllUpToTheMatch.indexWhere(implicitly[Ordering[Instant]].lt(unliftedAsOf, _)) match {
-            case -1 => revisionAsOfs.length
-            case index => found.foundIndex + 1 + index
-          }
-        }
-        case notFound@InsertionPoint(_) => notFound.insertionPoint
-      }
-    }
-  }
-
-  trait SelfPopulatedScope extends ScopeImplementation {
-    val identifiedItemsScope = {
-      val eventTimeline = eventTimelineFrom(mutableState.pertinentEventDatums(nextRevision))
-      new IdentifiedItemsScope(when, nextRevision, asOf, eventTimeline)
+  trait SelfPopulatedScopeUsingMutableState extends ScopeImplementation with SelfPopulatedScope {
+    override protected def eventTimeline(nextRevision: Revision): Seq[SerializableEvent] = {
+      eventTimelineFrom(mutableState.pertinentEventDatums(nextRevision))
     }
   }
 
@@ -61,7 +30,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
   def revise(events: Map[EventId, Option[Event]], asOf: Instant): Revision = {
     mutableState.synchronized {
       mutableState.idOfThreadMostRecentlyStartingARevision = Thread.currentThread.getId
-      if (revisionAsOfs.nonEmpty && revisionAsOfs.last.isAfter(asOf)) throw new IllegalArgumentException(s"'asOf': ${asOf} should be no earlier than that of the last revision: ${revisionAsOfs.last}")
+      checkRevisionPrecondition(asOf)
     }
 
     val newEventDatums: Map[EventId, AbstractEventData] = events.zipWithIndex map { case ((eventId, event), tiebreakerIndex) =>
@@ -103,17 +72,11 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
     revision
   }
 
-  def revise(events: java.util.Map[EventId, Optional[Event]], asOf: Instant): Revision = {
-    val sam: java.util.function.Function[Event, Option[Event]] = event => Some(event): Option[Event]
-    val eventsAsScalaImmutableMap = Map(events mapValues (_.map[Option[Event]](sam).orElse(None)) toSeq: _*)
-    revise(eventsAsScalaImmutableMap, asOf)
-  }
+  // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
+  override def scopeFor(when: Unbounded[Instant], nextRevision: Revision): Scope = new ScopeBasedOnNextRevision(when, nextRevision) with SelfPopulatedScopeUsingMutableState
 
   // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
-  override def scopeFor(when: Unbounded[Instant], nextRevision: Revision): Scope = new ScopeBasedOnNextRevision(when, nextRevision) with SelfPopulatedScope
-
-  // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
-  override def scopeFor(when: Unbounded[Instant], asOf: Instant): Scope = new ScopeBasedOnAsOf(when, asOf) with SelfPopulatedScope
+  override def scopeFor(when: Unbounded[Instant], asOf: Instant): Scope = new ScopeBasedOnAsOf(when, asOf) with SelfPopulatedScopeUsingMutableState
 
   override def forkExperimentalWorld(scope: javaApi.Scope): World[EventId] = {
     val forkedMutableState = new MutableState[EventId] {

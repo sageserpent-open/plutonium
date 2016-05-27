@@ -2,10 +2,11 @@ package com.sageserpent.plutonium
 
 import java.lang.reflect.{Method, Modifier}
 import java.time.Instant
-import java.util.concurrent.atomic.AtomicLong
+import java.util.Optional
 
-import com.sageserpent.americium.{PositiveInfinity, Unbounded}
+import com.sageserpent.americium.{Finite, NegativeInfinity, PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.World.Revision
+import com.sageserpent.plutonium.WorldImplementationCodeFactoring.IdentifiedItemsScope
 import net.sf.cglib.proxy._
 import resource.{ManagedResource, makeManagedResource}
 
@@ -16,6 +17,7 @@ import scala.collection.mutable.MutableList
 import scala.collection.{SeqLike, SeqView, mutable}
 import scala.reflect.runtime._
 import scala.reflect.runtime.universe._
+import scala.collection.JavaConversions._
 
 /**
   * Created by Gerard on 19/07/2015.
@@ -497,6 +499,50 @@ class MutableState[EventId] {
 }
 
 
-abstract class WorldImplementationCodeFactoring[EventId] extends World[EventId]
+abstract class WorldImplementationCodeFactoring[EventId] extends World[EventId]{
+  abstract class ScopeBasedOnNextRevision(val when: Unbounded[Instant], val nextRevision: Revision) extends com.sageserpent.plutonium.Scope {
+    val asOf = nextRevision match {
+      case World.initialRevision => NegativeInfinity[Instant]()
+      case _ => if (nextRevision <= revisionAsOfs.size)
+        Finite(revisionAsOfs(nextRevision - 1))
+      else throw new RuntimeException(s"Scope based the revision prior to: $nextRevision can't be constructed - there are only ${revisionAsOfs.size} revisions of the world.")
+    }
+  }
+
+  abstract class ScopeBasedOnAsOf(val when: Unbounded[Instant], unliftedAsOf: Instant) extends com.sageserpent.plutonium.Scope {
+    override val asOf = Finite(unliftedAsOf)
+
+    override val nextRevision: Revision = {
+      revisionAsOfs.search(unliftedAsOf) match {
+        case found@Found(_) => {
+          val versionTimelineNotIncludingAllUpToTheMatch = revisionAsOfs drop (1 + found.foundIndex)
+          versionTimelineNotIncludingAllUpToTheMatch.indexWhere(implicitly[Ordering[Instant]].lt(unliftedAsOf, _)) match {
+            case -1 => revisionAsOfs.length
+            case index => found.foundIndex + 1 + index
+          }
+        }
+        case notFound@InsertionPoint(_) => notFound.insertionPoint
+      }
+    }
+  }
+
+  trait SelfPopulatedScope extends com.sageserpent.plutonium.Scope {
+    val identifiedItemsScope = {
+      new IdentifiedItemsScope(when, nextRevision, asOf, eventTimeline(nextRevision))
+    }
+
+    protected def eventTimeline(nextRevision: Revision): Seq[SerializableEvent]
+  }
+
+  def revise(events: java.util.Map[EventId, Optional[Event]], asOf: Instant): Revision = {
+    val sam: java.util.function.Function[Event, Option[Event]] = event => Some(event): Option[Event]
+    val eventsAsScalaImmutableMap = Map(events mapValues (_.map[Option[Event]](sam).orElse(None)) toSeq: _*)
+    revise(eventsAsScalaImmutableMap, asOf)
+  }
+
+  protected def checkRevisionPrecondition(asOf: Instant): Unit = {
+    if (revisionAsOfs.nonEmpty && revisionAsOfs.last.isAfter(asOf)) throw new IllegalArgumentException(s"'asOf': ${asOf} should be no earlier than that of the last revision: ${revisionAsOfs.last}")
+  }
+}
 
 
