@@ -55,7 +55,7 @@ class WorldStateSharingSpec extends FlatSpec with Matchers with Checkers with Wo
   }
 
   implicit override val generatorDrivenConfig =
-    PropertyCheckConfig(maxSize = 30)
+    PropertyCheckConfig(maxSize = 40, minSuccessful = 200)
 
   val worldReferenceImplementationSharedState = new MutableState[Int]
 
