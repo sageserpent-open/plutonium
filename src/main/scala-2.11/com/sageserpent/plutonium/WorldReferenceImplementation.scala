@@ -16,8 +16,8 @@ import scala.collection.{SeqLike, SeqView, mutable}
 
 object MutableState {
 
-  import WorldImplementationCodeFactoring._
   import World._
+  import WorldImplementationCodeFactoring._
 
   type EventCorrections = MutableList[AbstractEventData]
   type EventIdToEventCorrectionsMap[EventId] = mutable.Map[EventId, EventCorrections]
@@ -43,8 +43,8 @@ object MutableState {
 class MutableState[EventId] {
 
   import MutableState._
-  import WorldImplementationCodeFactoring._
   import World._
+  import WorldImplementationCodeFactoring._
 
   var idOfThreadMostRecentlyStartingARevision: Long = -1L
 
@@ -98,7 +98,6 @@ class MutableState[EventId] {
 
 class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId]) extends WorldImplementationCodeFactoring[EventId] {
 
-  import WorldImplementationCodeFactoring._
   import World._
   import WorldImplementationCodeFactoring._
 
