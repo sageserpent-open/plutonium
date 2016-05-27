@@ -4,20 +4,17 @@ import java.lang.reflect.{Method, Modifier}
 import java.time.Instant
 import java.util.Optional
 
-import com.sageserpent.americium.{Finite, NegativeInfinity, PositiveInfinity, Unbounded}
+import com.sageserpent.americium.{Finite, NegativeInfinity, Unbounded}
 import com.sageserpent.plutonium.World.Revision
 import com.sageserpent.plutonium.WorldImplementationCodeFactoring.IdentifiedItemsScope
 import net.sf.cglib.proxy._
 import resource.{ManagedResource, makeManagedResource}
 
-import scala.Ordering.Implicits._
+import scala.collection.JavaConversions._
 import scala.collection.Searching._
-import scala.collection.generic.IsSeqLike
-import scala.collection.mutable.MutableList
-import scala.collection.{SeqLike, SeqView, mutable}
+import scala.collection.mutable
 import scala.reflect.runtime._
 import scala.reflect.runtime.universe._
-import scala.collection.JavaConversions._
 
 /**
   * Created by Gerard on 19/07/2015.
@@ -25,6 +22,27 @@ import scala.collection.JavaConversions._
 
 
 object WorldImplementationCodeFactoring {
+  type EventOrderingTiebreakerIndex = Int
+
+  abstract class AbstractEventData {
+    val introducedInRevision: Revision
+  }
+
+  case class EventData(serializableEvent: SerializableEvent, override val introducedInRevision: Revision, eventOrderingTiebreakerIndex: EventOrderingTiebreakerIndex) extends AbstractEventData
+
+  case class AnnulledEventData(override val introducedInRevision: Revision) extends AbstractEventData
+
+  implicit val eventOrdering = Ordering.by((_: SerializableEvent).when)
+
+  implicit val eventDataOrdering: Ordering[EventData] = Ordering.by {
+    case EventData(serializableEvent, introducedInRevision, eventOrderingTiebreakerIndex) =>
+      (serializableEvent, introducedInRevision, eventOrderingTiebreakerIndex)
+  }
+
+  def eventTimelineFrom(eventDatums: Seq[AbstractEventData]): Seq[SerializableEvent] = (eventDatums collect {
+    case eventData: EventData => eventData
+  }).sorted.map(_.serializableEvent)
+
   def serializableEventFrom(event: Event): SerializableEvent = {
     val patchesPickedUpFromAnEventBeingApplied = mutable.MutableList.empty[AbstractPatch]
 
@@ -402,104 +420,8 @@ object WorldImplementationCodeFactoring {
 
 }
 
-object MutableState {
-  type EventOrderingTiebreakerIndex = Int
+abstract class WorldImplementationCodeFactoring[EventId] extends World[EventId] {
 
-  abstract class AbstractEventData {
-    val introducedInRevision: Revision
-  }
-
-  case class EventData(serializableEvent: SerializableEvent, override val introducedInRevision: Revision, eventOrderingTiebreakerIndex: EventOrderingTiebreakerIndex) extends AbstractEventData
-
-  case class AnnulledEventData(override val introducedInRevision: Revision) extends AbstractEventData
-
-  type EventCorrections = MutableList[AbstractEventData]
-  type EventIdToEventCorrectionsMap[EventId] = mutable.Map[EventId, EventCorrections]
-
-  implicit val eventOrdering = Ordering.by((_: SerializableEvent).when)
-
-  implicit val eventDataOrdering: Ordering[EventData] = Ordering.by {
-    case EventData(serializableEvent, introducedInRevision, eventOrderingTiebreakerIndex) =>
-      (serializableEvent, introducedInRevision, eventOrderingTiebreakerIndex)
-  }
-
-  def eventCorrectionsPriorToCutoffRevision(eventCorrections: EventCorrections, cutoffRevision: Revision): EventCorrections =
-    eventCorrections take numberOfEventCorrectionsPriorToCutoff(eventCorrections, cutoffRevision)
-
-  implicit val isSeqLike = new IsSeqLike[SeqView[Revision, Seq[_]]] {
-    type A = Revision
-    override val conversion: (SeqView[Revision, Seq[_]]) => SeqLike[this.A, SeqView[Revision, Seq[_]]] = identity
-  }
-
-  def numberOfEventCorrectionsPriorToCutoff(eventCorrections: EventCorrections, cutoffRevision: Revision): EventOrderingTiebreakerIndex = {
-    val revisionsView: SeqView[Revision, Seq[_]] = eventCorrections.view.map(_.introducedInRevision)
-
-    revisionsView.search(cutoffRevision) match {
-      case Found(foundIndex) => foundIndex
-      case InsertionPoint(insertionPoint) => insertionPoint
-    }
-  }
-
-  def eventTimelineFrom(eventDatums: Seq[AbstractEventData]): Seq[SerializableEvent] = (eventDatums collect {
-    case eventData: EventData => eventData
-  }).sorted.map(_.serializableEvent)
-}
-
-class MutableState[EventId] {
-
-  import MutableState._
-
-  var idOfThreadMostRecentlyStartingARevision: Long = -1L
-
-  val eventIdToEventCorrectionsMap: MutableState.EventIdToEventCorrectionsMap[EventId] = mutable.Map.empty
-  val _revisionAsOfs: MutableList[Instant] = MutableList.empty
-
-  def revisionAsOfs: Seq[Instant] = _revisionAsOfs
-
-  def nextRevision: Revision = _revisionAsOfs.size
-
-  def mostRecentCorrectionOf(eventId: EventId): Option[AbstractEventData] = {
-    mostRecentCorrectionOf(eventId, nextRevision, PositiveInfinity())
-  }
-
-  def mostRecentCorrectionOf(eventId: EventId, cutoffRevision: Revision, cutoffWhen: Unbounded[Instant]): Option[AbstractEventData] = {
-    eventIdToEventCorrectionsMap.get(eventId) flatMap {
-      eventCorrections =>
-        val onePastIndexOfRelevantEventCorrection = numberOfEventCorrectionsPriorToCutoff(eventCorrections, cutoffRevision)
-        if (0 < onePastIndexOfRelevantEventCorrection)
-          Some(eventCorrections(onePastIndexOfRelevantEventCorrection - 1))
-        else
-          None
-    } filterNot (PartialFunction.cond(_) { case eventData: EventData => eventData.serializableEvent.when > cutoffWhen })
-  }
-
-  def pertinentEventDatums(cutoffRevision: Revision, cutoffWhen: Unbounded[Instant], excludedEventIds: Set[EventId]): Seq[AbstractEventData] =
-    eventIdsAndTheirDatums(cutoffRevision, cutoffWhen, excludedEventIds)._2
-
-  def eventIdsAndTheirDatums(cutoffRevision: Revision, cutoffWhen: Unbounded[Instant], excludedEventIds: Set[EventId]) = {
-    val eventIdAndDataPairs = eventIdToEventCorrectionsMap collect {
-      case (eventId, eventCorrections) if !excludedEventIds.contains(eventId) =>
-        val onePastIndexOfRelevantEventCorrection = numberOfEventCorrectionsPriorToCutoff(eventCorrections, cutoffRevision)
-        if (0 < onePastIndexOfRelevantEventCorrection)
-          Some(eventId -> eventCorrections(onePastIndexOfRelevantEventCorrection - 1))
-        else
-          None
-    } collect { case Some(idAndDataPair) => idAndDataPair }
-    val (eventIds, eventDatums) = eventIdAndDataPairs.unzip
-
-    eventIds -> eventDatums.filterNot(PartialFunction.cond(_) { case eventData: EventData => eventData.serializableEvent.when > cutoffWhen }).toStream
-  }
-
-  def pertinentEventDatums(cutoffRevision: Revision): Seq[AbstractEventData] =
-    pertinentEventDatums(cutoffRevision, PositiveInfinity(), Set.empty)
-
-  def checkInvariant() = {
-    assert(revisionAsOfs zip revisionAsOfs.tail forall {case (first, second) => first <= second})
-  }
-}
-
-
-abstract class WorldImplementationCodeFactoring[EventId] extends World[EventId]{
   abstract class ScopeBasedOnNextRevision(val when: Unbounded[Instant], val nextRevision: Revision) extends com.sageserpent.plutonium.Scope {
     val asOf = nextRevision match {
       case World.initialRevision => NegativeInfinity[Instant]()

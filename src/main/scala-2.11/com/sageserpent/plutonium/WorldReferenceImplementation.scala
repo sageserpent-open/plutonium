@@ -5,13 +5,100 @@ import java.time.Instant
 import com.sageserpent.americium.{Finite, PositiveInfinity, Unbounded}
 
 import scala.Ordering.Implicits._
+import scala.collection.Searching._
+import scala.collection.generic.IsSeqLike
 import scala.collection.mutable.MutableList
+import scala.collection.{SeqLike, SeqView, mutable}
 
 /**
   * Created by Gerard on 25/05/2016.
   */
-class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId]) extends WorldImplementationCodeFactoring[EventId] {
+
+object MutableState {
+
+  import WorldImplementationCodeFactoring._
+  import World._
+
+  type EventCorrections = MutableList[AbstractEventData]
+  type EventIdToEventCorrectionsMap[EventId] = mutable.Map[EventId, EventCorrections]
+
+  def eventCorrectionsPriorToCutoffRevision(eventCorrections: EventCorrections, cutoffRevision: Revision): EventCorrections =
+    eventCorrections take numberOfEventCorrectionsPriorToCutoff(eventCorrections, cutoffRevision)
+
+  implicit val isSeqLike = new IsSeqLike[SeqView[Revision, Seq[_]]] {
+    type A = Revision
+    override val conversion: (SeqView[Revision, Seq[_]]) => SeqLike[this.A, SeqView[Revision, Seq[_]]] = identity
+  }
+
+  def numberOfEventCorrectionsPriorToCutoff(eventCorrections: EventCorrections, cutoffRevision: Revision): EventOrderingTiebreakerIndex = {
+    val revisionsView: SeqView[Revision, Seq[_]] = eventCorrections.view.map(_.introducedInRevision)
+
+    revisionsView.search(cutoffRevision) match {
+      case Found(foundIndex) => foundIndex
+      case InsertionPoint(insertionPoint) => insertionPoint
+    }
+  }
+}
+
+class MutableState[EventId] {
+
   import MutableState._
+  import WorldImplementationCodeFactoring._
+  import World._
+
+  var idOfThreadMostRecentlyStartingARevision: Long = -1L
+
+  val eventIdToEventCorrectionsMap: EventIdToEventCorrectionsMap[EventId] = mutable.Map.empty
+  val _revisionAsOfs: MutableList[Instant] = MutableList.empty
+
+  def revisionAsOfs: Seq[Instant] = _revisionAsOfs
+
+  def nextRevision: Revision = _revisionAsOfs.size
+
+  def mostRecentCorrectionOf(eventId: EventId): Option[AbstractEventData] = {
+    mostRecentCorrectionOf(eventId, nextRevision, PositiveInfinity())
+  }
+
+  def mostRecentCorrectionOf(eventId: EventId, cutoffRevision: Revision, cutoffWhen: Unbounded[Instant]): Option[AbstractEventData] = {
+    eventIdToEventCorrectionsMap.get(eventId) flatMap {
+      eventCorrections =>
+        val onePastIndexOfRelevantEventCorrection = numberOfEventCorrectionsPriorToCutoff(eventCorrections, cutoffRevision)
+        if (0 < onePastIndexOfRelevantEventCorrection)
+          Some(eventCorrections(onePastIndexOfRelevantEventCorrection - 1))
+        else
+          None
+    } filterNot (PartialFunction.cond(_) { case eventData: EventData => eventData.serializableEvent.when > cutoffWhen })
+  }
+
+  def pertinentEventDatums(cutoffRevision: Revision, cutoffWhen: Unbounded[Instant], excludedEventIds: Set[EventId]): Seq[AbstractEventData] =
+    eventIdsAndTheirDatums(cutoffRevision, cutoffWhen, excludedEventIds)._2
+
+  def eventIdsAndTheirDatums(cutoffRevision: Revision, cutoffWhen: Unbounded[Instant], excludedEventIds: Set[EventId]) = {
+    val eventIdAndDataPairs = eventIdToEventCorrectionsMap collect {
+      case (eventId, eventCorrections) if !excludedEventIds.contains(eventId) =>
+        val onePastIndexOfRelevantEventCorrection = numberOfEventCorrectionsPriorToCutoff(eventCorrections, cutoffRevision)
+        if (0 < onePastIndexOfRelevantEventCorrection)
+          Some(eventId -> eventCorrections(onePastIndexOfRelevantEventCorrection - 1))
+        else
+          None
+    } collect { case Some(idAndDataPair) => idAndDataPair }
+    val (eventIds, eventDatums) = eventIdAndDataPairs.unzip
+
+    eventIds -> eventDatums.filterNot(PartialFunction.cond(_) { case eventData: EventData => eventData.serializableEvent.when > cutoffWhen }).toStream
+  }
+
+  def pertinentEventDatums(cutoffRevision: Revision): Seq[AbstractEventData] =
+    pertinentEventDatums(cutoffRevision, PositiveInfinity(), Set.empty)
+
+  def checkInvariant() = {
+    assert(revisionAsOfs zip revisionAsOfs.tail forall { case (first, second) => first <= second })
+  }
+}
+
+
+class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId]) extends WorldImplementationCodeFactoring[EventId] {
+
+  import WorldImplementationCodeFactoring._
   import World._
   import WorldImplementationCodeFactoring._
 
@@ -59,7 +146,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
     val revision = nextRevision
 
     mutableState.synchronized {
-      if (mutableState.idOfThreadMostRecentlyStartingARevision != Thread.currentThread.getId){
+      if (mutableState.idOfThreadMostRecentlyStartingARevision != Thread.currentThread.getId) {
         throw new RuntimeException("Concurrent revision attempt detected.")
       }
 
