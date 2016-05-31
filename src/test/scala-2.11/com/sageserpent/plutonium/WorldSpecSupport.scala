@@ -21,6 +21,8 @@ import scala.reflect.runtime.universe._
 import scala.util.Random
 import scalaz.std.stream
 
+import resource._
+
 
 object WorldSpecSupport {
   val changeError = new RuntimeException("Error in making a change.")
@@ -31,8 +33,8 @@ trait WorldSpecSupport {
   import WorldSpecSupport._
 
   // This looks odd, but the idea is *recreate* world instances each time the generator is used.
-  val worldGenerator: Gen[World[Int]] = Gen.delay {
-    new WorldReferenceImplementation[Int]
+  val worldGenerator: Gen[ManagedResource[World[Int]]] = Gen.delay {
+    makeManagedResource(new WorldReferenceImplementation[Int])(_ => {})(List.empty)
   }
 
   val seedGenerator = Arbitrary.arbitrary[Long]
