@@ -1,13 +1,14 @@
 package com.sageserpent.plutonium
 import java.time.Instant
 
+import com.redis.RedisClient
 import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.World.Revision
 
 /**
   * Created by Gerard on 27/05/2016.
   */
-class WorldRedisBasedImplementation[EventId] extends WorldImplementationCodeFactoring[EventId] {
+class WorldRedisBasedImplementation[EventId](redisClient: RedisClient, identityGuid: String) extends WorldImplementationCodeFactoring[EventId] {
   override def nextRevision: Revision = ???
 
   // NOTE: this increments 'nextRevision' if it succeeds, associating the new revision with 'revisionTime'.
