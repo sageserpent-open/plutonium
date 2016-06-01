@@ -13,6 +13,7 @@ import org.scalatest.{FlatSpec, Matchers}
 import scala.util.Random
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.plutonium.World.Revision
+import resource._
 
 import scala.collection.mutable.Set
 
@@ -20,7 +21,7 @@ import scala.collection.mutable.Set
   * Created by Gerard on 13/02/2016.
   */
 class WorldStateSharingSpec extends FlatSpec with Matchers with Checkers with WorldSpecSupport {
-  class DemultiplexingWorld(worldFactory: () => World[Revision], seed: Long) extends World[Int] {
+  class DemultiplexingWorld(worldFactory: () => World[Int], seed: Long) extends World[Int] {
     val random = new scala.util.Random(seed)
 
     val worlds: Set[World[Int]] = Set.empty
@@ -59,19 +60,17 @@ class WorldStateSharingSpec extends FlatSpec with Matchers with Checkers with Wo
   implicit override val generatorDrivenConfig =
     PropertyCheckConfig(maxSize = 40, minSuccessful = 200)
 
-  val worldReferenceImplementationSharedState = new MutableState[Int]
-
-  val worldSharingCommonStateFactoryGenerator: Gen[() => World[Int]] =
-    Gen.delay {
-      new MutableState[Int]
-    } map (worldReferenceImplementationSharedState =>
-      () => new WorldReferenceImplementation[Int](mutableState = worldReferenceImplementationSharedState))
+  val worldSharingCommonStateFactoryResourceGenerator: Gen[ManagedResource[() => World[Int]]] =
+    Gen.const(makeManagedResource {
+      val sharedMutableState = new MutableState[Int]
+      () => new WorldReferenceImplementation[Int](mutableState = sharedMutableState)
+    }(_ => {})(List.empty))
 
   behavior of "multiple world instances representing the same world"
 
   they should "yield the same results to scope queries regardless of which instance is used to define a revision" in {
     val testCaseGenerator = for {
-      worldFactory <- worldSharingCommonStateFactoryGenerator
+      worldSharingCommonStateFactoryResource <- worldSharingCommonStateFactoryResourceGenerator
       recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
       obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
       seed <- seedGenerator
@@ -82,23 +81,26 @@ class WorldStateSharingSpec extends FlatSpec with Matchers with Checkers with Wo
       bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(shuffledRecordingAndEventPairs)
       asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
       queryWhen <- unboundedInstantGenerator
-    } yield (worldFactory, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen, seed)
+    } yield (worldSharingCommonStateFactoryResource, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen, seed)
     check(Prop.forAllNoShrink(testCaseGenerator) {
-      case (worldFactory, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen, seed) =>
-        val demultiplexingWorld = new DemultiplexingWorld(worldFactory, seed)
+      case (worldSharingCommonStateFactoryResource, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen, seed) =>
+        worldSharingCommonStateFactoryResource acquireAndGet {
+          worldFactory =>
+          val demultiplexingWorld = new DemultiplexingWorld(worldFactory, seed)
 
-        recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, demultiplexingWorld)
+          recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, demultiplexingWorld)
 
-        val scope = demultiplexingWorld.scopeFor(queryWhen, demultiplexingWorld.nextRevision)
+          val scope = demultiplexingWorld.scopeFor(queryWhen, demultiplexingWorld.nextRevision)
 
-        val checks = for {RecordingsNoLaterThan(historyId, historiesFrom, pertinentRecordings, _, _) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(queryWhen))
-                          Seq(history) = historiesFrom(scope)}
-          yield (historyId, history.datums, pertinentRecordings.map(_._1))
+          val checks = for {RecordingsNoLaterThan(historyId, historiesFrom, pertinentRecordings, _, _) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(queryWhen))
+                            Seq(history) = historiesFrom(scope)}
+            yield (historyId, history.datums, pertinentRecordings.map(_._1))
 
-        checks.nonEmpty ==>
-          Prop.all(checks.map { case (historyId, actualHistory, expectedHistory) => ((actualHistory.length == expectedHistory.length) :| s"${actualHistory.length} == expectedHistory.length") &&
-            Prop.all((actualHistory zip expectedHistory zipWithIndex) map { case ((actual, expected), step) => (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}" }: _*)
-          }: _*)
+          checks.nonEmpty ==>
+            Prop.all(checks.map { case (historyId, actualHistory, expectedHistory) => ((actualHistory.length == expectedHistory.length) :| s"${actualHistory.length} == expectedHistory.length") &&
+              Prop.all((actualHistory zip expectedHistory zipWithIndex) map { case ((actual, expected), step) => (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}" }: _*)
+            }: _*)
+        }
     })
   }
 
@@ -108,7 +110,7 @@ class WorldStateSharingSpec extends FlatSpec with Matchers with Checkers with Wo
 
   they should "allow concurrent revisions to be attempted on distinct instances" in {
     val testCaseGenerator = for {
-      worldFactory <- worldSharingCommonStateFactoryGenerator
+      worldSharingCommonStateFactoryResource <- worldSharingCommonStateFactoryResourceGenerator
       recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
       obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
       seed <- seedGenerator
@@ -118,21 +120,24 @@ class WorldStateSharingSpec extends FlatSpec with Matchers with Checkers with Wo
       shuffledRecordingAndEventPairs = intersperseObsoleteRecordings(random, shuffledRecordings, shuffledObsoleteRecordings)
       bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(shuffledRecordingAndEventPairs)
       asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
-    } yield (worldFactory, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, seed)
+    } yield (worldSharingCommonStateFactoryResource, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, seed)
     check(Prop.forAllNoShrink(testCaseGenerator) {
-      case (worldFactory, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, seed) =>
-        val demultiplexingWorld = new DemultiplexingWorld(worldFactory, seed)
+      case (worldSharingCommonStateFactoryResource, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, seed) =>
+        worldSharingCommonStateFactoryResource acquireAndGet {
+          worldFactory =>
+          val demultiplexingWorld = new DemultiplexingWorld(worldFactory, seed)
 
-        try {
-          recordEventsInWorldViaMultipleThreads(bigShuffledHistoryOverLotsOfThings, asOfs, demultiplexingWorld)
-          Prop.proved
-        } catch {
-          case exception: RuntimeException if exception.getMessage.startsWith("Concurrent revision attempt detected") =>
+          try {
+            recordEventsInWorldViaMultipleThreads(bigShuffledHistoryOverLotsOfThings, asOfs, demultiplexingWorld)
             Prop.proved
-          case exception: RuntimeException if exception.getMessage.startsWith("Attempt to annihilate") =>
-            Prop.proved
-          case exception: RuntimeException if exception.getMessage.contains("should be no earlier than") =>
-            Prop.proved
+          } catch {
+            case exception: RuntimeException if exception.getMessage.startsWith("Concurrent revision attempt detected") =>
+              Prop.proved
+            case exception: RuntimeException if exception.getMessage.startsWith("Attempt to annihilate") =>
+              Prop.proved
+            case exception: RuntimeException if exception.getMessage.contains("should be no earlier than") =>
+              Prop.proved
+          }
         }
     })
   }
