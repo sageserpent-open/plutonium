@@ -23,7 +23,7 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
     PropertyCheckConfig(maxSize = 30)
 
   "The class Bitemporal" should "be an applicative plus instance" in {
-    val testCaseGenerator = for {world <- worldGenerator
+    val testCaseGenerator = for {worldResource <- worldResourceGenerator
                                  integerHistoryRecordingsGroupedById <- integerHistoryRecordingsGroupedByIdGenerator
                                  obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
                                  seed <- seedGenerator
@@ -34,9 +34,9 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
                                  bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(shuffledRecordingAndEventPairs)
                                  asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
                                  queryWhen <- unboundedInstantGenerator
-    } yield (world, integerHistoryRecordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
-    check(Prop.forAllNoShrink(testCaseGenerator) { case (world, integerHistoryRecordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
-      world acquireAndGet {
+    } yield (worldResource, integerHistoryRecordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
+    check(Prop.forAllNoShrink(testCaseGenerator) { case (worldResource, integerHistoryRecordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
+      worldResource acquireAndGet {
         world =>
         recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
 
@@ -80,7 +80,7 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
   }
 
   "A bitemporal wildcard" should "match all items of compatible type relevant to a scope" in {
-    val testCaseGenerator = for {world <- worldGenerator
+    val testCaseGenerator = for {worldResource <- worldResourceGenerator
                                  recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
                                  obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
                                  seed <- seedGenerator
@@ -91,9 +91,9 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
                                  bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(shuffledRecordingAndEventPairs)
                                  asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
                                  queryWhen <- unboundedInstantGenerator
-    } yield (world, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
-    check(Prop.forAllNoShrink(testCaseGenerator) { case (world, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
-      world acquireAndGet  {
+    } yield (worldResource, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
+    check(Prop.forAllNoShrink(testCaseGenerator) { case (worldResource, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
+      worldResource acquireAndGet  {
         world =>
         recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
 
@@ -111,7 +111,7 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
   }
 
   "A bitemporal query using an id" should "match a subset of the corresponding wildcard query." in {
-    val testCaseGenerator = for {world <- worldGenerator
+    val testCaseGenerator = for {worldResource <- worldResourceGenerator
                                  recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
                                  obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
                                  seed <- seedGenerator
@@ -122,10 +122,10 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
                                  bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(shuffledRecordingAndEventPairs)
                                  asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
                                  queryWhen <- unboundedInstantGenerator
-    } yield (world, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
+    } yield (worldResource, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
 
-    check(Prop.forAllNoShrink(testCaseGenerator) { case (world, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
-      world acquireAndGet {
+    check(Prop.forAllNoShrink(testCaseGenerator) { case (worldResource, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
+      worldResource acquireAndGet {
         world =>
         recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
 
@@ -155,7 +155,7 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
   }
 
   it should "yield items whose id matches the query" in {
-    val testCaseGenerator = for {world <- worldGenerator
+    val testCaseGenerator = for {worldResource <- worldResourceGenerator
                                  recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
                                  obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
                                  seed <- seedGenerator
@@ -166,10 +166,10 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
                                  bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(shuffledRecordingAndEventPairs)
                                  asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
                                  queryWhen <- unboundedInstantGenerator
-    } yield (world, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
+    } yield (worldResource, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
 
-    check(Prop.forAllNoShrink(testCaseGenerator) { case (world, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
-      world acquireAndGet {
+    check(Prop.forAllNoShrink(testCaseGenerator) { case (worldResource, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
+      worldResource acquireAndGet {
         world =>
         recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
 
@@ -198,7 +198,7 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
   }
 
   it should "yield the same identity of item for a given id replicated in a query" in {
-    val testCaseGenerator = for {world <- worldGenerator
+    val testCaseGenerator = for {worldResource <- worldResourceGenerator
                                  recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
                                  obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
                                  seed <- seedGenerator
@@ -209,10 +209,10 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
                                  bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(shuffledRecordingAndEventPairs)
                                  asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
                                  queryWhen <- unboundedInstantGenerator
-    } yield (world, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
+    } yield (worldResource, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
 
-    check(Prop.forAllNoShrink(testCaseGenerator) { case (world, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
-      world acquireAndGet {
+    check(Prop.forAllNoShrink(testCaseGenerator) { case (worldResource, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
+      worldResource acquireAndGet {
         world =>
         recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
 
@@ -245,7 +245,7 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
   }
 
   it should "have alternate forms that correctly relate to each other" in {
-    val testCaseGenerator = for {world <- worldGenerator
+    val testCaseGenerator = for {worldResource <- worldResourceGenerator
                                  recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
                                  obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
                                  seed <- seedGenerator
@@ -256,9 +256,9 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
                                  bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(shuffledRecordingAndEventPairs)
                                  asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
                                  queryWhen <- unboundedInstantGenerator
-    } yield (world, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
-    check(Prop.forAllNoShrink(testCaseGenerator) { case (world, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
-      world acquireAndGet {
+    } yield (worldResource, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
+    check(Prop.forAllNoShrink(testCaseGenerator) { case (worldResource, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
+      worldResource acquireAndGet {
         world =>
         recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
 
@@ -300,7 +300,7 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
   }
 
   "the bitemporal 'numberOf'" should "should count the number of items that would be yielded by the query 'withId'" in {
-    val testCaseGenerator = for {world <- worldGenerator
+    val testCaseGenerator = for {worldResource <- worldResourceGenerator
                                  recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
                                  obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
                                  seed <- seedGenerator
@@ -311,9 +311,9 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
                                  bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(shuffledRecordingAndEventPairs)
                                  asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
                                  queryWhen <- unboundedInstantGenerator
-    } yield (world, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
-    check(Prop.forAllNoShrink(testCaseGenerator) { case (world, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
-      world acquireAndGet {
+    } yield (worldResource, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
+    check(Prop.forAllNoShrink(testCaseGenerator) { case (worldResource, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
+      worldResource acquireAndGet {
         world =>
         recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
 
@@ -341,7 +341,7 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
   }
 
   "The bitemporal 'none'" should "not match anything" in {
-    val testCaseGenerator = for {world <- worldGenerator
+    val testCaseGenerator = for {worldResource <- worldResourceGenerator
                                  recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
                                  obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
                                  seed <- seedGenerator
@@ -352,9 +352,9 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
                                  bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(shuffledRecordingAndEventPairs)
                                  asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
                                  queryWhen <- unboundedInstantGenerator
-    } yield (world, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
-    check(Prop.forAllNoShrink(testCaseGenerator) { case (world, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
-      world acquireAndGet {
+    } yield (worldResource, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
+    check(Prop.forAllNoShrink(testCaseGenerator) { case (worldResource, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
+      worldResource acquireAndGet {
         world =>
         recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
 
@@ -366,7 +366,7 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
   }
 
   "A bitemporal query" should "include instances of subtypes" in {
-    val testCaseGenerator = for {world <- worldGenerator
+    val testCaseGenerator = for {worldResource <- worldResourceGenerator
                                  recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
                                  obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
                                  seed <- seedGenerator
@@ -377,9 +377,9 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
                                  bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(shuffledRecordingAndEventPairs)
                                  asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
                                  queryWhen <- unboundedInstantGenerator
-    } yield (world, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
-    check(Prop.forAllNoShrink(testCaseGenerator) { case (world, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
-      world acquireAndGet {
+    } yield (worldResource, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
+    check(Prop.forAllNoShrink(testCaseGenerator) { case (worldResource, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
+      worldResource acquireAndGet {
         world =>
         recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
 
@@ -406,7 +406,7 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
   }
 
   it should "result in read-only items" in {
-    val testCaseGenerator = for {world <- worldGenerator
+    val testCaseGenerator = for {worldResource <- worldResourceGenerator
                                  recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
                                  obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
                                  seed <- seedGenerator
@@ -417,9 +417,9 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
                                  bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(shuffledRecordingAndEventPairs)
                                  asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
                                  queryWhen <- unboundedInstantGenerator
-    } yield (world, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
-    check(Prop.forAllNoShrink(testCaseGenerator) { case (world, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
-      world acquireAndGet {
+    } yield (worldResource, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
+    check(Prop.forAllNoShrink(testCaseGenerator) { case (worldResource, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
+      worldResource acquireAndGet {
         world =>
         recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
 

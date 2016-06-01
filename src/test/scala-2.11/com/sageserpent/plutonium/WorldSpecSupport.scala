@@ -32,8 +32,7 @@ trait WorldSpecSupport {
 
   import WorldSpecSupport._
 
-  // This looks odd, but the idea is *recreate* world instances each time the generator is used.
-  val worldGenerator: Gen[ManagedResource[World[Int]]] = Gen.delay {
+  val worldResourceGenerator: Gen[ManagedResource[World[Int]]] = Gen.const {
     makeManagedResource(new WorldReferenceImplementation[Int])(_ => {})(List.empty)
   }
 
