@@ -925,10 +925,7 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
                                  queryWhen <- unboundedInstantGenerator
     } yield (utopiaResource, distopiaResource, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, bigShuffledFaultyHistoryOverLotsOfThings, asOfs, faultyAsOfs, queryWhen)
     check(Prop.forAllNoShrink(testCaseGenerator) { case (utopiaResource, distopiaResource, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, bigShuffledFaultyHistoryOverLotsOfThings, asOfs, faultyAsOfs, queryWhen) =>
-      (for {
-        utopia <- utopiaResource
-        distopia <- distopiaResource
-      } yield (utopia, distopia)) acquireAndGet {
+      utopiaResource and distopiaResource acquireAndGet {
         case(utopia, distopia) =>
         // NOTE: we add some 'good' changes within the faulty revisions to make things more realistic prior to merging the faulty history with the good history...
         val (mergedShuffledHistoryOverLotsOfThings, mergedAsOfs) = ((bigShuffledHistoryOverLotsOfThings zip asOfs) ++ (bigShuffledFaultyHistoryOverLotsOfThings zip bigShuffledHistoryOverLotsOfThings map { case (faulty, ok) => faulty ++ ok } zip faultyAsOfs) groupBy (_._2)).toSeq sortBy (_._1) flatMap (_._2) unzip
@@ -964,10 +961,7 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
                                  queryWhen <- unboundedInstantGenerator
     } yield (worldOneWayResource, worldAnotherWayResource, recordingsGroupedById, bigShuffledHistoryOverLotsOfThingsOneWay, bigShuffledHistoryOverLotsOfThingsAnotherWay, asOfsOneWay, asOfsAnotherWay, queryWhen)
     check(Prop.forAllNoShrink(testCaseGenerator) { case (worldOneWayResource, worldAnotherWayResource, recordingsGroupedById, bigShuffledHistoryOverLotsOfThingsOneWay, bigShuffledHistoryOverLotsOfThingsAnotherWay, asOfsOneWay, asOfsAnotherWay, queryWhen) =>
-      (for {
-        worldOneWay <- worldOneWayResource
-        worldAnotherWay <- worldAnotherWayResource
-      } yield (worldOneWay, worldAnotherWay)) acquireAndGet {
+      worldOneWayResource and worldAnotherWayResource acquireAndGet {
         case (worldOneWay, worldAnotherWay) =>
         recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThingsOneWay), asOfsOneWay, worldOneWay)
         recordEventsInWorld(liftRecordings(bigShuffledHistoryOverLotsOfThingsAnotherWay), asOfsAnotherWay, worldAnotherWay)
