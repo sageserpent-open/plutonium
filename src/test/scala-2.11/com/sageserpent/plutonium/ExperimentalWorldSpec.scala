@@ -303,9 +303,9 @@ class ExperimentalWorldSpec extends FlatSpec with Matchers with Checkers with Wo
     }
   }
 
-  "The world reference implementation" should behave like experimentalWorldBehaviour(worldResourceGenerator = worldReferenceImplementationResourceGenerator)
+  "An experimental world (using the world reference implementation)" should behave like experimentalWorldBehaviour(worldResourceGenerator = worldReferenceImplementationResourceGenerator)
 
-  "The world Redis-based implementation" should behave like withRedisServerRunning{
+  "An experimental world (using the world Redis-based implementation)" should behave like withRedisServerRunning{
     experimentalWorldBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
   }
 }
