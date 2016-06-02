@@ -47,12 +47,11 @@ trait WorldSpecSupport {
   def withRedisServerRunning[Result](block: => Result): Result = {
     val redisServerPort = 6451
 
-    (for {redisServer <- makeManagedResource {
+    makeManagedResource {
       val redisServer = new RedisServer(redisServerPort)
       redisServer.start()
       redisServer
-    }(_.stop)(List.empty)
-    } yield block) acquireAndGet identity
+    }(_.stop)(List.empty) acquireAndGet (_ => block)
   }
 
   val seedGenerator = Arbitrary.arbitrary[Long]
