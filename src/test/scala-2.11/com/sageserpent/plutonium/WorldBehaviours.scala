@@ -22,7 +22,7 @@ import scala.collection.immutable.{::, TreeMap}
 import scala.util.Random
 import scalaz.std.stream
 
-class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSupport {
+trait WorldBehaviours extends FlatSpec with Matchers with Checkers with WorldSpecSupport {
 
   class NonExistentIdentified extends Identified {
     override type Id = String
@@ -1382,32 +1382,24 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
       })
     }
   }
+}
 
+class WorldSpecUsingWorldReferenceImplementation extends WorldBehaviours {
   "A world with no history (using the world reference implementation)" should behave like worldWithNoHistoryBehaviour(worldResourceGenerator = worldReferenceImplementationResourceGenerator)
-
-  "A world with no history (using the world Redis-based implementation)" should behave like withRedisServerRunning {
-    worldWithNoHistoryBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
-  }
-
 
   "A world with history added in order of increasing event time (using the world reference implementation)" should behave like worldWithHistoryAddedInOrderOfIncreasingEventTimeBehaviour(worldResourceGenerator = worldReferenceImplementationResourceGenerator)
 
-  "A world with history added in order of increasing event time (using the world Redis-based implementation)" should behave like withRedisServerRunning {
-    worldWithHistoryAddedInOrderOfIncreasingEventTimeBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
-  }
-
-
   "A world (using the world reference implementation)" should behave like worldBehaviour(worldResourceGenerator = worldReferenceImplementationResourceGenerator)
 
-  "A world (using the world Redis-based implementation)" should behave like withRedisServerRunning {
-    worldBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
-  }
-
-
   "A world with events that have since been corrected (using the world reference implementation)" should behave like worldWithEventsThatHaveSinceBeenCorrectedBehaviour(worldResourceGenerator = worldReferenceImplementationResourceGenerator)
-
-  "A world with events that have since been corrected (using the world Redis-based implementation)" should behave like withRedisServerRunning {
-    worldWithEventsThatHaveSinceBeenCorrectedBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
-  }
 }
 
+class WorldSpecUsingWorldRedisBasedImplementation extends WorldBehaviours {
+  "A world with no history (using the world Redis-based implementation)" should behave like worldWithNoHistoryBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
+
+  "A world with history added in order of increasing event time (using the world Redis-based implementation)" should behave like worldWithHistoryAddedInOrderOfIncreasingEventTimeBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
+
+  "A world (using the world Redis-based implementation)" should behave like worldBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
+
+  "A world with events that have since been corrected (using the world Redis-based implementation)" should behave like worldWithEventsThatHaveSinceBeenCorrectedBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
+}

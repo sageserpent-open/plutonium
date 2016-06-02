@@ -15,7 +15,7 @@ import resource.ManagedResource
 /**
   * Created by Gerard on 13/02/2016.
   */
-class ExperimentalWorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSupport {
+trait ExperimentalWorldBehaviours extends FlatSpec with Matchers with Checkers with WorldSpecSupport {
   implicit override val generatorDrivenConfig =
     PropertyCheckConfig(maxSize = 20, minSuccessful = 200)
 
@@ -302,13 +302,12 @@ class ExperimentalWorldSpec extends FlatSpec with Matchers with Checkers with Wo
       })
     }
   }
-
-  "An experimental world (using the world reference implementation)" should behave like experimentalWorldBehaviour(worldResourceGenerator = worldReferenceImplementationResourceGenerator)
-
-  "An experimental world (using the world Redis-based implementation)" should behave like withRedisServerRunning{
-    experimentalWorldBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
-  }
 }
 
+class ExperimentalWorldSpecUsingWorldReferenceImplementation extends ExperimentalWorldBehaviours {
+  "An experimental world (using the world reference implementation)" should behave like experimentalWorldBehaviour(worldResourceGenerator = worldReferenceImplementationResourceGenerator)
+}
 
-
+class ExperimentalWorldSpecUsingWorldRedisBasedImplementation extends ExperimentalWorldBehaviours {
+  "An experimental world (using the world Redis-based implementation)" should behave like experimentalWorldBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
+}

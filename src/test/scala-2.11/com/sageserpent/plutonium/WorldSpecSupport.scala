@@ -5,6 +5,7 @@ package com.sageserpent.plutonium
   */
 
 import java.time.Instant
+import java.util.UUID
 
 import com.redis.RedisClient
 import com.sageserpent.americium
@@ -39,10 +40,12 @@ trait WorldSpecSupport {
     Gen.const(makeManagedResource(new WorldReferenceImplementation[Int])(_ => {})(List.empty))
 
   val worldRedisBasedImplementationResourceGenerator: Gen[ManagedResource[World[Int]]] =
-    Arbitrary.arbitrary[String] map (guid => for {
-      redisClient <- makeManagedResource(new RedisClient("localhost", redisServerPort))(_.disconnect)(List.empty)
-      worldResource <- makeManagedResource(new WorldRedisBasedImplementation[Int](redisClient, guid))(_ => {})(List.empty)
-    } yield worldResource)
+    Gen.delay {
+      for {
+        redisClient <- makeManagedResource(new RedisClient("localhost", redisServerPort))(_.disconnect)(List.empty)
+        worldResource <- makeManagedResource(new WorldRedisBasedImplementation[Int](redisClient, UUID.randomUUID().toString))(_ => {})(List.empty)
+      } yield worldResource
+    }
 
   def withRedisServerRunning[Result](block: => Result): Result = {
     val redisServerPort = 6451

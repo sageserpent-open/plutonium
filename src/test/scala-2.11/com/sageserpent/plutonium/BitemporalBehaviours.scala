@@ -19,7 +19,7 @@ import scalaz.syntax.applicativePlus._
   * Created by Gerard on 29/07/2015.
   */
 
-class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
+trait BitemporalBehaviours extends FlatSpec with Checkers with WorldSpecSupport {
   implicit override val generatorDrivenConfig =
     PropertyCheckConfig(maxSize = 30)
 
@@ -471,45 +471,32 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
       })
     }
   }
+}
 
+class BitemporalSpecUsingWorldReferenceImplementation extends BitemporalBehaviours {
   "The class Bitemporal (using the world reference implementation)" should behave like bitemporalBehaviour(worldResourceGenerator = worldReferenceImplementationResourceGenerator)
-
-  "The class Bitemporal (using the world Redis-based implementation)" should behave like withRedisServerRunning {
-    bitemporalBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
-  }
-
 
   "A bitemporal wildcard (using the world reference implementation)" should behave like bitemporalWildcardBehaviour(worldResourceGenerator = worldReferenceImplementationResourceGenerator)
 
-  "A bitemporal wildcard (using the world Redis-based implementation)" should behave like withRedisServerRunning {
-    bitemporalWildcardBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
-  }
-
-
   "A bitemporal query using an id (using the world reference implementation)" should behave like bitemporalQueryUsingAndIdBehaviour(worldResourceGenerator = worldReferenceImplementationResourceGenerator)
-
-  "A bitemporal query using an id (using the world Redis-based implementation)" should behave like withRedisServerRunning {
-    bitemporalQueryUsingAndIdBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
-  }
-
 
   "the bitemporal 'numberOf' (using the world reference implementation)" should behave like bitemporalNumberOfBehaviour(worldResourceGenerator = worldReferenceImplementationResourceGenerator)
 
-  "the bitemporal 'numberOf' (using the world Redis-based implementation)" should behave like withRedisServerRunning {
-    bitemporalNumberOfBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
-  }
-
-
   "The bitemporal 'none' (using the world reference implementation)" should behave like bitemporalNoneBehaviour(worldResourceGenerator = worldReferenceImplementationResourceGenerator)
 
-  "The bitemporal 'none' (using the world Redis-based implementation)" should behave like withRedisServerRunning {
-    bitemporalNoneBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
-  }
-
-
   "A bitemporal query (using the world reference implementation)" should behave like bitemporalQueryBehaviour(worldResourceGenerator = worldReferenceImplementationResourceGenerator)
+}
 
-  "A bitemporal query (using the world Redis-based implementation)" should behave like withRedisServerRunning {
-    bitemporalQueryBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
-  }
+class BitemporalSpecUsingWorldRedisBasedImplementation extends BitemporalBehaviours {
+  "The class Bitemporal (using the world Redis-based implementation)" should behave like bitemporalBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
+
+  "A bitemporal wildcard (using the world Redis-based implementation)" should behave like bitemporalWildcardBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
+
+  "A bitemporal query using an id (using the world Redis-based implementation)" should behave like bitemporalQueryUsingAndIdBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
+
+  "the bitemporal 'numberOf' (using the world Redis-based implementation)" should behave like bitemporalNumberOfBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
+
+  "The bitemporal 'none' (using the world Redis-based implementation)" should behave like bitemporalNoneBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
+
+  "A bitemporal query (using the world Redis-based implementation)" should behave like bitemporalQueryBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
 }
