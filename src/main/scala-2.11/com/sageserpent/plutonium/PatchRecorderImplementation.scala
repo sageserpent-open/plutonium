@@ -27,7 +27,7 @@ abstract class PatchRecorderImplementation(eventsHaveEffectNoLaterThan: Unbounde
   self: BestPatchSelection =>
   import PatchRecorderImplementation._
 
-  val identifiedItemsScope: WorldReferenceImplementation.IdentifiedItemsScope
+  val identifiedItemsScope: WorldImplementationCodeFactoring.IdentifiedItemsScope
   val itemsAreLockedResource: ManagedResource[Unit]
 
   private var _whenEventPertainedToByLastRecordingTookPlace: Option[Unbounded[Instant]] = None
@@ -163,7 +163,7 @@ abstract class PatchRecorderImplementation(eventsHaveEffectNoLaterThan: Unbounde
       methodAndItsCandidatePatchTuplesFor(patch.method) match {
         case (Some((exemplarMethod, candidatePatchTuples))) =>
           candidatePatchTuples += candidatePatchTuple
-          if (WorldReferenceImplementation.firstMethodIsOverrideCompatibleWithSecond(exemplarMethod, patch.method)) {
+          if (WorldImplementationCodeFactoring.firstMethodIsOverrideCompatibleWithSecond(exemplarMethod, patch.method)) {
             exemplarMethodToCandidatePatchesMap -= exemplarMethod
             exemplarMethodToCandidatePatchesMap += (patch.method -> candidatePatchTuples)
           }
@@ -185,8 +185,8 @@ abstract class PatchRecorderImplementation(eventsHaveEffectNoLaterThan: Unbounde
       exemplarMethodToCandidatePatchesMap.get(method) map (method -> _) orElse
         // ... fallback to doing a linear search if the methods are not equal, but are related.
         exemplarMethodToCandidatePatchesMap.find {
-          case (exemplarMethod, _) => WorldReferenceImplementation.firstMethodIsOverrideCompatibleWithSecond(method, exemplarMethod) ||
-            WorldReferenceImplementation.firstMethodIsOverrideCompatibleWithSecond(exemplarMethod, method)
+          case (exemplarMethod, _) => WorldImplementationCodeFactoring.firstMethodIsOverrideCompatibleWithSecond(method, exemplarMethod) ||
+            WorldImplementationCodeFactoring.firstMethodIsOverrideCompatibleWithSecond(exemplarMethod, method)
         }
     }
 

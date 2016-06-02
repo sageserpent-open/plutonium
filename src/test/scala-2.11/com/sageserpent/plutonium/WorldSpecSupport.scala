@@ -5,13 +5,16 @@ package com.sageserpent.plutonium
   */
 
 import java.time.Instant
+import java.util.UUID
 
+import com.redis.RedisClient
 import com.sageserpent.americium
 import com.sageserpent.americium._
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.seqEnrichment._
 import com.sageserpent.plutonium.World._
 import org.scalacheck.{Arbitrary, Gen}
+import redis.embedded.RedisServer
 
 import scala.collection.JavaConversions._
 import scala.collection.Searching._
@@ -20,18 +23,39 @@ import scala.collection.immutable.TreeMap
 import scala.reflect.runtime.universe._
 import scala.util.Random
 import scalaz.std.stream
+import resource._
 
 
 object WorldSpecSupport {
   val changeError = new RuntimeException("Error in making a change.")
+
+  val redisServerPort = 6451
 }
 
 trait WorldSpecSupport {
 
   import WorldSpecSupport._
 
-  // This looks odd, but the idea is *recreate* world instances each time the generator is used.
-  val worldGenerator = Gen.const(() => new WorldReferenceImplementation[Int]) map (_.apply)
+  val worldReferenceImplementationResourceGenerator: Gen[ManagedResource[World[Int]]] =
+    Gen.const(makeManagedResource(new WorldReferenceImplementation[Int])(_ => {})(List.empty))
+
+  val worldRedisBasedImplementationResourceGenerator: Gen[ManagedResource[World[Int]]] =
+    Gen.const {
+      for {
+        redisClient <- makeManagedResource(new RedisClient("localhost", redisServerPort))(_.disconnect)(List.empty)
+        worldResource <- makeManagedResource(new WorldRedisBasedImplementation[Int](redisClient, UUID.randomUUID().toString))(_ => {})(List.empty)
+      } yield worldResource
+    }
+
+  def withRedisServerRunning[Result](block: => Result): Result = {
+    val redisServerPort = 6451
+
+    makeManagedResource {
+      val redisServer = new RedisServer(redisServerPort)
+      redisServer.start()
+      redisServer
+    }(_.stop)(List.empty) acquireAndGet (_ => block)
+  }
 
   val seedGenerator = Arbitrary.arbitrary[Long]
 
@@ -456,11 +480,12 @@ trait WorldSpecSupport {
 
   def revisionActions(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[(Option[(Unbounded[Instant], Event)], Int)]], asOfs: List[Instant], world: World[Int]): Stream[() => Revision] = {
     assert(bigShuffledHistoryOverLotsOfThings.length == asOfs.length)
-    for {(pieceOfHistory, asOf) <- bigShuffledHistoryOverLotsOfThings zip asOfs
+    val asOfsQueue = scala.collection.mutable.Queue[Instant](asOfs: _*)
+    for {pieceOfHistory <- bigShuffledHistoryOverLotsOfThings
          events = pieceOfHistory map {
            case (recording, eventId) => eventId -> (for ((_, change) <- recording) yield change)
          } toSeq} yield
-      () => world.revise(TreeMap(events: _*), asOf)
+      () => world.revise(TreeMap(events: _*), asOfsQueue.dequeue())
   }
 
   def intersperseObsoleteRecordings(random: Random, recordings: immutable.Iterable[(Unbounded[Instant], Event)], obsoleteRecordings: immutable.Iterable[(Unbounded[Instant], Event)]): Stream[(Option[(Unbounded[Instant], Event)], Int)] = {

@@ -5,7 +5,7 @@ import java.time.Instant
 
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.{Finite, Unbounded}
-import com.sageserpent.plutonium.WorldReferenceImplementation.IdentifiedItemsScope
+import com.sageserpent.plutonium.WorldImplementationCodeFactoring.IdentifiedItemsScope
 import org.scalacheck.Prop.BooleanOperators
 import org.scalacheck.{Gen, Prop, Test}
 import org.scalamock.scalatest.MockFactory

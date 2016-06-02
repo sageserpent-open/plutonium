@@ -9,8 +9,8 @@ import java.lang.reflect.Method
 object AbstractPatch {
   def patchesAreRelated(lhs: AbstractPatch, rhs: AbstractPatch): Boolean = {
     val bothReferToTheSameItem = lhs.targetId == rhs.targetId && (lhs.targetTypeTag.tpe <:< rhs.targetTypeTag.tpe || rhs.targetTypeTag.tpe <:< lhs.targetTypeTag.tpe)
-    val bothReferToTheSameMethod = WorldReferenceImplementation.firstMethodIsOverrideCompatibleWithSecond(lhs.method, rhs.method) ||
-      WorldReferenceImplementation.firstMethodIsOverrideCompatibleWithSecond(rhs.method, lhs.method)
+    val bothReferToTheSameMethod = WorldImplementationCodeFactoring.firstMethodIsOverrideCompatibleWithSecond(lhs.method, rhs.method) ||
+      WorldImplementationCodeFactoring.firstMethodIsOverrideCompatibleWithSecond(rhs.method, lhs.method)
     bothReferToTheSameItem && bothReferToTheSameMethod
   }
 }
