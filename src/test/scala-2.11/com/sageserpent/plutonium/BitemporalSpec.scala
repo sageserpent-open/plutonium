@@ -24,7 +24,7 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
     PropertyCheckConfig(maxSize = 30)
 
   def bitemporalBehaviour(worldResourceGenerator: Gen[ManagedResource[World[Int]]]) = {
-    "The class Bitemporal" should "be an applicative plus instance" in {
+    it should "be an applicative plus instance" in {
       val testCaseGenerator = for {worldResource <- worldResourceGenerator
                                    integerHistoryRecordingsGroupedById <- integerHistoryRecordingsGroupedByIdGenerator
                                    obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
@@ -80,8 +80,10 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
         }
       })
     }
+  }
 
-    "A bitemporal wildcard" should "match all items of compatible type relevant to a scope" in {
+  def bitemporalWildcardBehaviour(worldResourceGenerator: Gen[ManagedResource[World[Int]]]) = {
+    it should "match all items of compatible type relevant to a scope" in {
       val testCaseGenerator = for {worldResource <- worldResourceGenerator
                                    recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
                                    obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
@@ -111,8 +113,10 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
         }
       })
     }
+  }
 
-    "A bitemporal query using an id" should "match a subset of the corresponding wildcard query." in {
+  def bitemporalQueryUsingAndIdBehaviour(worldResourceGenerator: Gen[ManagedResource[World[Int]]]) = {
+    it should "match a subset of the corresponding wildcard query." in {
       val testCaseGenerator = for {worldResource <- worldResourceGenerator
                                    recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
                                    obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
@@ -300,8 +304,10 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
         }
       })
     }
+  }
 
-    "the bitemporal 'numberOf'" should "should count the number of items that would be yielded by the query 'withId'" in {
+  def bitemporalNumberOfBehaviour(worldResourceGenerator: Gen[ManagedResource[World[Int]]]) = {
+    it should "should count the number of items that would be yielded by the query 'withId'" in {
       val testCaseGenerator = for {worldResource <- worldResourceGenerator
                                    recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
                                    obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
@@ -341,8 +347,10 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
         }
       })
     }
+  }
 
-    "The bitemporal 'none'" should "not match anything" in {
+  def bitemporalNoneBehaviour(worldResourceGenerator: Gen[ManagedResource[World[Int]]]) = {
+    it should "not match anything" in {
       val testCaseGenerator = for {worldResource <- worldResourceGenerator
                                    recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
                                    obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
@@ -366,8 +374,10 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
         }
       })
     }
+  }
 
-    "A bitemporal query" should "include instances of subtypes" in {
+  def bitemporalQueryBehaviour(worldResourceGenerator: Gen[ManagedResource[World[Int]]]) = {
+    it should "include instances of subtypes" in {
       val testCaseGenerator = for {worldResource <- worldResourceGenerator
                                    recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
                                    obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
@@ -462,9 +472,44 @@ class BitemporalSpec extends FlatSpec with Checkers with WorldSpecSupport {
     }
   }
 
-  "The world reference implementation" should behave like bitemporalBehaviour(worldResourceGenerator = worldReferenceImplementationResourceGenerator)
+  "The class Bitemporal (using the world reference implementation)" should behave like bitemporalBehaviour(worldResourceGenerator = worldReferenceImplementationResourceGenerator)
 
-  "The world Redis-based implementation" should behave like withRedisServerRunning{
+  "The class Bitemporal (using the world Redis-based implementation)" should behave like withRedisServerRunning {
     bitemporalBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
+  }
+
+
+  "A bitemporal wildcard (using the world reference implementation)" should behave like bitemporalWildcardBehaviour(worldResourceGenerator = worldReferenceImplementationResourceGenerator)
+
+  "A bitemporal wildcard (using the world Redis-based implementation)" should behave like withRedisServerRunning {
+    bitemporalWildcardBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
+  }
+
+
+  "A bitemporal query using an id (using the world reference implementation)" should behave like bitemporalQueryUsingAndIdBehaviour(worldResourceGenerator = worldReferenceImplementationResourceGenerator)
+
+  "A bitemporal query using an id (using the world Redis-based implementation)" should behave like withRedisServerRunning {
+    bitemporalQueryUsingAndIdBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
+  }
+
+
+  "the bitemporal 'numberOf' (using the world reference implementation)" should behave like bitemporalNumberOfBehaviour(worldResourceGenerator = worldReferenceImplementationResourceGenerator)
+
+  "the bitemporal 'numberOf' (using the world Redis-based implementation)" should behave like withRedisServerRunning {
+    bitemporalNumberOfBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
+  }
+
+
+  "The bitemporal 'none' (using the world reference implementation)" should behave like bitemporalNoneBehaviour(worldResourceGenerator = worldReferenceImplementationResourceGenerator)
+
+  "The bitemporal 'none' (using the world Redis-based implementation)" should behave like withRedisServerRunning {
+    bitemporalNoneBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
+  }
+
+
+  "A bitemporal query (using the world reference implementation)" should behave like bitemporalQueryBehaviour(worldResourceGenerator = worldReferenceImplementationResourceGenerator)
+
+  "A bitemporal query (using the world Redis-based implementation)" should behave like withRedisServerRunning {
+    bitemporalQueryBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
   }
 }
