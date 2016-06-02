@@ -113,36 +113,21 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
 
   override def revisionAsOfs: Seq[Instant] = mutableState.revisionAsOfs
 
-  def revise(events: Map[EventId, Option[Event]], asOf: Instant): Revision = {
+  override protected def transactNewRevision(asOf: Instant, newEventDatums: Map[EventId, AbstractEventData])
+                                            (buildAndValidateEventTimelineForProposedNewRevision: (Seq[AbstractEventData], Set[AbstractEventData]) => Unit): Unit = {
     mutableState.synchronized {
       mutableState.idOfThreadMostRecentlyStartingARevision = Thread.currentThread.getId
       checkRevisionPrecondition(asOf)
     }
 
-    val newEventDatums: Map[EventId, AbstractEventData] = events.zipWithIndex map { case ((eventId, event), tiebreakerIndex) =>
-      eventId -> (event match {
-        case Some(event) => EventData(serializableEventFrom(event), nextRevision, tiebreakerIndex)
-        case None => AnnulledEventData(nextRevision)
-      })
-    }
-
     val obsoleteEventDatums = Set((for {
-      eventId <- events.keys
+      eventId <- newEventDatums.keys
       obsoleteEventData <- mutableState.mostRecentCorrectionOf(eventId)
     } yield obsoleteEventData).toStream: _*)
 
-    val nextRevisionPostThisOne = 1 + nextRevision
-
     val pertinentEventDatumsExcludingTheNewRevision = mutableState.pertinentEventDatums(nextRevision)
 
-    val eventTimelineIncludingNewRevision = eventTimelineFrom(pertinentEventDatumsExcludingTheNewRevision filterNot obsoleteEventDatums.contains union newEventDatums.values.toStream)
-
-    // This does a check for consistency of the world's history as per this new revision as part of construction.
-    // We then throw away the resulting history if successful, the idea being for now to rebuild it as part of
-    // constructing a scope to apply queries on.
-    new IdentifiedItemsScope(PositiveInfinity[Instant], nextRevisionPostThisOne, Finite(asOf), eventTimelineIncludingNewRevision)
-
-    val revision = nextRevision
+    buildAndValidateEventTimelineForProposedNewRevision(pertinentEventDatumsExcludingTheNewRevision, obsoleteEventDatums)
 
     mutableState.synchronized {
       if (mutableState.idOfThreadMostRecentlyStartingARevision != Thread.currentThread.getId) {
@@ -155,7 +140,6 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
       mutableState._revisionAsOfs += asOf
       mutableState.checkInvariant()
     }
-    revision
   }
 
   // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.

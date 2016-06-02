@@ -4,7 +4,7 @@ import java.lang.reflect.{Method, Modifier}
 import java.time.Instant
 import java.util.Optional
 
-import com.sageserpent.americium.{Finite, NegativeInfinity, Unbounded}
+import com.sageserpent.americium.{Finite, NegativeInfinity, PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.World.Revision
 import com.sageserpent.plutonium.WorldImplementationCodeFactoring.IdentifiedItemsScope
 import net.sf.cglib.proxy._
@@ -421,6 +421,7 @@ object WorldImplementationCodeFactoring {
 }
 
 abstract class WorldImplementationCodeFactoring[EventId] extends World[EventId] {
+  import WorldImplementationCodeFactoring._
 
   abstract class ScopeBasedOnNextRevision(val when: Unbounded[Instant], val nextRevision: Revision) extends com.sageserpent.plutonium.Scope {
     val asOf = nextRevision match {
@@ -461,6 +462,33 @@ abstract class WorldImplementationCodeFactoring[EventId] extends World[EventId] 
     val eventsAsScalaImmutableMap = Map(events mapValues (_.map[Option[Event]](sam).orElse(None)) toSeq: _*)
     revise(eventsAsScalaImmutableMap, asOf)
   }
+
+  def revise(events: Map[EventId, Option[Event]], asOf: Instant): Revision = {
+    val nextRevisionPriorToUpdate = nextRevision
+    val newEventDatums: Map[EventId, AbstractEventData] = events.zipWithIndex map { case ((eventId, event), tiebreakerIndex) =>
+      eventId -> (event match {
+        case Some(event) => EventData(serializableEventFrom(event), nextRevisionPriorToUpdate, tiebreakerIndex)
+        case None => AnnulledEventData(nextRevisionPriorToUpdate)
+      })
+    }
+
+    transactNewRevision(asOf, newEventDatums) {
+      (pertinentEventDatumsExcludingTheNewRevision: Seq[AbstractEventData], obsoleteEventDatums: Set[AbstractEventData]) =>
+      val eventTimelineIncludingNewRevision = eventTimelineFrom(pertinentEventDatumsExcludingTheNewRevision filterNot obsoleteEventDatums.contains union newEventDatums.values.toStream)
+
+      val nextRevisionPostThisOne = 1 + nextRevisionPriorToUpdate
+
+      // This does a check for consistency of the world's history as per this new revision as part of construction.
+      // We then throw away the resulting history if successful, the idea being for now to rebuild it as part of
+      // constructing a scope to apply queries on.
+      new IdentifiedItemsScope(PositiveInfinity[Instant], nextRevisionPostThisOne, Finite(asOf), eventTimelineIncludingNewRevision)
+    }
+
+    nextRevisionPriorToUpdate
+  }
+
+  protected def transactNewRevision(asOf: Instant, newEventDatums: Map[EventId, AbstractEventData])
+                                   (buildAndValidateEventTimelineForProposedNewRevision: (Seq[AbstractEventData], Set[AbstractEventData]) => Unit): Unit
 
   protected def checkRevisionPrecondition(asOf: Instant): Unit = {
     if (revisionAsOfs.nonEmpty && revisionAsOfs.last.isAfter(asOf)) throw new IllegalArgumentException(s"'asOf': ${asOf} should be no earlier than that of the last revision: ${revisionAsOfs.last}")
