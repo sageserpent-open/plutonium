@@ -308,8 +308,6 @@ class ExperimentalWorldSpecUsingWorldReferenceImplementation extends Experimenta
   "An experimental world (using the world reference implementation)" should behave like experimentalWorldBehaviour(worldResourceGenerator = worldReferenceImplementationResourceGenerator)
 }
 
-class ExperimentalWorldSpecUsingWorldRedisBasedImplementation extends ExperimentalWorldBehaviours {
-  override protected def withFixture(test: NoArgTest) = withRedisServerRunning(super.withFixture(test))
-
+class ExperimentalWorldSpecUsingWorldRedisBasedImplementation extends ExperimentalWorldBehaviours with RedisServerFixture {
   "An experimental world (using the world Redis-based implementation)" should behave like experimentalWorldBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
 }
