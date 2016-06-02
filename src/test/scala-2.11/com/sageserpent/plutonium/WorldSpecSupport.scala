@@ -40,7 +40,7 @@ trait WorldSpecSupport {
     Gen.const(makeManagedResource(new WorldReferenceImplementation[Int])(_ => {})(List.empty))
 
   val worldRedisBasedImplementationResourceGenerator: Gen[ManagedResource[World[Int]]] =
-    Gen.delay {
+    Gen.const {
       for {
         redisClient <- makeManagedResource(new RedisClient("localhost", redisServerPort))(_.disconnect)(List.empty)
         worldResource <- makeManagedResource(new WorldRedisBasedImplementation[Int](redisClient, UUID.randomUUID().toString))(_ => {})(List.empty)

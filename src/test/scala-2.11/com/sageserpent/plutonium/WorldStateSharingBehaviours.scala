@@ -2,8 +2,9 @@ package com.sageserpent.plutonium
 
 import java.time.Instant
 import java.util
-import java.util.Optional
+import java.util.{Optional, UUID}
 
+import com.redis.RedisClient
 import com.sageserpent.americium.Unbounded
 import org.scalacheck.{Gen, Prop}
 import org.scalatest.prop.Checkers
@@ -61,11 +62,20 @@ trait WorldStateSharingBehaviours extends FlatSpec with Matchers with Checkers w
   implicit override val generatorDrivenConfig =
     PropertyCheckConfig(maxSize = 40, minSuccessful = 200)
 
-  val worldSharingCommonStateFactoryResourceGenerator: Gen[ManagedResource[() => World[Int]]] =
-    Gen.const(makeManagedResource {
-      val sharedMutableState = new MutableState[Int]
-      () => new WorldReferenceImplementation[Int](mutableState = sharedMutableState)
-    }(_ => {})(List.empty))
+  val worldReferenceImplementationSharingCommonStateFactoryResourceGenerator: Gen[ManagedResource[() => World[Int]]] =
+    Gen.const(for (sharedMutableState <- makeManagedResource(new MutableState[Int])(_ => {})(List.empty))
+      yield () => new WorldReferenceImplementation[Int](mutableState = sharedMutableState))
+
+  val worldRedisBasedImplementationSharingCommonStateFactoryResourceGenerator: Gen[ManagedResource[() => World[Int]]] =
+    Gen.const(for {
+      sharedGuid <- makeManagedResource(UUID.randomUUID().toString)(_ => {})(List.empty)
+      redisClientSet <- makeManagedResource(Set.empty[RedisClient])(redisClientSet => redisClientSet.foreach(_.disconnect))(List.empty)
+    } yield {
+      val redisClient = new RedisClient("localhost", WorldSpecSupport.redisServerPort)
+      redisClientSet += redisClient
+      () => new WorldRedisBasedImplementation[Int](redisClient, sharedGuid)
+    })
+
 
   def multipleInstancesRepresentingTheSameWorldBehaviour(worldSharingCommonStateFactoryResourceGenerator: Gen[ManagedResource[() => World[Revision]]]) = {
     they should "yield the same results to scope queries regardless of which instance is used to define a revision" in {
@@ -145,10 +155,9 @@ trait WorldStateSharingBehaviours extends FlatSpec with Matchers with Checkers w
 }
 
 class WorldStateSharingSpecUsingWorldReferenceImplementation extends WorldStateSharingBehaviours {
-  "multiple world instances representing the same world (using the world reference implementation)" should behave like multipleInstancesRepresentingTheSameWorldBehaviour(worldSharingCommonStateFactoryResourceGenerator)
+  "multiple world instances representing the same world (using the world reference implementation)" should behave like multipleInstancesRepresentingTheSameWorldBehaviour(worldReferenceImplementationSharingCommonStateFactoryResourceGenerator)
 }
 
-/*
-class WorldStateSharingSpecUsingWorldRedisBasedImplementation extends WorldStateSharingBehaviours{
-
-}*/
+class WorldStateSharingSpecUsingWorldRedisBasedImplementation extends WorldStateSharingBehaviours with RedisServerFixture {
+  "multiple world instances representing the same world (using the world Redis-based implementation)" should behave like multipleInstancesRepresentingTheSameWorldBehaviour(worldRedisBasedImplementationSharingCommonStateFactoryResourceGenerator)
+}
