@@ -488,6 +488,8 @@ class BitemporalSpecUsingWorldReferenceImplementation extends BitemporalBehaviou
 }
 
 class BitemporalSpecUsingWorldRedisBasedImplementation extends BitemporalBehaviours {
+  override protected def withFixture(test: NoArgTest) = withRedisServerRunning(super.withFixture(test))
+
   "The class Bitemporal (using the world Redis-based implementation)" should behave like bitemporalBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
 
   "A bitemporal wildcard (using the world Redis-based implementation)" should behave like bitemporalWildcardBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)

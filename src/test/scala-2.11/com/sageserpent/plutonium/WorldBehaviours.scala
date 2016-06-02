@@ -1395,6 +1395,8 @@ class WorldSpecUsingWorldReferenceImplementation extends WorldBehaviours {
 }
 
 class WorldSpecUsingWorldRedisBasedImplementation extends WorldBehaviours {
+  override protected def withFixture(test: NoArgTest) = withRedisServerRunning(super.withFixture(test))
+
   "A world with no history (using the world Redis-based implementation)" should behave like worldWithNoHistoryBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
 
   "A world with history added in order of increasing event time (using the world Redis-based implementation)" should behave like worldWithHistoryAddedInOrderOfIncreasingEventTimeBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
