@@ -6,12 +6,14 @@ package com.sageserpent.plutonium
 
 import java.time.Instant
 
+import com.redis.RedisClient
 import com.sageserpent.americium
 import com.sageserpent.americium._
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.seqEnrichment._
 import com.sageserpent.plutonium.World._
 import org.scalacheck.{Arbitrary, Gen}
+import redis.embedded.RedisServer
 
 import scala.collection.JavaConversions._
 import scala.collection.Searching._
@@ -20,20 +22,37 @@ import scala.collection.immutable.TreeMap
 import scala.reflect.runtime.universe._
 import scala.util.Random
 import scalaz.std.stream
-
 import resource._
 
 
 object WorldSpecSupport {
   val changeError = new RuntimeException("Error in making a change.")
+
+  val redisServerPort = 6451
 }
 
 trait WorldSpecSupport {
 
   import WorldSpecSupport._
 
-  val worldResourceGenerator: Gen[ManagedResource[World[Int]]] = Gen.const {
-    makeManagedResource(new WorldReferenceImplementation[Int])(_ => {})(List.empty)
+  val worldReferenceImplementationResourceGenerator: Gen[ManagedResource[World[Int]]] =
+    Gen.const(makeManagedResource(new WorldReferenceImplementation[Int])(_ => {})(List.empty))
+
+  val worldRedisBasedImplementationResourceGenerator: Gen[ManagedResource[World[Int]]] =
+    Arbitrary.arbitrary[String] map (guid => for {
+      redisClient <- makeManagedResource(new RedisClient("localhost", redisServerPort))(_.disconnect)(List.empty)
+      worldResource <- makeManagedResource(new WorldRedisBasedImplementation[Int](redisClient, guid))(_ => {})(List.empty)
+    } yield worldResource)
+
+  def withRedisServerRunning[Result](block: => Result): Result = {
+    val redisServerPort = 6451
+
+    (for {redisServer <- makeManagedResource {
+      val redisServer = new RedisServer(redisServerPort)
+      redisServer.start()
+      redisServer
+    }(_.stop)(List.empty)
+    } yield block) acquireAndGet identity
   }
 
   val seedGenerator = Arbitrary.arbitrary[Long]
