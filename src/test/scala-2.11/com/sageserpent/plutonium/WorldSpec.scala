@@ -23,15 +23,16 @@ import scala.util.Random
 import scalaz.std.stream
 
 class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSupport {
+
   class NonExistentIdentified extends Identified {
     override type Id = String
     override val id = fail("If I am not supposed to exist, why is something asking for my id?")
   }
 
-  def worldBehaviour(worldResourceGenerator: Gen[ManagedResource[World[Int]]]) = {
-    implicit val generatorDrivenConfig = PropertyCheckConfig(maxSize = 30)
+  implicit override val generatorDrivenConfig = PropertyCheckConfig(maxSize = 30)
 
-    "A world with no history" should "not contain any identifiables" in {
+  def worldWithNoHistoryBehaviour(worldResourceGenerator: Gen[ManagedResource[World[Int]]]) = {
+    it should "not contain any identifiables" in {
       val scopeGenerator = for {when <- unboundedInstantGenerator
                                 asOf <- instantGenerator
                                 worldResource <- worldResourceGenerator
@@ -50,19 +51,21 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
             (World.initialRevision == world.nextRevision) :| s"Initial revision of a world ${world.nextRevision} should be: ${World.initialRevision}."
         }))
     }
+  }
 
-    val faultyRecordingsGroupedByIdGenerator = mixedRecordingsGroupedByIdGenerator(faulty = true, forbidAnnihilations = false)
 
-    def eventWhenFrom(recording: ((Unbounded[Instant], Event), Int)) = recording match {
-      case ((eventWhen, _), _) => eventWhen
-    }
+  val faultyRecordingsGroupedByIdGenerator = mixedRecordingsGroupedByIdGenerator(faulty = true, forbidAnnihilations = false)
 
-    val chunksShareTheSameEventWhens: (((Unbounded[Instant], Unbounded[Instant]), Instant), ((americium.Unbounded[Instant], Unbounded[Instant]), Instant)) => Boolean =
-    {
-      case (((_, trailingEventWhen), _), ((leadingEventWhen, _), _)) => true
-    }
+  def eventWhenFrom(recording: ((Unbounded[Instant], Event), Int)) = recording match {
+    case ((eventWhen, _), _) => eventWhen
+  }
 
-    "A world with history added in order of increasing event time" should "reveal all history up to the 'asOf' limit of a scope made from it" in {
+  val chunksShareTheSameEventWhens: (((Unbounded[Instant], Unbounded[Instant]), Instant), ((americium.Unbounded[Instant], Unbounded[Instant]), Instant)) => Boolean = {
+    case (((_, trailingEventWhen), _), ((leadingEventWhen, _), _)) => true
+  }
+
+  def worldWithHistoryAddedInOrderOfIncreasingEventTimeBehaviour(worldResourceGenerator: Gen[ManagedResource[World[Int]]]) = {
+    it should "reveal all history up to the 'asOf' limit of a scope made from it" in {
       val testCaseGenerator = for {worldResource <- worldResourceGenerator
                                    recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
                                    seed <- seedGenerator
@@ -105,8 +108,10 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
         }
       })
     }
+  }
 
-    "A world" should "reveal the same lack of history from a scope with an 'asOf' limit that comes at or after that revision but before the following revision" in {
+  def worldBehaviour(worldResourceGenerator: Gen[ManagedResource[World[Int]]]) = {
+    it should "reveal the same lack of history from a scope with an 'asOf' limit that comes at or after that revision but before the following revision" in {
       val testCaseGenerator = for {worldResource <- worldResourceGenerator
                                    recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
                                    seed <- seedGenerator
@@ -908,7 +913,6 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
       })
     }
 
-
     it should "create revisions with the strong exception-safety guarantee" in {
       val testCaseGenerator = for {utopiaResource <- worldResourceGenerator
                                    distopiaResource <- worldResourceGenerator
@@ -1123,8 +1127,10 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
         }
       })
     }
+  }
 
-    "A world with events that have since been corrected" should "yield a history at the final revision based only on the latest corrections" in {
+  def worldWithEventsThatHaveSinceBeenCorrectedBehaviour(worldResourceGenerator: Gen[ManagedResource[World[Int]]]) = {
+    it should "yield a history at the final revision based only on the latest corrections" in {
       val testCaseGenerator = for {worldResource <- worldResourceGenerator
                                    recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
                                    obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
@@ -1377,10 +1383,31 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
     }
   }
 
-  "The world reference implementation" should behave like worldBehaviour(worldResourceGenerator = worldReferenceImplementationResourceGenerator)
+  "A world with no history (using the world reference implementation)" should behave like worldWithNoHistoryBehaviour(worldResourceGenerator = worldReferenceImplementationResourceGenerator)
 
-  "The world Redis-based implementation" should behave like withRedisServerRunning {
+  "A world with no history (using the world Redis-based implementation)" should behave like withRedisServerRunning {
+    worldWithNoHistoryBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
+  }
+
+
+  "A world with history added in order of increasing event time (using the world reference implementation)" should behave like worldWithHistoryAddedInOrderOfIncreasingEventTimeBehaviour(worldResourceGenerator = worldReferenceImplementationResourceGenerator)
+
+  "A world with history added in order of increasing event time (using the world Redis-based implementation)" should behave like withRedisServerRunning {
+    worldWithHistoryAddedInOrderOfIncreasingEventTimeBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
+  }
+
+
+  "A world (using the world reference implementation)" should behave like worldBehaviour(worldResourceGenerator = worldReferenceImplementationResourceGenerator)
+
+  "A world (using the world Redis-based implementation)" should behave like withRedisServerRunning {
     worldBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
+  }
+
+
+  "A world with events that have since been corrected (using the world reference implementation)" should behave like worldWithEventsThatHaveSinceBeenCorrectedBehaviour(worldResourceGenerator = worldReferenceImplementationResourceGenerator)
+
+  "A world with events that have since been corrected (using the world Redis-based implementation)" should behave like withRedisServerRunning {
+    worldWithEventsThatHaveSinceBeenCorrectedBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
   }
 }
 
