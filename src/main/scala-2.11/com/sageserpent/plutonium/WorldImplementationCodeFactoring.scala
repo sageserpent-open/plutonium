@@ -396,22 +396,18 @@ object WorldImplementationCodeFactoring {
         case PlusBitemporalResult(lhs, rhs) => render(lhs) ++ render(rhs)
         case PointBitemporalResult(raw) => Stream(raw)
         case NoneBitemporalResult() => Stream.empty
-        case bitemporal@IdentifiedItemsBitemporalResult(id) => {
+        case bitemporal@IdentifiedItemsBitemporalResult(id) =>
           implicit val typeTag = bitemporal.capturedTypeTag
           itemsFor(id)
-        }
-        case bitemporal@ZeroOrOneIdentifiedItemBitemporalResult(id) => {
+        case bitemporal@ZeroOrOneIdentifiedItemBitemporalResult(id) =>
           implicit val typeTag = bitemporal.capturedTypeTag
           zeroOrOneItemFor(id)
-        }
-        case bitemporal@SingleIdentifiedItemBitemporalResult(id) => {
+        case bitemporal@SingleIdentifiedItemBitemporalResult(id) =>
           implicit val typeTag = bitemporal.capturedTypeTag
           singleItemFor(id)
-        }
-        case bitemporal@WildcardBitemporalResult() => {
+        case bitemporal@WildcardBitemporalResult() =>
           implicit val typeTag = bitemporal.capturedTypeTag
           allItems
-        }
       }
     }
 
@@ -437,13 +433,12 @@ abstract class WorldImplementationCodeFactoring[EventId] extends World[EventId] 
 
     override val nextRevision: Revision = {
       revisionAsOfs.search(unliftedAsOf) match {
-        case found@Found(_) => {
+        case found@Found(_) =>
           val versionTimelineNotIncludingAllUpToTheMatch = revisionAsOfs drop (1 + found.foundIndex)
           versionTimelineNotIncludingAllUpToTheMatch.indexWhere(implicitly[Ordering[Instant]].lt(unliftedAsOf, _)) match {
             case -1 => revisionAsOfs.length
             case index => found.foundIndex + 1 + index
           }
-        }
         case notFound@InsertionPoint(_) => notFound.insertionPoint
       }
     }

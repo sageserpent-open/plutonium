@@ -2,7 +2,7 @@ package com.sageserpent.plutonium
 
 import java.time.Instant
 
-import com.sageserpent.americium.{Finite, PositiveInfinity, Unbounded}
+import com.sageserpent.americium.{PositiveInfinity, Unbounded}
 
 import scala.Ordering.Implicits._
 import scala.collection.Searching._
@@ -27,7 +27,7 @@ object MutableState {
 
   implicit val isSeqLike = new IsSeqLike[SeqView[Revision, Seq[_]]] {
     type A = Revision
-    override val conversion: (SeqView[Revision, Seq[_]]) => SeqLike[this.A, SeqView[Revision, Seq[_]]] = identity
+    override val conversion: SeqView[Revision, Seq[_]] => SeqLike[this.A, SeqView[Revision, Seq[_]]] = identity
   }
 
   def numberOfEventCorrectionsPriorToCutoff(eventCorrections: EventCorrections, cutoffRevision: Revision): EventOrderingTiebreakerIndex = {
