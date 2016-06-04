@@ -444,13 +444,17 @@ abstract class WorldImplementationCodeFactoring[EventId] extends World[EventId] 
     }
   }
 
-  trait SelfPopulatedScope extends com.sageserpent.plutonium.Scope {
+  trait SelfPopulatedScope extends ScopeImplementation {
     val identifiedItemsScope = {
       new IdentifiedItemsScope(when, nextRevision, asOf, eventTimeline(nextRevision))
     }
-
-    protected def eventTimeline(nextRevision: Revision): Seq[SerializableEvent]
   }
+
+  // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
+  override def scopeFor(when: Unbounded[Instant], nextRevision: Revision): Scope = new ScopeBasedOnNextRevision(when, nextRevision) with SelfPopulatedScope
+
+  // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
+  override def scopeFor(when: Unbounded[Instant], asOf: Instant): Scope = new ScopeBasedOnAsOf(when, asOf) with SelfPopulatedScope
 
   def revise(events: java.util.Map[EventId, Optional[Event]], asOf: Instant): Revision = {
     val sam: java.util.function.Function[Event, Option[Event]] = event => Some(event): Option[Event]
@@ -481,6 +485,8 @@ abstract class WorldImplementationCodeFactoring[EventId] extends World[EventId] 
 
     nextRevisionPriorToUpdate
   }
+
+  protected def eventTimeline(nextRevision: Revision): Seq[SerializableEvent]
 
   protected def transactNewRevision(asOf: Instant, newEventDatums: Map[EventId, AbstractEventData])
                                    (buildAndValidateEventTimelineForProposedNewRevision: (Seq[AbstractEventData], Set[AbstractEventData]) => Unit): Unit

@@ -103,50 +103,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
 
   def this() = this(new MutableState[EventId])
 
-  trait SelfPopulatedScopeUsingMutableState extends ScopeImplementation with SelfPopulatedScope {
-    override protected def eventTimeline(nextRevision: Revision): Seq[SerializableEvent] = {
-      eventTimelineFrom(mutableState.pertinentEventDatums(nextRevision))
-    }
-  }
-
   override def nextRevision: Revision = mutableState.nextRevision
-
-  override def revisionAsOfs: Seq[Instant] = mutableState.revisionAsOfs
-
-  override protected def transactNewRevision(asOf: Instant, newEventDatums: Map[EventId, AbstractEventData])
-                                            (buildAndValidateEventTimelineForProposedNewRevision: (Seq[AbstractEventData], Set[AbstractEventData]) => Unit): Unit = {
-    mutableState.synchronized {
-      mutableState.idOfThreadMostRecentlyStartingARevision = Thread.currentThread.getId
-      checkRevisionPrecondition(asOf)
-    }
-
-    val obsoleteEventDatums = Set((for {
-      eventId <- newEventDatums.keys
-      obsoleteEventData <- mutableState.mostRecentCorrectionOf(eventId)
-    } yield obsoleteEventData).toStream: _*)
-
-    val pertinentEventDatumsExcludingTheNewRevision = mutableState.pertinentEventDatums(nextRevision)
-
-    buildAndValidateEventTimelineForProposedNewRevision(pertinentEventDatumsExcludingTheNewRevision, obsoleteEventDatums)
-
-    mutableState.synchronized {
-      if (mutableState.idOfThreadMostRecentlyStartingARevision != Thread.currentThread.getId) {
-        throw new RuntimeException("Concurrent revision attempt detected.")
-      }
-
-      for ((eventId, eventDatum) <- newEventDatums) {
-        mutableState.eventIdToEventCorrectionsMap.getOrElseUpdate(eventId, MutableList.empty) += eventDatum
-      }
-      mutableState._revisionAsOfs += asOf
-      mutableState.checkInvariant()
-    }
-  }
-
-  // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
-  override def scopeFor(when: Unbounded[Instant], nextRevision: Revision): Scope = new ScopeBasedOnNextRevision(when, nextRevision) with SelfPopulatedScopeUsingMutableState
-
-  // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
-  override def scopeFor(when: Unbounded[Instant], asOf: Instant): Scope = new ScopeBasedOnAsOf(when, asOf) with SelfPopulatedScopeUsingMutableState
 
   override def forkExperimentalWorld(scope: javaApi.Scope): World[EventId] = {
     val forkedMutableState = new MutableState[EventId] {
@@ -179,5 +136,38 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
     }
 
     new WorldReferenceImplementation[EventId](forkedMutableState)
+  }
+
+  override def revisionAsOfs: Seq[Instant] = mutableState.revisionAsOfs
+
+  override protected def eventTimeline(nextRevision: Revision): Seq[SerializableEvent] = eventTimelineFrom(mutableState.pertinentEventDatums(nextRevision))
+
+  override protected def transactNewRevision(asOf: Instant, newEventDatums: Map[EventId, AbstractEventData])
+                                            (buildAndValidateEventTimelineForProposedNewRevision: (Seq[AbstractEventData], Set[AbstractEventData]) => Unit): Unit = {
+    mutableState.synchronized {
+      mutableState.idOfThreadMostRecentlyStartingARevision = Thread.currentThread.getId
+      checkRevisionPrecondition(asOf)
+    }
+
+    val obsoleteEventDatums = Set((for {
+      eventId <- newEventDatums.keys
+      obsoleteEventData <- mutableState.mostRecentCorrectionOf(eventId)
+    } yield obsoleteEventData).toStream: _*)
+
+    val pertinentEventDatumsExcludingTheNewRevision = mutableState.pertinentEventDatums(nextRevision)
+
+    buildAndValidateEventTimelineForProposedNewRevision(pertinentEventDatumsExcludingTheNewRevision, obsoleteEventDatums)
+
+    mutableState.synchronized {
+      if (mutableState.idOfThreadMostRecentlyStartingARevision != Thread.currentThread.getId) {
+        throw new RuntimeException("Concurrent revision attempt detected.")
+      }
+
+      for ((eventId, eventDatum) <- newEventDatums) {
+        mutableState.eventIdToEventCorrectionsMap.getOrElseUpdate(eventId, MutableList.empty) += eventDatum
+      }
+      mutableState._revisionAsOfs += asOf
+      mutableState.checkInvariant()
+    }
   }
 }
