@@ -6,10 +6,11 @@ import com.redis.serialization.Parse.parseDefault
 import com.redis.serialization._
 
 import scala.pickling._
-
+import scala.pickling.pickler.AllPicklers._
 import scalaz.std.list._
-import scalaz.std.option._
+import scalaz.std.option._  // If IntelliJ is showing this as an unused import, it is probably lying to you.
 import scalaz.syntax.monadPlus._
+
 
 
 /**
@@ -21,9 +22,8 @@ object WorldRedisBasedImplementation {
   implicit val parseInstant = Parse(parseDefault andThen (Instant.parse(_)))
 }
 
-class WorldRedisBasedImplementation[EventId: Pickler: Unpickler: FastTypeTag](redisClient: RedisClient, identityGuid: String) extends WorldImplementationCodeFactoring[EventId] {
+class WorldRedisBasedImplementation[EventId: Pickler: Unpickler](redisClient: RedisClient, identityGuid: String) extends WorldImplementationCodeFactoring[EventId] {
   import World._
-
   import WorldImplementationCodeFactoring._
   import WorldRedisBasedImplementation._
 
@@ -31,8 +31,8 @@ class WorldRedisBasedImplementation[EventId: Pickler: Unpickler: FastTypeTag](re
 
   implicit val parseEventId = Parse(parseDefault andThen (_.unpickle[EventId]))
 
-  implicit val foo: Pickler[AbstractEventData] = ???
-  implicit val bar: Unpickler[AbstractEventData] = ???
+  implicit val eventDataPickler: Pickler[AbstractEventData] = implicitly[Pickler[AbstractEventData]]
+  implicit val eventDataUnpickler: Unpickler[AbstractEventData] = implicitly[Unpickler[AbstractEventData]]
 
   implicit val parseEventData = Parse(parseDefault andThen (_.unpickle[AbstractEventData]))
 
