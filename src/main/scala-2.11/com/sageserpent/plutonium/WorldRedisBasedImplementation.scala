@@ -5,10 +5,12 @@ import com.redis.RedisClient
 import com.redis.serialization.Parse.parseDefault
 import com.redis.serialization._
 
+import scala.pickling._
 
 import scalaz.std.list._
 import scalaz.std.option._
 import scalaz.syntax.monadPlus._
+
 
 /**
   * Created by Gerard on 27/05/2016.
@@ -19,11 +21,20 @@ object WorldRedisBasedImplementation {
   implicit val parseInstant = Parse(parseDefault andThen (Instant.parse(_)))
 }
 
-class WorldRedisBasedImplementation[EventId](redisClient: RedisClient, identityGuid: String) extends WorldImplementationCodeFactoring[EventId] {
+class WorldRedisBasedImplementation[EventId: Pickler: Unpickler: FastTypeTag](redisClient: RedisClient, identityGuid: String) extends WorldImplementationCodeFactoring[EventId] {
   import World._
+
   import WorldImplementationCodeFactoring._
   import WorldRedisBasedImplementation._
 
+  import json._
+
+  implicit val parseEventId = Parse(parseDefault andThen (_.unpickle[EventId]))
+
+  implicit val foo: Pickler[AbstractEventData] = ???
+  implicit val bar: Unpickler[AbstractEventData] = ???
+
+  implicit val parseEventData = Parse(parseDefault andThen (_.unpickle[AbstractEventData]))
 
   val asOfsKey = s"${identityGuid}${redisNamespaceComponentSeparator}asOfs"
 
