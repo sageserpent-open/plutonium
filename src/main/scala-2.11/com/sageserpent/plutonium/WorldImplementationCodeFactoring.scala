@@ -475,12 +475,12 @@ abstract class WorldImplementationCodeFactoring[EventId] extends World[EventId] 
       (pertinentEventDatumsExcludingTheNewRevision: Seq[AbstractEventData], obsoleteEventDatums: Set[AbstractEventData]) =>
       val eventTimelineIncludingNewRevision = eventTimelineFrom(pertinentEventDatumsExcludingTheNewRevision filterNot obsoleteEventDatums.contains union newEventDatums.values.toStream)
 
-      val nextRevisionPostThisOne = 1 + nextRevisionPriorToUpdate
+      val nextRevisionAfterTransactionIsCompleted = 1 + nextRevisionPriorToUpdate
 
       // This does a check for consistency of the world's history as per this new revision as part of construction.
       // We then throw away the resulting history if successful, the idea being for now to rebuild it as part of
       // constructing a scope to apply queries on.
-      new IdentifiedItemsScope(PositiveInfinity[Instant], nextRevisionPostThisOne, Finite(asOf), eventTimelineIncludingNewRevision)
+      new IdentifiedItemsScope(PositiveInfinity[Instant], nextRevisionAfterTransactionIsCompleted, Finite(asOf), eventTimelineIncludingNewRevision)
     }
 
     nextRevisionPriorToUpdate
