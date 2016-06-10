@@ -19,7 +19,6 @@ import scalaz.syntax.monadPlus._
 
 object WorldRedisBasedImplementation {
   val redisNamespaceComponentSeparator = ":"
-  implicit val parseInstant = Parse(parseDefault andThen (Instant.parse(_)))
 }
 
 class WorldRedisBasedImplementation[EventId: Pickler: Unpickler](redisClient: RedisClient, identityGuid: String) extends WorldImplementationCodeFactoring[EventId] {
@@ -28,6 +27,11 @@ class WorldRedisBasedImplementation[EventId: Pickler: Unpickler](redisClient: Re
   import WorldRedisBasedImplementation._
 
   import json._
+
+  implicit val instantPickler: Pickler[Instant] = implicitly[Pickler[Instant]]
+  implicit val instantUnpickler: Unpickler[Instant] = implicitly[Unpickler[Instant]]
+
+  implicit val parseInstant = Parse(parseDefault andThen (_.unpickle[Instant]))
 
   implicit val parseEventId = Parse(parseDefault andThen (_.unpickle[EventId]))
 

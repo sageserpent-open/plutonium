@@ -49,8 +49,6 @@ trait WorldSpecSupport {
     }
 
   def withRedisServerRunning[Result](block: => Result): Result = {
-    val redisServerPort = 6451
-
     makeManagedResource {
       val redisServer = new RedisServer(redisServerPort)
       redisServer.start()
