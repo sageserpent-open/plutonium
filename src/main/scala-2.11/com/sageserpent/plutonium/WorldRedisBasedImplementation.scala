@@ -1,19 +1,14 @@
 package com.sageserpent.plutonium
 import java.nio.ByteBuffer
-import java.nio.charset.Charset
 import java.time.Instant
 
 import com.lambdaworks.redis.RedisClient
 import com.lambdaworks.redis.codec.{RedisCodec, Utf8StringCodec}
 import com.sageserpent.plutonium.WorldImplementationCodeFactoring.AbstractEventData
 
-import scala.pickling._
-import Defaults._
-import scalaz.std.list._
-import scalaz.std.option._
-import scalaz.syntax.monadPlus._
-
 import scala.collection.JavaConversions._
+import scala.pickling.Defaults._
+import scala.pickling._
 
 
 
@@ -45,7 +40,7 @@ object WorldRedisBasedImplementation {
 
     override def decodeValue(bytes: ByteBuffer): Value = stringKeyStringValueCodec.decodeValue(bytes).unpickle[Value]
   }
-  
+
   val instantCodec = codecFor[Instant]
 
   val eventDataCodec = codecFor[AbstractEventData]
