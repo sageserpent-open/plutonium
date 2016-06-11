@@ -7,7 +7,7 @@ package com.sageserpent.plutonium
 import java.time.Instant
 import java.util.UUID
 
-import com.redis.RedisClient
+import com.lambdaworks.redis.{RedisClient, RedisURI}
 import com.sageserpent.americium
 import com.sageserpent.americium._
 import com.sageserpent.americium.randomEnrichment._
@@ -24,6 +24,7 @@ import scala.reflect.runtime.universe._
 import scala.util.Random
 import scalaz.std.stream
 import resource._
+
 import scala.pickling.pickler.AllPicklers.intPickler
 
 
@@ -43,7 +44,7 @@ trait WorldSpecSupport {
   val worldRedisBasedImplementationResourceGenerator: Gen[ManagedResource[World[Int]]] =
     Gen.const {
       for {
-        redisClient <- makeManagedResource(new RedisClient("localhost", redisServerPort))(_.disconnect)(List.empty)
+        redisClient <- makeManagedResource(RedisClient.create(RedisURI.Builder.redis("localhost", redisServerPort).build()))(_.shutdown())(List.empty)
         worldResource <- makeManagedResource(new WorldRedisBasedImplementation[Int](redisClient, UUID.randomUUID().toString))(_ => {})(List.empty)
       } yield worldResource
     }
