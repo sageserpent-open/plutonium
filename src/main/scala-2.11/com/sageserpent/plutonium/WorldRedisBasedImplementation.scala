@@ -40,15 +40,15 @@ object WorldRedisBasedImplementation {
     override def encodeKey(key: String): ByteBuffer = stringKeyStringValueCodec.encodeKey(key)
   }
 
-  class PicklingCodec[Value: Pickler: Unpickler] extends RedisCodecDelegatingKeysToStandardCodec[Value]{
+  def codecFor[Value: Pickler: Unpickler] = new RedisCodecDelegatingKeysToStandardCodec[Value] {
     override def encodeValue(value: Value): ByteBuffer = stringKeyStringValueCodec.encodeValue(value.pickle.value)
 
     override def decodeValue(bytes: ByteBuffer): Value = stringKeyStringValueCodec.decodeValue(bytes).unpickle[Value]
   }
+  
+  val instantCodec = codecFor[Instant]
 
-  val instantCodec = new PicklingCodec[Instant]
-
-  val eventDataCodec = new PicklingCodec[AbstractEventData]
+  val eventDataCodec = codecFor[AbstractEventData]
 }
 
 class WorldRedisBasedImplementation[EventId: Pickler: Unpickler](redisClient: RedisClient, identityGuid: String) extends WorldImplementationCodeFactoring[EventId] {
@@ -56,7 +56,7 @@ class WorldRedisBasedImplementation[EventId: Pickler: Unpickler](redisClient: Re
   import WorldImplementationCodeFactoring._
   import WorldRedisBasedImplementation._
 
-  val eventIdCodec = new PicklingCodec[EventId]
+  val eventIdCodec = codecFor[EventId]
 
   val redisApiForEventId = redisClient.connect(eventIdCodec).sync()
 
