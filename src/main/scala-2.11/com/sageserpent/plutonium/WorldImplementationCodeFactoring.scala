@@ -24,7 +24,7 @@ import scala.reflect.runtime.universe._
 object WorldImplementationCodeFactoring {
   type EventOrderingTiebreakerIndex = Int
 
-  sealed abstract class AbstractEventData {
+  sealed abstract class AbstractEventData extends java.io.Serializable {
     val introducedInRevision: Revision
   }
 
