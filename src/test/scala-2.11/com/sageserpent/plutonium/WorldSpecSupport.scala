@@ -7,13 +7,14 @@ package com.sageserpent.plutonium
 import java.time.Instant
 import java.util.UUID
 
-import com.lambdaworks.redis.{RedisClient, RedisURI}
+import akka.actor
 import com.sageserpent.americium
 import com.sageserpent.americium._
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.seqEnrichment._
 import com.sageserpent.plutonium.World._
 import org.scalacheck.{Arbitrary, Gen}
+import redis.RedisClient
 import redis.embedded.RedisServer
 
 import scala.collection.JavaConversions._
@@ -44,7 +45,8 @@ trait WorldSpecSupport {
   val worldRedisBasedImplementationResourceGenerator: Gen[ManagedResource[World[Int]]] =
     Gen.const {
       for {
-        redisClient <- makeManagedResource(RedisClient.create(RedisURI.Builder.redis("localhost", redisServerPort).build()))(_.shutdown())(List.empty)
+        akkaSystem <- makeManagedResource(akka.actor.ActorSystem())(_.shutdown())(List.empty)
+        redisClient <- makeManagedResource(RedisClient(host = "localhost", port = redisServerPort)(akkaSystem))(_.stop())(List.empty)
         worldResource <- makeManagedResource(new WorldRedisBasedImplementation[Int](redisClient, UUID.randomUUID().toString))(_ => {})(List.empty)
       } yield worldResource
     }

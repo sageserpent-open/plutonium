@@ -1,12 +1,13 @@
 package com.sageserpent.plutonium
-import java.nio.ByteBuffer
 import java.time.Instant
 
-import com.lambdaworks.redis.RedisClient
-import com.lambdaworks.redis.codec.{RedisCodec, Utf8StringCodec}
-import com.sageserpent.plutonium.WorldImplementationCodeFactoring.AbstractEventData
+import akka.util.ByteString
+import redis.{ByteStringFormatter, ByteStringDeserializer, ByteStringSerializer, RedisClient}
+import redis.api.Limit
 
-import scala.collection.JavaConversions._
+
+import scala.concurrent.Await
+import scala.concurrent.duration.Duration
 import scala.pickling.Defaults._
 import scala.pickling._
 
@@ -17,6 +18,8 @@ import scala.pickling._
   */
 
 object WorldRedisBasedImplementation {
+  import WorldImplementationCodeFactoring._
+
   val redisNamespaceComponentSeparator = ":"
 
   implicit val instantPickler: Pickler[Instant] = implicitly[Pickler[Instant]]
@@ -27,37 +30,27 @@ object WorldRedisBasedImplementation {
 
   import json._
 
-  private val stringKeyStringValueCodec = new Utf8StringCodec
+  val byteStringSerializerForString = implicitly[ByteStringSerializer[String]]
+  val byteStringDeserializerForString = implicitly[ByteStringDeserializer[String]]
 
-  trait RedisCodecDelegatingKeysToStandardCodec[Value] extends RedisCodec[String, Value] {
-    override def decodeKey(bytes: ByteBuffer): String = stringKeyStringValueCodec.decodeKey(bytes)
+  def byteStringFormatterFor[Value: Pickler: Unpickler] = new ByteStringFormatter[Value] {
+    override def serialize(data: Value): ByteString = byteStringSerializerForString.serialize(data.pickle.value)
 
-    override def encodeKey(key: String): ByteBuffer = stringKeyStringValueCodec.encodeKey(key)
+    override def deserialize(bs: ByteString): Value = byteStringDeserializerForString.deserialize(bs).unpickle[Value]
   }
 
-  def codecFor[Value: Pickler: Unpickler] = new RedisCodecDelegatingKeysToStandardCodec[Value] {
-    override def encodeValue(value: Value): ByteBuffer = stringKeyStringValueCodec.encodeValue(value.pickle.value)
+  implicit val byteStringFormatterForInstant = byteStringFormatterFor[Instant]
 
-    override def decodeValue(bytes: ByteBuffer): Value = stringKeyStringValueCodec.decodeValue(bytes).unpickle[Value]
-  }
-
-  val instantCodec = codecFor[Instant]
-
-  val eventDataCodec = codecFor[AbstractEventData]
+  implicit val byteStringFormatterForEventData = byteStringFormatterFor[AbstractEventData]
 }
 
 class WorldRedisBasedImplementation[EventId: Pickler: Unpickler](redisClient: RedisClient, identityGuid: String) extends WorldImplementationCodeFactoring[EventId] {
   import World._
   import WorldImplementationCodeFactoring._
   import WorldRedisBasedImplementation._
+  import scala.concurrent.ExecutionContext.Implicits.global
 
-  val eventIdCodec = codecFor[EventId]
-
-  val redisApiForEventId = redisClient.connect(eventIdCodec).sync()
-
-  val redisApiForInstant = redisClient.connect(instantCodec).sync()
-
-  val redisApiForEventDatum = redisClient.connect(eventDataCodec).sync()
+  implicit val byteStringFormatterForEventId = byteStringFormatterFor[EventId]
 
   val asOfsKey = s"${identityGuid}${redisNamespaceComponentSeparator}asOfs"
 
@@ -67,18 +60,18 @@ class WorldRedisBasedImplementation[EventId: Pickler: Unpickler](redisClient: Re
 
   def eventCorrectionsKeyFrom(eventId: EventId) = s"${eventCorrectionsKeyPrefix}${eventId}"
 
-  override def nextRevision: Revision = redisApiForInstant.llen(asOfsKey).toInt
+  override def nextRevision: Revision = Await.result(redisClient.llen(asOfsKey) map (_.toInt), Duration.Inf)
 
   override def forkExperimentalWorld(scope: javaApi.Scope): World[EventId] = ???
 
-  override def revisionAsOfs: Seq[Instant] = redisApiForInstant.lrange(asOfsKey, 0, -1)
+  override def revisionAsOfs: Seq[Instant] = Await.result(redisClient.lrange[Instant](asOfsKey, 0, -1), Duration.Inf)
 
   override protected def eventTimeline(nextRevision: Revision): Seq[SerializableEvent] = eventTimelineFrom(pertinentEventDatums(nextRevision))
 
   private def pertinentEventDatums(nextRevision: Revision): Seq[AbstractEventData] = {
-    val eventIds: Set[EventId] = redisApiForEventId.smembers(eventIdsKey).toSet
+    val eventIds: Set[EventId] = Await.result(redisClient.smembers[EventId](eventIdsKey) map (_.toSet), Duration.Inf)
     val eventDatums: Seq[AbstractEventData] = eventIds.toSeq flatMap
-      (eventId => redisApiForEventDatum.zrangebyscore(eventCorrectionsKeyFrom(eventId), nextRevision - 1, nextRevision - 1))
+      (eventId => Await.result(redisClient.zrangebyscore[AbstractEventData](eventCorrectionsKeyFrom(eventId), Limit(nextRevision - 1, inclusive = true), Limit(nextRevision, inclusive = false)), Duration.Inf))
     eventDatums
   }
 
@@ -89,7 +82,7 @@ class WorldRedisBasedImplementation[EventId: Pickler: Unpickler](redisClient: Re
     checkRevisionPrecondition(asOf)
 
     val obsoleteEventDatums: Set[AbstractEventData] = Set(newEventDatums.keys.toSeq flatMap
-      (eventId => redisApiForEventDatum.zrangebyscore(eventCorrectionsKeyFrom(eventId), nextRevision - 1, nextRevision - 1)): _*)
+      (eventId => Await.result(redisClient.zrangebyscore[AbstractEventData](eventCorrectionsKeyFrom(eventId), Limit(nextRevision - 1, inclusive = true), Limit(nextRevision, inclusive = false)), Duration.Inf)): _*)
 
     val pertinentEventDatumsExcludingTheNewRevision = pertinentEventDatums(nextRevision)
 
@@ -98,10 +91,10 @@ class WorldRedisBasedImplementation[EventId: Pickler: Unpickler](redisClient: Re
     val nextRevisionAfterTransactionIsCompleted = 1 + nextRevision
 
     for ((eventId, eventDatum) <- newEventDatums) {
-      redisApiForEventDatum.zadd(eventCorrectionsKeyFrom(eventId), nextRevisionAfterTransactionIsCompleted, eventDatum)
-      redisApiForEventId.sadd(eventIdsKey, eventId)
+      redisClient.zadd[AbstractEventData](eventCorrectionsKeyFrom(eventId), nextRevisionAfterTransactionIsCompleted.toDouble -> eventDatum)
+      redisClient.sadd[EventId](eventIdsKey, eventId)
     }
 
-    redisApiForInstant.rpush(asOfsKey, asOf)
+    redisClient.rpush[Instant](asOfsKey, asOf)
   }
 }

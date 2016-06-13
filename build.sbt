@@ -9,7 +9,7 @@ lazy val settings = Seq(organization := "com.sageserpent",
   libraryDependencies += "com.sageserpent" %% "americium" % "0.1.0",
   libraryDependencies += "com.jsuereth" %% "scala-arm" % "1.4",
   libraryDependencies += "org.scala-lang" % "scala-reflect" % "2.11.8",
-  libraryDependencies += "biz.paluch.redis" % "lettuce" % "4.2.0.Final",
+  libraryDependencies += "com.github.etaty" %% "rediscala" % "1.6.0",
   libraryDependencies += "io.github.nicolasstucki" %% "multisets" % "0.3",
   libraryDependencies += "org.scala-lang.modules" % "scala-pickling_2.11" % "0.11.0-M2",
 
