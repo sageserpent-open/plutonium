@@ -2,6 +2,7 @@ package com.sageserpent.plutonium
 
 import java.lang.reflect.Method
 
+import com.sageserpent.plutonium.Patch.WrappedArgument
 import net.sf.cglib.proxy.MethodProxy
 
 import scalaz.{-\/, \/, \/-}
@@ -10,11 +11,8 @@ import scalaz.{-\/, \/, \/-}
 /**
   * Created by Gerard on 23/01/2016.
   */
-class Patch(targetRecorder: Recorder, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy) extends AbstractPatch(method) {
-  override val targetReconstitutionData = targetRecorder.itemReconstitutionData
 
-  override val argumentReconstitutionDatums: Seq[Recorder#ItemReconstitutionData[_ <: Identified]] = arguments collect {case argumentRecorder: Recorder => argumentRecorder.itemReconstitutionData}
-
+object Patch {
   type WrappedArgument = \/[AnyRef, Recorder#ItemReconstitutionData[_ <: Identified]]
 
   def wrap(argument: AnyRef): WrappedArgument = argument match {
@@ -22,7 +20,21 @@ class Patch(targetRecorder: Recorder, method: Method, arguments: Array[AnyRef], 
     case _ => -\/(argument)
   }
 
-  val wrappedArguments = arguments map wrap
+  def apply(targetRecorder: Recorder, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy) =
+    new Patch(method,
+      targetRecorder.itemReconstitutionData,
+      arguments map wrap,
+      methodProxy)
+}
+
+class Patch(method: Method,
+            override val targetReconstitutionData: Recorder#ItemReconstitutionData[_ <: Identified],
+            wrappedArguments: Array[Patch.WrappedArgument],
+            methodProxy: MethodProxy) extends AbstractPatch(method) {
+  import Patch._
+
+  override val argumentReconstitutionDatums: Seq[Recorder#ItemReconstitutionData[_ <: Identified]] =
+    wrappedArguments collect { case \/-(itemReconstitutionData) => itemReconstitutionData }
 
   def unwrap(identifiedItemAccess: IdentifiedItemAccess)(wrappedArgument: WrappedArgument) = wrappedArgument.fold(identity, identifiedItemAccess.reconstitute(_))
 
