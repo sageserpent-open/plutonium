@@ -16,7 +16,7 @@ object AbstractPatch {
   }
 }
 
-abstract class AbstractPatch(val method: Method) extends java.io.Serializable {
+abstract class AbstractPatch(val method: Method){
   val targetReconstitutionData: Recorder#ItemReconstitutionData[_ <: Identified]
   val argumentReconstitutionDatums: Seq[Recorder#ItemReconstitutionData[_ <: Identified]]
   lazy val (targetId, targetTypeTag) = targetReconstitutionData

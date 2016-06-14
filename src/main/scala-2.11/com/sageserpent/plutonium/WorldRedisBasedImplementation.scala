@@ -1,15 +1,16 @@
 package com.sageserpent.plutonium
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, ObjectOutputStream}
 import java.time.Instant
 
 import akka.util.ByteString
-import redis.{ByteStringDeserializer, ByteStringFormatter, ByteStringSerializer, RedisClient}
+import redis.{ByteStringFormatter, ByteStringDeserializer, ByteStringSerializer, RedisClient}
 import redis.api.Limit
+
 
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
-import resource._
-import scala.reflect.runtime.universe._
+import scala.pickling.Defaults._
+import scala.pickling._
+
 
 
 /**
@@ -21,44 +22,29 @@ object WorldRedisBasedImplementation {
 
   val redisNamespaceComponentSeparator = ":"
 
+  implicit val instantPickler: Pickler[Instant] = implicitly[Pickler[Instant]]
+  implicit val instantUnpickler: Unpickler[Instant] = implicitly[Unpickler[Instant]]
+
+  implicit val eventDataPickler: Pickler[AbstractEventData] = implicitly[Pickler[AbstractEventData]]
+  implicit val eventDataUnpickler: Unpickler[AbstractEventData] = implicitly[Unpickler[AbstractEventData]]
+
+  import json._
+
   val byteStringSerializerForString = implicitly[ByteStringSerializer[String]]
   val byteStringDeserializerForString = implicitly[ByteStringDeserializer[String]]
 
-  def byteStringFormatterFor[Value: TypeTag] = new ByteStringFormatter[Value] {
-    override def serialize(data: Value): ByteString = {
-      val resource: ManagedResource[Array[Byte]] = for {
-        outputStream <- managed(new ByteArrayOutputStream())
-        objectOutputStream <- managed(new ObjectOutputStream(outputStream))
-      } yield {
-        data match {
-          case data: java.io.Serializable if typeTag[Value].tpe <:< typeTag[java.io.Serializable].tpe => objectOutputStream.writeObject(data)
-          case data: Int if typeTag[Value].tpe =:= typeTag[Int].tpe => objectOutputStream.writeInt(data)
-        }
+  def byteStringFormatterFor[Value: Pickler: Unpickler] = new ByteStringFormatter[Value] {
+    override def serialize(data: Value): ByteString = byteStringSerializerForString.serialize(data.pickle.value)
 
-        objectOutputStream.flush()
-        outputStream.toByteArray()
+    override def deserialize(bs: ByteString): Value = byteStringDeserializerForString.deserialize(bs).unpickle[Value]
       }
-      resource.acquireAndGet(ByteString.apply(_))
-    }
-
-    override def deserialize(bs: ByteString): Value = {
-      val resource = for {
-        inputStream <- managed(new ByteArrayInputStream(bs.toArray))
-        objectInputStream <- managed(new ObjectInputStream(inputStream))
-      } yield () match {
-        case _ if typeTag[Value].tpe <:< typeTag[java.io.Serializable].tpe => objectInputStream.readObject
-        case _ if typeTag[Value].tpe =:= typeTag[Int].tpe => objectInputStream.readInt()
-      }
-      resource.acquireAndGet(_.asInstanceOf[Value])
-    }
-  }
 
   implicit val byteStringFormatterForInstant = byteStringFormatterFor[Instant]
 
   implicit val byteStringFormatterForEventData = byteStringFormatterFor[AbstractEventData]
 }
 
-class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, identityGuid: String) extends WorldImplementationCodeFactoring[EventId] {
+class WorldRedisBasedImplementation[EventId: Pickler: Unpickler](redisClient: RedisClient, identityGuid: String) extends WorldImplementationCodeFactoring[EventId] {
   import World._
   import WorldImplementationCodeFactoring._
   import WorldRedisBasedImplementation._

@@ -17,6 +17,7 @@ import redis.RedisClient
 import resource._
 
 import scala.collection.mutable.Set
+import scala.pickling.pickler.AllPicklers.intPickler
 
 /**
   * Created by Gerard on 13/02/2016.

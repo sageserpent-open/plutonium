@@ -26,6 +26,8 @@ import scala.util.Random
 import scalaz.std.stream
 import resource._
 
+import scala.pickling.pickler.AllPicklers.intPickler
+
 
 object WorldSpecSupport {
   val changeError = new RuntimeException("Error in making a change.")
