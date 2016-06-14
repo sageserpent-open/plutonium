@@ -26,6 +26,11 @@ object Patch {
       targetRecorder.itemReconstitutionData,
       arguments map wrap,
       methodProxy)
+
+
+  case class SerializableStandin() extends java.io.Serializable {
+    def readResolve(): Any = null
+  }
 }
 
 class Patch(method: Method,
@@ -47,11 +52,5 @@ class Patch(method: Method,
     identifiedItemAccess.reconstitute(targetReconstitutionData).checkInvariant()
   }
 
-  private def writeObject(stream: ObjectOutputStream): Unit = {
-    stream.writeUnshared("Fred")
-  }
-
-  private def readObject(stream: ObjectInputStream): Unit = {
-    println(stream.readUnshared())
-  }
+  private def writeReplace(): Any = SerializableStandin()
 }

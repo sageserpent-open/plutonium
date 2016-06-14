@@ -22,14 +22,6 @@ abstract class AbstractPatch(val method: Method) extends java.io.Serializable {
   lazy val (targetId, targetTypeTag) = targetReconstitutionData
   def apply(identifiedItemAccess: IdentifiedItemAccess): Unit
   def checkInvariant(identifiedItemAccess: IdentifiedItemAccess): Unit
-
-  private def writeObject(stream: ObjectOutputStream): Unit = {
-    stream.writeUnshared("Albert")
-  }
-
-  private def readObject(stream: ObjectInputStream): Unit = {
-    println(stream.readUnshared())
-  }
 }
 
 
