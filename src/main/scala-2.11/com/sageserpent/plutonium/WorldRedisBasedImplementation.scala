@@ -31,8 +31,8 @@ object WorldRedisBasedImplementation {
         objectOutputStream <- managed(new ObjectOutputStream(outputStream))
       } yield {
         data match {
-          case data: Serializable if typeTag[Value].tpe <:< typeTag[java.io.Serializable].tpe => objectOutputStream.writeObject(data)
-          case data: Int if typeTag[Value].tpe =:= typeTag[Int].tpe => objectOutputStream.write(data)
+          case data: java.io.Serializable if typeTag[Value].tpe <:< typeTag[java.io.Serializable].tpe => objectOutputStream.writeObject(data)
+          case data: Int if typeTag[Value].tpe =:= typeTag[Int].tpe => objectOutputStream.writeInt(data)
         }
 
         objectOutputStream.flush()

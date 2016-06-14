@@ -1,5 +1,6 @@
 package com.sageserpent.plutonium
 
+import java.io.{ObjectInput, ObjectInputStream, ObjectOutput, ObjectOutputStream}
 import java.lang.reflect.Method
 
 import com.sageserpent.plutonium.Patch.WrappedArgument
@@ -44,5 +45,13 @@ class Patch(method: Method,
 
   def checkInvariant(identifiedItemAccess: IdentifiedItemAccess): Unit = {
     identifiedItemAccess.reconstitute(targetReconstitutionData).checkInvariant()
+  }
+
+  private def writeObject(stream: ObjectOutputStream): Unit = {
+    stream.writeUnshared("Fred")
+  }
+
+  private def readObject(stream: ObjectInputStream): Unit = {
+    println(stream.readUnshared())
   }
 }
