@@ -2,8 +2,8 @@ package com.sageserpent.plutonium
 
 import java.lang.reflect.Method
 
-import com.sageserpent.plutonium.Patch.WrappedArgument
 import net.sf.cglib.proxy.MethodProxy
+import net.sf.cglib.core.Signature
 
 import scalaz.{-\/, \/, \/-}
 
@@ -24,13 +24,13 @@ object Patch {
     new Patch(method,
       targetRecorder.itemReconstitutionData,
       arguments map wrap,
-      methodProxy)
+      methodProxy.getSignature)
 }
 
 class Patch(method: Method,
             override val targetReconstitutionData: Recorder#ItemReconstitutionData[_ <: Identified],
             wrappedArguments: Array[Patch.WrappedArgument],
-            methodProxy: MethodProxy) extends AbstractPatch(method) {
+            signature: Signature) extends AbstractPatch(method) {
   import Patch._
 
   override val argumentReconstitutionDatums: Seq[Recorder#ItemReconstitutionData[_ <: Identified]] =
@@ -39,7 +39,10 @@ class Patch(method: Method,
   def unwrap(identifiedItemAccess: IdentifiedItemAccess)(wrappedArgument: WrappedArgument) = wrappedArgument.fold(identity, identifiedItemAccess.reconstitute(_))
 
   def apply(identifiedItemAccess: IdentifiedItemAccess): Unit = {
-    methodProxy.invoke(identifiedItemAccess.reconstitute(targetReconstitutionData), wrappedArguments map unwrap(identifiedItemAccess))
+    val targetBeingPatched = identifiedItemAccess.reconstitute(targetReconstitutionData)
+    val proxyClassOfTarget = targetBeingPatched.getClass()
+    val methodProxy = MethodProxy.find(proxyClassOfTarget, signature)
+    methodProxy.invoke(targetBeingPatched, wrappedArguments map unwrap(identifiedItemAccess))
   }
 
   def checkInvariant(identifiedItemAccess: IdentifiedItemAccess): Unit = {
