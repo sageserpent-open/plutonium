@@ -1,9 +1,7 @@
 package com.sageserpent.plutonium
 
-import java.io.{ObjectInput, ObjectInputStream, ObjectOutput, ObjectOutputStream}
 import java.lang.reflect.Method
 
-import com.sageserpent.plutonium.Patch.WrappedArgument
 import net.sf.cglib.proxy.MethodProxy
 
 import scalaz.{-\/, \/, \/-}
@@ -28,8 +26,13 @@ object Patch {
       methodProxy)
 
 
-  case class SerializableStandin() extends java.io.Serializable {
-    def readResolve(): Any = null
+  case class SerializableStandin(targetReconstitutionData: Recorder#ItemReconstitutionData[_ <: Identified],
+                                 wrappedArguments: Array[Patch.WrappedArgument]) extends java.io.Serializable {
+    def readResolve(): Any = {
+      println(targetReconstitutionData)
+      println(wrappedArguments.toList map (_.toString))
+      null
+    }
   }
 }
 
@@ -52,5 +55,5 @@ class Patch(method: Method,
     identifiedItemAccess.reconstitute(targetReconstitutionData).checkInvariant()
   }
 
-  private def writeReplace(): Any = SerializableStandin()
+  private def writeReplace(): Any = SerializableStandin(targetReconstitutionData, wrappedArguments)
 }
