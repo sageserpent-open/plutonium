@@ -408,8 +408,8 @@ object WorldImplementationCodeFactoring {
         case bitemporal@WildcardBitemporalResult() =>
           implicit val typeTag = bitemporal.capturedTypeTag
           allItems
+        }
       }
-    }
 
     override def numberOf[Raw <: Identified : TypeTag](id: Raw#Id): Int = identifiedItemsScope.itemsFor(id).size
   }
