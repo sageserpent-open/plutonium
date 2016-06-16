@@ -27,12 +27,14 @@ object Patch {
       methodProxy.getSignature)
 
 
-  case class SerializableStandin(targetReconstitutionData: Recorder#ItemReconstitutionData[_ <: Identified],
-                                 wrappedArguments: Array[Patch.WrappedArgument]) extends java.io.Serializable {
+  case class SerializableStandin(methodPieces: (Class[_ <: Identified], String, Array[Class[_]]),
+                                 targetReconstitutionData: Recorder#ItemReconstitutionData[_ <: Identified],
+                                 wrappedArguments: Array[Patch.WrappedArgument],
+                                 signaturePieces: (String, String)) extends java.io.Serializable {
     def readResolve(): Any = {
-      println(targetReconstitutionData)
-      println(wrappedArguments.toList map (_.toString))
-      null
+      val (declaringClassOfMethod, methodName, methodParameterTypes) = methodPieces
+      val (name, descriptor) = signaturePieces
+      new Patch(declaringClassOfMethod.getMethod(methodName, methodParameterTypes: _*), targetReconstitutionData, wrappedArguments, new Signature(name, descriptor))
     }
   }
 }
@@ -59,5 +61,9 @@ class Patch(method: Method,
     identifiedItemAccess.reconstitute(targetReconstitutionData).checkInvariant()
   }
 
-  private def writeReplace(): Any = SerializableStandin(targetReconstitutionData, wrappedArguments)
+  private def writeReplace(): Any = {
+    val methodPieces = (method.getDeclaringClass.asInstanceOf[Class[_ <: Identified]], method.getName, method.getParameterTypes)
+    val signaturePieces = signature.getName -> signature.getDescriptor
+    SerializableStandin(methodPieces, targetReconstitutionData, wrappedArguments, signaturePieces)
+  }
 }
