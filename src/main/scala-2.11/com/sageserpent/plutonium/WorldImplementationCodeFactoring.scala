@@ -61,7 +61,7 @@ object WorldImplementationCodeFactoring {
         val mutationCallback = new MethodInterceptor {
           override def intercept(target: Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy): AnyRef = {
             val item = target.asInstanceOf[Recorder] // Remember, the outer context is making a proxy of type 'Raw'.
-            val capturedPatch = new Patch(item, method, arguments, methodProxy)
+            val capturedPatch = Patch(item, method, arguments, methodProxy)
             patchesPickedUpFromAnEventBeingApplied += capturedPatch
             null // Representation of a unit value by a CGLIB interceptor.
           }
@@ -411,8 +411,8 @@ object WorldImplementationCodeFactoring {
         case bitemporal@WildcardBitemporalResult() => {
           implicit val typeTag = bitemporal.capturedTypeTag
           allItems
-        }
       }
+    }
     }
 
     override def numberOf[Raw <: Identified : TypeTag](id: Raw#Id): Int = identifiedItemsScope.itemsFor(id).size
