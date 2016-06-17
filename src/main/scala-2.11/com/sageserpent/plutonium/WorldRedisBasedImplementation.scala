@@ -1,14 +1,15 @@
 package com.sageserpent.plutonium
+
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, ObjectOutputStream}
 import java.time.Instant
 
 import akka.util.ByteString
-import redis.{ByteStringDeserializer, ByteStringFormatter, ByteStringSerializer, RedisClient}
 import redis.api.Limit
+import redis.{ByteStringDeserializer, ByteStringFormatter, ByteStringSerializer, RedisClient}
+import resource._
 
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
-import resource._
 import scala.reflect.runtime.universe._
 
 
@@ -62,6 +63,7 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
   import World._
   import WorldImplementationCodeFactoring._
   import WorldRedisBasedImplementation._
+
   import scala.concurrent.ExecutionContext.Implicits.global
 
   implicit val byteStringFormatterForEventId = byteStringFormatterFor[EventId]
@@ -84,9 +86,11 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
 
   private def pertinentEventDatums(nextRevision: Revision): Seq[AbstractEventData] = {
     val eventIds: Set[EventId] = Await.result(redisClient.smembers[EventId](eventIdsKey) map (_.toSet), Duration.Inf)
-    val eventDatums: Seq[AbstractEventData] = eventIds.toSeq flatMap
-      (eventId => Await.result(redisClient.zrangebyscore[AbstractEventData](eventCorrectionsKeyFrom(eventId), Limit(nextRevision - 1, inclusive = true), Limit(nextRevision, inclusive = false)), Duration.Inf))
-    eventDatums
+    eventIds.toSeq flatMap
+      (eventId => Await.result(redisClient.zrevrangebyscore[AbstractEventData](eventCorrectionsKeyFrom(eventId),
+        min = Limit(initialRevision, inclusive = true),
+        max = Limit(nextRevision, inclusive = false),
+        limit = Some(0, 1)), Duration.Inf))
   }
 
   override protected def transactNewRevision(asOf: Instant, newEventDatums: Map[EventId, AbstractEventData])
@@ -96,16 +100,18 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
     checkRevisionPrecondition(asOf)
 
     val obsoleteEventDatums: Set[AbstractEventData] = Set(newEventDatums.keys.toSeq flatMap
-      (eventId => Await.result(redisClient.zrangebyscore[AbstractEventData](eventCorrectionsKeyFrom(eventId), Limit(nextRevision - 1, inclusive = true), Limit(nextRevision, inclusive = false)), Duration.Inf)): _*)
+      (eventId => Await.result(redisClient.zrevrangebyscore[AbstractEventData](eventCorrectionsKeyFrom(eventId),
+        min = Limit(initialRevision, inclusive = true),
+        max = Limit(nextRevision, inclusive = false),
+        limit = Some(0, 1)),
+        Duration.Inf)): _*)
 
     val pertinentEventDatumsExcludingTheNewRevision = pertinentEventDatums(nextRevision)
 
     buildAndValidateEventTimelineForProposedNewRevision(pertinentEventDatumsExcludingTheNewRevision, obsoleteEventDatums)
 
-    val nextRevisionAfterTransactionIsCompleted = 1 + nextRevision
-
     for ((eventId, eventDatum) <- newEventDatums) {
-      redisClient.zadd[AbstractEventData](eventCorrectionsKeyFrom(eventId), nextRevisionAfterTransactionIsCompleted.toDouble -> eventDatum)
+      redisClient.zadd[AbstractEventData](eventCorrectionsKeyFrom(eventId), nextRevision.toDouble -> eventDatum)
       redisClient.sadd[EventId](eventIdsKey, eventId)
     }
 

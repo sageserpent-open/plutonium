@@ -14,6 +14,7 @@ import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.seqEnrichment._
 import com.sageserpent.plutonium.World._
 import org.scalacheck.{Arbitrary, Gen}
+import org.scalatest.{BeforeAndAfterAll, Suite}
 import redis.RedisClient
 import redis.embedded.RedisServer
 
@@ -33,9 +34,19 @@ object WorldSpecSupport {
   val redisServerPort = 6451
 }
 
-trait WorldSpecSupport {
-
+trait WorldSpecSupport extends BeforeAndAfterAll {
+  this: Suite =>
   import WorldSpecSupport._
+
+  override protected def beforeAll() = {
+    super.beforeAll()
+    System.setProperty("akka.loggers.0", "akka.event.slf4j.Slf4jLogger")
+    System.setProperty("akka.loglevel", "ERROR")
+  }
+
+  override protected  def afterAll() = {
+    super.afterAll()
+  }
 
   val worldReferenceImplementationResourceGenerator: Gen[ManagedResource[World[Int]]] =
     Gen.const(makeManagedResource(new WorldReferenceImplementation[Int])(_ => {})(List.empty))
