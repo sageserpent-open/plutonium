@@ -20,10 +20,12 @@ import scalaz.syntax.applicativePlus._
   */
 
 trait BitemporalBehaviours extends FlatSpec with Checkers with WorldSpecSupport {
+  this: WorldResource =>
+
   implicit override val generatorDrivenConfig =
     PropertyCheckConfig(maxSize = 30)
 
-  def bitemporalBehaviour(worldResourceGenerator: Gen[ManagedResource[World[Int]]]) = {
+  def bitemporalBehaviour = {
     it should "be an applicative plus instance" in {
       val testCaseGenerator = for {worldResource <- worldResourceGenerator
                                    integerHistoryRecordingsGroupedById <- integerHistoryRecordingsGroupedByIdGenerator
@@ -82,7 +84,7 @@ trait BitemporalBehaviours extends FlatSpec with Checkers with WorldSpecSupport 
     }
   }
 
-  def bitemporalWildcardBehaviour(worldResourceGenerator: Gen[ManagedResource[World[Int]]]) = {
+  def bitemporalWildcardBehaviour = {
     it should "match all items of compatible type relevant to a scope" in {
       val testCaseGenerator = for {worldResource <- worldResourceGenerator
                                    recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
@@ -115,7 +117,7 @@ trait BitemporalBehaviours extends FlatSpec with Checkers with WorldSpecSupport 
     }
   }
 
-  def bitemporalQueryUsingAndIdBehaviour(worldResourceGenerator: Gen[ManagedResource[World[Int]]]) = {
+  def bitemporalQueryUsingAndIdBehaviour = {
     it should "match a subset of the corresponding wildcard query." in {
       val testCaseGenerator = for {worldResource <- worldResourceGenerator
                                    recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
@@ -306,7 +308,7 @@ trait BitemporalBehaviours extends FlatSpec with Checkers with WorldSpecSupport 
     }
   }
 
-  def bitemporalNumberOfBehaviour(worldResourceGenerator: Gen[ManagedResource[World[Int]]]) = {
+  def bitemporalNumberOfBehaviour = {
     it should "should count the number of items that would be yielded by the query 'withId'" in {
       val testCaseGenerator = for {worldResource <- worldResourceGenerator
                                    recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
@@ -349,7 +351,7 @@ trait BitemporalBehaviours extends FlatSpec with Checkers with WorldSpecSupport 
     }
   }
 
-  def bitemporalNoneBehaviour(worldResourceGenerator: Gen[ManagedResource[World[Int]]]) = {
+  def bitemporalNoneBehaviour = {
     it should "not match anything" in {
       val testCaseGenerator = for {worldResource <- worldResourceGenerator
                                    recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
@@ -376,7 +378,7 @@ trait BitemporalBehaviours extends FlatSpec with Checkers with WorldSpecSupport 
     }
   }
 
-  def bitemporalQueryBehaviour(worldResourceGenerator: Gen[ManagedResource[World[Int]]]) = {
+  def bitemporalQueryBehaviour = {
     it should "include instances of subtypes" in {
       val testCaseGenerator = for {worldResource <- worldResourceGenerator
                                    recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
@@ -473,30 +475,32 @@ trait BitemporalBehaviours extends FlatSpec with Checkers with WorldSpecSupport 
   }
 }
 
-class BitemporalSpecUsingWorldReferenceImplementation extends BitemporalBehaviours with DisableAkkaLogging {
-  "The class Bitemporal (using the world reference implementation)" should behave like bitemporalBehaviour(worldResourceGenerator = worldReferenceImplementationResourceGenerator)
+class BitemporalSpecUsingWorldReferenceImplementation extends BitemporalBehaviours with DisableAkkaLogging with WorldReferenceImplementationResource {
+  "The class Bitemporal (using the world reference implementation)" should behave like bitemporalBehaviour
 
-  "A bitemporal wildcard (using the world reference implementation)" should behave like bitemporalWildcardBehaviour(worldResourceGenerator = worldReferenceImplementationResourceGenerator)
+  "A bitemporal wildcard (using the world reference implementation)" should behave like bitemporalWildcardBehaviour
 
-  "A bitemporal query using an id (using the world reference implementation)" should behave like bitemporalQueryUsingAndIdBehaviour(worldResourceGenerator = worldReferenceImplementationResourceGenerator)
+  "A bitemporal query using an id (using the world reference implementation)" should behave like bitemporalQueryUsingAndIdBehaviour
 
-  "the bitemporal 'numberOf' (using the world reference implementation)" should behave like bitemporalNumberOfBehaviour(worldResourceGenerator = worldReferenceImplementationResourceGenerator)
+  "the bitemporal 'numberOf' (using the world reference implementation)" should behave like bitemporalNumberOfBehaviour
 
-  "The bitemporal 'none' (using the world reference implementation)" should behave like bitemporalNoneBehaviour(worldResourceGenerator = worldReferenceImplementationResourceGenerator)
+  "The bitemporal 'none' (using the world reference implementation)" should behave like bitemporalNoneBehaviour
 
-  "A bitemporal query (using the world reference implementation)" should behave like bitemporalQueryBehaviour(worldResourceGenerator = worldReferenceImplementationResourceGenerator)
+  "A bitemporal query (using the world reference implementation)" should behave like bitemporalQueryBehaviour
 }
 
-class BitemporalSpecUsingWorldRedisBasedImplementation extends BitemporalBehaviours with RedisServerFixture with DisableAkkaLogging {
-  "The class Bitemporal (using the world Redis-based implementation)" should behave like bitemporalBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
+class BitemporalSpecUsingWorldRedisBasedImplementation extends BitemporalBehaviours with WorldRedisBasedImplementationResource {
+  val redisServerPort = 6453
 
-  "A bitemporal wildcard (using the world Redis-based implementation)" should behave like bitemporalWildcardBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
+  "The class Bitemporal (using the world Redis-based implementation)" should behave like bitemporalBehaviour
 
-  "A bitemporal query using an id (using the world Redis-based implementation)" should behave like bitemporalQueryUsingAndIdBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
+  "A bitemporal wildcard (using the world Redis-based implementation)" should behave like bitemporalWildcardBehaviour
 
-  "the bitemporal 'numberOf' (using the world Redis-based implementation)" should behave like bitemporalNumberOfBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
+  "A bitemporal query using an id (using the world Redis-based implementation)" should behave like bitemporalQueryUsingAndIdBehaviour
 
-  "The bitemporal 'none' (using the world Redis-based implementation)" should behave like bitemporalNoneBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
+  "the bitemporal 'numberOf' (using the world Redis-based implementation)" should behave like bitemporalNumberOfBehaviour
 
-  "A bitemporal query (using the world Redis-based implementation)" should behave like bitemporalQueryBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
+  "The bitemporal 'none' (using the world Redis-based implementation)" should behave like bitemporalNoneBehaviour
+
+  "A bitemporal query (using the world Redis-based implementation)" should behave like bitemporalQueryBehaviour
 }

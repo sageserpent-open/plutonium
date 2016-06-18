@@ -23,6 +23,7 @@ import scala.util.Random
 import scalaz.std.stream
 
 trait WorldBehaviours extends FlatSpec with Matchers with Checkers with WorldSpecSupport {
+  this: WorldResource =>
 
   class NonExistentIdentified extends Identified {
     override type Id = String
@@ -31,7 +32,7 @@ trait WorldBehaviours extends FlatSpec with Matchers with Checkers with WorldSpe
 
   implicit override val generatorDrivenConfig = PropertyCheckConfig(maxSize = 30)
 
-  def worldWithNoHistoryBehaviour(worldResourceGenerator: Gen[ManagedResource[World[Int]]]) = {
+  def worldWithNoHistoryBehaviour = {
     it should "not contain any identifiables" in {
       val scopeGenerator = for {when <- unboundedInstantGenerator
                                 asOf <- instantGenerator
@@ -64,7 +65,7 @@ trait WorldBehaviours extends FlatSpec with Matchers with Checkers with WorldSpe
     case (((_, trailingEventWhen), _), ((leadingEventWhen, _), _)) => true
   }
 
-  def worldWithHistoryAddedInOrderOfIncreasingEventTimeBehaviour(worldResourceGenerator: Gen[ManagedResource[World[Int]]]) = {
+  def worldWithHistoryAddedInOrderOfIncreasingEventTimeBehaviour = {
     it should "reveal all history up to the 'asOf' limit of a scope made from it" in {
       val testCaseGenerator = for {worldResource <- worldResourceGenerator
                                    recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
@@ -110,7 +111,7 @@ trait WorldBehaviours extends FlatSpec with Matchers with Checkers with WorldSpe
     }
   }
 
-  def worldBehaviour(worldResourceGenerator: Gen[ManagedResource[World[Int]]]) = {
+  def worldBehaviour = {
     it should "reveal the same lack of history from a scope with an 'asOf' limit that comes at or after that revision but before the following revision" in {
       val testCaseGenerator = for {worldResource <- worldResourceGenerator
                                    recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
@@ -1129,7 +1130,7 @@ trait WorldBehaviours extends FlatSpec with Matchers with Checkers with WorldSpe
     }
   }
 
-  def worldWithEventsThatHaveSinceBeenCorrectedBehaviour(worldResourceGenerator: Gen[ManagedResource[World[Int]]]) = {
+  def worldWithEventsThatHaveSinceBeenCorrectedBehaviour = {
     it should "yield a history at the final revision based only on the latest corrections" in {
       val testCaseGenerator = for {worldResource <- worldResourceGenerator
                                    recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
@@ -1384,22 +1385,24 @@ trait WorldBehaviours extends FlatSpec with Matchers with Checkers with WorldSpe
   }
 }
 
-class WorldSpecUsingWorldReferenceImplementation extends WorldBehaviours {
-  "A world with no history (using the world reference implementation)" should behave like worldWithNoHistoryBehaviour(worldResourceGenerator = worldReferenceImplementationResourceGenerator)
+class WorldSpecUsingWorldReferenceImplementation extends WorldBehaviours with WorldReferenceImplementationResource {
+  "A world with no history (using the world reference implementation)" should behave like worldWithNoHistoryBehaviour
 
-  "A world with history added in order of increasing event time (using the world reference implementation)" should behave like worldWithHistoryAddedInOrderOfIncreasingEventTimeBehaviour(worldResourceGenerator = worldReferenceImplementationResourceGenerator)
+  "A world with history added in order of increasing event time (using the world reference implementation)" should behave like worldWithHistoryAddedInOrderOfIncreasingEventTimeBehaviour
 
-  "A world (using the world reference implementation)" should behave like worldBehaviour(worldResourceGenerator = worldReferenceImplementationResourceGenerator)
+  "A world (using the world reference implementation)" should behave like worldBehaviour
 
-  "A world with events that have since been corrected (using the world reference implementation)" should behave like worldWithEventsThatHaveSinceBeenCorrectedBehaviour(worldResourceGenerator = worldReferenceImplementationResourceGenerator)
+  "A world with events that have since been corrected (using the world reference implementation)" should behave like worldWithEventsThatHaveSinceBeenCorrectedBehaviour
 }
 
-class WorldSpecUsingWorldRedisBasedImplementation extends WorldBehaviours with RedisServerFixture with DisableAkkaLogging {
-  "A world with no history (using the world Redis-based implementation)" should behave like worldWithNoHistoryBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
+class WorldSpecUsingWorldRedisBasedImplementation extends WorldBehaviours with WorldRedisBasedImplementationResource {
+  val redisServerPort = 6454
 
-  "A world with history added in order of increasing event time (using the world Redis-based implementation)" should behave like worldWithHistoryAddedInOrderOfIncreasingEventTimeBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
+  "A world with no history (using the world Redis-based implementation)" should behave like worldWithNoHistoryBehaviour
 
-  "A world (using the world Redis-based implementation)" should behave like worldBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
+  "A world with history added in order of increasing event time (using the world Redis-based implementation)" should behave like worldWithHistoryAddedInOrderOfIncreasingEventTimeBehaviour
 
-  "A world with events that have since been corrected (using the world Redis-based implementation)" should behave like worldWithEventsThatHaveSinceBeenCorrectedBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
+  "A world (using the world Redis-based implementation)" should behave like worldBehaviour
+
+  "A world with events that have since been corrected (using the world Redis-based implementation)" should behave like worldWithEventsThatHaveSinceBeenCorrectedBehaviour
 }

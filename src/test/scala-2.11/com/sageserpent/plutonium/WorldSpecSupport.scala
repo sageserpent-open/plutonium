@@ -28,33 +28,11 @@ import scalaz.std.stream
 
 object WorldSpecSupport {
   val changeError = new RuntimeException("Error in making a change.")
-
-  val redisServerPort = 6451
 }
 
 
 trait WorldSpecSupport {
   import WorldSpecSupport._
-
-  val worldReferenceImplementationResourceGenerator: Gen[ManagedResource[World[Int]]] =
-    Gen.const(makeManagedResource(new WorldReferenceImplementation[Int])(_ => {})(List.empty))
-
-  val worldRedisBasedImplementationResourceGenerator: Gen[ManagedResource[World[Int]]] =
-    Gen.const {
-      for {
-        akkaSystem <- makeManagedResource(akka.actor.ActorSystem())(_.shutdown())(List.empty)
-        redisClient <- makeManagedResource(RedisClient(host = "localhost", port = redisServerPort)(akkaSystem))(_.stop())(List.empty)
-        worldResource <- makeManagedResource(new WorldRedisBasedImplementation[Int](redisClient, UUID.randomUUID().toString))(_ => {})(List.empty)
-      } yield worldResource
-    }
-
-  def withRedisServerRunning[Result](block: => Result): Result = {
-    makeManagedResource {
-      val redisServer = new RedisServer(redisServerPort)
-      redisServer.start()
-      redisServer
-    }(_.stop)(List.empty) acquireAndGet (_ => block)
-  }
 
   val seedGenerator = Arbitrary.arbitrary[Long]
 
@@ -576,4 +554,24 @@ trait WorldSpecSupport {
   val mixedRecordingsForReferencedIdGenerator = dataSamplesForAnIdGenerator_[FooHistory](Gen.oneOf(ReferringHistory.specialFooIds), Gen.oneOf(dataSampleGenerator1(faulty = false), moreSpecificFooDataSampleGenerator(faulty = false)), dataSampleGenerator2(faulty = false))
 
   def referencedHistoryRecordingsGroupedByIdGenerator(forbidAnnihilations: Boolean) = recordingsGroupedByIdGenerator_(mixedRecordingsForReferencedIdGenerator, forbidAnnihilations = forbidAnnihilations)
+}
+
+trait WorldResource {
+  val worldResourceGenerator: Gen[ManagedResource[World[Int]]]
+}
+
+trait WorldReferenceImplementationResource extends WorldResource {
+  val worldResourceGenerator: Gen[ManagedResource[World[Int]]] =
+    Gen.const(makeManagedResource(new WorldReferenceImplementation[Int])(_ => {})(List.empty))
+}
+
+trait WorldRedisBasedImplementationResource extends WorldResource with RedisServerFixture with DisableAkkaLogging {
+  val worldResourceGenerator: Gen[ManagedResource[World[Int]]] =
+    Gen.const {
+      for {
+        akkaSystem <- makeManagedResource(akka.actor.ActorSystem())(_.shutdown())(List.empty)
+        redisClient <- makeManagedResource(RedisClient(host = "localhost", port = redisServerPort)(akkaSystem))(_.stop())(List.empty)
+        worldResource <- makeManagedResource(new WorldRedisBasedImplementation[Int](redisClient, UUID.randomUUID().toString))(_ => {})(List.empty)
+      } yield worldResource
+    }
 }
