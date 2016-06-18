@@ -473,7 +473,7 @@ trait BitemporalBehaviours extends FlatSpec with Checkers with WorldSpecSupport 
   }
 }
 
-class BitemporalSpecUsingWorldReferenceImplementation extends BitemporalBehaviours {
+class BitemporalSpecUsingWorldReferenceImplementation extends BitemporalBehaviours with DisableAkkaLogging {
   "The class Bitemporal (using the world reference implementation)" should behave like bitemporalBehaviour(worldResourceGenerator = worldReferenceImplementationResourceGenerator)
 
   "A bitemporal wildcard (using the world reference implementation)" should behave like bitemporalWildcardBehaviour(worldResourceGenerator = worldReferenceImplementationResourceGenerator)
@@ -487,7 +487,7 @@ class BitemporalSpecUsingWorldReferenceImplementation extends BitemporalBehaviou
   "A bitemporal query (using the world reference implementation)" should behave like bitemporalQueryBehaviour(worldResourceGenerator = worldReferenceImplementationResourceGenerator)
 }
 
-class BitemporalSpecUsingWorldRedisBasedImplementation extends BitemporalBehaviours with RedisServerFixture {
+class BitemporalSpecUsingWorldRedisBasedImplementation extends BitemporalBehaviours with RedisServerFixture with DisableAkkaLogging {
   "The class Bitemporal (using the world Redis-based implementation)" should behave like bitemporalBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
 
   "A bitemporal wildcard (using the world Redis-based implementation)" should behave like bitemporalWildcardBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)

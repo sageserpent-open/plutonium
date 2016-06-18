@@ -1394,7 +1394,7 @@ class WorldSpecUsingWorldReferenceImplementation extends WorldBehaviours {
   "A world with events that have since been corrected (using the world reference implementation)" should behave like worldWithEventsThatHaveSinceBeenCorrectedBehaviour(worldResourceGenerator = worldReferenceImplementationResourceGenerator)
 }
 
-class WorldSpecUsingWorldRedisBasedImplementation extends WorldBehaviours with RedisServerFixture {
+class WorldSpecUsingWorldRedisBasedImplementation extends WorldBehaviours with RedisServerFixture with DisableAkkaLogging {
   "A world with no history (using the world Redis-based implementation)" should behave like worldWithNoHistoryBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
 
   "A world with history added in order of increasing event time (using the world Redis-based implementation)" should behave like worldWithHistoryAddedInOrderOfIncreasingEventTimeBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)

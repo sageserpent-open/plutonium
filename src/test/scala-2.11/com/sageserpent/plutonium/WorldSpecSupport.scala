@@ -7,17 +7,15 @@ package com.sageserpent.plutonium
 import java.time.Instant
 import java.util.UUID
 
-import akka.actor
 import com.sageserpent.americium
 import com.sageserpent.americium._
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.seqEnrichment._
 import com.sageserpent.plutonium.World._
-import com.typesafe.config.ConfigFactory
 import org.scalacheck.{Arbitrary, Gen}
-import org.scalatest.{BeforeAndAfterAll, Suite}
 import redis.RedisClient
 import redis.embedded.RedisServer
+import resource._
 
 import scala.collection.JavaConversions._
 import scala.collection.Searching._
@@ -26,48 +24,17 @@ import scala.collection.immutable.TreeMap
 import scala.reflect.runtime.universe._
 import scala.util.Random
 import scalaz.std.stream
-import resource._
 
 
 object WorldSpecSupport {
   val changeError = new RuntimeException("Error in making a change.")
 
   val redisServerPort = 6451
-
-  val akkaStdoutLogLevelKey: String = "akka.stdout-loglevel"
-  val akkaLogLevelKey: String = "akka.loglevel"
 }
 
-trait WorldSpecSupport extends BeforeAndAfterAll {
-  this: Suite =>
+
+trait WorldSpecSupport {
   import WorldSpecSupport._
-
-  var akkaStdOutLogLevel = "OFF"
-  var akkaLogLevel = "ERROR"
-
-
-
-  override protected def beforeAll() = {
-    super.beforeAll()
-
-    val config = ConfigFactory.load()
-    akkaStdOutLogLevel = config.getString(akkaStdoutLogLevelKey)
-    akkaLogLevel = config.getString(akkaLogLevelKey)
-
-    System.setProperty(akkaStdoutLogLevelKey, "OFF")
-    System.setProperty(akkaLogLevelKey, "ERROR")
-
-    ConfigFactory.invalidateCaches()
-  }
-
-  override protected  def afterAll() = {
-    System.setProperty(akkaStdoutLogLevelKey, akkaStdOutLogLevel)
-    System.setProperty(akkaLogLevelKey, akkaLogLevel)
-
-    ConfigFactory.invalidateCaches()
-
-    super.afterAll()
-  }
 
   val worldReferenceImplementationResourceGenerator: Gen[ManagedResource[World[Int]]] =
     Gen.const(makeManagedResource(new WorldReferenceImplementation[Int])(_ => {})(List.empty))
