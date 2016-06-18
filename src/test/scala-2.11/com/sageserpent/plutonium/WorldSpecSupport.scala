@@ -13,6 +13,7 @@ import com.sageserpent.americium._
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.seqEnrichment._
 import com.sageserpent.plutonium.World._
+import com.typesafe.config.ConfigFactory
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.{BeforeAndAfterAll, Suite}
 import redis.RedisClient
@@ -32,19 +33,39 @@ object WorldSpecSupport {
   val changeError = new RuntimeException("Error in making a change.")
 
   val redisServerPort = 6451
+
+  val akkaStdoutLogLevelKey: String = "akka.stdout-loglevel"
+  val akkaLogLevelKey: String = "akka.loglevel"
 }
 
 trait WorldSpecSupport extends BeforeAndAfterAll {
   this: Suite =>
   import WorldSpecSupport._
 
+  var akkaStdOutLogLevel = "OFF"
+  var akkaLogLevel = "ERROR"
+
+
+
   override protected def beforeAll() = {
     super.beforeAll()
-    System.setProperty("akka.loggers.0", "akka.event.slf4j.Slf4jLogger")
-    System.setProperty("akka.loglevel", "ERROR")
+
+    val config = ConfigFactory.load()
+    akkaStdOutLogLevel = config.getString(akkaStdoutLogLevelKey)
+    akkaLogLevel = config.getString(akkaLogLevelKey)
+
+    System.setProperty(akkaStdoutLogLevelKey, "OFF")
+    System.setProperty(akkaLogLevelKey, "ERROR")
+
+    ConfigFactory.invalidateCaches()
   }
 
   override protected  def afterAll() = {
+    System.setProperty(akkaStdoutLogLevelKey, akkaStdOutLogLevel)
+    System.setProperty(akkaLogLevelKey, akkaLogLevel)
+
+    ConfigFactory.invalidateCaches()
+
     super.afterAll()
   }
 
