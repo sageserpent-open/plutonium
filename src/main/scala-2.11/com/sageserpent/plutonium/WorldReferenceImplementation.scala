@@ -147,7 +147,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
                                              buildAndValidateEventTimelineForProposedNewRevision: (Map[EventId, AbstractEventData], Revision, Seq[AbstractEventData], Set[AbstractEventData]) => Unit): Revision = {
     mutableState.synchronized {
       mutableState.idOfThreadMostRecentlyStartingARevision = Thread.currentThread.getId
-      checkRevisionPrecondition(asOf)
+      checkRevisionPrecondition(asOf, revisionAsOfs)
     }
 
     val nextRevisionPriorToUpdate = nextRevision

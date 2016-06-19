@@ -412,7 +412,6 @@ object WorldImplementationCodeFactoring {
 
     override def numberOf[Raw <: Identified : TypeTag](id: Raw#Id): Int = identifiedItemsScope.itemsFor(id).size
   }
-
 }
 
 abstract class WorldImplementationCodeFactoring[EventId] extends World[EventId] {
@@ -493,7 +492,7 @@ abstract class WorldImplementationCodeFactoring[EventId] extends World[EventId] 
                                     newEventDatumsFor: Revision => Map[EventId, AbstractEventData],
                                     buildAndValidateEventTimelineForProposedNewRevision: (Map[EventId, AbstractEventData], Revision, Seq[AbstractEventData], Set[AbstractEventData]) => Unit): Revision
 
-  protected def checkRevisionPrecondition(asOf: Instant): Unit = {
+  protected def checkRevisionPrecondition(asOf: Instant, revisionAsOfs: Seq[Instant]): Unit = {
     if (revisionAsOfs.nonEmpty && revisionAsOfs.last.isAfter(asOf)) throw new IllegalArgumentException(s"'asOf': ${asOf} should be no earlier than that of the last revision: ${revisionAsOfs.last}")
   }
 }
