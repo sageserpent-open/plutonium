@@ -6,7 +6,6 @@ import java.util.Optional
 
 import com.sageserpent.americium.{Finite, NegativeInfinity, PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.World.Revision
-import com.sageserpent.plutonium.WorldImplementationCodeFactoring.IdentifiedItemsScope
 import net.sf.cglib.proxy._
 import resource.{ManagedResource, makeManagedResource}
 
@@ -408,8 +407,8 @@ object WorldImplementationCodeFactoring {
         case bitemporal@WildcardBitemporalResult() =>
           implicit val typeTag = bitemporal.capturedTypeTag
           allItems
-        }
       }
+    }
 
     override def numberOf[Raw <: Identified : TypeTag](id: Raw#Id): Int = identifiedItemsScope.itemsFor(id).size
   }
@@ -417,6 +416,7 @@ object WorldImplementationCodeFactoring {
 }
 
 abstract class WorldImplementationCodeFactoring[EventId] extends World[EventId] {
+
   import WorldImplementationCodeFactoring._
 
   abstract class ScopeBasedOnNextRevision(val when: Unbounded[Instant], val nextRevision: Revision) extends com.sageserpent.plutonium.Scope {
@@ -463,7 +463,7 @@ abstract class WorldImplementationCodeFactoring[EventId] extends World[EventId] 
   }
 
   def revise(events: Map[EventId, Option[Event]], asOf: Instant): Revision = {
-    val nextRevisionPriorToUpdate = nextRevision
+    val nextRevisionPriorToUpdate: Revision = nextRevision
     val newEventDatums: Map[EventId, AbstractEventData] = events.zipWithIndex map { case ((eventId, event), tiebreakerIndex) =>
       eventId -> (event match {
         case Some(event) => EventData(serializableEventFrom(event), nextRevisionPriorToUpdate, tiebreakerIndex)
@@ -471,8 +471,8 @@ abstract class WorldImplementationCodeFactoring[EventId] extends World[EventId] 
       })
     }
 
-    transactNewRevision(asOf, newEventDatums) {
-      (pertinentEventDatumsExcludingTheNewRevision: Seq[AbstractEventData], obsoleteEventDatums: Set[AbstractEventData]) =>
+    def buildAndValidateEventTimelineForProposedNewRevision(nextRevisionPriorToUpdate: Revision, newEventDatums: Map[EventId, AbstractEventData])
+                                                           (pertinentEventDatumsExcludingTheNewRevision: Seq[AbstractEventData], obsoleteEventDatums: Set[AbstractEventData]): Unit = {
       val eventTimelineIncludingNewRevision = eventTimelineFrom(pertinentEventDatumsExcludingTheNewRevision filterNot obsoleteEventDatums.contains union newEventDatums.values.toStream)
 
       val nextRevisionAfterTransactionIsCompleted = 1 + nextRevisionPriorToUpdate
@@ -482,6 +482,8 @@ abstract class WorldImplementationCodeFactoring[EventId] extends World[EventId] 
       // constructing a scope to apply queries on.
       new IdentifiedItemsScope(PositiveInfinity[Instant], nextRevisionAfterTransactionIsCompleted, Finite(asOf), eventTimelineIncludingNewRevision)
     }
+
+    transactNewRevision(asOf, newEventDatums)(buildAndValidateEventTimelineForProposedNewRevision(nextRevisionPriorToUpdate, newEventDatums) _)
 
     nextRevisionPriorToUpdate
   }
