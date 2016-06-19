@@ -8,8 +8,8 @@ import redis.api.Limit
 import redis.{ByteStringDeserializer, ByteStringFormatter, ByteStringSerializer, RedisClient}
 import resource._
 
-import scala.concurrent.Await
 import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, Future}
 import scala.reflect.runtime.universe._
 
 
@@ -76,21 +76,29 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
 
   def eventCorrectionsKeyFrom(eventId: EventId) = s"${eventCorrectionsKeyPrefix}${eventId}"
 
-  override def nextRevision: Revision = Await.result(redisClient.llen(asOfsKey) map (_.toInt), Duration.Inf)
+  override def nextRevision: Revision = Await.result(nextRevisionFuture, Duration.Inf)
+
+  private def nextRevisionFuture: Future[EventOrderingTiebreakerIndex] = {
+    redisClient.llen(asOfsKey) map (_.toInt)
+  }
 
   override def forkExperimentalWorld(scope: javaApi.Scope): World[EventId] = ???
 
   override def revisionAsOfs: Seq[Instant] = Await.result(redisClient.lrange[Instant](asOfsKey, 0, -1), Duration.Inf)
 
-  override protected def eventTimeline(nextRevision: Revision): Seq[SerializableEvent] = eventTimelineFrom(pertinentEventDatums(nextRevision))
+  override protected def eventTimeline(nextRevision: Revision): Seq[SerializableEvent] = eventTimelineFrom(Await.result(pertinentEventDatums(nextRevision), Duration.Inf))
 
-  private def pertinentEventDatums(nextRevision: Revision): Seq[AbstractEventData] = {
-    val eventIds: Set[EventId] = Await.result(redisClient.smembers[EventId](eventIdsKey) map (_.toSet), Duration.Inf)
-    eventIds.toSeq flatMap
-      (eventId => Await.result(redisClient.zrevrangebyscore[AbstractEventData](eventCorrectionsKeyFrom(eventId),
+  private def pertinentEventDatums(nextRevision: Revision, eventIds: Seq[EventId]): Future[Seq[AbstractEventData]] = Future.traverse(eventIds)(eventId =>
+    redisClient.zrevrangebyscore[AbstractEventData](eventCorrectionsKeyFrom(eventId),
         min = Limit(initialRevision, inclusive = true),
         max = Limit(nextRevision, inclusive = false),
-        limit = Some(0, 1)), Duration.Inf))
+      limit = Some(0, 1))) map (_.flatten)
+
+  private def pertinentEventDatums(nextRevision: Revision): Future[Seq[AbstractEventData]] = {
+    for {
+      eventIds: Set[EventId] <- redisClient.smembers[EventId](eventIdsKey) map (_.toSet)
+      eventDatums <- pertinentEventDatums(nextRevision, eventIds.toSeq)
+    } yield eventDatums
   }
 
   override protected def transactNewRevision(asOf: Instant,
@@ -98,30 +106,20 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
                                              buildAndValidateEventTimelineForProposedNewRevision: (Map[EventId, AbstractEventData], Revision, Seq[AbstractEventData], Set[AbstractEventData]) => Unit): Revision = {
     // TODO - concurrency safety!
 
-    val nextRevisionPriorToUpdate = nextRevision
-
-    val newEventDatums: Map[EventId, AbstractEventData] = newEventDatumsFor(nextRevisionPriorToUpdate)
-
-    checkRevisionPrecondition(asOf)
-
-    val obsoleteEventDatums: Set[AbstractEventData] = Set(newEventDatums.keys.toSeq flatMap
-      (eventId => Await.result(redisClient.zrevrangebyscore[AbstractEventData](eventCorrectionsKeyFrom(eventId),
-        min = Limit(initialRevision, inclusive = true),
-        max = Limit(nextRevision, inclusive = false),
-        limit = Some(0, 1)),
-        Duration.Inf)): _*)
-
-    val pertinentEventDatumsExcludingTheNewRevision = pertinentEventDatums(nextRevision)
-
-    buildAndValidateEventTimelineForProposedNewRevision(newEventDatums, nextRevisionPriorToUpdate, pertinentEventDatumsExcludingTheNewRevision, obsoleteEventDatums)
-
-    for ((eventId, eventDatum) <- newEventDatums) {
-      redisClient.zadd[AbstractEventData](eventCorrectionsKeyFrom(eventId), nextRevision.toDouble -> eventDatum)
-      redisClient.sadd[EventId](eventIdsKey, eventId)
-    }
-
-    redisClient.rpush[Instant](asOfsKey, asOf)
-
-    nextRevisionPriorToUpdate
+    Await.result(for {
+      nextRevisionPriorToUpdate <- nextRevisionFuture
+      newEventDatums: Map[EventId, AbstractEventData] = newEventDatumsFor(nextRevisionPriorToUpdate)
+      _ = checkRevisionPrecondition(asOf)
+      obsoleteEventDatums: Set[AbstractEventData] <- pertinentEventDatums(nextRevisionPriorToUpdate, newEventDatums.keys.toSeq) map (Set(_: _*))
+      pertinentEventDatumsExcludingTheNewRevision: Seq[AbstractEventData] <- pertinentEventDatums(nextRevisionPriorToUpdate)
+      _ = buildAndValidateEventTimelineForProposedNewRevision(newEventDatums, nextRevisionPriorToUpdate, pertinentEventDatumsExcludingTheNewRevision, obsoleteEventDatums)
+      _ <- Future.traverse(newEventDatums) {
+        case (eventId, eventDatum) => for {
+          _ <- redisClient.zadd[AbstractEventData](eventCorrectionsKeyFrom(eventId), nextRevisionPriorToUpdate.toDouble -> eventDatum)
+          _ <- redisClient.sadd[EventId](eventIdsKey, eventId)
+        } yield ()
+      }
+      _ <- redisClient.rpush[Instant](asOfsKey, asOf)
+    } yield nextRevisionPriorToUpdate, Duration.Inf)
   }
 }
