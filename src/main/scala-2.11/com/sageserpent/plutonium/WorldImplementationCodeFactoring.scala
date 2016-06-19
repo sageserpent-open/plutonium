@@ -463,16 +463,17 @@ abstract class WorldImplementationCodeFactoring[EventId] extends World[EventId] 
   }
 
   def revise(events: Map[EventId, Option[Event]], asOf: Instant): Revision = {
-    val nextRevisionPriorToUpdate: Revision = nextRevision
-    val newEventDatums: Map[EventId, AbstractEventData] = events.zipWithIndex map { case ((eventId, event), tiebreakerIndex) =>
-      eventId -> (event match {
-        case Some(event) => EventData(serializableEventFrom(event), nextRevisionPriorToUpdate, tiebreakerIndex)
-        case None => AnnulledEventData(nextRevisionPriorToUpdate)
-      })
+    def newEventDatumsFor(nextRevisionPriorToUpdate: Revision): Map[EventId, AbstractEventData] = {
+      events.zipWithIndex map { case ((eventId, event), tiebreakerIndex) =>
+        eventId -> (event match {
+          case Some(event) => EventData(serializableEventFrom(event), nextRevisionPriorToUpdate, tiebreakerIndex)
+          case None => AnnulledEventData(nextRevisionPriorToUpdate)
+        })
+      }
     }
 
-    def buildAndValidateEventTimelineForProposedNewRevision(nextRevisionPriorToUpdate: Revision, newEventDatums: Map[EventId, AbstractEventData])
-                                                           (pertinentEventDatumsExcludingTheNewRevision: Seq[AbstractEventData], obsoleteEventDatums: Set[AbstractEventData]): Unit = {
+    def buildAndValidateEventTimelineForProposedNewRevision(newEventDatums: Map[EventId, AbstractEventData],
+                                                            nextRevisionPriorToUpdate: Revision, pertinentEventDatumsExcludingTheNewRevision: Seq[AbstractEventData], obsoleteEventDatums: Set[AbstractEventData]): Unit = {
       val eventTimelineIncludingNewRevision = eventTimelineFrom(pertinentEventDatumsExcludingTheNewRevision filterNot obsoleteEventDatums.contains union newEventDatums.values.toStream)
 
       val nextRevisionAfterTransactionIsCompleted = 1 + nextRevisionPriorToUpdate
@@ -483,15 +484,14 @@ abstract class WorldImplementationCodeFactoring[EventId] extends World[EventId] 
       new IdentifiedItemsScope(PositiveInfinity[Instant], nextRevisionAfterTransactionIsCompleted, Finite(asOf), eventTimelineIncludingNewRevision)
     }
 
-    transactNewRevision(asOf, newEventDatums)(buildAndValidateEventTimelineForProposedNewRevision(nextRevisionPriorToUpdate, newEventDatums) _)
-
-    nextRevisionPriorToUpdate
+    transactNewRevision(asOf, newEventDatumsFor, buildAndValidateEventTimelineForProposedNewRevision)
   }
 
   protected def eventTimeline(nextRevision: Revision): Seq[SerializableEvent]
 
-  protected def transactNewRevision(asOf: Instant, newEventDatums: Map[EventId, AbstractEventData])
-                                   (buildAndValidateEventTimelineForProposedNewRevision: (Seq[AbstractEventData], Set[AbstractEventData]) => Unit): Unit
+  protected def transactNewRevision(asOf: Instant,
+                                    newEventDatumsFor: Revision => Map[EventId, AbstractEventData],
+                                    buildAndValidateEventTimelineForProposedNewRevision: (Map[EventId, AbstractEventData], Revision, Seq[AbstractEventData], Set[AbstractEventData]) => Unit): Revision
 
   protected def checkRevisionPrecondition(asOf: Instant): Unit = {
     if (revisionAsOfs.nonEmpty && revisionAsOfs.last.isAfter(asOf)) throw new IllegalArgumentException(s"'asOf': ${asOf} should be no earlier than that of the last revision: ${revisionAsOfs.last}")

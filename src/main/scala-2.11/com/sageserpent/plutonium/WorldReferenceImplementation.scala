@@ -142,12 +142,17 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
 
   override protected def eventTimeline(nextRevision: Revision): Seq[SerializableEvent] = eventTimelineFrom(mutableState.pertinentEventDatums(nextRevision))
 
-  override protected def transactNewRevision(asOf: Instant, newEventDatums: Map[EventId, AbstractEventData])
-                                            (buildAndValidateEventTimelineForProposedNewRevision: (Seq[AbstractEventData], Set[AbstractEventData]) => Unit): Unit = {
+  override protected def transactNewRevision(asOf: Instant,
+                                             newEventDatumsFor: Revision => Map[EventId, AbstractEventData],
+                                             buildAndValidateEventTimelineForProposedNewRevision: (Map[EventId, AbstractEventData], Revision, Seq[AbstractEventData], Set[AbstractEventData]) => Unit): Revision = {
     mutableState.synchronized {
       mutableState.idOfThreadMostRecentlyStartingARevision = Thread.currentThread.getId
       checkRevisionPrecondition(asOf)
     }
+
+    val nextRevisionPriorToUpdate = nextRevision
+
+    val newEventDatums: Map[EventId, AbstractEventData] = newEventDatumsFor(nextRevisionPriorToUpdate)
 
     val obsoleteEventDatums = Set((for {
       eventId <- newEventDatums.keys
@@ -156,7 +161,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
 
     val pertinentEventDatumsExcludingTheNewRevision = mutableState.pertinentEventDatums(nextRevision)
 
-    buildAndValidateEventTimelineForProposedNewRevision(pertinentEventDatumsExcludingTheNewRevision, obsoleteEventDatums)
+    buildAndValidateEventTimelineForProposedNewRevision(newEventDatums, nextRevisionPriorToUpdate, pertinentEventDatumsExcludingTheNewRevision, obsoleteEventDatums)
 
     mutableState.synchronized {
       if (mutableState.idOfThreadMostRecentlyStartingARevision != Thread.currentThread.getId) {
@@ -169,5 +174,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
       mutableState._revisionAsOfs += asOf
       mutableState.checkInvariant()
     }
+
+    nextRevisionPriorToUpdate
   }
 }

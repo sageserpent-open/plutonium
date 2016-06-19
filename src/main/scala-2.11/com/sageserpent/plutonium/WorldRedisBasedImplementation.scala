@@ -93,9 +93,14 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
         limit = Some(0, 1)), Duration.Inf))
   }
 
-  override protected def transactNewRevision(asOf: Instant, newEventDatums: Map[EventId, AbstractEventData])
-                                            (buildAndValidateEventTimelineForProposedNewRevision: (Seq[AbstractEventData], Set[AbstractEventData]) => Unit): Unit = {
+  override protected def transactNewRevision(asOf: Instant,
+                                             newEventDatumsFor: Revision => Map[EventId, AbstractEventData],
+                                             buildAndValidateEventTimelineForProposedNewRevision: (Map[EventId, AbstractEventData], Revision, Seq[AbstractEventData], Set[AbstractEventData]) => Unit): Revision = {
     // TODO - concurrency safety!
+
+    val nextRevisionPriorToUpdate = nextRevision
+
+    val newEventDatums: Map[EventId, AbstractEventData] = newEventDatumsFor(nextRevisionPriorToUpdate)
 
     checkRevisionPrecondition(asOf)
 
@@ -108,7 +113,7 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
 
     val pertinentEventDatumsExcludingTheNewRevision = pertinentEventDatums(nextRevision)
 
-    buildAndValidateEventTimelineForProposedNewRevision(pertinentEventDatumsExcludingTheNewRevision, obsoleteEventDatums)
+    buildAndValidateEventTimelineForProposedNewRevision(newEventDatums, nextRevisionPriorToUpdate, pertinentEventDatumsExcludingTheNewRevision, obsoleteEventDatums)
 
     for ((eventId, eventDatum) <- newEventDatums) {
       redisClient.zadd[AbstractEventData](eventCorrectionsKeyFrom(eventId), nextRevision.toDouble -> eventDatum)
@@ -116,5 +121,7 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
     }
 
     redisClient.rpush[Instant](asOfsKey, asOf)
+
+    nextRevisionPriorToUpdate
   }
 }
