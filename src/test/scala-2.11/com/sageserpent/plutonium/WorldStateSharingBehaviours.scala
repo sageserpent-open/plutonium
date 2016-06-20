@@ -148,7 +148,7 @@ class WorldStateSharingSpecUsingWorldReferenceImplementation extends WorldStateS
   "multiple world instances representing the same world (using the world reference implementation)" should behave like multipleInstancesRepresentingTheSameWorldBehaviour
 }
 
-class WorldStateSharingSpecUsingWorldRedisBasedImplementation extends WorldStateSharingBehaviours with RedisServerFixture with DisableAkkaLogging {
+class WorldStateSharingSpecUsingWorldRedisBasedImplementation extends WorldStateSharingBehaviours with RedisServerFixture with AkkaSetup {
   val redisServerPort: Int = 6451
 
   val worldSharingCommonStateFactoryResourceGenerator: Gen[ManagedResource[() => World[Int]]] =
