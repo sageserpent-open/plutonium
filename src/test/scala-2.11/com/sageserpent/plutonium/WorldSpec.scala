@@ -1200,7 +1200,7 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
         case _ => None
       }
 
-      val checks = for {(revision, recordingsGroupedById) <- listOfRevisionsToCheckAtAndRecordingsGroupedById} yield {
+      val checks = (for {(revision, recordingsGroupedById) <- listOfRevisionsToCheckAtAndRecordingsGroupedById} yield {
         val scope = world.scopeFor(queryWhen, revision)
 
         val checks = for {RecordingsNoLaterThan(historyId, historiesFrom, pertinentRecordings, _, _) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(queryWhen))
@@ -1210,7 +1210,7 @@ class WorldSpec extends FlatSpec with Matchers with Checkers with WorldSpecSuppo
         Prop.all(checks.map { case (historyId, actualHistory, expectedHistory) => ((actualHistory.length == expectedHistory.length) :| s"For ${historyId}, ${actualHistory}.length == ${expectedHistory}.length") &&
           Prop.all((actualHistory zip expectedHistory zipWithIndex) map { case ((actual, expected), step) => (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}" }: _*)
         }: _*)
-      }
+      }).force
 
       if (checks.nonEmpty) {
         Prop.all(checks: _*)
