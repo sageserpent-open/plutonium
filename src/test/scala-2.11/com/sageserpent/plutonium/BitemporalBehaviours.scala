@@ -475,7 +475,7 @@ trait BitemporalBehaviours extends FlatSpec with Checkers with WorldSpecSupport 
   }
 }
 
-class BitemporalSpecUsingWorldReferenceImplementation extends BitemporalBehaviours with AkkaSetup with WorldReferenceImplementationResource {
+class BitemporalSpecUsingWorldReferenceImplementation extends BitemporalBehaviours with DisableAkkaLogging with WorldReferenceImplementationResource {
   "The class Bitemporal (using the world reference implementation)" should behave like bitemporalBehaviour
 
   "A bitemporal wildcard (using the world reference implementation)" should behave like bitemporalWildcardBehaviour
