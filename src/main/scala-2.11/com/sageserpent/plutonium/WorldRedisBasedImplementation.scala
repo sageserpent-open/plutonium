@@ -18,6 +18,7 @@ import scala.reflect.runtime.universe._
   */
 
 object WorldRedisBasedImplementation {
+
   import WorldImplementationCodeFactoring._
 
   val redisNamespaceComponentSeparator = ":"
@@ -60,6 +61,7 @@ object WorldRedisBasedImplementation {
 }
 
 class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, identityGuid: String) extends WorldImplementationCodeFactoring[EventId] {
+
   import World._
   import WorldImplementationCodeFactoring._
   import WorldRedisBasedImplementation._
@@ -74,28 +76,26 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
 
   val eventIdsKey = s"${identityGuid}${redisNamespaceComponentSeparator}eventIds"
 
+  var pendingUpdates: Future[Unit] = Future.successful ()
+
   def eventCorrectionsKeyFrom(eventId: EventId) = s"${eventCorrectionsKeyPrefix}${eventId}"
 
-  override def nextRevision: Revision = Await.result(nextRevisionFuture, Duration.Inf)
+  override def nextRevision: Revision = Await.result(pendingUpdates flatMap (_ => nextRevisionFuture), Duration.Inf)
 
-  private def nextRevisionFuture: Future[EventOrderingTiebreakerIndex] = {
-    redisClient.llen(asOfsKey) map (_.toInt)
-  }
+  private def nextRevisionFuture: Future[EventOrderingTiebreakerIndex] = redisClient.llen(asOfsKey) map (_.toInt)
 
   override def forkExperimentalWorld(scope: javaApi.Scope): World[EventId] = ???
 
-  override def revisionAsOfs: Seq[Instant] = Await.result(revisionAsOfsFuture, Duration.Inf)
+  override def revisionAsOfs: Seq[Instant] = Await.result(pendingUpdates flatMap (_ => revisionAsOfsFuture), Duration.Inf)
 
-  private def revisionAsOfsFuture: Future[Seq[Instant]] = {
-    redisClient.lrange[Instant](asOfsKey, 0, -1)
-  }
+  private def revisionAsOfsFuture: Future[Seq[Instant]] = redisClient.lrange[Instant](asOfsKey, 0, -1)
 
-  override protected def eventTimeline(nextRevision: Revision): Seq[SerializableEvent] = eventTimelineFrom(Await.result(pertinentEventDatumsFuture(nextRevision), Duration.Inf))
+  override protected def eventTimeline(nextRevision: Revision): Seq[SerializableEvent] = eventTimelineFrom(Await.result(pendingUpdates flatMap (_ => pertinentEventDatumsFuture(nextRevision)), Duration.Inf))
 
   private def pertinentEventDatumsFuture(nextRevision: Revision, eventIds: Seq[EventId]): Future[Seq[AbstractEventData]] = Future.traverse(eventIds)(eventId =>
     redisClient.zrevrangebyscore[AbstractEventData](eventCorrectionsKeyFrom(eventId),
-        min = Limit(initialRevision, inclusive = true),
-        max = Limit(nextRevision, inclusive = false),
+      min = Limit(initialRevision, inclusive = true),
+      max = Limit(nextRevision, inclusive = false),
       limit = Some(0, 1))) map (_.flatten)
 
   private def pertinentEventDatumsFuture(nextRevision: Revision): Future[Seq[AbstractEventData]] = {
@@ -110,7 +110,8 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
                                              buildAndValidateEventTimelineForProposedNewRevision: (Map[EventId, AbstractEventData], Revision, Seq[AbstractEventData], Set[AbstractEventData]) => Unit): Revision = {
     // TODO - concurrency safety!
 
-    Await.result(for {
+    val transactionConsistencyCheckFuture = for {
+      _ <- pendingUpdates
       nextRevisionPriorToUpdate <- nextRevisionFuture
       newEventDatums: Map[EventId, AbstractEventData] = newEventDatumsFor(nextRevisionPriorToUpdate)
       revisionAsOfs <- revisionAsOfsFuture
@@ -118,13 +119,19 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
       obsoleteEventDatums: Set[AbstractEventData] <- pertinentEventDatumsFuture(nextRevisionPriorToUpdate, newEventDatums.keys.toSeq) map (Set(_: _*))
       pertinentEventDatumsExcludingTheNewRevision: Seq[AbstractEventData] <- pertinentEventDatumsFuture(nextRevisionPriorToUpdate)
       _ = buildAndValidateEventTimelineForProposedNewRevision(newEventDatums, nextRevisionPriorToUpdate, pertinentEventDatumsExcludingTheNewRevision, obsoleteEventDatums)
+    } yield (nextRevisionPriorToUpdate, newEventDatums)
+
+    pendingUpdates = for {
+      (nextRevisionPriorToUpdate, newEventDatums) <- transactionConsistencyCheckFuture
       _ <- Future.traverse(newEventDatums) {
         case (eventId, eventDatum) => for {
           _ <- redisClient.zadd[AbstractEventData](eventCorrectionsKeyFrom(eventId), nextRevisionPriorToUpdate.toDouble -> eventDatum)
           _ <- redisClient.sadd[EventId](eventIdsKey, eventId)
-        } yield ()
+        } yield nextRevisionPriorToUpdate
       }
       _ <- redisClient.rpush[Instant](asOfsKey, asOf)
-    } yield nextRevisionPriorToUpdate, Duration.Inf)
+    } yield ()
+
+    Await.result(transactionConsistencyCheckFuture map (_._1), Duration.Inf)
   }
 }
