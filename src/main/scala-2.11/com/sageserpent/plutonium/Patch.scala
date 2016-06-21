@@ -26,15 +26,14 @@ object Patch {
       arguments map wrap,
       methodProxy.getSignature)
 
+  case class MethodPieces(declaringClassOfMethod: Class[_ <: Identified], methodName: String, methodParameterTypes: Array[Class[_]], signatureDescriptor: String)
 
-  case class SerializableStandin(methodPieces: (Class[_ <: Identified], String, Array[Class[_]]),
+  case class SerializableStandin(methodPieces: MethodPieces,
                                  targetReconstitutionData: Recorder#ItemReconstitutionData[_ <: Identified],
-                                 wrappedArguments: Array[Patch.WrappedArgument],
-                                 signaturePieces: (String, String)) extends java.io.Serializable {
+                                 wrappedArguments: Array[Patch.WrappedArgument]) extends java.io.Serializable {
     def readResolve(): Any = {
-      val (declaringClassOfMethod, methodName, methodParameterTypes) = methodPieces
-      val (name, descriptor) = signaturePieces
-      new Patch(declaringClassOfMethod.getMethod(methodName, methodParameterTypes: _*), targetReconstitutionData, wrappedArguments, new Signature(name, descriptor))
+      val MethodPieces(declaringClassOfMethod, methodName, methodParameterTypes, signatureDescriptor) = methodPieces
+      new Patch(declaringClassOfMethod.getMethod(methodName, methodParameterTypes: _*), targetReconstitutionData, wrappedArguments, new Signature(methodName, signatureDescriptor))
     }
   }
 }
@@ -62,8 +61,7 @@ class Patch(method: Method,
   }
 
   private def writeReplace(): Any = {
-    val methodPieces = (method.getDeclaringClass.asInstanceOf[Class[_ <: Identified]], method.getName, method.getParameterTypes)
-    val signaturePieces = signature.getName -> signature.getDescriptor
-    SerializableStandin(methodPieces, targetReconstitutionData, wrappedArguments, signaturePieces)
+    val methodPieces = MethodPieces(method.getDeclaringClass.asInstanceOf[Class[_ <: Identified]], method.getName, method.getParameterTypes, signature.getDescriptor)
+    SerializableStandin(methodPieces, targetReconstitutionData, wrappedArguments)
   }
 }
