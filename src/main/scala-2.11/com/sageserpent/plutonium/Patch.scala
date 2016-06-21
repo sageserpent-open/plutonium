@@ -2,8 +2,9 @@ package com.sageserpent.plutonium
 
 import java.lang.reflect.Method
 
-import net.sf.cglib.proxy.MethodProxy
+import com.sageserpent.plutonium.Patch.MethodPieces
 import net.sf.cglib.core.Signature
+import net.sf.cglib.proxy.MethodProxy
 
 import scalaz.{-\/, \/, \/-}
 
@@ -20,29 +21,31 @@ object Patch {
     case _ => -\/(argument)
   }
 
-  def apply(targetRecorder: Recorder, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy) =
-    new Patch(method,
+  def apply(targetRecorder: Recorder, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy) = {
+    val methodPieces = MethodPieces(method.getDeclaringClass.asInstanceOf[Class[_ <: Identified]], method.getName, method.getParameterTypes, methodProxy.getSignature.getDescriptor)
+    new Patch(methodPieces,
       targetRecorder.itemReconstitutionData,
-      arguments map wrap,
-      methodProxy.getSignature)
-
-  case class MethodPieces(declaringClassOfMethod: Class[_ <: Identified], methodName: String, methodParameterTypes: Array[Class[_]], signatureDescriptor: String)
-
-  case class SerializableStandin(methodPieces: MethodPieces,
-                                 targetReconstitutionData: Recorder#ItemReconstitutionData[_ <: Identified],
-                                 wrappedArguments: Array[Patch.WrappedArgument]) extends java.io.Serializable {
-    def readResolve(): Any = {
-      val MethodPieces(declaringClassOfMethod, methodName, methodParameterTypes, signatureDescriptor) = methodPieces
-      new Patch(declaringClassOfMethod.getMethod(methodName, methodParameterTypes: _*), targetReconstitutionData, wrappedArguments, new Signature(methodName, signatureDescriptor))
-    }
+      arguments map wrap)
   }
+
+  case class MethodPieces(declaringClassOfMethod: Class[_ <: Identified], methodName: String, methodParameterTypes: Array[Class[_]], signatureDescriptor: String) {
+    @transient
+    lazy val method = declaringClassOfMethod.getMethod(methodName, methodParameterTypes: _*)
+    @transient
+    lazy val signature = new Signature(methodName, signatureDescriptor)
+
+    def methodProxyFor(proxyClassOfTarget: Class[_ <: Identified]) = MethodProxy.find(proxyClassOfTarget, signature)
+  }
+
 }
 
-class Patch(method: Method,
+class Patch(methodPieces: MethodPieces,
             override val targetReconstitutionData: Recorder#ItemReconstitutionData[_ <: Identified],
-            wrappedArguments: Array[Patch.WrappedArgument],
-            signature: Signature) extends AbstractPatch(method) {
+            wrappedArguments: Array[Patch.WrappedArgument]) extends AbstractPatch {
   import Patch._
+
+  @transient
+  override lazy val method = methodPieces.method
 
   override val argumentReconstitutionDatums: Seq[Recorder#ItemReconstitutionData[_ <: Identified]] =
     wrappedArguments collect { case \/-(itemReconstitutionData) => itemReconstitutionData }
@@ -52,16 +55,11 @@ class Patch(method: Method,
   def apply(identifiedItemAccess: IdentifiedItemAccess): Unit = {
     val targetBeingPatched = identifiedItemAccess.reconstitute(targetReconstitutionData)
     val proxyClassOfTarget = targetBeingPatched.getClass()
-    val methodProxy = MethodProxy.find(proxyClassOfTarget, signature)
+    val methodProxy = methodPieces.methodProxyFor(proxyClassOfTarget)
     methodProxy.invoke(targetBeingPatched, wrappedArguments map unwrap(identifiedItemAccess))
   }
 
   def checkInvariant(identifiedItemAccess: IdentifiedItemAccess): Unit = {
     identifiedItemAccess.reconstitute(targetReconstitutionData).checkInvariant()
-  }
-
-  private def writeReplace(): Any = {
-    val methodPieces = MethodPieces(method.getDeclaringClass.asInstanceOf[Class[_ <: Identified]], method.getName, method.getParameterTypes, signature.getDescriptor)
-    SerializableStandin(methodPieces, targetReconstitutionData, wrappedArguments)
   }
 }
