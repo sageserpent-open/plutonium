@@ -1,6 +1,6 @@
 package com.sageserpent.plutonium
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, ObjectOutputStream}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import java.time.Instant
 
 import akka.util.ByteString
@@ -9,7 +9,7 @@ import com.esotericsoftware.kryo.io.{Input, Output}
 import com.esotericsoftware.kryo.serializers.JavaSerializer
 import org.objenesis.strategy.SerializingInstantiatorStrategy
 import redis.api.Limit
-import redis.{ByteStringDeserializer, ByteStringFormatter, ByteStringSerializer, RedisClient}
+import redis.{ByteStringFormatter, RedisClient}
 import resource._
 
 import scala.concurrent.duration.Duration
