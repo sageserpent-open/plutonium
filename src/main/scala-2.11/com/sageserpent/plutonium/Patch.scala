@@ -29,12 +29,9 @@ object Patch {
   }
 
   case class MethodPieces(declaringClassOfMethod: Class[_ <: Identified], methodName: String, methodParameterTypes: Array[Class[_]], signatureDescriptor: String) {
-    @transient
-    lazy val method = declaringClassOfMethod.getMethod(methodName, methodParameterTypes: _*)
-    @transient
-    lazy val signature = new Signature(methodName, signatureDescriptor)
+    def method = declaringClassOfMethod.getMethod(methodName, methodParameterTypes: _*)
 
-    def methodProxyFor(proxyClassOfTarget: Class[_ <: Identified]) = MethodProxy.find(proxyClassOfTarget, signature)
+    def methodProxyFor(proxyClassOfTarget: Class[_ <: Identified]) = MethodProxy.find(proxyClassOfTarget, new Signature(methodName, signatureDescriptor))
   }
 
 }
