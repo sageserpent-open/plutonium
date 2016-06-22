@@ -4,7 +4,7 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import java.time.Instant
 
 import akka.util.ByteString
-import com.esotericsoftware.kryo.Kryo
+import com.esotericsoftware.kryo.{Kryo, Serializer}
 import com.esotericsoftware.kryo.io.{Input, Output}
 import com.esotericsoftware.kryo.serializers.JavaSerializer
 import org.objenesis.strategy.SerializingInstantiatorStrategy
@@ -26,9 +26,29 @@ object WorldRedisBasedImplementation {
 
   val redisNamespaceComponentSeparator = ":"
 
+  val javaSerializer = new JavaSerializer
+
+  class ItemReconstitutionDataSerializer[Raw <: Identified] extends Serializer[Recorder#ItemReconstitutionData[Raw]]{
+
+    override def write(kryo: Kryo, output: Output, data: Recorder#ItemReconstitutionData[Raw]): Unit = {
+      val (id, typeTag) = data
+      kryo.writeClassAndObject(output, id)
+      kryo.writeObject(output, typeTag, javaSerializer)
+    }
+
+    override def read(kryo: Kryo, input: Input, dataType: Class[Recorder#ItemReconstitutionData[Raw]]): Recorder#ItemReconstitutionData[Raw] = {
+      val id = kryo.readClassAndObject(input).asInstanceOf[Raw#Id]
+      val typeTag = kryo.readObject[TypeTag[Raw]](input, classOf[TypeTag[Raw]], javaSerializer)
+      id -> typeTag
+    }
+  }
+
   val kryo: ThreadLocal[Kryo] = ThreadLocal.withInitial(() => {
     val kryo = new Kryo()
-    kryo.register(classOf[Recorder#ItemReconstitutionData[_ <: Identified]], new JavaSerializer)
+    def registerSerializerForItemReconstitutionData[Raw <: Identified]() = {
+      kryo.register(classOf[Recorder#ItemReconstitutionData[Raw]], new ItemReconstitutionDataSerializer[Raw])
+    }
+    registerSerializerForItemReconstitutionData()
     kryo.setInstantiatorStrategy(new SerializingInstantiatorStrategy)
     kryo
   })
