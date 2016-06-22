@@ -1,6 +1,5 @@
 package com.sageserpent.plutonium
 
-import java.io.{ObjectInputStream, ObjectOutputStream}
 import java.lang.reflect.Method
 
 /**
@@ -16,9 +15,11 @@ object AbstractPatch {
   }
 }
 
-abstract class AbstractPatch(val method: Method) extends java.io.Serializable {
+abstract class AbstractPatch extends java.io.Serializable {
+  val method: Method
   val targetReconstitutionData: Recorder#ItemReconstitutionData[_ <: Identified]
   val argumentReconstitutionDatums: Seq[Recorder#ItemReconstitutionData[_ <: Identified]]
+  @transient
   lazy val (targetId, targetTypeTag) = targetReconstitutionData
   def apply(identifiedItemAccess: IdentifiedItemAccess): Unit
   def checkInvariant(identifiedItemAccess: IdentifiedItemAccess): Unit

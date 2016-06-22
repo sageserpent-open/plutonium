@@ -28,7 +28,8 @@ object WorldRedisBasedImplementation {
 
   val kryo: ThreadLocal[Kryo] = ThreadLocal.withInitial(() => {
     val kryo = new Kryo()
-    kryo.register(classOf[Patch], new JavaSerializer)
+    kryo.register(classOf[Recorder#ItemReconstitutionData[_ <: Identified]], new JavaSerializer)
+    kryo.register(classOf[Patch.MethodPieces], new JavaSerializer)
     kryo.register(classOf[Annihilation[_ <: Identified]], new JavaSerializer)
     kryo.setInstantiatorStrategy(new SerializingInstantiatorStrategy)
     kryo
