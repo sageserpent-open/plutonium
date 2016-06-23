@@ -1,16 +1,15 @@
 package com.sageserpent.plutonium
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import java.time.Instant
 
 import akka.util.ByteString
-import com.esotericsoftware.kryo.{Kryo, Serializer}
 import com.esotericsoftware.kryo.io.{Input, Output}
 import com.esotericsoftware.kryo.serializers.JavaSerializer
+import com.esotericsoftware.kryo.{Kryo, Serializer}
+import com.twitter.chill.{KryoInstantiator, KryoPool}
 import org.objenesis.strategy.SerializingInstantiatorStrategy
 import redis.api.Limit
 import redis.{ByteStringFormatter, RedisClient}
-import resource._
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, Future}
@@ -42,38 +41,18 @@ object WorldRedisBasedImplementation {
     }
   }
 
-  val kryo: ThreadLocal[Kryo] = ThreadLocal.withInitial(() => {
-    val kryo = new Kryo()
+  val kryoPool = KryoPool.withByteArrayOutputStream(40, new KryoInstantiator().withRegistrar((kryo: Kryo) => {
     def registerSerializerForItemReconstitutionData[Raw <: Identified]() = {
       kryo.register(classOf[Recorder#ItemReconstitutionData[Raw]], new ItemReconstitutionDataSerializer[Raw])
     }
     registerSerializerForItemReconstitutionData()
     kryo.setInstantiatorStrategy(new SerializingInstantiatorStrategy)
-    kryo
-  })
+  }))
 
   def byteStringFormatterFor[Value: TypeTag] = new ByteStringFormatter[Value] {
-    override def serialize(data: Value): ByteString = {
-      val resource: ManagedResource[Array[Byte]] = for {
-        outputStream <- managed(new ByteArrayOutputStream())
-        objectOutput <- managed(new Output(outputStream))
-      } yield {
-        kryo.get.writeClassAndObject(objectOutput, data)
-        objectOutput.flush()
-        outputStream.toByteArray()
-      }
+    override def serialize(data: Value): ByteString = ByteString(kryoPool.toBytesWithClass(data))
 
-      resource.acquireAndGet(ByteString.apply)
-    }
-
-    override def deserialize(bs: ByteString): Value = {
-      val resource = for {
-        inputStream <- managed(new ByteArrayInputStream(bs.toArray))
-        objectInput <- managed(new Input(inputStream))
-      } yield kryo.get.readClassAndObject(objectInput)
-
-      resource.acquireAndGet(_.asInstanceOf[Value])
-    }
+    override def deserialize(bs: ByteString): Value = kryoPool.fromBytes(bs.toArray).asInstanceOf[Value]
   }
 
   implicit val byteStringFormatterForInstant = byteStringFormatterFor[Instant]

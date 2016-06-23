@@ -1,7 +1,7 @@
 lazy val settings = Seq(organization := "com.sageserpent",
   name := "plutonium",
   version := "1.0.1-SNAPSHOT",
-  scalaVersion := "2.11.7",
+  scalaVersion := "2.11.8",
   scalacOptions += "-Xexperimental",
 
   libraryDependencies += "org.scalaz" %% "scalaz-core" % "7.2.2",
@@ -11,7 +11,7 @@ lazy val settings = Seq(organization := "com.sageserpent",
   libraryDependencies += "org.scala-lang" % "scala-reflect" % "2.11.8",
   libraryDependencies += "com.github.etaty" %% "rediscala" % "1.6.0",
   libraryDependencies += "io.github.nicolasstucki" %% "multisets" % "0.3",
-  libraryDependencies += "com.esotericsoftware" % "kryo" % "3.0.3",
+  libraryDependencies += "com.twitter" % "chill_2.11" % "0.8.0",
 
   libraryDependencies += "org.slf4j" % "slf4j-api" % "1.7.21" % "provided",
   libraryDependencies += "org.slf4j" % "slf4j-nop" % "1.7.21" % "test",
