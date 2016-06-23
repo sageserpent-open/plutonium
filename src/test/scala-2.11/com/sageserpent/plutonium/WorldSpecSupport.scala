@@ -568,7 +568,6 @@ trait WorldRedisBasedImplementationResource extends WorldResource with RedisServ
   val worldResourceGenerator: Gen[ManagedResource[World[Int]]] =
     Gen.const {
       for {
-        akkaSystem <- makeManagedResource(akka.actor.ActorSystem())(_.shutdown())(List.empty)
         redisClient <- makeManagedResource(RedisClient(host = "localhost", port = redisServerPort)(akkaSystem))(_.stop())(List.empty)
         worldResource <- makeManagedResource(new WorldRedisBasedImplementation[Int](redisClient, UUID.randomUUID().toString))(_ => {})(List.empty)
       } yield worldResource

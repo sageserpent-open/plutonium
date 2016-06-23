@@ -153,7 +153,6 @@ class WorldStateSharingSpecUsingWorldRedisBasedImplementation extends WorldState
 
   val worldSharingCommonStateFactoryResourceGenerator: Gen[ManagedResource[() => World[Int]]] =
     Gen.const(for {
-      akkaSystem <- makeManagedResource(akka.actor.ActorSystem())(_.shutdown())(List.empty)
       sharedGuid <- makeManagedResource(UUID.randomUUID().toString)(_ => {})(List.empty)
       redisClientSet <- makeManagedResource(Set.empty[RedisClient])(redisClientSet => redisClientSet.foreach(_.stop()))(List.empty)
     } yield {

@@ -1,5 +1,6 @@
 package com.sageserpent.plutonium
 
+import akka.actor.ActorSystem
 import com.typesafe.config.ConfigFactory
 import org.scalatest.{BeforeAndAfterAll, Suite}
 
@@ -14,6 +15,8 @@ trait DisableAkkaLogging extends BeforeAndAfterAll {
   var akkaLogLevel = "ERROR"
   var akkaDeadLettersLogging = 0
   var akkaDeadLettersDuringShutdownLogging = false
+
+  var akkaSystem: ActorSystem = null
 
   override protected def beforeAll() = {
     super.beforeAll()
@@ -30,9 +33,14 @@ trait DisableAkkaLogging extends BeforeAndAfterAll {
     System.setProperty(akkaDeadLettersDuringShutdownKey, false.toString)
 
     ConfigFactory.invalidateCaches()
+
+    akkaSystem = akka.actor.ActorSystem()
   }
 
   override protected  def afterAll() = {
+    akkaSystem.shutdown
+    akkaSystem.awaitTermination()
+
     System.setProperty(akkaStdoutLogLevelKey, akkaStdOutLogging)
     System.setProperty(akkaLogLevelKey, akkaLogLevel)
     System.setProperty(akkaDeadLettersKey, akkaDeadLettersLogging.toString)
