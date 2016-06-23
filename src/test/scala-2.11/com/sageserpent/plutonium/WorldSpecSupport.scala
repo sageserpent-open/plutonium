@@ -14,7 +14,6 @@ import com.sageserpent.americium.seqEnrichment._
 import com.sageserpent.plutonium.World._
 import org.scalacheck.{Arbitrary, Gen}
 import redis.RedisClient
-import redis.embedded.RedisServer
 import resource._
 
 import scala.collection.JavaConversions._
@@ -569,7 +568,6 @@ trait WorldRedisBasedImplementationResource extends WorldResource with RedisServ
   val worldResourceGenerator: Gen[ManagedResource[World[Int]]] =
     Gen.const {
       for {
-        akkaSystem <- makeManagedResource(akka.actor.ActorSystem())(_.shutdown())(List.empty)
         redisClient <- makeManagedResource(RedisClient(host = "localhost", port = redisServerPort)(akkaSystem))(_.stop())(List.empty)
         worldResource <- makeManagedResource(new WorldRedisBasedImplementation[Int](redisClient, UUID.randomUUID().toString))(_ => {})(List.empty)
       } yield worldResource

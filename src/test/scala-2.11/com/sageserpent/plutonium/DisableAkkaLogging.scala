@@ -1,5 +1,6 @@
 package com.sageserpent.plutonium
 
+import akka.actor.ActorSystem
 import com.typesafe.config.ConfigFactory
 import org.scalatest.{BeforeAndAfterAll, Suite}
 
@@ -10,25 +11,40 @@ trait DisableAkkaLogging extends BeforeAndAfterAll {
   this: Suite =>
   import DisableAkkaLogging._
 
-  var akkaStdOutLogLevel = "OFF"
+  var akkaStdOutLogging = "OFF"
   var akkaLogLevel = "ERROR"
+  var akkaDeadLettersLogging = 0
+  var akkaDeadLettersDuringShutdownLogging = false
+
+  var akkaSystem: ActorSystem = null
 
   override protected def beforeAll() = {
     super.beforeAll()
 
     val config = ConfigFactory.load()
-    akkaStdOutLogLevel = config.getString(akkaStdoutLogLevelKey)
+    akkaStdOutLogging = config.getString(akkaStdoutLogLevelKey)
     akkaLogLevel = config.getString(akkaLogLevelKey)
+    akkaDeadLettersLogging = config.getInt(akkaDeadLettersKey)
+    akkaDeadLettersDuringShutdownLogging = config.getBoolean(akkaDeadLettersDuringShutdownKey)
 
     System.setProperty(akkaStdoutLogLevelKey, "OFF")
     System.setProperty(akkaLogLevelKey, "ERROR")
+    System.setProperty(akkaDeadLettersKey, 0.toString)
+    System.setProperty(akkaDeadLettersDuringShutdownKey, false.toString)
 
     ConfigFactory.invalidateCaches()
+
+    akkaSystem = akka.actor.ActorSystem()
   }
 
   override protected  def afterAll() = {
-    System.setProperty(akkaStdoutLogLevelKey, akkaStdOutLogLevel)
+    akkaSystem.shutdown
+    akkaSystem.awaitTermination()
+
+    System.setProperty(akkaStdoutLogLevelKey, akkaStdOutLogging)
     System.setProperty(akkaLogLevelKey, akkaLogLevel)
+    System.setProperty(akkaDeadLettersKey, akkaDeadLettersLogging.toString)
+    System.setProperty(akkaDeadLettersDuringShutdownKey, akkaDeadLettersDuringShutdownLogging.toString)
 
     ConfigFactory.invalidateCaches()
 
@@ -39,4 +55,6 @@ trait DisableAkkaLogging extends BeforeAndAfterAll {
 object DisableAkkaLogging {
   val akkaStdoutLogLevelKey: String = "akka.stdout-loglevel"
   val akkaLogLevelKey: String = "akka.loglevel"
+  val akkaDeadLettersKey: String = "akka.log-dead-letters"
+  val akkaDeadLettersDuringShutdownKey: String = "akka.log-dead-letters-during-shutdown"
 }

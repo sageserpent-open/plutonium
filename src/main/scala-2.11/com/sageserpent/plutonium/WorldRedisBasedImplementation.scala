@@ -1,11 +1,15 @@
 package com.sageserpent.plutonium
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, ObjectOutputStream}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import java.time.Instant
 
 import akka.util.ByteString
+import com.esotericsoftware.kryo.{Kryo, Serializer}
+import com.esotericsoftware.kryo.io.{Input, Output}
+import com.esotericsoftware.kryo.serializers.JavaSerializer
+import org.objenesis.strategy.SerializingInstantiatorStrategy
 import redis.api.Limit
-import redis.{ByteStringDeserializer, ByteStringFormatter, ByteStringSerializer, RedisClient}
+import redis.{ByteStringFormatter, RedisClient}
 import resource._
 
 import scala.concurrent.duration.Duration
@@ -22,34 +26,52 @@ object WorldRedisBasedImplementation {
 
   val redisNamespaceComponentSeparator = ":"
 
-  val byteStringSerializerForString = implicitly[ByteStringSerializer[String]]
-  val byteStringDeserializerForString = implicitly[ByteStringDeserializer[String]]
+  val javaSerializer = new JavaSerializer
+
+  class ItemReconstitutionDataSerializer[Raw <: Identified] extends Serializer[Recorder#ItemReconstitutionData[Raw]]{
+    override def write(kryo: Kryo, output: Output, data: Recorder#ItemReconstitutionData[Raw]): Unit = {
+      val (id, typeTag) = data
+      kryo.writeClassAndObject(output, id)
+      kryo.writeObject(output, typeTag, javaSerializer)
+    }
+
+    override def read(kryo: Kryo, input: Input, dataType: Class[Recorder#ItemReconstitutionData[Raw]]): Recorder#ItemReconstitutionData[Raw] = {
+      val id = kryo.readClassAndObject(input).asInstanceOf[Raw#Id]
+      val typeTag = kryo.readObject[TypeTag[Raw]](input, classOf[TypeTag[Raw]], javaSerializer)
+      id -> typeTag
+    }
+  }
+
+  val kryo: ThreadLocal[Kryo] = ThreadLocal.withInitial(() => {
+    val kryo = new Kryo()
+    def registerSerializerForItemReconstitutionData[Raw <: Identified]() = {
+      kryo.register(classOf[Recorder#ItemReconstitutionData[Raw]], new ItemReconstitutionDataSerializer[Raw])
+    }
+    registerSerializerForItemReconstitutionData()
+    kryo.setInstantiatorStrategy(new SerializingInstantiatorStrategy)
+    kryo
+  })
 
   def byteStringFormatterFor[Value: TypeTag] = new ByteStringFormatter[Value] {
     override def serialize(data: Value): ByteString = {
       val resource: ManagedResource[Array[Byte]] = for {
         outputStream <- managed(new ByteArrayOutputStream())
-        objectOutputStream <- managed(new ObjectOutputStream(outputStream))
+        objectOutput <- managed(new Output(outputStream))
       } yield {
-        data match {
-          case data: java.io.Serializable if typeTag[Value].tpe <:< typeTag[java.io.Serializable].tpe => objectOutputStream.writeObject(data)
-          case data: Int if typeTag[Value].tpe =:= typeTag[Int].tpe => objectOutputStream.writeInt(data)
-        }
-
-        objectOutputStream.flush()
+        kryo.get.writeClassAndObject(objectOutput, data)
+        objectOutput.flush()
         outputStream.toByteArray()
       }
-      resource.acquireAndGet(ByteString.apply(_))
+
+      resource.acquireAndGet(ByteString.apply)
     }
 
     override def deserialize(bs: ByteString): Value = {
       val resource = for {
         inputStream <- managed(new ByteArrayInputStream(bs.toArray))
-        objectInputStream <- managed(new ObjectInputStream(inputStream))
-      } yield () match {
-        case _ if typeTag[Value].tpe <:< typeTag[java.io.Serializable].tpe => objectInputStream.readObject
-        case _ if typeTag[Value].tpe =:= typeTag[Int].tpe => objectInputStream.readInt()
-      }
+        objectInput <- managed(new Input(inputStream))
+      } yield kryo.get.readClassAndObject(objectInput)
+
       resource.acquireAndGet(_.asInstanceOf[Value])
     }
   }
