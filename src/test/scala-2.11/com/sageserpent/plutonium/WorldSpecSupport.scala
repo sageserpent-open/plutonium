@@ -14,7 +14,6 @@ import com.sageserpent.americium.seqEnrichment._
 import com.sageserpent.plutonium.World._
 import org.scalacheck.{Arbitrary, Gen}
 import redis.RedisClient
-import redis.embedded.RedisServer
 import resource._
 
 import scala.collection.JavaConversions._
