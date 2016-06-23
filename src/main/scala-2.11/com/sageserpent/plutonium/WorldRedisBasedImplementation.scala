@@ -29,7 +29,6 @@ object WorldRedisBasedImplementation {
   val javaSerializer = new JavaSerializer
 
   class ItemReconstitutionDataSerializer[Raw <: Identified] extends Serializer[Recorder#ItemReconstitutionData[Raw]]{
-
     override def write(kryo: Kryo, output: Output, data: Recorder#ItemReconstitutionData[Raw]): Unit = {
       val (id, typeTag) = data
       kryo.writeClassAndObject(output, id)
