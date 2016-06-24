@@ -7,6 +7,8 @@ package com.sageserpent.plutonium
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 
+import com.esotericsoftware.kryo.io.{Input, Output}
+import com.esotericsoftware.kryo.{Kryo, KryoSerializable}
 import com.sageserpent.americium
 import com.sageserpent.americium._
 import com.sageserpent.americium.randomEnrichment._
@@ -15,12 +17,11 @@ import org.scalacheck.Prop.BooleanOperators
 import org.scalacheck.{Gen, Prop}
 import org.scalatest.prop.Checkers
 import org.scalatest.{FlatSpec, Matchers}
-import resource.ManagedResource
 
-import scalaz.syntax.applicativePlus._
 import scala.collection.immutable.{::, TreeMap}
 import scala.util.Random
 import scalaz.std.stream
+import scalaz.syntax.applicativePlus._
 
 trait WorldBehaviours extends FlatSpec with Matchers with Checkers with WorldSpecSupport {
   this: WorldResource =>
@@ -1395,14 +1396,78 @@ class WorldSpecUsingWorldReferenceImplementation extends WorldBehaviours with Wo
   "A world with events that have since been corrected (using the world reference implementation)" should behave like worldWithEventsThatHaveSinceBeenCorrectedBehaviour
 }
 
+class HistoryWhoseIdWontSerialize(val id: HistoryWhoseIdWontSerialize#Id) extends History {
+  type Id = WontSerializeId
+
+  var property: String = ""
+}
+
+case class WontSerializeId(var id: Int) extends KryoSerializable {
+  override def write(kryo: Kryo, output: Output): Unit = {
+    println("Should fail to serialize.")
+    ???
+  }
+
+  override def read(kryo: Kryo, input: Input): Unit = {
+    id = kryo.readObject(input, classOf[Int])
+  }
+}
+
+class HistoryWhoseIdWontDeserialize(val id: HistoryWhoseIdWontDeserialize#Id) extends History{
+  type Id = WontDeserializeId
+
+  var property: Boolean = false
+}
+
+case class WontDeserializeId(var id: String) extends KryoSerializable {
+  override def write(kryo: Kryo, output: Output): Unit = kryo.writeObject(output, id)
+
+  override def read(kryo: Kryo, input: Input): Unit = {
+    println("Should fail to deserialize.")
+    ???
+  }
+}
+
 class WorldSpecUsingWorldRedisBasedImplementation extends WorldBehaviours with WorldRedisBasedImplementationResource {
   val redisServerPort = 6454
 
-  "A world with no history (using the world Redis-based implementation)" should behave like worldWithNoHistoryBehaviour
+/*  "A world with no history (using the world Redis-based implementation)" should behave like worldWithNoHistoryBehaviour
 
   "A world with history added in order of increasing event time (using the world Redis-based implementation)" should behave like worldWithHistoryAddedInOrderOfIncreasingEventTimeBehaviour
 
   "A world (using the world Redis-based implementation)" should behave like worldBehaviour
 
-  "A world with events that have since been corrected (using the world Redis-based implementation)" should behave like worldWithEventsThatHaveSinceBeenCorrectedBehaviour
+  "A world with events that have since been corrected (using the world Redis-based implementation)" should behave like worldWithEventsThatHaveSinceBeenCorrectedBehaviour*/
+
+  "A world" should "be usable even if (de)serialization fails" in {
+    val testCaseGenerator = for {
+      worldResource <- worldResourceGenerator
+      asOf <- instantGenerator
+      queryWhen <- unboundedInstantGenerator
+    } yield (worldResource, asOf, queryWhen)
+    check(Prop.forAllNoShrink(testCaseGenerator) {
+      case (worldResource, asOf, queryWhen) =>
+        worldResource acquireAndGet {
+        world =>
+          val itemOneId = WontSerializeId(1)
+
+          intercept[NotImplementedError] {
+            world.revise(Map(100 -> Some(Change.forOneItem[HistoryWhoseIdWontSerialize](NegativeInfinity[Instant]())(itemOneId, (_.property = "Fred")))), asOf)
+          }
+
+          val firstRevisionAttemptFailed = (world.nextRevision == World.initialRevision) :| s"The first revision attempt should have failed due to serialization throwing an exception."
+
+          val itemTwoId = WontDeserializeId("Elma")
+
+          world.revise(Map(200 -> Some(Change.forOneItem[HistoryWhoseIdWontDeserialize](NegativeInfinity[Instant]())(itemTwoId, (_.property = true)))), asOf)
+
+          intercept[NotImplementedError] {
+            val scope = world.scopeFor(queryWhen, world.nextRevision)
+            scope.render(Bitemporal.wildcard[History]())
+          }
+
+          firstRevisionAttemptFailed
+      }
+    })
+  }
 }
