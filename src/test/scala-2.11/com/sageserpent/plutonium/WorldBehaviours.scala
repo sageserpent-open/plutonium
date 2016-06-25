@@ -1433,15 +1433,15 @@ case class WontDeserializeId(var id: String) extends KryoSerializable {
 class WorldSpecUsingWorldRedisBasedImplementation extends WorldBehaviours with WorldRedisBasedImplementationResource {
   val redisServerPort = 6454
 
-/*  "A world with no history (using the world Redis-based implementation)" should behave like worldWithNoHistoryBehaviour
+  "A world with no history (using the world Redis-based implementation)" should behave like worldWithNoHistoryBehaviour
 
   "A world with history added in order of increasing event time (using the world Redis-based implementation)" should behave like worldWithHistoryAddedInOrderOfIncreasingEventTimeBehaviour
 
   "A world (using the world Redis-based implementation)" should behave like worldBehaviour
 
-  "A world with events that have since been corrected (using the world Redis-based implementation)" should behave like worldWithEventsThatHaveSinceBeenCorrectedBehaviour*/
+  "A world with events that have since been corrected (using the world Redis-based implementation)" should behave like worldWithEventsThatHaveSinceBeenCorrectedBehaviour
 
-  "A world" should "be usable even if (de)serialization fails" in {
+  /*"A world"*/ignore should "be usable even if (de)serialization fails" in {
     val testCaseGenerator = for {
       worldResource <- worldResourceGenerator
       asOf <- instantGenerator
