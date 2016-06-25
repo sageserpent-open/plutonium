@@ -4,7 +4,6 @@ import java.time.Instant
 import java.util
 import java.util.{Optional, UUID}
 
-import com.lambdaworks.redis.{RedisClient, RedisURI}
 import com.sageserpent.americium.Unbounded
 import org.scalacheck.{Gen, Prop}
 import org.scalatest.prop.Checkers
@@ -14,16 +13,15 @@ import org.scalatest.{FlatSpec, Matchers}
 import scala.util.Random
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.plutonium.World.Revision
+import redis.RedisClient
 import resource._
 
 import scala.collection.mutable.Set
-import scala.pickling.pickler.AllPicklers.intPickler
 
 /**
   * Created by Gerard on 13/02/2016.
   */
 trait WorldStateSharingBehaviours extends FlatSpec with Matchers with Checkers with WorldSpecSupport {
-
   class DemultiplexingWorld(worldFactory: () => World[Int], seed: Long) extends World[Int] {
     val random = new scala.util.Random(seed)
 
@@ -63,22 +61,9 @@ trait WorldStateSharingBehaviours extends FlatSpec with Matchers with Checkers w
   implicit override val generatorDrivenConfig =
     PropertyCheckConfig(maxSize = 40, minSuccessful = 200)
 
-  val worldReferenceImplementationSharingCommonStateFactoryResourceGenerator: Gen[ManagedResource[() => World[Int]]] =
-    Gen.const(for (sharedMutableState <- makeManagedResource(new MutableState[Int])(_ => {})(List.empty))
-      yield () => new WorldReferenceImplementation[Int](mutableState = sharedMutableState))
+  val worldSharingCommonStateFactoryResourceGenerator: Gen[ManagedResource[() => World[Int]]]
 
-  val worldRedisBasedImplementationSharingCommonStateFactoryResourceGenerator: Gen[ManagedResource[() => World[Int]]] =
-    Gen.const(for {
-      sharedGuid <- makeManagedResource(UUID.randomUUID().toString)(_ => {})(List.empty)
-      redisClientSet <- makeManagedResource(Set.empty[RedisClient])(redisClientSet => redisClientSet.foreach(_.shutdown()))(List.empty)
-    } yield {
-      val redisClient = RedisClient.create(RedisURI.Builder.redis("localhost", WorldSpecSupport.redisServerPort).build())
-      redisClientSet += redisClient
-      () => new WorldRedisBasedImplementation[Int](redisClient, sharedGuid)
-    })
-
-
-  def multipleInstancesRepresentingTheSameWorldBehaviour(worldSharingCommonStateFactoryResourceGenerator: Gen[ManagedResource[() => World[Revision]]]) = {
+  def multipleInstancesRepresentingTheSameWorldBehaviour = {
     they should "yield the same results to scope queries regardless of which instance is used to define a revision" in {
       val testCaseGenerator = for {
         worldSharingCommonStateFactoryResource <- worldSharingCommonStateFactoryResourceGenerator
@@ -156,9 +141,25 @@ trait WorldStateSharingBehaviours extends FlatSpec with Matchers with Checkers w
 }
 
 class WorldStateSharingSpecUsingWorldReferenceImplementation extends WorldStateSharingBehaviours {
-  "multiple world instances representing the same world (using the world reference implementation)" should behave like multipleInstancesRepresentingTheSameWorldBehaviour(worldReferenceImplementationSharingCommonStateFactoryResourceGenerator)
+  val worldSharingCommonStateFactoryResourceGenerator: Gen[ManagedResource[() => World[Int]]] =
+    Gen.const(for (sharedMutableState <- makeManagedResource(new MutableState[Int])(_ => {})(List.empty))
+      yield () => new WorldReferenceImplementation[Int](mutableState = sharedMutableState))
+
+  "multiple world instances representing the same world (using the world reference implementation)" should behave like multipleInstancesRepresentingTheSameWorldBehaviour
 }
 
-class WorldStateSharingSpecUsingWorldRedisBasedImplementation extends WorldStateSharingBehaviours with RedisServerFixture {
-  "multiple world instances representing the same world (using the world Redis-based implementation)" should behave like multipleInstancesRepresentingTheSameWorldBehaviour(worldRedisBasedImplementationSharingCommonStateFactoryResourceGenerator)
+class WorldStateSharingSpecUsingWorldRedisBasedImplementation extends WorldStateSharingBehaviours with RedisServerFixture with DisableAkkaLogging {
+  val redisServerPort: Int = 6451
+
+  val worldSharingCommonStateFactoryResourceGenerator: Gen[ManagedResource[() => World[Int]]] =
+    Gen.const(for {
+      sharedGuid <- makeManagedResource(UUID.randomUUID().toString)(_ => {})(List.empty)
+      redisClientSet <- makeManagedResource(Set.empty[RedisClient])(redisClientSet => redisClientSet.foreach(_.stop()))(List.empty)
+    } yield {
+      val redisClient = RedisClient(host = "localhost", port = redisServerPort)(akkaSystem)
+      redisClientSet += redisClient
+      () => new WorldRedisBasedImplementation[Int](redisClient, sharedGuid)
+    })
+
+  "multiple world instances representing the same world (using the world Redis-based implementation)" should behave like multipleInstancesRepresentingTheSameWorldBehaviour
 }

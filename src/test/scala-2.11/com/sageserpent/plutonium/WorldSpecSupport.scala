@@ -7,14 +7,14 @@ package com.sageserpent.plutonium
 import java.time.Instant
 import java.util.UUID
 
-import com.lambdaworks.redis.{RedisClient, RedisURI}
 import com.sageserpent.americium
 import com.sageserpent.americium._
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.seqEnrichment._
 import com.sageserpent.plutonium.World._
 import org.scalacheck.{Arbitrary, Gen}
-import redis.embedded.RedisServer
+import redis.RedisClient
+import resource._
 
 import scala.collection.JavaConversions._
 import scala.collection.Searching._
@@ -23,39 +23,15 @@ import scala.collection.immutable.TreeMap
 import scala.reflect.runtime.universe._
 import scala.util.Random
 import scalaz.std.stream
-import resource._
-
-import scala.pickling.pickler.AllPicklers.intPickler
 
 
 object WorldSpecSupport {
   val changeError = new RuntimeException("Error in making a change.")
-
-  val redisServerPort = 6451
 }
 
+
 trait WorldSpecSupport {
-
   import WorldSpecSupport._
-
-  val worldReferenceImplementationResourceGenerator: Gen[ManagedResource[World[Int]]] =
-    Gen.const(makeManagedResource(new WorldReferenceImplementation[Int])(_ => {})(List.empty))
-
-  val worldRedisBasedImplementationResourceGenerator: Gen[ManagedResource[World[Int]]] =
-    Gen.const {
-      for {
-        redisClient <- makeManagedResource(RedisClient.create(RedisURI.Builder.redis("localhost", redisServerPort).build()))(_.shutdown())(List.empty)
-        worldResource <- makeManagedResource(new WorldRedisBasedImplementation[Int](redisClient, UUID.randomUUID().toString))(_ => {})(List.empty)
-      } yield worldResource
-    }
-
-  def withRedisServerRunning[Result](block: => Result): Result = {
-    makeManagedResource {
-      val redisServer = new RedisServer(redisServerPort)
-      redisServer.start()
-      redisServer
-    }(_.stop)(List.empty) acquireAndGet (_ => block)
-  }
 
   val seedGenerator = Arbitrary.arbitrary[Long]
 
@@ -577,4 +553,23 @@ trait WorldSpecSupport {
   val mixedRecordingsForReferencedIdGenerator = dataSamplesForAnIdGenerator_[FooHistory](Gen.oneOf(ReferringHistory.specialFooIds), Gen.oneOf(dataSampleGenerator1(faulty = false), moreSpecificFooDataSampleGenerator(faulty = false)), dataSampleGenerator2(faulty = false))
 
   def referencedHistoryRecordingsGroupedByIdGenerator(forbidAnnihilations: Boolean) = recordingsGroupedByIdGenerator_(mixedRecordingsForReferencedIdGenerator, forbidAnnihilations = forbidAnnihilations)
+}
+
+trait WorldResource {
+  val worldResourceGenerator: Gen[ManagedResource[World[Int]]]
+}
+
+trait WorldReferenceImplementationResource extends WorldResource {
+  val worldResourceGenerator: Gen[ManagedResource[World[Int]]] =
+    Gen.const(makeManagedResource(new WorldReferenceImplementation[Int])(_ => {})(List.empty))
+}
+
+trait WorldRedisBasedImplementationResource extends WorldResource with RedisServerFixture with DisableAkkaLogging {
+  val worldResourceGenerator: Gen[ManagedResource[World[Int]]] =
+    Gen.const {
+      for {
+        redisClient <- makeManagedResource(RedisClient(host = "localhost", port = redisServerPort)(akkaSystem))(_.stop())(List.empty)
+        worldResource <- makeManagedResource(new WorldRedisBasedImplementation[Int](redisClient, UUID.randomUUID().toString))(_ => {})(List.empty)
+      } yield worldResource
+    }
 }

@@ -16,10 +16,12 @@ import resource.ManagedResource
   * Created by Gerard on 13/02/2016.
   */
 trait ExperimentalWorldBehaviours extends FlatSpec with Matchers with Checkers with WorldSpecSupport {
+  this: WorldResource =>
+
   implicit override val generatorDrivenConfig =
     PropertyCheckConfig(maxSize = 20, minSuccessful = 200)
 
-  def experimentalWorldBehaviour(worldResourceGenerator: Gen[ManagedResource[World[Int]]]) = {
+  def experimentalWorldBehaviour = {
     def scopeAndExperimentalWorldFor(baseWorld: World[Int], forkWhen: Unbounded[Instant], forkAsOf: Instant, seed: Long): (Scope, World[Int]) = {
       val random = new Random(seed)
 
@@ -304,10 +306,12 @@ trait ExperimentalWorldBehaviours extends FlatSpec with Matchers with Checkers w
   }
 }
 
-class ExperimentalWorldSpecUsingWorldReferenceImplementation extends ExperimentalWorldBehaviours {
-  "An experimental world (using the world reference implementation)" should behave like experimentalWorldBehaviour(worldResourceGenerator = worldReferenceImplementationResourceGenerator)
+class ExperimentalWorldSpecUsingWorldReferenceImplementation extends ExperimentalWorldBehaviours with WorldReferenceImplementationResource {
+  "An experimental world (using the world reference implementation)" should behave like experimentalWorldBehaviour
 }
 
-class ExperimentalWorldSpecUsingWorldRedisBasedImplementation extends ExperimentalWorldBehaviours with RedisServerFixture {
-  "An experimental world (using the world Redis-based implementation)" should behave like experimentalWorldBehaviour(worldResourceGenerator = worldRedisBasedImplementationResourceGenerator)
+class ExperimentalWorldSpecUsingWorldRedisBasedImplementation extends ExperimentalWorldBehaviours with WorldRedisBasedImplementationResource {
+  val redisServerPort = 6452
+
+  "An experimental world (using the world Redis-based implementation)" should behave like experimentalWorldBehaviour
 }

@@ -6,7 +6,6 @@ import java.util.Optional
 
 import com.sageserpent.americium.{Finite, NegativeInfinity, PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.World.Revision
-import com.sageserpent.plutonium.WorldImplementationCodeFactoring.IdentifiedItemsScope
 import net.sf.cglib.proxy._
 import resource.{ManagedResource, makeManagedResource}
 
@@ -24,7 +23,7 @@ import scala.reflect.runtime.universe._
 object WorldImplementationCodeFactoring {
   type EventOrderingTiebreakerIndex = Int
 
-  sealed abstract class AbstractEventData {
+  sealed abstract class AbstractEventData extends java.io.Serializable {
     val introducedInRevision: Revision
   }
 
@@ -61,7 +60,7 @@ object WorldImplementationCodeFactoring {
         val mutationCallback = new MethodInterceptor {
           override def intercept(target: Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy): AnyRef = {
             val item = target.asInstanceOf[Recorder] // Remember, the outer context is making a proxy of type 'Raw'.
-            val capturedPatch = new Patch(item, method, arguments, methodProxy)
+            val capturedPatch = Patch(item, method, arguments, methodProxy)
             patchesPickedUpFromAnEventBeingApplied += capturedPatch
             null // Representation of a unit value by a CGLIB interceptor.
           }
@@ -413,10 +412,10 @@ object WorldImplementationCodeFactoring {
 
     override def numberOf[Raw <: Identified : TypeTag](id: Raw#Id): Int = identifiedItemsScope.itemsFor(id).size
   }
-
 }
 
 abstract class WorldImplementationCodeFactoring[EventId] extends World[EventId] {
+
   import WorldImplementationCodeFactoring._
 
   abstract class ScopeBasedOnNextRevision(val when: Unbounded[Instant], val nextRevision: Revision) extends com.sageserpent.plutonium.Scope {
@@ -463,16 +462,17 @@ abstract class WorldImplementationCodeFactoring[EventId] extends World[EventId] 
   }
 
   def revise(events: Map[EventId, Option[Event]], asOf: Instant): Revision = {
-    val nextRevisionPriorToUpdate = nextRevision
-    val newEventDatums: Map[EventId, AbstractEventData] = events.zipWithIndex map { case ((eventId, event), tiebreakerIndex) =>
-      eventId -> (event match {
-        case Some(event) => EventData(serializableEventFrom(event), nextRevisionPriorToUpdate, tiebreakerIndex)
-        case None => AnnulledEventData(nextRevisionPriorToUpdate)
-      })
+    def newEventDatumsFor(nextRevisionPriorToUpdate: Revision): Map[EventId, AbstractEventData] = {
+      events.zipWithIndex map { case ((eventId, event), tiebreakerIndex) =>
+        eventId -> (event match {
+          case Some(event) => EventData(serializableEventFrom(event), nextRevisionPriorToUpdate, tiebreakerIndex)
+          case None => AnnulledEventData(nextRevisionPriorToUpdate)
+        })
+      }
     }
 
-    transactNewRevision(asOf, newEventDatums) {
-      (pertinentEventDatumsExcludingTheNewRevision: Seq[AbstractEventData], obsoleteEventDatums: Set[AbstractEventData]) =>
+    def buildAndValidateEventTimelineForProposedNewRevision(newEventDatums: Map[EventId, AbstractEventData],
+                                                            nextRevisionPriorToUpdate: Revision, pertinentEventDatumsExcludingTheNewRevision: Seq[AbstractEventData], obsoleteEventDatums: Set[AbstractEventData]): Unit = {
       val eventTimelineIncludingNewRevision = eventTimelineFrom(pertinentEventDatumsExcludingTheNewRevision filterNot obsoleteEventDatums.contains union newEventDatums.values.toStream)
 
       val nextRevisionAfterTransactionIsCompleted = 1 + nextRevisionPriorToUpdate
@@ -483,15 +483,16 @@ abstract class WorldImplementationCodeFactoring[EventId] extends World[EventId] 
       new IdentifiedItemsScope(PositiveInfinity[Instant], nextRevisionAfterTransactionIsCompleted, Finite(asOf), eventTimelineIncludingNewRevision)
     }
 
-    nextRevisionPriorToUpdate
+    transactNewRevision(asOf, newEventDatumsFor, buildAndValidateEventTimelineForProposedNewRevision)
   }
 
   protected def eventTimeline(nextRevision: Revision): Seq[SerializableEvent]
 
-  protected def transactNewRevision(asOf: Instant, newEventDatums: Map[EventId, AbstractEventData])
-                                   (buildAndValidateEventTimelineForProposedNewRevision: (Seq[AbstractEventData], Set[AbstractEventData]) => Unit): Unit
+  protected def transactNewRevision(asOf: Instant,
+                                    newEventDatumsFor: Revision => Map[EventId, AbstractEventData],
+                                    buildAndValidateEventTimelineForProposedNewRevision: (Map[EventId, AbstractEventData], Revision, Seq[AbstractEventData], Set[AbstractEventData]) => Unit): Revision
 
-  protected def checkRevisionPrecondition(asOf: Instant): Unit = {
+  protected def checkRevisionPrecondition(asOf: Instant, revisionAsOfs: Seq[Instant]): Unit = {
     if (revisionAsOfs.nonEmpty && revisionAsOfs.last.isAfter(asOf)) throw new IllegalArgumentException(s"'asOf': ${asOf} should be no earlier than that of the last revision: ${revisionAsOfs.last}")
   }
 }
