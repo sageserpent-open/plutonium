@@ -11,7 +11,7 @@ import org.objenesis.strategy.SerializingInstantiatorStrategy
 import redis.api.Limit
 import redis.{ByteStringFormatter, RedisClient}
 
-import scala.concurrent.duration.Duration
+import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionException, Future}
 import scala.reflect.runtime.universe._
 
@@ -91,7 +91,10 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
     redisClient.lrange[Instant](asOfsKey, 0, -1)
   }
 
-  override protected def eventTimeline(nextRevision: Revision): Seq[SerializableEvent] = eventTimelineFrom(Await.result(pertinentEventDatumsFuture(nextRevision), Duration.Inf))
+  override protected def eventTimeline(nextRevision: Revision): Seq[SerializableEvent] = {
+    val atMost = 10 millis span
+    eventTimelineFrom(Await.result(pertinentEventDatumsFuture(nextRevision), atMost))
+  }
 
   private def pertinentEventDatumsFuture(nextRevision: Revision, eventIds: Seq[EventId]): Future[Seq[AbstractEventData]] = Future.traverse(eventIds)(eventId =>
     redisClient.zrevrangebyscore[AbstractEventData](eventCorrectionsKeyFrom(eventId),

@@ -1465,10 +1465,12 @@ class WorldSpecUsingWorldRedisBasedImplementation extends WorldBehaviours with W
 
           world.revise(Map(200 -> Some(Change.forOneItem[HistoryWhoseIdWontDeserialize](NegativeInfinity[Instant]())(itemTwoId, (_.property = true)))), asOf)
 
-          intercept[BadDeserializationException] {
+          val exceptionDueToFailedDeserialization = intercept[java.util.concurrent.TimeoutException] {
             val scope = world.scopeFor(queryWhen, world.nextRevision)
             scope.render(Bitemporal.wildcard[History]())
           }
+
+          val deserializationFailedInExpectedManner = (exceptionDueToFailedDeserialization == BadDeserializationException()) :| s"Expected an instance of 'BadDeserializationException', but got a '$exceptionDueToFailedDeserialization' instead."
 
           serializationFailedInExpectedManner && firstRevisionAttemptFailed
       }
