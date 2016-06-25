@@ -8,7 +8,7 @@ import java.time.Instant
 import java.time.temporal.ChronoUnit
 
 import com.esotericsoftware.kryo.io.{Input, Output}
-import com.esotericsoftware.kryo.{Kryo, KryoSerializable}
+import com.esotericsoftware.kryo.{Kryo, KryoException, KryoSerializable}
 import com.sageserpent.americium
 import com.sageserpent.americium._
 import com.sageserpent.americium.randomEnrichment._
@@ -1402,11 +1402,12 @@ class HistoryWhoseIdWontSerialize(val id: HistoryWhoseIdWontSerialize#Id) extend
   var property: String = ""
 }
 
+case class BadSerializationException() extends RuntimeException {
+
+}
+
 case class WontSerializeId(var id: Int) extends KryoSerializable {
-  override def write(kryo: Kryo, output: Output): Unit = {
-    println("Should fail to serialize.")
-    ???
-  }
+  override def write(kryo: Kryo, output: Output): Unit = throw BadSerializationException()
 
   override def read(kryo: Kryo, input: Input): Unit = {
     id = kryo.readObject(input, classOf[Int])
@@ -1419,13 +1420,14 @@ class HistoryWhoseIdWontDeserialize(val id: HistoryWhoseIdWontDeserialize#Id) ex
   var property: Boolean = false
 }
 
+case class BadDeserializationException() extends RuntimeException {
+
+}
+
 case class WontDeserializeId(var id: String) extends KryoSerializable {
   override def write(kryo: Kryo, output: Output): Unit = kryo.writeObject(output, id)
 
-  override def read(kryo: Kryo, input: Input): Unit = {
-    println("Should fail to deserialize.")
-    ???
-  }
+  override def read(kryo: Kryo, input: Input): Unit = throw BadDeserializationException()
 }
 
 class WorldSpecUsingWorldRedisBasedImplementation extends WorldBehaviours with WorldRedisBasedImplementationResource {
@@ -1451,9 +1453,11 @@ class WorldSpecUsingWorldRedisBasedImplementation extends WorldBehaviours with W
         world =>
           val itemOneId = WontSerializeId(1)
 
-          intercept[NotImplementedError] {
+          val exceptionDueToFailedSerialization = intercept[KryoException] {
             world.revise(Map(100 -> Some(Change.forOneItem[HistoryWhoseIdWontSerialize](NegativeInfinity[Instant]())(itemOneId, (_.property = "Fred")))), asOf)
-          }
+          } getCause
+
+          val serializationFailedInExpectedManner = (exceptionDueToFailedSerialization == BadSerializationException()) :| s"Expected an instance of 'BadSerializationException', but got a '$exceptionDueToFailedSerialization' instead."
 
           val firstRevisionAttemptFailed = (world.nextRevision == World.initialRevision) :| s"The first revision attempt should have failed due to serialization throwing an exception."
 
@@ -1461,12 +1465,12 @@ class WorldSpecUsingWorldRedisBasedImplementation extends WorldBehaviours with W
 
           world.revise(Map(200 -> Some(Change.forOneItem[HistoryWhoseIdWontDeserialize](NegativeInfinity[Instant]())(itemTwoId, (_.property = true)))), asOf)
 
-          intercept[NotImplementedError] {
+          intercept[BadDeserializationException] {
             val scope = world.scopeFor(queryWhen, world.nextRevision)
             scope.render(Bitemporal.wildcard[History]())
           }
 
-          firstRevisionAttemptFailed
+          serializationFailedInExpectedManner && firstRevisionAttemptFailed
       }
     })
   }
