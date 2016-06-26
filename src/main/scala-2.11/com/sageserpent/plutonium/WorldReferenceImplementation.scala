@@ -122,7 +122,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
 
   override def revisionAsOfs: Seq[Instant] = mutableState.revisionAsOfs
 
-  override protected def eventTimeline(nextRevision: Revision): Seq[SerializableEvent] = eventTimelineFrom(mutableState.pertinentEventDatums(nextRevision))
+  override protected def eventTimeline(cutoffRevision: Revision): Seq[SerializableEvent] = eventTimelineFrom(mutableState.pertinentEventDatums(cutoffRevision))
 
   override protected def transactNewRevision(asOf: Instant,
                                              newEventDatumsFor: Revision => Map[EventId, AbstractEventData],
