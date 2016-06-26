@@ -55,21 +55,6 @@ class MutableState[EventId] {
 
   def nextRevision: Revision = _revisionAsOfs.size
 
-  def mostRecentCorrectionOf(eventId: EventId): Option[AbstractEventData] = {
-    mostRecentCorrectionOf(eventId, nextRevision, PositiveInfinity())
-  }
-
-  def mostRecentCorrectionOf(eventId: EventId, cutoffRevision: Revision, cutoffWhen: Unbounded[Instant]): Option[AbstractEventData] = {
-    eventIdToEventCorrectionsMap.get(eventId) flatMap {
-      eventCorrections =>
-        val onePastIndexOfRelevantEventCorrection = numberOfEventCorrectionsPriorToCutoff(eventCorrections, cutoffRevision)
-        if (0 < onePastIndexOfRelevantEventCorrection)
-          Some(eventCorrections(onePastIndexOfRelevantEventCorrection - 1))
-        else
-          None
-    } filterNot (PartialFunction.cond(_) { case eventData: EventData => eventData.serializableEvent.when > cutoffWhen })
-  }
-
   type EventIdInclusion = EventId => Boolean
 
   def pertinentEventDatums(cutoffRevision: Revision, cutoffWhen: Unbounded[Instant], eventIdInclusion: EventIdInclusion): Seq[AbstractEventData] =
@@ -89,8 +74,13 @@ class MutableState[EventId] {
     eventIds -> eventDatums.filterNot(PartialFunction.cond(_) { case eventData: EventData => eventData.serializableEvent.when > cutoffWhen }).toStream
   }
 
+  def pertinentEventDatums(cutoffRevision: Revision, eventIds: Iterable[EventId]): Seq[AbstractEventData] = {
+    val eventIdsToBeIncluded = eventIds.toSet
+    pertinentEventDatums(cutoffRevision, PositiveInfinity(), eventIdsToBeIncluded.contains)
+  }
+
   def pertinentEventDatums(cutoffRevision: Revision): Seq[AbstractEventData] =
-    pertinentEventDatums(cutoffRevision, PositiveInfinity(), (_ => true))
+    pertinentEventDatums(cutoffRevision, PositiveInfinity(), _ => true)
 
   def checkInvariant() = {
     assert(revisionAsOfs zip revisionAsOfs.tail forall { case (first, second) => first <= second })
@@ -116,17 +106,6 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
       override def nextRevision: Revision = numberOfRevisionsInCommon + super.nextRevision
 
       override def revisionAsOfs: Seq[Instant] = (baseMutableState.revisionAsOfs take numberOfRevisionsInCommon) ++ super.revisionAsOfs
-
-
-      override def mostRecentCorrectionOf(eventId: EventId, cutoffRevision: Revision, cutoffWhen: Unbounded[Instant]): Option[AbstractEventData] = {
-        val cutoffWhenForBaseWorld = cutoffWhen min cutoffWhenAfterWhichHistoriesDiverge
-        if (cutoffRevision > numberOfRevisionsInCommon) {
-          import scalaz.std.option.optionInstance
-          import scalaz.syntax.monadPlus._
-          val superResult = super.mostRecentCorrectionOf(eventId, cutoffRevision, cutoffWhen)
-          superResult <+> baseMutableState.mostRecentCorrectionOf(eventId, numberOfRevisionsInCommon, cutoffWhenForBaseWorld)
-        } else baseMutableState.mostRecentCorrectionOf(eventId, cutoffRevision, cutoffWhenForBaseWorld)
-      }
 
       override def pertinentEventDatums(cutoffRevision: Revision, cutoffWhen: Unbounded[Instant], eventIdInclusion: EventIdInclusion): Seq[AbstractEventData] = {
         val cutoffWhenForBaseWorld = cutoffWhen min cutoffWhenAfterWhichHistoriesDiverge
@@ -157,12 +136,9 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
 
     val newEventDatums: Map[EventId, AbstractEventData] = newEventDatumsFor(nextRevisionPriorToUpdate)
 
-    val obsoleteEventDatums = Set((for {
-      eventId <- newEventDatums.keys
-      obsoleteEventData <- mutableState.mostRecentCorrectionOf(eventId)
-    } yield obsoleteEventData).toStream: _*)
+    val obsoleteEventDatums = Set(mutableState.pertinentEventDatums(nextRevisionPriorToUpdate, newEventDatums.keys): _*)
 
-    val pertinentEventDatumsExcludingTheNewRevision = mutableState.pertinentEventDatums(nextRevision)
+    val pertinentEventDatumsExcludingTheNewRevision = mutableState.pertinentEventDatums(nextRevisionPriorToUpdate)
 
     buildAndValidateEventTimelineForProposedNewRevision(newEventDatums, nextRevisionPriorToUpdate, pertinentEventDatumsExcludingTheNewRevision, obsoleteEventDatums)
 
