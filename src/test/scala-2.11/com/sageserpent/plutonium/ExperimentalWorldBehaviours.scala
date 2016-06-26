@@ -185,7 +185,6 @@ trait ExperimentalWorldBehaviours extends FlatSpec with Matchers with Checkers w
                                    queryWhenAfterFork <- unboundedInstantGenerator if queryWhenAfterFork > forkWhen
                                    baseWorldResource <- worldResourceGenerator
                                    recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
-                                   followingRecordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
                                    seed <- seedGenerator
                                    random = new Random(seed)
                                    bigShuffledHistoryOverLotsOfThings = (random.splitIntoNonEmptyPieces(shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, recordingsGroupedById)
@@ -267,7 +266,6 @@ trait ExperimentalWorldBehaviours extends FlatSpec with Matchers with Checkers w
                                    queryWhen <- unboundedInstantGenerator
                                    baseWorldResource <- worldResourceGenerator
                                    recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
-                                   followingRecordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
                                    seed <- seedGenerator
                                    random = new Random(seed)
                                    bigShuffledHistoryOverLotsOfThings = (random.splitIntoNonEmptyPieces(shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(random, recordingsGroupedById)

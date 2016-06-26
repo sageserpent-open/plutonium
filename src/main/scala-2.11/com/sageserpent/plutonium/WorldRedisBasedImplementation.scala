@@ -30,7 +30,7 @@ object WorldRedisBasedImplementation {
 
   val javaSerializer = new JavaSerializer
 
-  class ItemReconstitutionDataSerializer[Raw <: Identified] extends Serializer[Recorder#ItemReconstitutionData[Raw]]{
+  class ItemReconstitutionDataSerializer[Raw <: Identified] extends Serializer[Recorder#ItemReconstitutionData[Raw]] {
     override def write(kryo: Kryo, output: Output, data: Recorder#ItemReconstitutionData[Raw]): Unit = {
       val (id, typeTag) = data
       kryo.writeClassAndObject(output, id)
@@ -87,7 +87,7 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
     redisClient.llen(asOfsKey) map (_.toInt)
   }
 
-  override def forkExperimentalWorld(scope: javaApi.Scope): World[EventId] = new WorldRedisBasedImplementation[EventId](redisClient = redisClient, identityGuid = s"${parentWorld.identityGuid}-experimental-${UUID.randomUUID()}"){
+  override def forkExperimentalWorld(scope: javaApi.Scope): World[EventId] = new WorldRedisBasedImplementation[EventId](redisClient = redisClient, identityGuid = s"${parentWorld.identityGuid}-experimental-${UUID.randomUUID()}") {
     val baseWorld = parentWorld
     val numberOfRevisionsInCommon = scope.nextRevision
     val cutoffWhenAfterWhichHistoriesDiverge = scope.when
@@ -102,7 +102,7 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
     override protected def pertinentEventDatumsFuture(cutoffRevision: Revision, cutoffWhen: Unbounded[Instant], eventIdInclusion: EventIdInclusion): Future[Seq[AbstractEventData]] = {
       val cutoffWhenForBaseWorld = cutoffWhen min cutoffWhenAfterWhichHistoriesDiverge
       if (cutoffRevision > numberOfRevisionsInCommon) for {
-        (eventIds, eventDatums) <- eventIdsAndTheirDatums(cutoffRevision, cutoffWhen, eventIdInclusion)
+        (eventIds, eventDatums) <- eventIdsAndTheirDatumsFuture(cutoffRevision, cutoffWhen, eventIdInclusion)
         eventIdsToBeExcluded = eventIds.toSet
         eventDatumsFromBaseWorld <- baseWorld.pertinentEventDatumsFuture(numberOfRevisionsInCommon, cutoffWhenForBaseWorld, eventId => !eventIdsToBeExcluded.contains(eventId) && eventIdInclusion(eventId))
       } yield eventDatums ++ eventDatumsFromBaseWorld
@@ -121,20 +121,23 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
   type EventIdInclusion = EventId => Boolean
 
   protected def pertinentEventDatumsFuture(cutoffRevision: Revision, cutoffWhen: Unbounded[Instant], eventIdInclusion: EventIdInclusion): Future[Seq[AbstractEventData]] =
-    eventIdsAndTheirDatums(cutoffRevision, cutoffWhen, eventIdInclusion) map (_._2)
+    eventIdsAndTheirDatumsFuture(cutoffRevision, cutoffWhen, eventIdInclusion) map (_._2)
 
-  def eventIdsAndTheirDatums(cutoffRevision: Revision,  cutoffWhen: Unbounded[Instant], eventIdInclusion: EventIdInclusion): Future[(Seq[EventId], Seq[AbstractEventData])] = {
+  def eventIdsAndTheirDatumsFuture(cutoffRevision: Revision, cutoffWhen: Unbounded[Instant], eventIdInclusion: EventIdInclusion): Future[(Seq[EventId], Seq[AbstractEventData])] = {
     for {
       eventIds: Seq[EventId] <- redisClient.smembers[EventId](eventIdsKey) map (_ filter eventIdInclusion)
-      eventDatums <- Future.traverse(eventIds)(eventId =>
-        redisClient.zrevrangebyscore[AbstractEventData](eventCorrectionsKeyFrom(eventId),
-          min = Limit(initialRevision, inclusive = true),
-          max = Limit(cutoffRevision, inclusive = false),
-          limit = Some(0, 1))) map (_.flatten) filter {
-        case eventData: EventData => eventData.serializableEvent.when <= cutoffWhen
-        case _ => true
-      }
-    } yield eventIds -> eventDatums
+      eventIdAndDataPairs <- Future.traverse(eventIds)(eventId =>
+        for {
+          eventDatumsContainers <- redisClient.zrevrangebyscore[AbstractEventData](eventCorrectionsKeyFrom(eventId),
+            min = Limit(initialRevision, inclusive = true),
+            max = Limit(cutoffRevision, inclusive = false),
+            limit = Some(0, 1))
+        } yield eventDatumsContainers map (eventId -> _)) map (_.flatten)
+      (eventIds, eventDatums) = eventIdAndDataPairs.unzip
+    } yield eventIds -> eventDatums.filter {
+      case eventData: EventData => eventData.serializableEvent.when <= cutoffWhen
+      case _ => true
+    }
   }
 
   def pertinentEventDatumsFuture(cutoffRevision: Revision, eventIds: Iterable[EventId]): Future[Seq[AbstractEventData]] = {

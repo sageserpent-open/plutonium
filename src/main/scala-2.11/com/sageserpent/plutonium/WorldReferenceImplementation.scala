@@ -69,6 +69,7 @@ class MutableState[EventId] {
         else
           None
     } collect { case Some(idAndDataPair) => idAndDataPair }
+
     val (eventIds, eventDatums) = eventIdAndDataPairs.unzip
 
     eventIds -> eventDatums.filterNot(PartialFunction.cond(_) { case eventData: EventData => eventData.serializableEvent.when > cutoffWhen }).toStream
