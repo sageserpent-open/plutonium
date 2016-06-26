@@ -1,16 +1,19 @@
 package com.sageserpent.plutonium
 
 import java.time.Instant
+import java.util.UUID
 
 import akka.util.ByteString
 import com.esotericsoftware.kryo.io.{Input, Output}
 import com.esotericsoftware.kryo.serializers.JavaSerializer
 import com.esotericsoftware.kryo.{Kryo, Serializer}
+import com.sageserpent.americium.{PositiveInfinity, Unbounded}
 import com.twitter.chill.{KryoInstantiator, KryoPool}
 import org.objenesis.strategy.SerializingInstantiatorStrategy
 import redis.api.Limit
 import redis.{ByteStringFormatter, RedisClient}
 
+import scala.Ordering.Implicits._
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionException, Future}
 import scala.reflect.runtime.universe._
@@ -61,6 +64,7 @@ object WorldRedisBasedImplementation {
 }
 
 class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, identityGuid: String) extends WorldImplementationCodeFactoring[EventId] {
+  parentWorld =>
   import World._
   import WorldImplementationCodeFactoring._
   import WorldRedisBasedImplementation._
@@ -83,26 +87,49 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
     redisClient.llen(asOfsKey) map (_.toInt)
   }
 
-  override def forkExperimentalWorld(scope: javaApi.Scope): World[EventId] = ???
+  override def forkExperimentalWorld(scope: javaApi.Scope): World[EventId] = new WorldRedisBasedImplementation[EventId](redisClient = redisClient, identityGuid = s"${parentWorld.identityGuid}-experimental-${UUID.randomUUID()}"){
+    val baseWorld = parentWorld
+    val numberOfRevisionsInCommon = scope.nextRevision
+    val cutoffWhenAfterWhichHistoriesDiverge = scope.when
+
+    override def nextRevision: Revision = numberOfRevisionsInCommon + super.nextRevision
+
+    override protected def revisionAsOfsFuture: Future[Seq[Instant]] = for {
+      revisionAsOfsFromBaseWorld <- baseWorld.revisionAsOfsFuture
+      revisionAsOfsFromSuper <- super.revisionAsOfsFuture
+    } yield (revisionAsOfsFromBaseWorld take numberOfRevisionsInCommon) ++ revisionAsOfsFromSuper
+
+    override protected def pertinentEventDatumsFuture(cutoffRevision: Revision, cutoffWhen: Unbounded[Instant], eventIds: Seq[EventId]): Future[Seq[AbstractEventData]] = {
+      val cutoffWhenForBaseWorld = cutoffWhen min cutoffWhenAfterWhichHistoriesDiverge
+      if (cutoffRevision > numberOfRevisionsInCommon) for {
+        eventDatums <- super.pertinentEventDatumsFuture(cutoffRevision, cutoffWhen, eventIds)
+        eventDatumsFromBaseWorld <- baseWorld.pertinentEventDatumsFuture(numberOfRevisionsInCommon, cutoffWhenForBaseWorld, eventIds)
+      } yield eventDatums ++ eventDatumsFromBaseWorld
+      else baseWorld.pertinentEventDatumsFuture(cutoffRevision, cutoffWhenForBaseWorld, eventIds)
+    }
+  }
 
   override def revisionAsOfs: Seq[Instant] = Await.result(revisionAsOfsFuture, Duration.Inf)
 
-  private def revisionAsOfsFuture: Future[Seq[Instant]] = {
+  protected def revisionAsOfsFuture: Future[Seq[Instant]] = {
     redisClient.lrange[Instant](asOfsKey, 0, -1)
   }
 
-  override protected def eventTimeline(nextRevision: Revision): Seq[SerializableEvent] = eventTimelineFrom(Await.result(pertinentEventDatumsFuture(nextRevision), Duration.Inf))
+  override protected def eventTimeline(cutoffRevision: Revision): Seq[SerializableEvent] = eventTimelineFrom(Await.result(pertinentEventDatumsFuture(cutoffRevision), Duration.Inf))
 
-  private def pertinentEventDatumsFuture(nextRevision: Revision, eventIds: Seq[EventId]): Future[Seq[AbstractEventData]] = Future.traverse(eventIds)(eventId =>
+  protected def pertinentEventDatumsFuture(cutoffRevision: Revision, cutoffWhen: Unbounded[Instant], eventIds: Seq[EventId]): Future[Seq[AbstractEventData]] = Future.traverse(eventIds)(eventId =>
     redisClient.zrevrangebyscore[AbstractEventData](eventCorrectionsKeyFrom(eventId),
         min = Limit(initialRevision, inclusive = true),
-        max = Limit(nextRevision, inclusive = false),
-      limit = Some(0, 1))) map (_.flatten)
+        max = Limit(cutoffRevision, inclusive = false),
+      limit = Some(0, 1))) map (_.flatten) filter {
+    case eventData: EventData => eventData.serializableEvent.when <= cutoffWhen
+    case _ => true
+  }
 
   private def pertinentEventDatumsFuture(nextRevision: Revision): Future[Seq[AbstractEventData]] = {
     for {
       eventIds: Set[EventId] <- redisClient.smembers[EventId](eventIdsKey) map (_.toSet)
-      eventDatums <- pertinentEventDatumsFuture(nextRevision, eventIds.toSeq)
+      eventDatums <- pertinentEventDatumsFuture(nextRevision, PositiveInfinity(), eventIds.toSeq)
     } yield eventDatums
   }
 
@@ -117,7 +144,7 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
         newEventDatums: Map[EventId, AbstractEventData] = newEventDatumsFor(nextRevisionPriorToUpdate)
         revisionAsOfs <- revisionAsOfsFuture
         _ = checkRevisionPrecondition(asOf, revisionAsOfs)
-        obsoleteEventDatums: Set[AbstractEventData] <- pertinentEventDatumsFuture(nextRevisionPriorToUpdate, newEventDatums.keys.toSeq) map (Set(_: _*))
+        obsoleteEventDatums: Set[AbstractEventData] <- pertinentEventDatumsFuture(nextRevisionPriorToUpdate, PositiveInfinity(), newEventDatums.keys.toSeq) map (Set(_: _*))
         pertinentEventDatumsExcludingTheNewRevision: Seq[AbstractEventData] <- pertinentEventDatumsFuture(nextRevisionPriorToUpdate)
         _ = buildAndValidateEventTimelineForProposedNewRevision(newEventDatums, nextRevisionPriorToUpdate, pertinentEventDatumsExcludingTheNewRevision, obsoleteEventDatums)
         _ <- Future.traverse(newEventDatums) {
