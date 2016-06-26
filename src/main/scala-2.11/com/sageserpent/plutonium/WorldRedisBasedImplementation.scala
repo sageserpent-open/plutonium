@@ -83,7 +83,7 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
 
   override def nextRevision: Revision = Await.result(nextRevisionFuture, Duration.Inf)
 
-  private def nextRevisionFuture: Future[EventOrderingTiebreakerIndex] = {
+  protected def nextRevisionFuture: Future[EventOrderingTiebreakerIndex] = {
     redisClient.llen(asOfsKey) map (_.toInt)
   }
 
@@ -92,20 +92,21 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
     val numberOfRevisionsInCommon = scope.nextRevision
     val cutoffWhenAfterWhichHistoriesDiverge = scope.when
 
-    override def nextRevision: Revision = numberOfRevisionsInCommon + super.nextRevision
+    override protected def nextRevisionFuture: Future[EventOrderingTiebreakerIndex] = super.nextRevisionFuture map (numberOfRevisionsInCommon + _)
 
     override protected def revisionAsOfsFuture: Future[Seq[Instant]] = for {
       revisionAsOfsFromBaseWorld <- baseWorld.revisionAsOfsFuture
       revisionAsOfsFromSuper <- super.revisionAsOfsFuture
     } yield (revisionAsOfsFromBaseWorld take numberOfRevisionsInCommon) ++ revisionAsOfsFromSuper
 
-    override protected def pertinentEventDatumsFuture(cutoffRevision: Revision, cutoffWhen: Unbounded[Instant], eventIds: Seq[EventId]): Future[Seq[AbstractEventData]] = {
+    override protected def pertinentEventDatumsFuture(cutoffRevision: Revision, cutoffWhen: Unbounded[Instant], eventIdInclusion: EventIdInclusion): Future[Seq[AbstractEventData]] = {
       val cutoffWhenForBaseWorld = cutoffWhen min cutoffWhenAfterWhichHistoriesDiverge
       if (cutoffRevision > numberOfRevisionsInCommon) for {
-        eventDatums <- super.pertinentEventDatumsFuture(cutoffRevision, cutoffWhen, eventIds)
-        eventDatumsFromBaseWorld <- baseWorld.pertinentEventDatumsFuture(numberOfRevisionsInCommon, cutoffWhenForBaseWorld, eventIds)
+        (eventIds, eventDatums) <- eventIdsAndTheirDatums(cutoffRevision, cutoffWhen, eventIdInclusion)
+        eventIdsToBeExcluded = eventIds.toSet
+        eventDatumsFromBaseWorld <- baseWorld.pertinentEventDatumsFuture(numberOfRevisionsInCommon, cutoffWhenForBaseWorld, eventId => !eventIdsToBeExcluded.contains(eventId) && eventIdInclusion(eventId))
       } yield eventDatums ++ eventDatumsFromBaseWorld
-      else baseWorld.pertinentEventDatumsFuture(cutoffRevision, cutoffWhenForBaseWorld, eventIds)
+      else baseWorld.pertinentEventDatumsFuture(cutoffRevision, cutoffWhenForBaseWorld, eventIdInclusion)
     }
   }
 
@@ -117,21 +118,32 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
 
   override protected def eventTimeline(cutoffRevision: Revision): Seq[SerializableEvent] = eventTimelineFrom(Await.result(pertinentEventDatumsFuture(cutoffRevision), Duration.Inf))
 
-  protected def pertinentEventDatumsFuture(cutoffRevision: Revision, cutoffWhen: Unbounded[Instant], eventIds: Seq[EventId]): Future[Seq[AbstractEventData]] = Future.traverse(eventIds)(eventId =>
-    redisClient.zrevrangebyscore[AbstractEventData](eventCorrectionsKeyFrom(eventId),
-        min = Limit(initialRevision, inclusive = true),
-        max = Limit(cutoffRevision, inclusive = false),
-      limit = Some(0, 1))) map (_.flatten) filter {
-    case eventData: EventData => eventData.serializableEvent.when <= cutoffWhen
-    case _ => true
+  type EventIdInclusion = EventId => Boolean
+
+  protected def pertinentEventDatumsFuture(cutoffRevision: Revision, cutoffWhen: Unbounded[Instant], eventIdInclusion: EventIdInclusion): Future[Seq[AbstractEventData]] =
+    eventIdsAndTheirDatums(cutoffRevision, cutoffWhen, eventIdInclusion) map (_._2)
+
+  def eventIdsAndTheirDatums(cutoffRevision: Revision,  cutoffWhen: Unbounded[Instant], eventIdInclusion: EventIdInclusion): Future[(Seq[EventId], Seq[AbstractEventData])] = {
+    for {
+      eventIds: Seq[EventId] <- redisClient.smembers[EventId](eventIdsKey) map (_ filter eventIdInclusion)
+      eventDatums <- Future.traverse(eventIds)(eventId =>
+        redisClient.zrevrangebyscore[AbstractEventData](eventCorrectionsKeyFrom(eventId),
+          min = Limit(initialRevision, inclusive = true),
+          max = Limit(cutoffRevision, inclusive = false),
+          limit = Some(0, 1))) map (_.flatten) filter {
+        case eventData: EventData => eventData.serializableEvent.when <= cutoffWhen
+        case _ => true
+      }
+    } yield eventIds -> eventDatums
   }
 
-  private def pertinentEventDatumsFuture(nextRevision: Revision): Future[Seq[AbstractEventData]] = {
-    for {
-      eventIds: Set[EventId] <- redisClient.smembers[EventId](eventIdsKey) map (_.toSet)
-      eventDatums <- pertinentEventDatumsFuture(nextRevision, PositiveInfinity(), eventIds.toSeq)
-    } yield eventDatums
+  def pertinentEventDatumsFuture(cutoffRevision: Revision, eventIds: Iterable[EventId]): Future[Seq[AbstractEventData]] = {
+    val eventIdsToBeIncluded = eventIds.toSet
+    pertinentEventDatumsFuture(cutoffRevision, PositiveInfinity(), eventIdsToBeIncluded.contains)
   }
+
+  def pertinentEventDatumsFuture(cutoffRevision: Revision): Future[Seq[AbstractEventData]] =
+    pertinentEventDatumsFuture(cutoffRevision, PositiveInfinity(), _ => true)
 
   override protected def transactNewRevision(asOf: Instant,
                                              newEventDatumsFor: Revision => Map[EventId, AbstractEventData],
@@ -144,7 +156,7 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
         newEventDatums: Map[EventId, AbstractEventData] = newEventDatumsFor(nextRevisionPriorToUpdate)
         revisionAsOfs <- revisionAsOfsFuture
         _ = checkRevisionPrecondition(asOf, revisionAsOfs)
-        obsoleteEventDatums: Set[AbstractEventData] <- pertinentEventDatumsFuture(nextRevisionPriorToUpdate, PositiveInfinity(), newEventDatums.keys.toSeq) map (Set(_: _*))
+        obsoleteEventDatums: Set[AbstractEventData] <- pertinentEventDatumsFuture(nextRevisionPriorToUpdate, newEventDatums.keys.toSeq) map (Set(_: _*))
         pertinentEventDatumsExcludingTheNewRevision: Seq[AbstractEventData] <- pertinentEventDatumsFuture(nextRevisionPriorToUpdate)
         _ = buildAndValidateEventTimelineForProposedNewRevision(newEventDatums, nextRevisionPriorToUpdate, pertinentEventDatumsExcludingTheNewRevision, obsoleteEventDatums)
         _ <- Future.traverse(newEventDatums) {
