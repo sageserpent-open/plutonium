@@ -70,12 +70,14 @@ class MutableState[EventId] {
     } filterNot (PartialFunction.cond(_) { case eventData: EventData => eventData.serializableEvent.when > cutoffWhen })
   }
 
-  def pertinentEventDatums(cutoffRevision: Revision, cutoffWhen: Unbounded[Instant], excludedEventIds: Set[EventId]): Seq[AbstractEventData] =
-    eventIdsAndTheirDatums(cutoffRevision, cutoffWhen, excludedEventIds)._2
+  type EventIdInclusion = EventId => Boolean
 
-  def eventIdsAndTheirDatums(cutoffRevision: Revision, cutoffWhen: Unbounded[Instant], excludedEventIds: Set[EventId]) = {
+  def pertinentEventDatums(cutoffRevision: Revision, cutoffWhen: Unbounded[Instant], eventIdInclusion: EventIdInclusion): Seq[AbstractEventData] =
+    eventIdsAndTheirDatums(cutoffRevision, cutoffWhen, eventIdInclusion)._2
+
+  def eventIdsAndTheirDatums(cutoffRevision: Revision, cutoffWhen: Unbounded[Instant], eventIdInclusion: EventIdInclusion) = {
     val eventIdAndDataPairs = eventIdToEventCorrectionsMap collect {
-      case (eventId, eventCorrections) if !excludedEventIds.contains(eventId) =>
+      case (eventId, eventCorrections) if eventIdInclusion(eventId) =>
         val onePastIndexOfRelevantEventCorrection = numberOfEventCorrectionsPriorToCutoff(eventCorrections, cutoffRevision)
         if (0 < onePastIndexOfRelevantEventCorrection)
           Some(eventId -> eventCorrections(onePastIndexOfRelevantEventCorrection - 1))
@@ -88,7 +90,7 @@ class MutableState[EventId] {
   }
 
   def pertinentEventDatums(cutoffRevision: Revision): Seq[AbstractEventData] =
-    pertinentEventDatums(cutoffRevision, PositiveInfinity(), Set.empty)
+    pertinentEventDatums(cutoffRevision, PositiveInfinity(), (_ => true))
 
   def checkInvariant() = {
     assert(revisionAsOfs zip revisionAsOfs.tail forall { case (first, second) => first <= second })
@@ -126,12 +128,13 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
         } else baseMutableState.mostRecentCorrectionOf(eventId, cutoffRevision, cutoffWhenForBaseWorld)
       }
 
-      override def pertinentEventDatums(cutoffRevision: Revision, cutoffWhen: Unbounded[Instant], excludedEventIds: Set[EventId]): Seq[AbstractEventData] = {
+      override def pertinentEventDatums(cutoffRevision: Revision, cutoffWhen: Unbounded[Instant], eventIdInclusion: EventIdInclusion): Seq[AbstractEventData] = {
         val cutoffWhenForBaseWorld = cutoffWhen min cutoffWhenAfterWhichHistoriesDiverge
         if (cutoffRevision > numberOfRevisionsInCommon) {
-          val (eventIds, eventDatums) = eventIdsAndTheirDatums(cutoffRevision, cutoffWhen, excludedEventIds)
-          eventDatums ++ baseMutableState.pertinentEventDatums(numberOfRevisionsInCommon, cutoffWhenForBaseWorld, excludedEventIds union eventIds.toSet)
-        } else baseMutableState.pertinentEventDatums(cutoffRevision, cutoffWhenForBaseWorld, excludedEventIds)
+          val (eventIds, eventDatums) = eventIdsAndTheirDatums(cutoffRevision, cutoffWhen, eventIdInclusion)
+          val eventIdsToBeExcluded = eventIds.toSet
+          eventDatums ++ baseMutableState.pertinentEventDatums(numberOfRevisionsInCommon, cutoffWhenForBaseWorld, eventId => !eventIdsToBeExcluded.contains(eventId) && eventIdInclusion(eventId))
+        } else baseMutableState.pertinentEventDatums(cutoffRevision, cutoffWhenForBaseWorld, eventIdInclusion)
       }
     }
 
