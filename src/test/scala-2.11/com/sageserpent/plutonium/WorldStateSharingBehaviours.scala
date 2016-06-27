@@ -125,14 +125,14 @@ trait WorldStateSharingBehaviours extends FlatSpec with Matchers with Checkers w
 
               try {
                 recordEventsInWorldViaMultipleThreads(bigShuffledHistoryOverLotsOfThings, asOfs, demultiplexingWorld)
-                Prop.proved
+                Prop.undecided
               } catch {
                 case exception: RuntimeException if exception.getMessage.startsWith("Concurrent revision attempt detected") =>
                   Prop.proved
                 case exception: RuntimeException if exception.getMessage.startsWith("Attempt to annihilate") =>
-                  Prop.proved
+                  Prop.undecided
                 case exception: RuntimeException if exception.getMessage.contains("should be no earlier than") =>
-                  Prop.proved
+                  Prop.undecided
               }
           }
       })
