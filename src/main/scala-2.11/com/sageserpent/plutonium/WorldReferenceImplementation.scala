@@ -51,7 +51,7 @@ class MutableState[EventId] {
   val eventIdToEventCorrectionsMap: EventIdToEventCorrectionsMap[EventId] = mutable.Map.empty
   val _revisionAsOfs: MutableList[Instant] = MutableList.empty
 
-  def revisionAsOfs: Seq[Instant] = _revisionAsOfs
+  def revisionAsOfs: Seq[Instant] = _revisionAsOfs.toList
 
   def nextRevision: Revision = _revisionAsOfs.size
 

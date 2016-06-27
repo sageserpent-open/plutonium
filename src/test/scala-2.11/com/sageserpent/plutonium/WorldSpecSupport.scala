@@ -561,7 +561,7 @@ trait WorldResource {
 
 trait WorldReferenceImplementationResource extends WorldResource {
   val worldResourceGenerator: Gen[ManagedResource[World[Int]]] =
-    Gen.const(makeManagedResource(new WorldReferenceImplementation[Int])(_ => {})(List.empty))
+    Gen.const(makeManagedResource(new WorldReferenceImplementation[Int] with WorldContracts[Int])(_ => {})(List.empty))
 }
 
 trait WorldRedisBasedImplementationResource extends WorldResource with RedisServerFixture with DisableAkkaLogging {
@@ -569,7 +569,7 @@ trait WorldRedisBasedImplementationResource extends WorldResource with RedisServ
     Gen.const {
       for {
         redisClient <- makeManagedResource(RedisClient(host = "localhost", port = redisServerPort)(akkaSystem))(_.stop())(List.empty)
-        worldResource <- makeManagedResource(new WorldRedisBasedImplementation[Int](redisClient, UUID.randomUUID().toString))(_ => {})(List.empty)
+        worldResource <- makeManagedResource(new WorldRedisBasedImplementation[Int](redisClient, UUID.randomUUID().toString) with WorldContracts[Int])(_ => {})(List.empty)
       } yield worldResource
     }
 }
