@@ -161,7 +161,7 @@ class WorldStateSharingSpecUsingWorldRedisBasedImplementation extends WorldState
     } yield {
       val redisClient = RedisClient(host = "localhost", port = redisServerPort)(akkaSystem)
       redisClientSet += redisClient
-      () => new WorldRedisBasedImplementation[Int](redisClient, sharedGuid)
+      () => new WorldRedisBasedImplementation[Int](redisClient, sharedGuid) with WorldContracts[Int]
     })
 
   "multiple world instances representing the same world (using the world Redis-based implementation)" should behave like multipleInstancesRepresentingTheSameWorldBehaviour
