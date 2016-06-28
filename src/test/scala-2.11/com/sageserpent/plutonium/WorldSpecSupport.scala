@@ -456,12 +456,15 @@ trait WorldSpecSupport {
 
   def revisionActions(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[(Option[(Unbounded[Instant], Event)], Int)]], asOfs: List[Instant], world: World[Int]): Stream[() => Revision] = {
     assert(bigShuffledHistoryOverLotsOfThings.length == asOfs.length)
-    val asOfsQueue = scala.collection.mutable.Queue[Instant](asOfs: _*)
+    revisionActions(bigShuffledHistoryOverLotsOfThings, asOfs.iterator, world)
+  }
+
+  def revisionActions(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[(Option[(Unbounded[Instant], Event)], Revision)]], asOfsIterator: Iterator[Instant], world: World[Int]): Stream[() => Revision] = {
     for {pieceOfHistory <- bigShuffledHistoryOverLotsOfThings
          events = pieceOfHistory map {
            case (recording, eventId) => eventId -> (for ((_, change) <- recording) yield change)
          } toSeq} yield
-      () => world.revise(TreeMap(events: _*), asOfsQueue.dequeue())
+      () => world.revise(TreeMap(events: _*), asOfsIterator.next())
   }
 
   def intersperseObsoleteRecordings(random: Random, recordings: immutable.Iterable[(Unbounded[Instant], Event)], obsoleteRecordings: immutable.Iterable[(Unbounded[Instant], Event)]): Stream[(Option[(Unbounded[Instant], Event)], Int)] = {

@@ -5,7 +5,7 @@ import java.util
 import java.util.{Optional, UUID}
 
 import com.sageserpent.americium.Unbounded
-import org.scalacheck.{Gen, Prop}
+import org.scalacheck.{Gen, Prop, Test}
 import org.scalatest.prop.Checkers
 import org.scalacheck.Prop.BooleanOperators
 import org.scalatest.{FlatSpec, Matchers}
@@ -101,13 +101,15 @@ trait WorldStateSharingBehaviours extends FlatSpec with Matchers with Checkers w
     }
 
     def recordEventsInWorldViaMultipleThreads(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[(Option[(Unbounded[Instant], Event)], Int)]], asOfs: List[Instant], world: World[Int]) = {
-      revisionActions(bigShuffledHistoryOverLotsOfThings, asOfs, world).toParArray map (_.apply) // Actually a piece of imperative code that looks functional - 'world' is being mutated as a side-effect; but the revisions are harvested functionally.
+      revisionActions(bigShuffledHistoryOverLotsOfThings, asOfs.iterator, world).toParArray map (_.apply) // Actually a piece of imperative code that looks functional - 'world' is being mutated as a side-effect; but the revisions are harvested functionally.
     }
+
+    val integerHistoryRecordingsGroupedByIdThatAreRobustAgainstConcurrencyGenerator = recordingsGroupedByIdGenerator_(integerDataSamplesForAnIdGenerator, forbidAnnihilations = true)
 
     they should "allow concurrent revisions to be attempted on distinct instances" in {
       val testCaseGenerator = for {
         worldSharingCommonStateFactoryResource <- worldSharingCommonStateFactoryResourceGenerator
-        recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
+        recordingsGroupedById <- integerHistoryRecordingsGroupedByIdThatAreRobustAgainstConcurrencyGenerator
         obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
         seed <- seedGenerator
         random = new Random(seed)
@@ -125,17 +127,15 @@ trait WorldStateSharingBehaviours extends FlatSpec with Matchers with Checkers w
 
               try {
                 recordEventsInWorldViaMultipleThreads(bigShuffledHistoryOverLotsOfThings, asOfs, demultiplexingWorld)
-                Prop.undecided
+                Prop.collect("No failure detected")(Prop.undecided)
               } catch {
                 case exception: RuntimeException if exception.getMessage.startsWith("Concurrent revision attempt detected") =>
-                  Prop.proved
-                case exception: RuntimeException if exception.getMessage.startsWith("Attempt to annihilate") =>
-                  Prop.undecided
+                  Prop.collect("Concurrent revision attempt detected.")(Prop.proved)
                 case exception: RuntimeException if exception.getMessage.contains("should be no earlier than") =>
-                  Prop.undecided
+                  Prop.collect("Asofs were presented out of order due to racing.")(Prop.undecided)
               }
           }
-      })
+      }, Test.Parameters.defaultVerbose)
     }
   }
 }
