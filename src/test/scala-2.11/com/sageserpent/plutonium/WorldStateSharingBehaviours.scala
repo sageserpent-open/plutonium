@@ -4,7 +4,7 @@ import java.time.Instant
 import java.util
 import java.util.{Optional, UUID}
 
-import com.sageserpent.americium.Unbounded
+import com.sageserpent.americium.{PositiveInfinity, Unbounded}
 import org.scalacheck.{Gen, Prop, Test}
 import org.scalatest.prop.Checkers
 import org.scalacheck.Prop.BooleanOperators
@@ -100,8 +100,11 @@ trait WorldStateSharingBehaviours extends FlatSpec with Matchers with Checkers w
       })
     }
 
-    def recordEventsInWorldViaMultipleThreads(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[(Option[(Unbounded[Instant], Event)], Int)]], asOfs: List[Instant], world: World[Int]) = {
-      revisionActions(bigShuffledHistoryOverLotsOfThings, asOfs.iterator, world).toParArray map (_.apply) // Actually a piece of imperative code that looks functional - 'world' is being mutated as a side-effect; but the revisions are harvested functionally.
+    def recordEventsInWorldAndRunQueriesViaMultipleThreads(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[(Option[(Unbounded[Instant], Event)], Int)]], asOfs: List[Instant], world: World[Int]) = {
+      val finalAsOf = asOfs.last
+      val revisionActionsInParallel = revisionActions(bigShuffledHistoryOverLotsOfThings, asOfs.iterator, world).toParArray
+      val queriesInParallel = (for (_ <- 0 to 3) yield () => world.scopeFor(PositiveInfinity[Instant](), finalAsOf).render(Bitemporal.wildcard[History]())).toParArray
+      (revisionActionsInParallel ++ queriesInParallel) map (_.apply)
     }
 
     val integerHistoryRecordingsGroupedByIdThatAreRobustAgainstConcurrencyGenerator = recordingsGroupedByIdGenerator_(integerDataSamplesForAnIdGenerator, forbidAnnihilations = true)
@@ -126,7 +129,7 @@ trait WorldStateSharingBehaviours extends FlatSpec with Matchers with Checkers w
               val demultiplexingWorld = new DemultiplexingWorld(worldFactory, seed)
 
               try {
-                recordEventsInWorldViaMultipleThreads(bigShuffledHistoryOverLotsOfThings, asOfs, demultiplexingWorld)
+                recordEventsInWorldAndRunQueriesViaMultipleThreads(bigShuffledHistoryOverLotsOfThings, asOfs, demultiplexingWorld)
                 Prop.collect("No failure detected")(Prop.undecided)
               } catch {
                 case exception: RuntimeException if exception.getMessage.startsWith("Concurrent revision attempt detected") =>
@@ -143,7 +146,7 @@ trait WorldStateSharingBehaviours extends FlatSpec with Matchers with Checkers w
 class WorldStateSharingSpecUsingWorldReferenceImplementation extends WorldStateSharingBehaviours {
   val worldSharingCommonStateFactoryResourceGenerator: Gen[ManagedResource[() => World[Int]]] =
     Gen.const(for (sharedMutableState <- makeManagedResource(new MutableState[Int])(_ => {})(List.empty))
-      yield () => new WorldReferenceImplementation[Int](mutableState = sharedMutableState))
+      yield () => new WorldReferenceImplementation[Int](mutableState = sharedMutableState) with WorldContracts[Int])
 
   "multiple world instances representing the same world (using the world reference implementation)" should behave like multipleInstancesRepresentingTheSameWorldBehaviour
 }

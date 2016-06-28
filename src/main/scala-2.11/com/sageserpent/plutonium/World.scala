@@ -64,8 +64,6 @@ trait World[EventId] {
 }
 
 trait WorldContracts[EventId] extends World[EventId] {
-  require(World.initialRevision == nextRevision)
-
   def checkInvariant: Unit = {
     require(revisionAsOfs.size == nextRevision)
     require(revisionAsOfs.isEmpty || (revisionAsOfs zip revisionAsOfs.tail forall {case (first, second) => !second.isBefore(first)}))
@@ -73,7 +71,7 @@ trait WorldContracts[EventId] extends World[EventId] {
 
   // NOTE: this increments 'nextRevision' if it succeeds, associating the new revision with 'asOf'.
   abstract override def revise(events: Map[EventId, Option[Event]], asOf: Instant): Revision = {
-    require(revisionAsOfs.isEmpty || !asOf.isBefore(revisionAsOfs.last))
+    require(revisionAsOfs.isEmpty || !asOf.isBefore(revisionAsOfs.last), s"'asOf' of value: $asOf should be no earlier than: ${revisionAsOfs.last}")
     val revisionAsOfsBeforehand = revisionAsOfs
     val nextRevisionBeforehand = nextRevision
     try {
