@@ -85,6 +85,8 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
 
   def eventCorrectionsKeyFrom(eventId: EventId) = s"${eventCorrectionsKeyPrefix}${eventId}"
 
+  val concurrentRevisionCheckKey = s"{identityGuid}:${redisNamespaceComponentSeparator}concurrentRevisionCheck"
+
   override def nextRevision: Revision = Await.result(nextRevisionFuture(redisClient), Duration.Inf)
 
   protected def nextRevisionFuture(redisClient: RedisCommands): Future[EventOrderingTiebreakerIndex] = {
@@ -155,11 +157,16 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
   override protected def transactNewRevision(asOf: Instant,
                                              newEventDatumsFor: Revision => Map[EventId, AbstractEventData],
                                              buildAndValidateEventTimelineForProposedNewRevision: (Map[EventId, AbstractEventData], Revision, Seq[AbstractEventData], Set[AbstractEventData]) => Unit): Revision = {
-    // TODO - concurrency safety!
+    val revisionInProgressClaim = UUID.randomUUID().toString
 
     try
       Await.result(for {
-        //_ <- redisClient.send(Watch(Set.empty))
+        _ <- redisClient.set[String](concurrentRevisionCheckKey, revisionInProgressClaim)
+        _ <- redisClient.send(Watch(Set(concurrentRevisionCheckKey)))
+        possiblyAnotherRevisionInProgressClaim <- redisClient.get[String](concurrentRevisionCheckKey)
+        _ <- if (revisionInProgressClaim == possiblyAnotherRevisionInProgressClaim)
+          Future.failed(new RuntimeException("Concurrent revision attempt detected."))
+        else Future.successful(())
         nextRevisionPriorToUpdate <- nextRevisionFuture(redisClient)
         newEventDatums: Map[EventId, AbstractEventData] = newEventDatumsFor(nextRevisionPriorToUpdate)
         revisionAsOfs <- revisionAsOfsFuture(redisClient)
