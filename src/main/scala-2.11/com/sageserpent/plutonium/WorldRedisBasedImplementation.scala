@@ -161,9 +161,9 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
       Await.result(for {
         nextRevisionPriorToUpdate <- nextRevisionFuture(redisClient)
         newEventDatums: Map[EventId, AbstractEventData] = newEventDatumsFor(nextRevisionPriorToUpdate)
-        (obsoleteEventDatums: Set[AbstractEventData], pertinentEventDatumsExcludingTheNewRevision: Seq[AbstractEventData]) <-
-        pertinentEventDatumsFuture(redisClient, nextRevisionPriorToUpdate, newEventDatums.keys.toSeq).map(Set(_: _*)) zip pertinentEventDatumsFuture(redisClient, nextRevisionPriorToUpdate)
-        _ <- revisionPreconditionFutureRunningInParallel
+        ((obsoleteEventDatums: Set[AbstractEventData], pertinentEventDatumsExcludingTheNewRevision: Seq[AbstractEventData]), _) <-
+        (pertinentEventDatumsFuture(redisClient, nextRevisionPriorToUpdate, newEventDatums.keys.toSeq).map(Set(_: _*)) zip
+          pertinentEventDatumsFuture(redisClient, nextRevisionPriorToUpdate)) zip revisionPreconditionFutureRunningInParallel
         _ = buildAndValidateEventTimelineForProposedNewRevision(newEventDatums, nextRevisionPriorToUpdate, pertinentEventDatumsExcludingTheNewRevision, obsoleteEventDatums)
         // NASTY HACK: the Rediscala transactions API, is, hmm, 'interesting'. Hence the following block for which I apologize in advance...
         redisTransaction = redisClient.transaction()
