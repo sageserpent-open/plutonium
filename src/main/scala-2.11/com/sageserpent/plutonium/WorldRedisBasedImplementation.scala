@@ -156,13 +156,14 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
                                              buildAndValidateEventTimelineForProposedNewRevision: (Map[EventId, AbstractEventData], Revision, Seq[AbstractEventData], Set[AbstractEventData]) => Unit): Revision = {
     // TODO - concurrency safety!
 
-    try
+    try {
+      val revisionPreconditionFutureRunningInParallel = for (revisionAsOfs <- revisionAsOfsFuture(redisClient)) yield checkRevisionPrecondition(asOf, revisionAsOfs)
       Await.result(for {
-        (nextRevisionPriorToUpdate, revisionAsOfs) <- nextRevisionFuture(redisClient) zip revisionAsOfsFuture(redisClient)
+        nextRevisionPriorToUpdate <- nextRevisionFuture(redisClient)
         newEventDatums: Map[EventId, AbstractEventData] = newEventDatumsFor(nextRevisionPriorToUpdate)
-        _ = checkRevisionPrecondition(asOf, revisionAsOfs)
-        obsoleteEventDatums: Set[AbstractEventData] <- pertinentEventDatumsFuture(redisClient, nextRevisionPriorToUpdate, newEventDatums.keys.toSeq) map (Set(_: _*))
-        pertinentEventDatumsExcludingTheNewRevision: Seq[AbstractEventData] <- pertinentEventDatumsFuture(redisClient, nextRevisionPriorToUpdate)
+        (obsoleteEventDatums: Set[AbstractEventData], pertinentEventDatumsExcludingTheNewRevision: Seq[AbstractEventData]) <-
+        pertinentEventDatumsFuture(redisClient, nextRevisionPriorToUpdate, newEventDatums.keys.toSeq).map(Set(_: _*)) zip pertinentEventDatumsFuture(redisClient, nextRevisionPriorToUpdate)
+        _ <- revisionPreconditionFutureRunningInParallel
         _ = buildAndValidateEventTimelineForProposedNewRevision(newEventDatums, nextRevisionPriorToUpdate, pertinentEventDatumsExcludingTheNewRevision, obsoleteEventDatums)
         // NASTY HACK: the Rediscala transactions API, is, hmm, 'interesting'. Hence the following block for which I apologize in advance...
         redisTransaction = redisClient.transaction()
@@ -174,6 +175,7 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
         _ = redisTransaction.rpush[Instant](asOfsKey, asOf)
         _ <- redisTransaction.exec()
       } yield nextRevisionPriorToUpdate, Duration.Inf)
+    }
     catch {
       case exception: ExecutionException => throw exception.getCause
     }
