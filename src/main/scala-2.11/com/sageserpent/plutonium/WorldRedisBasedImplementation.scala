@@ -11,7 +11,6 @@ import com.sageserpent.americium.{PositiveInfinity, Unbounded}
 import com.twitter.chill.{KryoInstantiator, KryoPool}
 import org.objenesis.strategy.SerializingInstantiatorStrategy
 import redis.api.Limit
-import redis.api.transactions.Watch
 import redis.{ByteStringFormatter, RedisClient, RedisCommands}
 
 import scala.Ordering.Implicits._
@@ -159,10 +158,8 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
 
     try
       Await.result(for {
-        //_ <- redisClient.send(Watch(Set.empty))
-        nextRevisionPriorToUpdate <- nextRevisionFuture(redisClient)
+        (nextRevisionPriorToUpdate, revisionAsOfs) <- nextRevisionFuture(redisClient) zip revisionAsOfsFuture(redisClient)
         newEventDatums: Map[EventId, AbstractEventData] = newEventDatumsFor(nextRevisionPriorToUpdate)
-        revisionAsOfs <- revisionAsOfsFuture(redisClient)
         _ = checkRevisionPrecondition(asOf, revisionAsOfs)
         obsoleteEventDatums: Set[AbstractEventData] <- pertinentEventDatumsFuture(redisClient, nextRevisionPriorToUpdate, newEventDatums.keys.toSeq) map (Set(_: _*))
         pertinentEventDatumsExcludingTheNewRevision: Seq[AbstractEventData] <- pertinentEventDatumsFuture(redisClient, nextRevisionPriorToUpdate)
