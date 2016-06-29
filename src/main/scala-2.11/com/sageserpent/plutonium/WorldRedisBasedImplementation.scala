@@ -11,6 +11,7 @@ import com.sageserpent.americium.{PositiveInfinity, Unbounded}
 import com.twitter.chill.{KryoInstantiator, KryoPool}
 import org.objenesis.strategy.SerializingInstantiatorStrategy
 import redis.api.Limit
+import redis.commands.TransactionWatchException
 import redis.{ByteStringFormatter, RedisClient, RedisCommands}
 
 import scala.Ordering.Implicits._
@@ -166,18 +167,20 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
           pertinentEventDatumsFuture(redisClient, nextRevisionPriorToUpdate)) zip revisionPreconditionFutureRunningInParallel
         _ = buildAndValidateEventTimelineForProposedNewRevision(newEventDatums, nextRevisionPriorToUpdate, pertinentEventDatumsExcludingTheNewRevision, obsoleteEventDatums)
         // NASTY HACK: the Rediscala transactions API, is, hmm, 'interesting'. Hence the following block for which I apologize in advance...
-        redisTransaction = redisClient.transaction()
+        redisTransaction = redisClient.watch(asOfsKey)  // As we are updating in a transaction, we know that watching on 'asOfsKey' will pick up all of the updates bundled together with it.
         _ = newEventDatums foreach {
           case (eventId, eventDatum) =>
             redisTransaction.zadd[AbstractEventData](eventCorrectionsKeyFrom(eventId), nextRevisionPriorToUpdate.toDouble -> eventDatum)
             redisTransaction.sadd[EventId](eventIdsKey, eventId)
         }
-        _ = redisTransaction.rpush[Instant](asOfsKey, asOf)
+        markerThatTransactionIsCompleteFuture = redisTransaction.rpush[Instant](asOfsKey, asOf)
         _ <- redisTransaction.exec()
+        _ <- markerThatTransactionIsCompleteFuture
       } yield nextRevisionPriorToUpdate, Duration.Inf)
     }
     catch {
       case exception: ExecutionException => throw exception.getCause
+      case exception: TransactionWatchException => throw new RuntimeException("Concurrent revision attempt detected.")
     }
   }
 }
