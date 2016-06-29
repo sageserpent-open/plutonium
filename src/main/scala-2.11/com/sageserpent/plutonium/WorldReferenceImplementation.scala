@@ -77,7 +77,7 @@ class MutableState[EventId] {
 
   def pertinentEventDatums(cutoffRevision: Revision, eventIds: Iterable[EventId]): Seq[AbstractEventData] = {
     val eventIdsToBeIncluded = eventIds.toSet
-    pertinentEventDatums(cutoffRevision, PositiveInfinity(), eventIdsToBeIncluded.contains)
+    pertinentEventDatums(cutoffRevision, PositiveInfinity(), eventId => !eventIdsToBeIncluded.contains(eventId))
   }
 
   def pertinentEventDatums(cutoffRevision: Revision): Seq[AbstractEventData] =
@@ -127,7 +127,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
 
   override protected def transactNewRevision(asOf: Instant,
                                              newEventDatumsFor: Revision => Map[EventId, AbstractEventData],
-                                             buildAndValidateEventTimelineForProposedNewRevision: (Map[EventId, AbstractEventData], Revision, Seq[AbstractEventData], Set[AbstractEventData]) => Unit): Revision = {
+                                             buildAndValidateEventTimelineForProposedNewRevision: (Map[EventId, AbstractEventData], Revision, Seq[AbstractEventData]) => Unit): Revision = {
     mutableState.synchronized {
       mutableState.idOfThreadMostRecentlyStartingARevision = Thread.currentThread.getId
       checkRevisionPrecondition(asOf, revisionAsOfs)
@@ -137,11 +137,9 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
 
     val newEventDatums: Map[EventId, AbstractEventData] = newEventDatumsFor(nextRevisionPriorToUpdate)
 
-    val obsoleteEventDatums = Set(mutableState.pertinentEventDatums(nextRevisionPriorToUpdate, newEventDatums.keys): _*)
+    val pertinentEventDatumsExcludingTheNewRevision = mutableState.pertinentEventDatums(nextRevisionPriorToUpdate, newEventDatums.keys)
 
-    val pertinentEventDatumsExcludingTheNewRevision = mutableState.pertinentEventDatums(nextRevisionPriorToUpdate)
-
-    buildAndValidateEventTimelineForProposedNewRevision(newEventDatums, nextRevisionPriorToUpdate, pertinentEventDatumsExcludingTheNewRevision, obsoleteEventDatums)
+    buildAndValidateEventTimelineForProposedNewRevision(newEventDatums, nextRevisionPriorToUpdate, pertinentEventDatumsExcludingTheNewRevision)
 
     mutableState.synchronized {
       if (mutableState.idOfThreadMostRecentlyStartingARevision != Thread.currentThread.getId) {

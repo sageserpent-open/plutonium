@@ -145,7 +145,7 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
 
   def pertinentEventDatumsFuture(redisClient: RedisCommands, cutoffRevision: Revision, eventIds: Iterable[EventId]): Future[Seq[AbstractEventData]] = {
     val eventIdsToBeIncluded = eventIds.toSet
-    pertinentEventDatumsFuture(redisClient, cutoffRevision, PositiveInfinity(), eventIdsToBeIncluded.contains)
+    pertinentEventDatumsFuture(redisClient, cutoffRevision, PositiveInfinity(), eventId => !eventIdsToBeIncluded.contains(eventId))
   }
 
   def pertinentEventDatumsFuture(redisClient: RedisCommands, cutoffRevision: Revision): Future[Seq[AbstractEventData]] =
@@ -153,7 +153,7 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
 
   override protected def transactNewRevision(asOf: Instant,
                                              newEventDatumsFor: Revision => Map[EventId, AbstractEventData],
-                                             buildAndValidateEventTimelineForProposedNewRevision: (Map[EventId, AbstractEventData], Revision, Seq[AbstractEventData], Set[AbstractEventData]) => Unit): Revision = {
+                                             buildAndValidateEventTimelineForProposedNewRevision: (Map[EventId, AbstractEventData], Revision, Seq[AbstractEventData]) => Unit): Revision = {
     // TODO - concurrency safety!
 
     try {
@@ -161,10 +161,9 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
       Await.result(for {
         nextRevisionPriorToUpdate <- nextRevisionFuture(redisClient)
         newEventDatums: Map[EventId, AbstractEventData] = newEventDatumsFor(nextRevisionPriorToUpdate)
-        ((obsoleteEventDatums: Set[AbstractEventData], pertinentEventDatumsExcludingTheNewRevision: Seq[AbstractEventData]), _) <-
-        (pertinentEventDatumsFuture(redisClient, nextRevisionPriorToUpdate, newEventDatums.keys.toSeq).map(Set(_: _*)) zip
-          pertinentEventDatumsFuture(redisClient, nextRevisionPriorToUpdate)) zip revisionPreconditionFutureRunningInParallel
-        _ = buildAndValidateEventTimelineForProposedNewRevision(newEventDatums, nextRevisionPriorToUpdate, pertinentEventDatumsExcludingTheNewRevision, obsoleteEventDatums)
+        (pertinentEventDatumsExcludingTheNewRevision: Seq[AbstractEventData], _) <-
+        pertinentEventDatumsFuture(redisClient, nextRevisionPriorToUpdate, newEventDatums.keys.toSeq) zip revisionPreconditionFutureRunningInParallel
+        _ = buildAndValidateEventTimelineForProposedNewRevision(newEventDatums, nextRevisionPriorToUpdate, pertinentEventDatumsExcludingTheNewRevision)
         _ <- Future.traverse(newEventDatums) {
           case (eventId, eventDatum) =>
             redisClient.zadd[AbstractEventData](eventCorrectionsKeyFrom(eventId), nextRevisionPriorToUpdate.toDouble -> eventDatum) zip
