@@ -5,7 +5,7 @@ import java.time.Instant
 
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.{Finite, Unbounded}
-import com.sageserpent.plutonium.WorldReferenceImplementation.IdentifiedItemsScope
+import com.sageserpent.plutonium.WorldImplementationCodeFactoring.IdentifiedItemsScope
 import org.scalacheck.Prop.BooleanOperators
 import org.scalacheck.{Gen, Prop, Test}
 import org.scalamock.scalatest.MockFactory
@@ -42,8 +42,10 @@ class PatchRecorderSpec extends FlatSpec with Matchers with Checkers with MockFa
   val fooProperty1 = fooClazz.getMethod("property1")
   val fooProperty2 = fooClazz.getMethod("property2")
 
-  def patchGenerator(method: Method)(id: FooHistory#Id) = Gen.const(() => {
-    abstract class WorkaroundToMakeAbstractPatchMockable extends AbstractPatch(method) {
+  def patchGenerator(expectedMethod: Method)(id: FooHistory#Id) = Gen.const(() => {
+    abstract class WorkaroundToMakeAbstractPatchMockable extends AbstractPatch {
+      override val method = expectedMethod
+
       override val targetReconstitutionData: Recorder#ItemReconstitutionData[FooHistory] = id -> typeTag[FooHistory]
 
       override val argumentReconstitutionDatums = Seq.empty
