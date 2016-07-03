@@ -122,10 +122,10 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
     override protected def pertinentEventDatumsObservable(cutoffRevision: Revision, cutoffWhen: Unbounded[Instant], eventIdInclusion: EventIdInclusion): Observable[Seq[AbstractEventData]] = {
       val cutoffWhenForBaseWorld = cutoffWhen min cutoffWhenAfterWhichHistoriesDiverge
       if (cutoffRevision > numberOfRevisionsInCommon) for {
-        (eventIds, eventDatums) <- eventIdsAndTheirDatumsObservable(cutoffRevision, cutoffWhen, eventIdInclusion)
+        (eventIds, eventDatums) <- eventIdsAndTheirDatumsObservable(cutoffRevision, eventIdInclusion).toList map (_.unzip)
         eventIdsToBeExcluded = eventIds.toSet
         eventDatumsFromBaseWorld <- baseWorld.pertinentEventDatumsObservable(numberOfRevisionsInCommon, cutoffWhenForBaseWorld, eventId => !eventIdsToBeExcluded.contains(eventId) && eventIdInclusion(eventId))
-      } yield eventDatums ++ eventDatumsFromBaseWorld
+      } yield (eventDatums filter (eventDatumComesWithinCutoff(_, cutoffWhen))) ++ eventDatumsFromBaseWorld
       else baseWorld.pertinentEventDatumsObservable(cutoffRevision, cutoffWhenForBaseWorld, eventIdInclusion)
     }
   }
@@ -139,20 +139,20 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
   type EventIdInclusion = EventId => Boolean
 
   protected def pertinentEventDatumsObservable(cutoffRevision: Revision, cutoffWhen: Unbounded[Instant], eventIdInclusion: EventIdInclusion): Observable[Seq[AbstractEventData]] =
-    eventIdsAndTheirDatumsObservable(cutoffRevision, cutoffWhen, eventIdInclusion) map (_._2)
+    eventIdsAndTheirDatumsObservable(cutoffRevision, eventIdInclusion) map (_._2) filter (eventDatumComesWithinCutoff(_, cutoffWhen)) toList
 
-  def eventIdsAndTheirDatumsObservable(cutoffRevision: Revision, cutoffWhen: Unbounded[Instant], eventIdInclusion: EventIdInclusion): Observable[(Seq[EventId], Seq[AbstractEventData])] = {
-    for {
-      (eventIds, eventDatums) <- (for {
+  private def eventDatumComesWithinCutoff(eventDatum: AbstractEventData, cutoffWhen: Unbounded[Instant]) = eventDatum match {
+    case eventData: EventData => eventData.serializableEvent.when <= cutoffWhen
+    case _ => true
+  }
+
+  def eventIdsAndTheirDatumsObservable(cutoffRevision: Revision, eventIdInclusion: EventIdInclusion): Observable[(EventId, AbstractEventData)] = {
+      for {
         eventId <- toScalaObservable(redisApiForEventId.smembers(eventIdsKey)) filter eventIdInclusion
         eventIdAndDataPair <- toScalaObservable(redisApiForEventDatum.zrevrangebyscore(eventCorrectionsKeyFrom(eventId),
           cutoffRevision - 1, initialRevision,
           0, 1)) map (eventId -> _)
-      } yield eventIdAndDataPair).toList map (_.unzip)
-    } yield eventIds -> eventDatums.filter {
-      case eventData: EventData => eventData.serializableEvent.when <= cutoffWhen
-      case _ => true
-    }
+      } yield eventIdAndDataPair
   }
 
   def pertinentEventDatumsObservable(cutoffRevision: Revision, eventIds: Iterable[EventId]): Observable[Seq[AbstractEventData]] = {
