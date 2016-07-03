@@ -1,21 +1,24 @@
 package com.sageserpent.plutonium
 
+import java.nio.ByteBuffer
 import java.time.Instant
 import java.util.UUID
 
-import akka.util.ByteString
 import com.esotericsoftware.kryo.io.{Input, Output}
 import com.esotericsoftware.kryo.serializers.JavaSerializer
 import com.esotericsoftware.kryo.{Kryo, Serializer}
+import com.lambdaworks.redis.RedisClient
+import com.lambdaworks.redis.codec.{ByteArrayCodec, RedisCodec, Utf8StringCodec}
 import com.sageserpent.americium.{PositiveInfinity, Unbounded}
+import com.sageserpent.plutonium.World.Revision
+import com.sageserpent.plutonium.WorldImplementationCodeFactoring.AbstractEventData
 import com.twitter.chill.{KryoInstantiator, KryoPool}
 import org.objenesis.strategy.SerializingInstantiatorStrategy
-import redis.api.Limit
-import redis.{ByteStringFormatter, RedisClient, RedisCommands}
+import rx.lang.scala.JavaConversions._
+import rx.lang.scala.Observable
 
 import scala.Ordering.Implicits._
-import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionException, Future}
+import scala.concurrent.ExecutionException
 import scala.reflect.runtime.universe._
 
 
@@ -24,8 +27,6 @@ import scala.reflect.runtime.universe._
   */
 
 object WorldRedisBasedImplementation {
-  import WorldImplementationCodeFactoring._
-
   val redisNamespaceComponentSeparator = ":"
 
   val javaSerializer = new JavaSerializer
@@ -55,26 +56,44 @@ object WorldRedisBasedImplementation {
     kryo.setInstantiatorStrategy(new SerializingInstantiatorStrategy)
   }))
 
-  def byteStringFormatterFor[Value: TypeTag] = new ByteStringFormatter[Value] {
-    override def serialize(data: Value): ByteString = ByteString(kryoPool.toBytesWithClass(data))
 
-    override def deserialize(bs: ByteString): Value = kryoPool.fromBytes(bs.toArray).asInstanceOf[Value]
+  trait RedisCodecDelegatingKeysToStandardCodec[Value] extends RedisCodec[String, Value] {
+    protected val stringKeyStringValueCodec = new Utf8StringCodec
+
+    override def encodeKey(key: String): ByteBuffer = stringKeyStringValueCodec.encodeKey(key)
+
+    override def decodeKey(bytes: ByteBuffer): String = stringKeyStringValueCodec.decodeKey(bytes)
   }
 
-  implicit val byteStringFormatterForInstant = byteStringFormatterFor[Instant]
+  def codecFor[Value] = new RedisCodecDelegatingKeysToStandardCodec[Value] {
+    override def encodeValue(value: Value): ByteBuffer = ByteArrayCodec.INSTANCE.encodeValue(kryoPool.toBytesWithClass(value))
 
-  implicit val byteStringFormatterForEventData = byteStringFormatterFor[AbstractEventData]
+    override def decodeValue(bytes: ByteBuffer): Value = kryoPool.fromBytes(ByteArrayCodec.INSTANCE.decodeValue(bytes)).asInstanceOf[Value]
+  }
+
+  val instantCodec = codecFor[Instant]
+
+  val eventDataCodec = codecFor[AbstractEventData]
+
+  val revisionCodec = codecFor[Revision]
 }
 
 class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, identityGuid: String) extends WorldImplementationCodeFactoring[EventId] {
   parentWorld =>
+
   import World._
   import WorldImplementationCodeFactoring._
   import WorldRedisBasedImplementation._
 
-  import scala.concurrent.ExecutionContext.Implicits.global
+  val eventIdCodec = codecFor[EventId]
 
-  implicit val byteStringFormatterForEventId = byteStringFormatterFor[EventId]
+  val redisApi = redisClient.connect().reactive()
+
+  val redisApiForEventId = redisClient.connect(eventIdCodec).reactive()
+
+  val redisApiForInstant = redisClient.connect(instantCodec).reactive()
+
+  val redisApiForEventDatum = redisClient.connect(eventDataCodec).reactive()
 
   val asOfsKey = s"${identityGuid}${redisNamespaceComponentSeparator}asOfs"
 
@@ -84,72 +103,65 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
 
   def eventCorrectionsKeyFrom(eventId: EventId) = s"${eventCorrectionsKeyPrefix}${eventId}"
 
-  override def nextRevision: Revision = Await.result(nextRevisionFuture(redisClient), Duration.Inf)
+  override def nextRevision: Revision = nextRevisionObservable.toBlocking.first
 
-  protected def nextRevisionFuture(redisClient: RedisCommands): Future[EventOrderingTiebreakerIndex] = {
-    redisClient.llen(asOfsKey) map (_.toInt)
-  }
+  protected def nextRevisionObservable: Observable[Revision] = toScalaObservable(redisApi.llen(asOfsKey)) map (_.toInt)
 
   override def forkExperimentalWorld(scope: javaApi.Scope): World[EventId] = new WorldRedisBasedImplementation[EventId](redisClient = parentWorld.redisClient, identityGuid = s"${parentWorld.identityGuid}-experimental-${UUID.randomUUID()}") {
     val baseWorld = parentWorld
     val numberOfRevisionsInCommon = scope.nextRevision
     val cutoffWhenAfterWhichHistoriesDiverge = scope.when
 
-    override protected def nextRevisionFuture(redisClient: RedisCommands): Future[EventOrderingTiebreakerIndex] = super.nextRevisionFuture(redisClient) map (numberOfRevisionsInCommon + _)
+    override protected def nextRevisionObservable: Observable[Revision] = super.nextRevisionObservable map (numberOfRevisionsInCommon + _)
 
-    override protected def revisionAsOfsFuture(redisClient: RedisCommands): Future[Seq[Instant]] = for {
-      revisionAsOfsFromBaseWorld <- baseWorld.revisionAsOfsFuture(redisClient)
-      revisionAsOfsFromSuper <- super.revisionAsOfsFuture(redisClient)
+    override protected def revisionAsOfsObservable: Observable[Seq[Instant]] = for {
+      revisionAsOfsFromBaseWorld <- baseWorld.revisionAsOfsObservable
+      revisionAsOfsFromSuper <- super.revisionAsOfsObservable
     } yield (revisionAsOfsFromBaseWorld take numberOfRevisionsInCommon) ++ revisionAsOfsFromSuper
 
-    override protected def pertinentEventDatumsFuture(redisClient: RedisCommands, cutoffRevision: Revision, cutoffWhen: Unbounded[Instant], eventIdInclusion: EventIdInclusion): Future[Seq[AbstractEventData]] = {
+    override protected def pertinentEventDatumsObservable(cutoffRevision: Revision, cutoffWhen: Unbounded[Instant], eventIdInclusion: EventIdInclusion): Observable[Seq[AbstractEventData]] = {
       val cutoffWhenForBaseWorld = cutoffWhen min cutoffWhenAfterWhichHistoriesDiverge
       if (cutoffRevision > numberOfRevisionsInCommon) for {
-        (eventIds, eventDatums) <- eventIdsAndTheirDatumsFuture(redisClient, cutoffRevision, cutoffWhen, eventIdInclusion)
+        (eventIds, eventDatums) <- eventIdsAndTheirDatumsObservable(cutoffRevision, cutoffWhen, eventIdInclusion)
         eventIdsToBeExcluded = eventIds.toSet
-        eventDatumsFromBaseWorld <- baseWorld.pertinentEventDatumsFuture(redisClient, numberOfRevisionsInCommon, cutoffWhenForBaseWorld, eventId => !eventIdsToBeExcluded.contains(eventId) && eventIdInclusion(eventId))
+        eventDatumsFromBaseWorld <- baseWorld.pertinentEventDatumsObservable(numberOfRevisionsInCommon, cutoffWhenForBaseWorld, eventId => !eventIdsToBeExcluded.contains(eventId) && eventIdInclusion(eventId))
       } yield eventDatums ++ eventDatumsFromBaseWorld
-      else baseWorld.pertinentEventDatumsFuture(redisClient, cutoffRevision, cutoffWhenForBaseWorld, eventIdInclusion)
+      else baseWorld.pertinentEventDatumsObservable(cutoffRevision, cutoffWhenForBaseWorld, eventIdInclusion)
     }
   }
 
-  override def revisionAsOfs: Seq[Instant] = Await.result(revisionAsOfsFuture(redisClient), Duration.Inf)
+  override def revisionAsOfs: Seq[Instant] = revisionAsOfsObservable.toBlocking.first
 
-  protected def revisionAsOfsFuture(redisClient: RedisCommands): Future[Seq[Instant]] = {
-    redisClient.lrange[Instant](asOfsKey, 0, -1)
-  }
+  protected def revisionAsOfsObservable: Observable[Seq[Instant]] = toScalaObservable(redisApiForInstant.lrange(asOfsKey, 0, -1)).toList
 
-  override protected def eventTimeline(cutoffRevision: Revision): Seq[SerializableEvent] = eventTimelineFrom(Await.result(pertinentEventDatumsFuture(redisClient, cutoffRevision), Duration.Inf))
+  override protected def eventTimeline(cutoffRevision: Revision): Seq[SerializableEvent] = eventTimelineFrom(pertinentEventDatumsObservable(cutoffRevision).toBlocking.first)
 
   type EventIdInclusion = EventId => Boolean
 
-  protected def pertinentEventDatumsFuture(redisClient: RedisCommands, cutoffRevision: Revision, cutoffWhen: Unbounded[Instant], eventIdInclusion: EventIdInclusion): Future[Seq[AbstractEventData]] =
-    eventIdsAndTheirDatumsFuture(redisClient, cutoffRevision, cutoffWhen, eventIdInclusion) map (_._2)
+  protected def pertinentEventDatumsObservable(cutoffRevision: Revision, cutoffWhen: Unbounded[Instant], eventIdInclusion: EventIdInclusion): Observable[Seq[AbstractEventData]] =
+    eventIdsAndTheirDatumsObservable(cutoffRevision, cutoffWhen, eventIdInclusion) map (_._2)
 
-  def eventIdsAndTheirDatumsFuture(redisClient: RedisCommands, cutoffRevision: Revision, cutoffWhen: Unbounded[Instant], eventIdInclusion: EventIdInclusion): Future[(Seq[EventId], Seq[AbstractEventData])] = {
+  def eventIdsAndTheirDatumsObservable(cutoffRevision: Revision, cutoffWhen: Unbounded[Instant], eventIdInclusion: EventIdInclusion): Observable[(Seq[EventId], Seq[AbstractEventData])] = {
     for {
-      eventIds: Seq[EventId] <- redisClient.smembers[EventId](eventIdsKey) map (_ filter eventIdInclusion)
-      eventIdAndDataPairs <- Future.traverse(eventIds)(eventId =>
-        for {
-          eventDatumsContainers <- redisClient.zrevrangebyscore[AbstractEventData](eventCorrectionsKeyFrom(eventId),
-            min = Limit(initialRevision, inclusive = true),
-            max = Limit(cutoffRevision, inclusive = false),
-            limit = Some(0, 1))
-        } yield eventDatumsContainers map (eventId -> _)) map (_.flatten)
-      (eventIds, eventDatums) = eventIdAndDataPairs.unzip
+      (eventIds, eventDatums) <- (for {
+        eventId <- toScalaObservable(redisApiForEventId.smembers(eventIdsKey)) filter eventIdInclusion
+        eventIdAndDataPair <- toScalaObservable(redisApiForEventDatum.zrevrangebyscore(eventCorrectionsKeyFrom(eventId),
+          cutoffRevision - 1, initialRevision,
+          0, 1)) map (eventId -> _)
+      } yield eventIdAndDataPair).toList map (_.unzip)
     } yield eventIds -> eventDatums.filter {
       case eventData: EventData => eventData.serializableEvent.when <= cutoffWhen
       case _ => true
     }
   }
 
-  def pertinentEventDatumsFuture(redisClient: RedisCommands, cutoffRevision: Revision, eventIds: Iterable[EventId]): Future[Seq[AbstractEventData]] = {
+  def pertinentEventDatumsObservable(cutoffRevision: Revision, eventIds: Iterable[EventId]): Observable[Seq[AbstractEventData]] = {
     val eventIdsToBeIncluded = eventIds.toSet
-    pertinentEventDatumsFuture(redisClient, cutoffRevision, PositiveInfinity(), eventId => !eventIdsToBeIncluded.contains(eventId))
+    pertinentEventDatumsObservable(cutoffRevision, PositiveInfinity(), eventId => !eventIdsToBeIncluded.contains(eventId))
   }
 
-  def pertinentEventDatumsFuture(redisClient: RedisCommands, cutoffRevision: Revision): Future[Seq[AbstractEventData]] =
-    pertinentEventDatumsFuture(redisClient, cutoffRevision, PositiveInfinity(), _ => true)
+  def pertinentEventDatumsObservable(cutoffRevision: Revision): Observable[Seq[AbstractEventData]] =
+    pertinentEventDatumsObservable(cutoffRevision, PositiveInfinity(), _ => true)
 
   override protected def transactNewRevision(asOf: Instant,
                                              newEventDatumsFor: Revision => Map[EventId, AbstractEventData],
@@ -157,19 +169,18 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
     // TODO - concurrency safety!
 
     try {
-      val revisionPreconditionFutureRunningInParallel = for (revisionAsOfs <- revisionAsOfsFuture(redisClient)) yield checkRevisionPrecondition(asOf, revisionAsOfs)
-      Await.result(for {
-        nextRevisionPriorToUpdate <- nextRevisionFuture(redisClient)
+      val revisionPreconditionObservableRunningInParallel = for (revisionAsOfs <- revisionAsOfsObservable) yield checkRevisionPrecondition(asOf, revisionAsOfs)
+      (for {
+        nextRevisionPriorToUpdate <- nextRevisionObservable
         newEventDatums: Map[EventId, AbstractEventData] = newEventDatumsFor(nextRevisionPriorToUpdate)
         (pertinentEventDatumsExcludingTheNewRevision: Seq[AbstractEventData], _) <-
-        pertinentEventDatumsFuture(redisClient, nextRevisionPriorToUpdate, newEventDatums.keys.toSeq) zip revisionPreconditionFutureRunningInParallel
+        pertinentEventDatumsObservable(nextRevisionPriorToUpdate, newEventDatums.keys.toSeq) zip revisionPreconditionObservableRunningInParallel
         _ = buildAndValidateEventTimelineForProposedNewRevision(newEventDatums, nextRevisionPriorToUpdate, pertinentEventDatumsExcludingTheNewRevision)
-        _ <- Future.traverse(newEventDatums) {
+        _ <- Observable.from(newEventDatums map {
           case (eventId, eventDatum) =>
-            redisClient.zadd[AbstractEventData](eventCorrectionsKeyFrom(eventId), nextRevisionPriorToUpdate.toDouble -> eventDatum) zip
-              redisClient.sadd[EventId](eventIdsKey, eventId)
-        } zip redisClient.rpush[Instant](asOfsKey, asOf)
-      } yield nextRevisionPriorToUpdate, Duration.Inf)
+            redisApiForEventDatum.zadd(eventCorrectionsKeyFrom(eventId), nextRevisionPriorToUpdate.toDouble, eventDatum) zip redisApiForEventId.sadd(eventIdsKey, eventId)
+        }).flatten zip redisApiForInstant.rpush(asOfsKey, asOf)
+      } yield nextRevisionPriorToUpdate).toBlocking.first
     }
     catch {
       case exception: ExecutionException => throw exception.getCause

@@ -4,6 +4,7 @@ import java.time.Instant
 import java.util
 import java.util.{Optional, UUID}
 
+import com.lambdaworks.redis.{RedisClient, RedisURI}
 import com.sageserpent.americium.Unbounded
 import org.scalacheck.{Gen, Prop, Test}
 import org.scalatest.prop.Checkers
@@ -13,7 +14,6 @@ import org.scalatest.{FlatSpec, Matchers}
 import scala.util.Random
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.plutonium.World.Revision
-import redis.RedisClient
 import resource._
 
 import scala.collection.mutable.Set
@@ -154,9 +154,9 @@ class WorldStateSharingSpecUsingWorldRedisBasedImplementation extends WorldState
   val worldSharingCommonStateFactoryResourceGenerator: Gen[ManagedResource[() => World[Int]]] =
     Gen.const(for {
       sharedGuid <- makeManagedResource(UUID.randomUUID().toString)(_ => {})(List.empty)
-      redisClientSet <- makeManagedResource(Set.empty[RedisClient])(redisClientSet => redisClientSet.foreach(_.stop()))(List.empty)
+      redisClientSet <- makeManagedResource(Set.empty[RedisClient])(redisClientSet => redisClientSet.foreach(_.shutdown()))(List.empty)
     } yield {
-      val redisClient = RedisClient(host = "localhost", port = redisServerPort)(akkaSystem)
+      val redisClient = RedisClient.create(RedisURI.Builder.redis("localhost", redisServerPort).build())
       redisClientSet += redisClient
       () => new WorldRedisBasedImplementation[Int](redisClient, sharedGuid)
     })
