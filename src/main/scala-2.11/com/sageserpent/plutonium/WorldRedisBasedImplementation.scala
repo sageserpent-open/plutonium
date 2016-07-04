@@ -119,13 +119,13 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
       revisionAsOfsFromSuper <- super.revisionAsOfsObservable
     } yield (revisionAsOfsFromBaseWorld take numberOfRevisionsInCommon) ++ revisionAsOfsFromSuper
 
-    override protected def pertinentEventDatumsObservable(cutoffRevision: Revision, cutoffWhen: Unbounded[Instant], eventIdInclusion: EventIdInclusion): Observable[Seq[AbstractEventData]] = {
+    override protected def pertinentEventDatumsObservable(cutoffRevision: Revision, cutoffWhen: Unbounded[Instant], eventIdInclusion: EventIdInclusion): Observable[AbstractEventData] = {
       val cutoffWhenForBaseWorld = cutoffWhen min cutoffWhenAfterWhichHistoriesDiverge
       if (cutoffRevision > numberOfRevisionsInCommon) for {
         (eventIds, eventDatums) <- eventIdsAndTheirDatumsObservable(cutoffRevision, eventIdInclusion).toList map (_.unzip)
         eventIdsToBeExcluded = eventIds.toSet
-        eventDatumsFromBaseWorld <- baseWorld.pertinentEventDatumsObservable(numberOfRevisionsInCommon, cutoffWhenForBaseWorld, eventId => !eventIdsToBeExcluded.contains(eventId) && eventIdInclusion(eventId))
-      } yield (eventDatums filter (eventDatumComesWithinCutoff(_, cutoffWhen))) ++ eventDatumsFromBaseWorld
+        eventDatum <- Observable.from(eventDatums filter (eventDatumComesWithinCutoff(_, cutoffWhen))) merge baseWorld.pertinentEventDatumsObservable(numberOfRevisionsInCommon, cutoffWhenForBaseWorld, eventId => !eventIdsToBeExcluded.contains(eventId) && eventIdInclusion(eventId))
+      } yield eventDatum
       else baseWorld.pertinentEventDatumsObservable(cutoffRevision, cutoffWhenForBaseWorld, eventIdInclusion)
     }
   }
@@ -134,12 +134,12 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
 
   protected def revisionAsOfsObservable: Observable[Seq[Instant]] = toScalaObservable(redisApiForInstant.lrange(asOfsKey, 0, -1)).toList
 
-  override protected def eventTimeline(cutoffRevision: Revision): Seq[SerializableEvent] = eventTimelineFrom(pertinentEventDatumsObservable(cutoffRevision).toBlocking.first)
+  override protected def eventTimeline(cutoffRevision: Revision): Seq[SerializableEvent] = eventTimelineFrom(pertinentEventDatumsObservable(cutoffRevision).toBlocking.toList)
 
   type EventIdInclusion = EventId => Boolean
 
-  protected def pertinentEventDatumsObservable(cutoffRevision: Revision, cutoffWhen: Unbounded[Instant], eventIdInclusion: EventIdInclusion): Observable[Seq[AbstractEventData]] =
-    eventIdsAndTheirDatumsObservable(cutoffRevision, eventIdInclusion) map (_._2) filter (eventDatumComesWithinCutoff(_, cutoffWhen)) toList
+  protected def pertinentEventDatumsObservable(cutoffRevision: Revision, cutoffWhen: Unbounded[Instant], eventIdInclusion: EventIdInclusion): Observable[AbstractEventData] =
+    eventIdsAndTheirDatumsObservable(cutoffRevision, eventIdInclusion) map (_._2) filter (eventDatumComesWithinCutoff(_, cutoffWhen))
 
   private def eventDatumComesWithinCutoff(eventDatum: AbstractEventData, cutoffWhen: Unbounded[Instant]) = eventDatum match {
     case eventData: EventData => eventData.serializableEvent.when <= cutoffWhen
@@ -155,12 +155,12 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
       } yield eventIdAndDataPair
   }
 
-  def pertinentEventDatumsObservable(cutoffRevision: Revision, eventIds: Iterable[EventId]): Observable[Seq[AbstractEventData]] = {
+  def pertinentEventDatumsObservable(cutoffRevision: Revision, eventIds: Iterable[EventId]): Observable[AbstractEventData] = {
     val eventIdsToBeIncluded = eventIds.toSet
     pertinentEventDatumsObservable(cutoffRevision, PositiveInfinity(), eventId => !eventIdsToBeIncluded.contains(eventId))
   }
 
-  def pertinentEventDatumsObservable(cutoffRevision: Revision): Observable[Seq[AbstractEventData]] =
+  def pertinentEventDatumsObservable(cutoffRevision: Revision): Observable[AbstractEventData] =
     pertinentEventDatumsObservable(cutoffRevision, PositiveInfinity(), _ => true)
 
   override protected def transactNewRevision(asOf: Instant,
@@ -174,7 +174,7 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
         nextRevisionPriorToUpdate <- nextRevisionObservable
         newEventDatums: Map[EventId, AbstractEventData] = newEventDatumsFor(nextRevisionPriorToUpdate)
         (pertinentEventDatumsExcludingTheNewRevision: Seq[AbstractEventData], _) <-
-        pertinentEventDatumsObservable(nextRevisionPriorToUpdate, newEventDatums.keys.toSeq) zip revisionPreconditionObservableRunningInParallel
+        pertinentEventDatumsObservable(nextRevisionPriorToUpdate, newEventDatums.keys.toSeq).toList zip revisionPreconditionObservableRunningInParallel
         _ = buildAndValidateEventTimelineForProposedNewRevision(newEventDatums, nextRevisionPriorToUpdate, pertinentEventDatumsExcludingTheNewRevision)
         _ <- Observable.from(newEventDatums map {
           case (eventId, eventDatum) =>
