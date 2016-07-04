@@ -58,27 +58,17 @@ object WorldRedisBasedImplementation {
   }))
 
 
-  trait RedisCodecDelegatingKeysToStandardCodec[Value] extends RedisCodec[String, Value] {
+  object redisCodecDelegatingKeysToStandardCodec extends RedisCodec[String, Any] {
     protected val stringKeyStringValueCodec = new Utf8StringCodec
 
     override def encodeKey(key: String): ByteBuffer = stringKeyStringValueCodec.encodeKey(key)
 
     override def decodeKey(bytes: ByteBuffer): String = stringKeyStringValueCodec.decodeKey(bytes)
+
+    override def encodeValue(value: Any): ByteBuffer = ByteArrayCodec.INSTANCE.encodeValue(kryoPool.toBytesWithClass(value))
+
+    override def decodeValue(bytes: ByteBuffer): Any = kryoPool.fromBytes(ByteArrayCodec.INSTANCE.decodeValue(bytes))
   }
-
-  def codecFor[Value] = new RedisCodecDelegatingKeysToStandardCodec[Value] {
-    override def encodeValue(value: Value): ByteBuffer = ByteArrayCodec.INSTANCE.encodeValue(kryoPool.toBytesWithClass(value))
-
-    override def decodeValue(bytes: ByteBuffer): Value = kryoPool.fromBytes(ByteArrayCodec.INSTANCE.decodeValue(bytes)).asInstanceOf[Value]
-  }
-
-  val oneSizeFitsAllCodec = codecFor[Any]
-
-  val instantCodec = codecFor[Instant]
-
-  val eventDataCodec = codecFor[AbstractEventData]
-
-  val revisionCodec = codecFor[Revision]
 }
 
 class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, identityGuid: String) extends WorldImplementationCodeFactoring[EventId] {
@@ -88,17 +78,15 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
   import WorldImplementationCodeFactoring._
   import WorldRedisBasedImplementation._
 
-  val eventIdCodec = codecFor[EventId]
-
   var redisApi: RedisReactiveCommands[String, Any] = null
 
   setupRedisApi()
 
   private def setupRedisApi() = {
-    redisApi = redisClient.connect(oneSizeFitsAllCodec).reactive()
+    redisApi = redisClient.connect(redisCodecDelegatingKeysToStandardCodec).reactive()
   }
 
-  private def teardownRedisApi: Unit = {
+  private def teardownRedisApi(): Unit = {
     redisApi.close()
   }
 
@@ -191,7 +179,7 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
     }
     catch {
       case exception: EncoderException =>
-        teardownRedisApi
+        teardownRedisApi()
         setupRedisApi()
         throw exception.getCause
     }
