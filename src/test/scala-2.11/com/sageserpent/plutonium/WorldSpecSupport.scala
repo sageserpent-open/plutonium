@@ -7,13 +7,13 @@ package com.sageserpent.plutonium
 import java.time.Instant
 import java.util.UUID
 
+import com.lambdaworks.redis.{RedisClient, RedisURI}
 import com.sageserpent.americium
 import com.sageserpent.americium._
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.seqEnrichment._
 import com.sageserpent.plutonium.World._
 import org.scalacheck.{Arbitrary, Gen}
-import redis.RedisClient
 import resource._
 
 import scala.collection.JavaConversions._
@@ -567,11 +567,11 @@ trait WorldReferenceImplementationResource extends WorldResource {
     Gen.const(makeManagedResource(new WorldReferenceImplementation[Int] with WorldContracts[Int])(_ => {})(List.empty))
 }
 
-trait WorldRedisBasedImplementationResource extends WorldResource with RedisServerFixture with DisableAkkaLogging {
+trait WorldRedisBasedImplementationResource extends WorldResource with RedisServerFixture {
   val worldResourceGenerator: Gen[ManagedResource[World[Int]]] =
     Gen.const {
       for {
-        redisClient <- makeManagedResource(RedisClient(host = "localhost", port = redisServerPort)(akkaSystem))(_.stop())(List.empty)
+        redisClient <- makeManagedResource(RedisClient.create(RedisURI.Builder.redis("localhost", redisServerPort).build()))(_.shutdown())(List.empty)
         worldResource <- makeManagedResource(new WorldRedisBasedImplementation[Int](redisClient, UUID.randomUUID().toString) with WorldContracts[Int])(_ => {})(List.empty)
       } yield worldResource
     }
