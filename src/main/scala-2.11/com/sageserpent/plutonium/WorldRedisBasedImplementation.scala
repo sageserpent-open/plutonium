@@ -8,17 +8,18 @@ import com.esotericsoftware.kryo.io.{Input, Output}
 import com.esotericsoftware.kryo.serializers.JavaSerializer
 import com.esotericsoftware.kryo.{Kryo, Serializer}
 import com.lambdaworks.redis.RedisClient
+import com.lambdaworks.redis.api.rx.RedisReactiveCommands
 import com.lambdaworks.redis.codec.{ByteArrayCodec, RedisCodec, Utf8StringCodec}
 import com.sageserpent.americium.{PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.World.Revision
 import com.sageserpent.plutonium.WorldImplementationCodeFactoring.AbstractEventData
 import com.twitter.chill.{KryoInstantiator, KryoPool}
+import io.netty.handler.codec.EncoderException
 import org.objenesis.strategy.SerializingInstantiatorStrategy
 import rx.lang.scala.JavaConversions._
 import rx.lang.scala.Observable
 
 import scala.Ordering.Implicits._
-import scala.concurrent.ExecutionException
 import scala.reflect.runtime.universe._
 
 
@@ -87,13 +88,29 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
 
   val eventIdCodec = codecFor[EventId]
 
-  val redisApi = redisClient.connect().reactive()
+  var redisApi: RedisReactiveCommands[String, String] = null
 
-  val redisApiForEventId = redisClient.connect(eventIdCodec).reactive()
+  var redisApiForEventId: RedisReactiveCommands[String, EventId] = null
 
-  val redisApiForInstant = redisClient.connect(instantCodec).reactive()
+  var redisApiForInstant: RedisReactiveCommands[String, Instant] = null
 
-  val redisApiForEventDatum = redisClient.connect(eventDataCodec).reactive()
+  var redisApiForEventDatum: RedisReactiveCommands[String, AbstractEventData] = null
+
+  setupRedisApis()
+
+  private def setupRedisApis() = {
+    redisApi = redisClient.connect().reactive()
+    redisApiForEventId = redisClient.connect(eventIdCodec).reactive()
+    redisApiForInstant = redisClient.connect(instantCodec).reactive()
+    redisApiForEventDatum = redisClient.connect(eventDataCodec).reactive()
+  }
+
+  private def teardownRedisApis: Unit = {
+    redisApi.close()
+    redisApiForInstant.close()
+    redisApiForEventId.close()
+    redisApiForEventDatum.close()
+  }
 
   val asOfsKey = s"${identityGuid}${redisNamespaceComponentSeparator}asOfs"
 
@@ -183,7 +200,10 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
       } yield nextRevisionPriorToUpdate).toBlocking.first
     }
     catch {
-      case exception: ExecutionException => throw exception.getCause
+      case exception: EncoderException =>
+        teardownRedisApis
+        setupRedisApis()
+        throw exception.getCause
     }
   }
 }
