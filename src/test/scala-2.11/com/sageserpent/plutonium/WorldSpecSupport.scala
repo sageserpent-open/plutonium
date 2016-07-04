@@ -567,7 +567,7 @@ trait WorldReferenceImplementationResource extends WorldResource {
     Gen.const(makeManagedResource(new WorldReferenceImplementation[Int] with WorldContracts[Int])(_ => {})(List.empty))
 }
 
-trait WorldRedisBasedImplementationResource extends WorldResource with RedisServerFixture with DisableAkkaLogging {
+trait WorldRedisBasedImplementationResource extends WorldResource with RedisServerFixture {
   val worldResourceGenerator: Gen[ManagedResource[World[Int]]] =
     Gen.const {
       for {
