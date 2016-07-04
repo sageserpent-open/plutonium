@@ -72,6 +72,8 @@ object WorldRedisBasedImplementation {
     override def decodeValue(bytes: ByteBuffer): Value = kryoPool.fromBytes(ByteArrayCodec.INSTANCE.decodeValue(bytes)).asInstanceOf[Value]
   }
 
+  val oneSizeFitsAllCodec = codecFor[Any]
+
   val instantCodec = codecFor[Instant]
 
   val eventDataCodec = codecFor[AbstractEventData]
@@ -88,28 +90,16 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
 
   val eventIdCodec = codecFor[EventId]
 
-  var redisApi: RedisReactiveCommands[String, String] = null
+  var redisApi: RedisReactiveCommands[String, Any] = null
 
-  var redisApiForEventId: RedisReactiveCommands[String, EventId] = null
+  setupRedisApi()
 
-  var redisApiForInstant: RedisReactiveCommands[String, Instant] = null
-
-  var redisApiForEventDatum: RedisReactiveCommands[String, AbstractEventData] = null
-
-  setupRedisApis()
-
-  private def setupRedisApis() = {
-    redisApi = redisClient.connect().reactive()
-    redisApiForEventId = redisClient.connect(eventIdCodec).reactive()
-    redisApiForInstant = redisClient.connect(instantCodec).reactive()
-    redisApiForEventDatum = redisClient.connect(eventDataCodec).reactive()
+  private def setupRedisApi() = {
+    redisApi = redisClient.connect(oneSizeFitsAllCodec).reactive()
   }
 
-  private def teardownRedisApis: Unit = {
+  private def teardownRedisApi: Unit = {
     redisApi.close()
-    redisApiForInstant.close()
-    redisApiForEventId.close()
-    redisApiForEventDatum.close()
   }
 
   val asOfsKey = s"${identityGuid}${redisNamespaceComponentSeparator}asOfs"
@@ -149,7 +139,7 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
 
   override def revisionAsOfs: Seq[Instant] = revisionAsOfsObservable.toBlocking.first
 
-  protected def revisionAsOfsObservable: Observable[Seq[Instant]] = toScalaObservable(redisApiForInstant.lrange(asOfsKey, 0, -1)).toList
+  protected def revisionAsOfsObservable: Observable[Seq[Instant]] = toScalaObservable(redisApi.lrange(asOfsKey, 0, -1)).asInstanceOf[Observable[Instant]].toList
 
   override protected def eventTimeline(cutoffRevision: Revision): Seq[SerializableEvent] = eventTimelineFrom(pertinentEventDatumsObservable(cutoffRevision).toBlocking.toList)
 
@@ -165,10 +155,10 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
 
   def eventIdsAndTheirDatumsObservable(cutoffRevision: Revision, eventIdInclusion: EventIdInclusion): Observable[(EventId, AbstractEventData)] = {
       for {
-        eventId <- toScalaObservable(redisApiForEventId.smembers(eventIdsKey)) filter eventIdInclusion
-        eventIdAndDataPair <- toScalaObservable(redisApiForEventDatum.zrevrangebyscore(eventCorrectionsKeyFrom(eventId),
+        eventId <- toScalaObservable(redisApi.smembers(eventIdsKey)).asInstanceOf[Observable[EventId]] filter eventIdInclusion
+        eventIdAndDataPair <- toScalaObservable(redisApi.zrevrangebyscore(eventCorrectionsKeyFrom(eventId),
           cutoffRevision - 1, initialRevision,
-          0, 1)) map (eventId -> _)
+          0, 1)).asInstanceOf[Observable[AbstractEventData]] map (eventId -> _)
       } yield eventIdAndDataPair
   }
 
@@ -195,14 +185,14 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
         _ = buildAndValidateEventTimelineForProposedNewRevision(newEventDatums, nextRevisionPriorToUpdate, pertinentEventDatumsExcludingTheNewRevision)
         _ <- Observable.from(newEventDatums map {
           case (eventId, eventDatum) =>
-            redisApiForEventDatum.zadd(eventCorrectionsKeyFrom(eventId), nextRevisionPriorToUpdate.toDouble, eventDatum) zip redisApiForEventId.sadd(eventIdsKey, eventId)
-        }).flatten zip redisApiForInstant.rpush(asOfsKey, asOf)
+            redisApi.zadd(eventCorrectionsKeyFrom(eventId), nextRevisionPriorToUpdate.toDouble, eventDatum) zip redisApi.sadd(eventIdsKey, eventId)
+        }).flatten zip redisApi.rpush(asOfsKey, asOf)
       } yield nextRevisionPriorToUpdate).toBlocking.first
     }
     catch {
       case exception: EncoderException =>
-        teardownRedisApis
-        setupRedisApis()
+        teardownRedisApi
+        setupRedisApi()
         throw exception.getCause
     }
   }
