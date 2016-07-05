@@ -11,8 +11,6 @@ import com.lambdaworks.redis.RedisClient
 import com.lambdaworks.redis.api.rx.RedisReactiveCommands
 import com.lambdaworks.redis.codec.{ByteArrayCodec, RedisCodec, Utf8StringCodec}
 import com.sageserpent.americium.{PositiveInfinity, Unbounded}
-import com.sageserpent.plutonium.World.Revision
-import com.sageserpent.plutonium.WorldImplementationCodeFactoring.AbstractEventData
 import com.twitter.chill.{KryoInstantiator, KryoPool}
 import io.netty.handler.codec.EncoderException
 import org.objenesis.strategy.SerializingInstantiatorStrategy
@@ -164,17 +162,18 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
     // TODO - concurrency safety!
 
     try {
-      val revisionPreconditionObservableRunningInParallel = for (revisionAsOfs <- revisionAsOfsObservable) yield checkRevisionPrecondition(asOf, revisionAsOfs)
       (for {
         nextRevisionPriorToUpdate <- nextRevisionObservable
         newEventDatums: Map[EventId, AbstractEventData] = newEventDatumsFor(nextRevisionPriorToUpdate)
         (pertinentEventDatumsExcludingTheNewRevision: Seq[AbstractEventData], _) <-
-        pertinentEventDatumsObservable(nextRevisionPriorToUpdate, newEventDatums.keys.toSeq).toList zip revisionPreconditionObservableRunningInParallel
+        pertinentEventDatumsObservable(nextRevisionPriorToUpdate, newEventDatums.keys.toSeq).toList zip
+          (for (revisionAsOfs <- revisionAsOfsObservable) yield checkRevisionPrecondition(asOf, revisionAsOfs))
         _ = buildAndValidateEventTimelineForProposedNewRevision(newEventDatums, nextRevisionPriorToUpdate, pertinentEventDatumsExcludingTheNewRevision)
-        _ <- Observable.from(newEventDatums map {
+        delayedTransaction = toScalaObservable(redisApi.multi()).map(_ => Observable.from(newEventDatums map {
           case (eventId, eventDatum) =>
             redisApi.zadd(eventCorrectionsKeyFrom(eventId), nextRevisionPriorToUpdate.toDouble, eventDatum) zip redisApi.sadd(eventIdsKey, eventId)
-        }).flatten zip redisApi.rpush(asOfsKey, asOf)
+        }).flatten.toList zip redisApi.rpush(asOfsKey, asOf))
+        _ <- delayedTransaction.concatMap(transactionContent => redisApi.exec().concatWith(transactionContent))
       } yield nextRevisionPriorToUpdate).toBlocking.first
     }
     catch {
