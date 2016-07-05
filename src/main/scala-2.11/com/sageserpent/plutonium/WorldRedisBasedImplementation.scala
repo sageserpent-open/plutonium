@@ -172,14 +172,16 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
         transactionGuid = UUID.randomUUID()
         foo <- Observable.from(newEventDatums map {
           case (eventId, eventDatum) =>
-            redisApi.zadd(s"${eventCorrectionsKeyFrom(eventId)}:${transactionGuid}", nextRevisionPriorToUpdate.toDouble, eventDatum) zip
+            val eventCorrectionsKey = eventCorrectionsKeyFrom(eventId)
+            redisApi.zadd(s"${eventCorrectionsKey}:${transactionGuid}", nextRevisionPriorToUpdate.toDouble, eventDatum) zip
               redisApi.sadd(s"${eventIdsKey}:${transactionGuid}", eventId) zip
-              redisApi.expire(s"${eventCorrectionsKeyFrom(eventId)}:${transactionGuid}", 2) zip
+              redisApi.expire(s"${eventCorrectionsKey}:${transactionGuid}", 2) zip
               redisApi.expire(s"${eventIdsKey}:${transactionGuid}", 2)
         }).flatten.toList
         delayedTransaction = toScalaObservable(redisApi.multi()).map(_ => Observable.from(newEventDatums map {
           case (eventId, eventDatum) =>
-            redisApi.zunionstore(eventCorrectionsKeyFrom(eventId), eventCorrectionsKeyFrom(eventId), s"${eventCorrectionsKeyFrom(eventId)}:${transactionGuid}") zip
+            val eventCorrectionsKey = eventCorrectionsKeyFrom(eventId)
+            redisApi.zunionstore(eventCorrectionsKey, eventCorrectionsKey, s"${eventCorrectionsKey}:${transactionGuid}") zip
               redisApi.sunionstore(eventIdsKey, eventIdsKey, s"${eventIdsKey}:${transactionGuid}")
         }).flatten.toList zip redisApi.rpush(asOfsKey, asOf))
         _ <- delayedTransaction.concatMap(transactionContent => redisApi.exec().concatWith(transactionContent))
