@@ -1441,7 +1441,7 @@ class WorldSpecUsingWorldRedisBasedImplementation extends WorldBehaviours with W
 
   "A world with events that have since been corrected (using the world Redis-based implementation)" should behave like worldWithEventsThatHaveSinceBeenCorrectedBehaviour
 
-  /*"A world"*/ ignore should "be usable even if (de)serialization fails" in {
+  "A world" should "be usable even if (de)serialization fails" in {
     val testCaseGenerator = for {
       worldResource <- worldResourceGenerator
       asOf <- instantGenerator
