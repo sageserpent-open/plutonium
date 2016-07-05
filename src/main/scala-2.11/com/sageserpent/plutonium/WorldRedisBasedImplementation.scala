@@ -169,9 +169,18 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
         pertinentEventDatumsObservable(nextRevisionPriorToUpdate, newEventDatums.keys.toSeq).toList zip
           (for (revisionAsOfs <- revisionAsOfsObservable) yield checkRevisionPrecondition(asOf, revisionAsOfs))
         _ = buildAndValidateEventTimelineForProposedNewRevision(newEventDatums, nextRevisionPriorToUpdate, pertinentEventDatumsExcludingTheNewRevision)
+        transactionGuid = UUID.randomUUID()
+        foo <- Observable.from(newEventDatums map {
+          case (eventId, eventDatum) =>
+            redisApi.zadd(s"${eventCorrectionsKeyFrom(eventId)}:${transactionGuid}", nextRevisionPriorToUpdate.toDouble, eventDatum) zip
+              redisApi.sadd(s"${eventIdsKey}:${transactionGuid}", eventId) zip
+              redisApi.expire(s"${eventCorrectionsKeyFrom(eventId)}:${transactionGuid}", 2) zip
+              redisApi.expire(s"${eventIdsKey}:${transactionGuid}", 2)
+        }).flatten.toList
         delayedTransaction = toScalaObservable(redisApi.multi()).map(_ => Observable.from(newEventDatums map {
           case (eventId, eventDatum) =>
-            redisApi.zadd(eventCorrectionsKeyFrom(eventId), nextRevisionPriorToUpdate.toDouble, eventDatum) zip redisApi.sadd(eventIdsKey, eventId)
+            redisApi.zunionstore(eventCorrectionsKeyFrom(eventId), eventCorrectionsKeyFrom(eventId), s"${eventCorrectionsKeyFrom(eventId)}:${transactionGuid}") zip
+              redisApi.sunionstore(eventIdsKey, eventIdsKey, s"${eventIdsKey}:${transactionGuid}")
         }).flatten.toList zip redisApi.rpush(asOfsKey, asOf))
         _ <- delayedTransaction.concatMap(transactionContent => redisApi.exec().concatWith(transactionContent))
       } yield nextRevisionPriorToUpdate).toBlocking.first
