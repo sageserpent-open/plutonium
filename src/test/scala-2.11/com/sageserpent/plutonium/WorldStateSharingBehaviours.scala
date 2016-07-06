@@ -22,42 +22,6 @@ import scala.collection.mutable.Set
   * Created by Gerard on 13/02/2016.
   */
 trait WorldStateSharingBehaviours extends FlatSpec with Matchers with Checkers with WorldSpecSupport {
-  class DemultiplexingWorld(worldFactory: () => World[Int], seed: Long) extends World[Int] {
-    val random = new scala.util.Random(seed)
-
-    val worlds: Set[World[Int]] = Set.empty
-
-    def world: World[Int] = {
-      worlds.synchronized {
-        if (worlds.nonEmpty && random.nextBoolean()) {
-          worlds -= random.chooseOneOf(worlds)
-        }
-
-        if (worlds.nonEmpty && random.nextBoolean())
-          random.chooseOneOf(worlds)
-        else {
-          val newWorldSharingCommonState = worldFactory()
-          worlds += newWorldSharingCommonState
-          newWorldSharingCommonState
-        }
-      }
-    }
-
-    override def nextRevision: Revision = world.nextRevision
-
-    override def revise(events: Map[Int, Option[Event]], asOf: Instant): Revision = world.revise(events, asOf)
-
-    override def revise(events: util.Map[Int, Optional[Event]], asOf: Instant): Revision = world.revise(events, asOf)
-
-    override def scopeFor(when: Unbounded[Instant], nextRevision: Revision): Scope = world.scopeFor(when, nextRevision)
-
-    override def scopeFor(when: Unbounded[Instant], asOf: Instant): Scope = world.scopeFor(when, asOf)
-
-    override def forkExperimentalWorld(scope: javaApi.Scope): World[Int] = world.forkExperimentalWorld(scope)
-
-    override def revisionAsOfs: Seq[Instant] = world.revisionAsOfs
-  }
-
   implicit override val generatorDrivenConfig =
     PropertyCheckConfig(maxSize = 40, minSuccessful = 200)
 
@@ -65,6 +29,42 @@ trait WorldStateSharingBehaviours extends FlatSpec with Matchers with Checkers w
 
   def multipleInstancesRepresentingTheSameWorldBehaviour = {
     they should "yield the same results to scope queries regardless of which instance is used to define a revision" in {
+      class DemultiplexingWorld(worldFactory: () => World[Int], seed: Long) extends World[Int] {
+        val random = new scala.util.Random(seed)
+
+        val worlds: Set[World[Int]] = Set.empty
+
+        def world: World[Int] = {
+          worlds.synchronized {
+            if (worlds.nonEmpty && random.nextBoolean()) {
+              worlds -= random.chooseOneOf(worlds)
+            }
+
+            if (worlds.nonEmpty && random.nextBoolean())
+              random.chooseOneOf(worlds)
+            else {
+              val newWorldSharingCommonState = worldFactory()
+              worlds += newWorldSharingCommonState
+              newWorldSharingCommonState
+            }
+          }
+        }
+
+        override def nextRevision: Revision = world.nextRevision
+
+        override def revise(events: Map[Int, Option[Event]], asOf: Instant): Revision = world.revise(events, asOf)
+
+        override def revise(events: util.Map[Int, Optional[Event]], asOf: Instant): Revision = world.revise(events, asOf)
+
+        override def scopeFor(when: Unbounded[Instant], nextRevision: Revision): Scope = world.scopeFor(when, nextRevision)
+
+        override def scopeFor(when: Unbounded[Instant], asOf: Instant): Scope = world.scopeFor(when, asOf)
+
+        override def forkExperimentalWorld(scope: javaApi.Scope): World[Int] = world.forkExperimentalWorld(scope)
+
+        override def revisionAsOfs: Seq[Instant] = world.revisionAsOfs
+      }
+
       val testCaseGenerator = for {
         worldSharingCommonStateFactoryResource <- worldSharingCommonStateFactoryResourceGenerator
         recordingsGroupedById <- recordingsGroupedByIdGenerator(forbidAnnihilations = false)
@@ -107,6 +107,26 @@ trait WorldStateSharingBehaviours extends FlatSpec with Matchers with Checkers w
     val integerHistoryRecordingsGroupedByIdThatAreRobustAgainstConcurrencyGenerator = recordingsGroupedByIdGenerator_(integerDataSamplesForAnIdGenerator, forbidAnnihilations = true)
 
     they should "allow concurrent revisions to be attempted on distinct instances" in {
+      class DemultiplexingWorld(worldFactory: () => World[Int]) extends World[Int] {
+        val worldThreadLocal: ThreadLocal[World[Int]] = ThreadLocal.withInitial[World[Int]](() => worldFactory())
+
+        def world: World[Int] = worldThreadLocal.get
+
+        override def nextRevision: Revision = world.nextRevision
+
+        override def revise(events: Map[Int, Option[Event]], asOf: Instant): Revision = world.revise(events, asOf)
+
+        override def revise(events: util.Map[Int, Optional[Event]], asOf: Instant): Revision = world.revise(events, asOf)
+
+        override def scopeFor(when: Unbounded[Instant], nextRevision: Revision): Scope = world.scopeFor(when, nextRevision)
+
+        override def scopeFor(when: Unbounded[Instant], asOf: Instant): Scope = world.scopeFor(when, asOf)
+
+        override def forkExperimentalWorld(scope: javaApi.Scope): World[Int] = world.forkExperimentalWorld(scope)
+
+        override def revisionAsOfs: Seq[Instant] = world.revisionAsOfs
+      }
+
       val testCaseGenerator = for {
         worldSharingCommonStateFactoryResource <- worldSharingCommonStateFactoryResourceGenerator
         recordingsGroupedById <- integerHistoryRecordingsGroupedByIdThatAreRobustAgainstConcurrencyGenerator
@@ -118,12 +138,12 @@ trait WorldStateSharingBehaviours extends FlatSpec with Matchers with Checkers w
         shuffledRecordingAndEventPairs = intersperseObsoleteRecordings(random, shuffledRecordings, shuffledObsoleteRecordings)
         bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(shuffledRecordingAndEventPairs)
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length, instantGenerator) map (_.sorted)
-      } yield (worldSharingCommonStateFactoryResource, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, seed)
+      } yield (worldSharingCommonStateFactoryResource, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs)
       check(Prop.forAllNoShrink(testCaseGenerator) {
-        case (worldSharingCommonStateFactoryResource, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs, seed) =>
+        case (worldSharingCommonStateFactoryResource, recordingsGroupedById, bigShuffledHistoryOverLotsOfThings, asOfs) =>
           worldSharingCommonStateFactoryResource acquireAndGet {
             worldFactory =>
-              val demultiplexingWorld = new DemultiplexingWorld(worldFactory, seed)
+              val demultiplexingWorld = new DemultiplexingWorld(worldFactory)
 
               try {
                 recordEventsInWorldViaMultipleThreads(bigShuffledHistoryOverLotsOfThings, asOfs, demultiplexingWorld)
