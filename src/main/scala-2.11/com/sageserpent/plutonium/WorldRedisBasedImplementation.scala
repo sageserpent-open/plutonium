@@ -8,17 +8,16 @@ import com.esotericsoftware.kryo.io.{Input, Output}
 import com.esotericsoftware.kryo.serializers.JavaSerializer
 import com.esotericsoftware.kryo.{Kryo, Serializer}
 import com.lambdaworks.redis.RedisClient
+import com.lambdaworks.redis.api.rx.RedisReactiveCommands
 import com.lambdaworks.redis.codec.{ByteArrayCodec, RedisCodec, Utf8StringCodec}
 import com.sageserpent.americium.{PositiveInfinity, Unbounded}
-import com.sageserpent.plutonium.World.Revision
-import com.sageserpent.plutonium.WorldImplementationCodeFactoring.AbstractEventData
 import com.twitter.chill.{KryoInstantiator, KryoPool}
+import io.netty.handler.codec.EncoderException
 import org.objenesis.strategy.SerializingInstantiatorStrategy
 import rx.lang.scala.JavaConversions._
 import rx.lang.scala.Observable
 
 import scala.Ordering.Implicits._
-import scala.concurrent.ExecutionException
 import scala.reflect.runtime.universe._
 
 
@@ -57,25 +56,17 @@ object WorldRedisBasedImplementation {
   }))
 
 
-  trait RedisCodecDelegatingKeysToStandardCodec[Value] extends RedisCodec[String, Value] {
+  object redisCodecDelegatingKeysToStandardCodec extends RedisCodec[String, Any] {
     protected val stringKeyStringValueCodec = new Utf8StringCodec
 
     override def encodeKey(key: String): ByteBuffer = stringKeyStringValueCodec.encodeKey(key)
 
     override def decodeKey(bytes: ByteBuffer): String = stringKeyStringValueCodec.decodeKey(bytes)
+
+    override def encodeValue(value: Any): ByteBuffer = ByteArrayCodec.INSTANCE.encodeValue(kryoPool.toBytesWithClass(value))
+
+    override def decodeValue(bytes: ByteBuffer): Any = kryoPool.fromBytes(ByteArrayCodec.INSTANCE.decodeValue(bytes))
   }
-
-  def codecFor[Value] = new RedisCodecDelegatingKeysToStandardCodec[Value] {
-    override def encodeValue(value: Value): ByteBuffer = ByteArrayCodec.INSTANCE.encodeValue(kryoPool.toBytesWithClass(value))
-
-    override def decodeValue(bytes: ByteBuffer): Value = kryoPool.fromBytes(ByteArrayCodec.INSTANCE.decodeValue(bytes)).asInstanceOf[Value]
-  }
-
-  val instantCodec = codecFor[Instant]
-
-  val eventDataCodec = codecFor[AbstractEventData]
-
-  val revisionCodec = codecFor[Revision]
 }
 
 class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, identityGuid: String) extends WorldImplementationCodeFactoring[EventId] {
@@ -85,15 +76,17 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
   import WorldImplementationCodeFactoring._
   import WorldRedisBasedImplementation._
 
-  val eventIdCodec = codecFor[EventId]
+  var redisApi: RedisReactiveCommands[String, Any] = null
 
-  val redisApi = redisClient.connect().reactive()
+  setupRedisApi()
 
-  val redisApiForEventId = redisClient.connect(eventIdCodec).reactive()
+  private def setupRedisApi() = {
+    redisApi = redisClient.connect(redisCodecDelegatingKeysToStandardCodec).reactive()
+  }
 
-  val redisApiForInstant = redisClient.connect(instantCodec).reactive()
-
-  val redisApiForEventDatum = redisClient.connect(eventDataCodec).reactive()
+  private def teardownRedisApi(): Unit = {
+    redisApi.close()
+  }
 
   val asOfsKey = s"${identityGuid}${redisNamespaceComponentSeparator}asOfs"
 
@@ -132,7 +125,7 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
 
   override def revisionAsOfs: Seq[Instant] = revisionAsOfsObservable.toBlocking.first
 
-  protected def revisionAsOfsObservable: Observable[Seq[Instant]] = toScalaObservable(redisApiForInstant.lrange(asOfsKey, 0, -1)).toList
+  protected def revisionAsOfsObservable: Observable[Seq[Instant]] = toScalaObservable(redisApi.lrange(asOfsKey, 0, -1)).asInstanceOf[Observable[Instant]].toList
 
   override protected def eventTimeline(cutoffRevision: Revision): Seq[SerializableEvent] = eventTimelineFrom(pertinentEventDatumsObservable(cutoffRevision).toBlocking.toList)
 
@@ -148,10 +141,10 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
 
   def eventIdsAndTheirDatumsObservable(cutoffRevision: Revision, eventIdInclusion: EventIdInclusion): Observable[(EventId, AbstractEventData)] = {
       for {
-        eventId <- toScalaObservable(redisApiForEventId.smembers(eventIdsKey)) filter eventIdInclusion
-        eventIdAndDataPair <- toScalaObservable(redisApiForEventDatum.zrevrangebyscore(eventCorrectionsKeyFrom(eventId),
+        eventId <- toScalaObservable(redisApi.smembers(eventIdsKey)).asInstanceOf[Observable[EventId]] filter eventIdInclusion
+        eventIdAndDataPair <- toScalaObservable(redisApi.zrevrangebyscore(eventCorrectionsKeyFrom(eventId),
           cutoffRevision - 1, initialRevision,
-          0, 1)) map (eventId -> _)
+          0, 1)).asInstanceOf[Observable[AbstractEventData]] map (eventId -> _)
       } yield eventIdAndDataPair
   }
 
@@ -169,21 +162,36 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
     // TODO - concurrency safety!
 
     try {
-      val revisionPreconditionObservableRunningInParallel = for (revisionAsOfs <- revisionAsOfsObservable) yield checkRevisionPrecondition(asOf, revisionAsOfs)
       (for {
         nextRevisionPriorToUpdate <- nextRevisionObservable
         newEventDatums: Map[EventId, AbstractEventData] = newEventDatumsFor(nextRevisionPriorToUpdate)
         (pertinentEventDatumsExcludingTheNewRevision: Seq[AbstractEventData], _) <-
-        pertinentEventDatumsObservable(nextRevisionPriorToUpdate, newEventDatums.keys.toSeq).toList zip revisionPreconditionObservableRunningInParallel
+        pertinentEventDatumsObservable(nextRevisionPriorToUpdate, newEventDatums.keys.toSeq).toList zip
+          (for (revisionAsOfs <- revisionAsOfsObservable) yield checkRevisionPrecondition(asOf, revisionAsOfs))
         _ = buildAndValidateEventTimelineForProposedNewRevision(newEventDatums, nextRevisionPriorToUpdate, pertinentEventDatumsExcludingTheNewRevision)
-        _ <- Observable.from(newEventDatums map {
+        transactionGuid = UUID.randomUUID()
+        foo <- Observable.from(newEventDatums map {
           case (eventId, eventDatum) =>
-            redisApiForEventDatum.zadd(eventCorrectionsKeyFrom(eventId), nextRevisionPriorToUpdate.toDouble, eventDatum) zip redisApiForEventId.sadd(eventIdsKey, eventId)
-        }).flatten zip redisApiForInstant.rpush(asOfsKey, asOf)
+            val eventCorrectionsKey = eventCorrectionsKeyFrom(eventId)
+            redisApi.zadd(s"${eventCorrectionsKey}:${transactionGuid}", nextRevisionPriorToUpdate.toDouble, eventDatum) zip
+              redisApi.sadd(s"${eventIdsKey}:${transactionGuid}", eventId) zip
+              redisApi.expire(s"${eventCorrectionsKey}:${transactionGuid}", 2) zip
+              redisApi.expire(s"${eventIdsKey}:${transactionGuid}", 2)
+        }).flatten.toList
+        delayedTransaction = toScalaObservable(redisApi.multi()).map(_ => Observable.from(newEventDatums map {
+          case (eventId, eventDatum) =>
+            val eventCorrectionsKey = eventCorrectionsKeyFrom(eventId)
+            redisApi.zunionstore(eventCorrectionsKey, eventCorrectionsKey, s"${eventCorrectionsKey}:${transactionGuid}") zip
+              redisApi.sunionstore(eventIdsKey, eventIdsKey, s"${eventIdsKey}:${transactionGuid}")
+        }).flatten.toList zip redisApi.rpush(asOfsKey, asOf))
+        _ <- delayedTransaction.concatMap(transactionContent => redisApi.exec().concatWith(transactionContent))
       } yield nextRevisionPriorToUpdate).toBlocking.first
     }
     catch {
-      case exception: ExecutionException => throw exception.getCause
+      case exception: EncoderException =>
+        teardownRedisApi()
+        setupRedisApi()
+        throw exception.getCause
     }
   }
 }

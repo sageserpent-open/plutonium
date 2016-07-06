@@ -1441,7 +1441,7 @@ class WorldSpecUsingWorldRedisBasedImplementation extends WorldBehaviours with W
 
   "A world with events that have since been corrected (using the world Redis-based implementation)" should behave like worldWithEventsThatHaveSinceBeenCorrectedBehaviour
 
-  /*"A world"*/ ignore should "be usable even if (de)serialization fails" in {
+  "A world" should "be usable even if (de)serialization fails" in {
     val testCaseGenerator = for {
       worldResource <- worldResourceGenerator
       asOf <- instantGenerator
@@ -1461,9 +1461,23 @@ class WorldSpecUsingWorldRedisBasedImplementation extends WorldBehaviours with W
 
             val firstRevisionAttemptFailed = (world.nextRevision == World.initialRevision) :| s"The first revision attempt should have failed due to serialization throwing an exception."
 
-            val itemTwoId = WontDeserializeId("Elma")
+            val itemTwoId = 28
 
-            world.revise(Map(200 -> Some(Change.forOneItem[HistoryWhoseIdWontDeserialize](NegativeInfinity[Instant]())(itemTwoId, (_.property = true)))), asOf)
+            world.revise(Map(300 -> Some(Change.forOneItem[BarHistory](NegativeInfinity[Instant]())(itemTwoId, (_.property1 = 4)))), asOf)
+
+            val exceptionDueToFailedSecondSerialization = intercept[KryoException] {
+              world.revise(Map(400 -> Some(Change.forOneItem[HistoryWhoseIdWontSerialize](NegativeInfinity[Instant]())(itemOneId, (_.property = "Alfred")))), asOf)
+            } getCause
+
+            val secondSerializationFailedInExpectedManner = (exceptionDueToFailedSecondSerialization == BadSerializationException()) :| s"Expected an instance of 'BadSerializationException', but got a '$exceptionDueToFailedSerialization' instead."
+
+            val secondRevisionAttemptFailed = (world.nextRevision == 1 + World.initialRevision) :| s"The second revision attempt should have failed due to serialization throwing an exception."
+
+            val queryOk = (world.scopeFor(queryWhen, world.nextRevision).render(Bitemporal.singleOneOf[BarHistory](itemTwoId)).head.datums == Seq(4)) :| "Expected to see effects of the successful revision."
+
+            val itemThreeId = WontDeserializeId("Elma")
+
+            world.revise(Map(200 -> Some(Change.forOneItem[HistoryWhoseIdWontDeserialize](NegativeInfinity[Instant]())(itemThreeId, (_.property = true)))), asOf)
 
             val exceptionDueToFailedDeserialization = intercept[KryoException] {
               val scope = world.scopeFor(queryWhen, world.nextRevision)
@@ -1472,7 +1486,10 @@ class WorldSpecUsingWorldRedisBasedImplementation extends WorldBehaviours with W
 
             val deserializationFailedInExpectedManner = (exceptionDueToFailedDeserialization == BadDeserializationException()) :| s"Expected an instance of 'BadDeserializationException', but got a '$exceptionDueToFailedDeserialization' instead."
 
-            serializationFailedInExpectedManner && firstRevisionAttemptFailed && deserializationFailedInExpectedManner
+            serializationFailedInExpectedManner && firstRevisionAttemptFailed &&
+              deserializationFailedInExpectedManner &&
+              secondSerializationFailedInExpectedManner && secondRevisionAttemptFailed &&
+              queryOk
         }
     })
   }
