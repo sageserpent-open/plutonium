@@ -173,10 +173,11 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
         foo <- Observable.from(newEventDatums map {
           case (eventId, eventDatum) =>
             val eventCorrectionsKey = eventCorrectionsKeyFrom(eventId)
+            val timeToExpireGarbageInSeconds = 5
             redisApi.zadd(s"${eventCorrectionsKey}:${transactionGuid}", nextRevisionPriorToUpdate.toDouble, eventDatum) zip
               redisApi.sadd(s"${eventIdsKey}:${transactionGuid}", eventId) zip
-              redisApi.expire(s"${eventCorrectionsKey}:${transactionGuid}", 2) zip
-              redisApi.expire(s"${eventIdsKey}:${transactionGuid}", 2)
+              redisApi.expire(s"${eventCorrectionsKey}:${transactionGuid}", timeToExpireGarbageInSeconds) zip
+              redisApi.expire(s"${eventIdsKey}:${transactionGuid}", timeToExpireGarbageInSeconds)
         }).flatten.toList
         delayedTransaction = toScalaObservable(redisApi.multi()).map(_ => Observable.from(newEventDatums map {
           case (eventId, eventDatum) =>
@@ -193,5 +194,5 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
         setupRedisApi()
         throw exception.getCause
     }
+    }
   }
-}
