@@ -2,7 +2,7 @@ package com.sageserpent.plutonium
 
 import java.nio.ByteBuffer
 import java.time.Instant
-import java.util.UUID
+import java.util.{NoSuchElementException, UUID}
 
 import com.esotericsoftware.kryo.io.{Input, Output}
 import com.esotericsoftware.kryo.serializers.JavaSerializer
@@ -163,6 +163,7 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
 
     try {
       (for {
+        _ <- toScalaObservable(redisApi.watch(asOfsKey))
         nextRevisionPriorToUpdate <- nextRevisionObservable
         newEventDatums: Map[EventId, AbstractEventData] = newEventDatumsFor(nextRevisionPriorToUpdate)
         (pertinentEventDatumsExcludingTheNewRevision: Seq[AbstractEventData], _) <-
@@ -179,13 +180,18 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
               redisApi.expire(s"${eventCorrectionsKey}:${transactionGuid}", timeToExpireGarbageInSeconds) zip
               redisApi.expire(s"${eventIdsKey}:${transactionGuid}", timeToExpireGarbageInSeconds)
         }).flatten.toList
-        delayedTransaction = toScalaObservable(redisApi.multi()).map(_ => Observable.from(newEventDatums map {
+        transactionStart = toScalaObservable(redisApi.multi())
+        transactionBody = Observable.from(newEventDatums map {
           case (eventId, eventDatum) =>
             val eventCorrectionsKey = eventCorrectionsKeyFrom(eventId)
             redisApi.zunionstore(eventCorrectionsKey, eventCorrectionsKey, s"${eventCorrectionsKey}:${transactionGuid}") zip
               redisApi.sunionstore(eventIdsKey, eventIdsKey, s"${eventIdsKey}:${transactionGuid}")
-        }).flatten.toList zip redisApi.rpush(asOfsKey, asOf))
-        _ <- delayedTransaction.concatMap(transactionContent => redisApi.exec().concatWith(transactionContent))
+        }).flatten.toList zip redisApi.rpush(asOfsKey, asOf)
+        transactionEnd = toScalaObservable(redisApi.exec())
+        // NASTY HACK: the order of evaluation of the subterms in the next double-zip is vital to ensure that Redis sees
+        // the 'multi', body commands and 'exec' verbs in the correct order, even though the processing of the results is
+        // handled by ReactiveX, which simply sees three streams of replies.
+        _ <- transactionStart zip transactionBody zip transactionEnd
       } yield nextRevisionPriorToUpdate).toBlocking.first
     }
     catch {
@@ -193,6 +199,9 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
         teardownRedisApi()
         setupRedisApi()
         throw exception.getCause
+
+      case _: NoSuchElementException  =>
+        throw new RuntimeException("Concurrent revision attempt detected.")
     }
     }
   }
