@@ -2,7 +2,7 @@ package com.sageserpent.plutonium
 
 import java.nio.ByteBuffer
 import java.time.Instant
-import java.util.UUID
+import java.util.{NoSuchElementException, UUID}
 
 import com.esotericsoftware.kryo.io.{Input, Output}
 import com.esotericsoftware.kryo.serializers.JavaSerializer
@@ -127,7 +127,23 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
 
   protected def revisionAsOfsObservable: Observable[Seq[Instant]] = toScalaObservable(redisApi.lrange(asOfsKey, 0, -1)).asInstanceOf[Observable[Instant]].toList
 
-  override protected def eventTimeline(cutoffRevision: Revision): Seq[SerializableEvent] = eventTimelineFrom(pertinentEventDatumsObservable(cutoffRevision).toBlocking.toList)
+  override protected def eventTimeline(cutoffRevision: Revision): Seq[SerializableEvent] =
+    try {
+      eventTimelineFrom((for {
+        _ <- toScalaObservable(redisApi.watch(asOfsKey))
+        eventDatums <- pertinentEventDatumsObservable(cutoffRevision).toList
+        transactionStart = toScalaObservable(redisApi.multi())
+        // NASTY HACK: there needs to be at least one Redis command sent in a
+        // transaction for the result of the 'exec' command to yield a difference
+        // between an aborted transaction and a completed one. Yuk!
+        transactionBody = toScalaObservable(redisApi.llen(asOfsKey))
+        transactionEnd = toScalaObservable(redisApi.exec())
+        ((_, _), _) <- transactionStart zip transactionBody zip transactionEnd
+      } yield eventDatums).toBlocking.single)
+    } catch {
+      case _: NoSuchElementException  =>
+        throw new RuntimeException("Concurrent revision attempt detected in query.")
+    }
 
   type EventIdInclusion = EventId => Boolean
 
@@ -159,10 +175,9 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
   override protected def transactNewRevision(asOf: Instant,
                                              newEventDatumsFor: Revision => Map[EventId, AbstractEventData],
                                              buildAndValidateEventTimelineForProposedNewRevision: (Map[EventId, AbstractEventData], Revision, Seq[AbstractEventData]) => Unit): Revision = {
-    // TODO - concurrency safety!
-
     try {
       (for {
+        _ <- toScalaObservable(redisApi.watch(asOfsKey))
         nextRevisionPriorToUpdate <- nextRevisionObservable
         newEventDatums: Map[EventId, AbstractEventData] = newEventDatumsFor(nextRevisionPriorToUpdate)
         (pertinentEventDatumsExcludingTheNewRevision: Seq[AbstractEventData], _) <-
@@ -173,18 +188,24 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
         foo <- Observable.from(newEventDatums map {
           case (eventId, eventDatum) =>
             val eventCorrectionsKey = eventCorrectionsKeyFrom(eventId)
+            val timeToExpireGarbageInSeconds = 5
             redisApi.zadd(s"${eventCorrectionsKey}:${transactionGuid}", nextRevisionPriorToUpdate.toDouble, eventDatum) zip
               redisApi.sadd(s"${eventIdsKey}:${transactionGuid}", eventId) zip
-              redisApi.expire(s"${eventCorrectionsKey}:${transactionGuid}", 2) zip
-              redisApi.expire(s"${eventIdsKey}:${transactionGuid}", 2)
+              redisApi.expire(s"${eventCorrectionsKey}:${transactionGuid}", timeToExpireGarbageInSeconds) zip
+              redisApi.expire(s"${eventIdsKey}:${transactionGuid}", timeToExpireGarbageInSeconds)
         }).flatten.toList
-        delayedTransaction = toScalaObservable(redisApi.multi()).map(_ => Observable.from(newEventDatums map {
+        transactionStart = toScalaObservable(redisApi.multi())
+        transactionBody = Observable.from(newEventDatums map {
           case (eventId, eventDatum) =>
             val eventCorrectionsKey = eventCorrectionsKeyFrom(eventId)
             redisApi.zunionstore(eventCorrectionsKey, eventCorrectionsKey, s"${eventCorrectionsKey}:${transactionGuid}") zip
               redisApi.sunionstore(eventIdsKey, eventIdsKey, s"${eventIdsKey}:${transactionGuid}")
-        }).flatten.toList zip redisApi.rpush(asOfsKey, asOf))
-        _ <- delayedTransaction.concatMap(transactionContent => redisApi.exec().concatWith(transactionContent))
+        }).flatten.toList zip redisApi.rpush(asOfsKey, asOf)
+        transactionEnd = toScalaObservable(redisApi.exec())
+        // NASTY HACK: the order of evaluation of the subterms in the next double-zip is vital to ensure that Redis sees
+        // the 'multi', body commands and 'exec' verbs in the correct order, even though the processing of the results is
+        // handled by ReactiveX, which simply sees three streams of replies.
+        _ <- transactionStart zip transactionBody zip transactionEnd
       } yield nextRevisionPriorToUpdate).toBlocking.first
     }
     catch {
@@ -192,6 +213,9 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
         teardownRedisApi()
         setupRedisApi()
         throw exception.getCause
+
+      case _: NoSuchElementException  =>
+        throw new RuntimeException("Concurrent revision attempt detected in revision.")
+    }
     }
   }
-}

@@ -5,18 +5,17 @@ import java.util
 import java.util.{Optional, UUID}
 
 import com.lambdaworks.redis.{RedisClient, RedisURI}
-import com.sageserpent.americium.Unbounded
+import com.sageserpent.americium.randomEnrichment._
+import com.sageserpent.americium.{PositiveInfinity, Unbounded}
+import com.sageserpent.plutonium.World.Revision
+import org.scalacheck.Prop.BooleanOperators
 import org.scalacheck.{Gen, Prop, Test}
 import org.scalatest.prop.Checkers
-import org.scalacheck.Prop.BooleanOperators
 import org.scalatest.{FlatSpec, Matchers}
-
-import scala.util.Random
-import com.sageserpent.americium.randomEnrichment._
-import com.sageserpent.plutonium.World.Revision
 import resource._
 
 import scala.collection.mutable.Set
+import scala.util.Random
 
 /**
   * Created by Gerard on 13/02/2016.
@@ -100,32 +99,29 @@ trait WorldStateSharingBehaviours extends FlatSpec with Matchers with Checkers w
       })
     }
 
-    def recordEventsInWorldViaMultipleThreads(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[(Option[(Unbounded[Instant], Event)], Int)]], asOfs: List[Instant], world: World[Int]) = {
-      revisionActions(bigShuffledHistoryOverLotsOfThings, asOfs.iterator, world).toParArray map (_.apply) // Actually a piece of imperative code that looks functional - 'world' is being mutated as a side-effect; but the revisions are harvested functionally.
+    class DemultiplexingWorld(worldFactory: () => World[Int]) extends World[Int] {
+      val worldThreadLocal: ThreadLocal[World[Int]] = ThreadLocal.withInitial[World[Int]](() => worldFactory())
+
+      def world: World[Int] = worldThreadLocal.get
+
+      override def nextRevision: Revision = world.nextRevision
+
+      override def revise(events: Map[Int, Option[Event]], asOf: Instant): Revision = world.revise(events, asOf)
+
+      override def revise(events: util.Map[Int, Optional[Event]], asOf: Instant): Revision = world.revise(events, asOf)
+
+      override def scopeFor(when: Unbounded[Instant], nextRevision: Revision): Scope = world.scopeFor(when, nextRevision)
+
+      override def scopeFor(when: Unbounded[Instant], asOf: Instant): Scope = world.scopeFor(when, asOf)
+
+      override def forkExperimentalWorld(scope: javaApi.Scope): World[Int] = world.forkExperimentalWorld(scope)
+
+      override def revisionAsOfs: Seq[Instant] = world.revisionAsOfs
     }
 
     val integerHistoryRecordingsGroupedByIdThatAreRobustAgainstConcurrencyGenerator = recordingsGroupedByIdGenerator_(integerDataSamplesForAnIdGenerator, forbidAnnihilations = true)
 
     they should "allow concurrent revisions to be attempted on distinct instances" in {
-      class DemultiplexingWorld(worldFactory: () => World[Int]) extends World[Int] {
-        val worldThreadLocal: ThreadLocal[World[Int]] = ThreadLocal.withInitial[World[Int]](() => worldFactory())
-
-        def world: World[Int] = worldThreadLocal.get
-
-        override def nextRevision: Revision = world.nextRevision
-
-        override def revise(events: Map[Int, Option[Event]], asOf: Instant): Revision = world.revise(events, asOf)
-
-        override def revise(events: util.Map[Int, Optional[Event]], asOf: Instant): Revision = world.revise(events, asOf)
-
-        override def scopeFor(when: Unbounded[Instant], nextRevision: Revision): Scope = world.scopeFor(when, nextRevision)
-
-        override def scopeFor(when: Unbounded[Instant], asOf: Instant): Scope = world.scopeFor(when, asOf)
-
-        override def forkExperimentalWorld(scope: javaApi.Scope): World[Int] = world.forkExperimentalWorld(scope)
-
-        override def revisionAsOfs: Seq[Instant] = world.revisionAsOfs
-      }
 
       val testCaseGenerator = for {
         worldSharingCommonStateFactoryResource <- worldSharingCommonStateFactoryResourceGenerator
@@ -146,18 +142,93 @@ trait WorldStateSharingBehaviours extends FlatSpec with Matchers with Checkers w
               val demultiplexingWorld = new DemultiplexingWorld(worldFactory)
 
               try {
-                recordEventsInWorldViaMultipleThreads(bigShuffledHistoryOverLotsOfThings, asOfs, demultiplexingWorld)
-                Prop.collect("No failure detected")(Prop.undecided)
+                revisionActions(bigShuffledHistoryOverLotsOfThings, asOfs.iterator, demultiplexingWorld).toParArray foreach (_.apply)
+                Prop.collect("No concurrent revision attempt detected.")(Prop.undecided)
               } catch {
-                case exception: RuntimeException if exception.getMessage.startsWith("Concurrent revision attempt detected") =>
-                  Prop.collect("Concurrent revision attempt detected.")(Prop.proved)
+                case exception: RuntimeException if exception.getMessage.startsWith("Concurrent revision attempt detected in revision") =>
+                  Prop.collect("Concurrent revision attempt detected in revision.")(Prop.proved)
                 case exception: RuntimeException if exception.getMessage.contains("should be no earlier than") =>
                   Prop.collect("Asofs were presented out of order due to racing.")(Prop.undecided)
               }
           }
       }, Test.Parameters.defaultVerbose)
     }
+
+    they should "allow queries to be attempted on instances while one other is being revised" in {
+      // PLAN: book events are various business times that define objects that all have an integer property,
+      // such that sorting the property values by the associated id of their host instances yields either
+      // a monotonic increasing or decreasing sequence.
+
+      // By switching between increasing and decreasing from one revision to another, we hope to provoke
+      // an inconsistent mixture of property values due to data racing between the N query threads and the
+      // one revising thread. This should not be allowed to happen in a successful test case. We also expect
+      // the test to report the detection of queries that would have produced such mixing - IOW, we expect
+      // queries to fail fast, *not* to acquire locks.
+
+      val universalSetOfIds = scala.collection.immutable.Set(0 until 20: _*)
+
+      val testCaseGenerator = for {
+        worldSharingCommonStateFactoryResource <- worldSharingCommonStateFactoryResourceGenerator
+        asOfs <- Gen.nonEmptyListOf(instantGenerator) map (_.sorted)
+        numberOfRevisions = asOfs.size
+        idSetsForEachRevision <- Gen.listOfN(numberOfRevisions, Gen.someOf(universalSetOfIds))
+      } yield (worldSharingCommonStateFactoryResource, asOfs, numberOfRevisions, idSetsForEachRevision)
+      check(Prop.forAllNoShrink(testCaseGenerator) {
+        case (worldSharingCommonStateFactoryResource, asOfs, numberOfRevisions, idSetsForEachRevision) =>
+          worldSharingCommonStateFactoryResource acquireAndGet {
+            worldFactory =>
+              val demultiplexingWorld = new DemultiplexingWorld(worldFactory)
+
+              val finalAsOf = asOfs.last
+
+              val queries = for {
+                _ <- 1 to 100 * numberOfRevisions
+              } yield () => {
+                val scope = demultiplexingWorld.scopeFor(PositiveInfinity[Instant](), finalAsOf)
+                val itemInstancesSortedById = scope.render(Bitemporal.wildcard[Item]).toList.sortBy(_.id)
+                Prop(itemInstancesSortedById.isEmpty || (itemInstancesSortedById zip itemInstancesSortedById.tail forall {
+                  case (first, second) => first.property < second.property
+                }) || (itemInstancesSortedById zip itemInstancesSortedById.tail forall {
+                  case (first, second) => first.property > second.property
+                }))
+              }
+
+              def toggledChoices(firstChoice: Boolean): Stream[Boolean] = firstChoice #:: toggledChoices(!firstChoice)
+
+              val revisionCommandSequence = () => {
+                for {
+                  ((idSet, asOf), ascending) <- idSetsForEachRevision zip asOfs zip toggledChoices(true)
+                } {
+                  demultiplexingWorld.revise(universalSetOfIds map (id => id -> (if (idSet.contains(id))
+                    Some(Change.forOneItem[Item](id, {
+                      (item: Item) =>
+                        if (ascending)
+                          item.property = id
+                        else
+                          item.property = -id
+                    }))
+                  else None
+                    )) toMap, asOf)
+                }
+                Prop.undecided
+              }
+              try {
+                val checks = (revisionCommandSequence +: queries).toParArray map (_.apply)
+                Prop.collect("No concurrent revision attempt detected.")(Prop.all(checks.toList: _*))
+              } catch {
+                case exception: RuntimeException if exception.getMessage.startsWith("Concurrent revision attempt detected in query") =>
+                  Prop.collect("Concurrent revision attempt detected in query.")(Prop.proved)
+              }
+          }
+      }, Test.Parameters.defaultVerbose)
+    }
   }
+}
+
+class Item(val id: Item#Id) extends Identified {
+  type Id = Integer
+
+  var property: Int = 0
 }
 
 class WorldStateSharingSpecUsingWorldReferenceImplementation extends WorldStateSharingBehaviours {
