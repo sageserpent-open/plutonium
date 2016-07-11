@@ -5,13 +5,16 @@ package com.sageserpent.plutonium
   */
 
 import java.time.Instant
+import java.util.UUID
 
+import com.lambdaworks.redis.{RedisClient, RedisURI}
 import com.sageserpent.americium
 import com.sageserpent.americium._
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.seqEnrichment._
 import com.sageserpent.plutonium.World._
 import org.scalacheck.{Arbitrary, Gen}
+import resource._
 
 import scala.collection.JavaConversions._
 import scala.collection.Searching._
@@ -26,12 +29,9 @@ object WorldSpecSupport {
   val changeError = new RuntimeException("Error in making a change.")
 }
 
+
 trait WorldSpecSupport {
-
   import WorldSpecSupport._
-
-  // This looks odd, but the idea is *recreate* world instances each time the generator is used.
-  val worldGenerator = Gen.const(() => new WorldReferenceImplementation[Int]) map (_.apply)
 
   val seedGenerator = Arbitrary.arbitrary[Long]
 
@@ -456,11 +456,15 @@ trait WorldSpecSupport {
 
   def revisionActions(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[(Option[(Unbounded[Instant], Event)], Int)]], asOfs: List[Instant], world: World[Int]): Stream[() => Revision] = {
     assert(bigShuffledHistoryOverLotsOfThings.length == asOfs.length)
-    for {(pieceOfHistory, asOf) <- bigShuffledHistoryOverLotsOfThings zip asOfs
+    revisionActions(bigShuffledHistoryOverLotsOfThings, asOfs.iterator, world)
+  }
+
+  def revisionActions(bigShuffledHistoryOverLotsOfThings: Stream[Traversable[(Option[(Unbounded[Instant], Event)], Revision)]], asOfsIterator: Iterator[Instant], world: World[Int]): Stream[() => Revision] = {
+    for {pieceOfHistory <- bigShuffledHistoryOverLotsOfThings
          events = pieceOfHistory map {
            case (recording, eventId) => eventId -> (for ((_, change) <- recording) yield change)
          } toSeq} yield
-      () => world.revise(TreeMap(events: _*), asOf)
+      () => world.revise(TreeMap(events: _*), asOfsIterator.next())
   }
 
   def intersperseObsoleteRecordings(random: Random, recordings: immutable.Iterable[(Unbounded[Instant], Event)], obsoleteRecordings: immutable.Iterable[(Unbounded[Instant], Event)]): Stream[(Option[(Unbounded[Instant], Event)], Int)] = {
@@ -552,4 +556,23 @@ trait WorldSpecSupport {
   val mixedRecordingsForReferencedIdGenerator = dataSamplesForAnIdGenerator_[FooHistory](Gen.oneOf(ReferringHistory.specialFooIds), Gen.oneOf(dataSampleGenerator1(faulty = false), moreSpecificFooDataSampleGenerator(faulty = false)), dataSampleGenerator2(faulty = false))
 
   def referencedHistoryRecordingsGroupedByIdGenerator(forbidAnnihilations: Boolean) = recordingsGroupedByIdGenerator_(mixedRecordingsForReferencedIdGenerator, forbidAnnihilations = forbidAnnihilations)
+}
+
+trait WorldResource {
+  val worldResourceGenerator: Gen[ManagedResource[World[Int]]]
+}
+
+trait WorldReferenceImplementationResource extends WorldResource {
+  val worldResourceGenerator: Gen[ManagedResource[World[Int]]] =
+    Gen.const(makeManagedResource(new WorldReferenceImplementation[Int] with WorldContracts[Int])(_ => {})(List.empty))
+}
+
+trait WorldRedisBasedImplementationResource extends WorldResource with RedisServerFixture {
+  val worldResourceGenerator: Gen[ManagedResource[World[Int]]] =
+    Gen.const {
+      for {
+        redisClient <- makeManagedResource(RedisClient.create(RedisURI.Builder.redis("localhost", redisServerPort).build()))(_.shutdown())(List.empty)
+        worldResource <- makeManagedResource(new WorldRedisBasedImplementation[Int](redisClient, UUID.randomUUID().toString) with WorldContracts[Int])(_ => {})(List.empty)
+      } yield worldResource
+    }
 }

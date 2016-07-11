@@ -2,6 +2,9 @@ package com.sageserpent.plutonium
 
 import java.time.Instant
 
+import com.esotericsoftware.kryo.serializers.JavaSerializer
+import com.esotericsoftware.kryo.serializers.FieldSerializer.Bind
+
 import com.sageserpent.americium
 import com.sageserpent.americium.{Finite, PositiveInfinity, Unbounded}
 
@@ -100,6 +103,7 @@ object Measurement {
 // recreated and so on all at the same time.
 case class Annihilation[Raw <: Identified : TypeTag](definiteWhen: Instant, id: Raw#Id) extends Event {
   val when = Finite(definiteWhen)
+  @Bind(classOf[JavaSerializer])
   val capturedTypeTag = typeTag[Raw]
 }
 
