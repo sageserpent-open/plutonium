@@ -201,7 +201,7 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
         throw exception.getCause
 
       case _: NoSuchElementException  =>
-        throw new RuntimeException("Concurrent revision attempt detected.")
+        throw new RuntimeException("Concurrent revision attempt detected in revision.")
     }
     }
   }

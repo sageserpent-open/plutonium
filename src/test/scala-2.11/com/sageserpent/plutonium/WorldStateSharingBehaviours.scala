@@ -145,8 +145,8 @@ trait WorldStateSharingBehaviours extends FlatSpec with Matchers with Checkers w
                 revisionActions(bigShuffledHistoryOverLotsOfThings, asOfs.iterator, demultiplexingWorld).toParArray foreach (_.apply)
                 Prop.collect("No concurrent revision attempt detected.")(Prop.undecided)
               } catch {
-                case exception: RuntimeException if exception.getMessage.startsWith("Concurrent revision attempt detected") =>
-                  Prop.collect("Concurrent revision attempt detected.")(Prop.proved)
+                case exception: RuntimeException if exception.getMessage.startsWith("Concurrent revision attempt detected in revision") =>
+                  Prop.collect("Concurrent revision attempt detected in revision.")(Prop.proved)
                 case exception: RuntimeException if exception.getMessage.contains("should be no earlier than") =>
                   Prop.collect("Asofs were presented out of order due to racing.")(Prop.undecided)
               }
@@ -216,8 +216,8 @@ trait WorldStateSharingBehaviours extends FlatSpec with Matchers with Checkers w
                 val checks = (revisionCommandSequence +: queries).toParArray map (_.apply)
                 Prop.collect("No concurrent revision attempt detected.")(Prop.all(checks.toList: _*))
               } catch {
-                case exception: RuntimeException if exception.getMessage.startsWith("Concurrent revision attempt detected") =>
-                  Prop.collect("Concurrent revision attempt detected.")(Prop.proved)
+                case exception: RuntimeException if exception.getMessage.startsWith("Concurrent revision attempt detected in query") =>
+                  Prop.collect("Concurrent revision attempt detected in query.")(Prop.proved)
               }
           }
       }, Test.Parameters.defaultVerbose)

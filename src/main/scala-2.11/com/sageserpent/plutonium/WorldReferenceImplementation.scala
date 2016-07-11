@@ -143,7 +143,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
 
     mutableState.synchronized {
       if (mutableState.idOfThreadMostRecentlyStartingARevision != Thread.currentThread.getId) {
-        throw new RuntimeException("Concurrent revision attempt detected.")
+        throw new RuntimeException("Concurrent revision attempt detected in revision.")
       }
 
       for ((eventId, eventDatum) <- newEventDatums) {
