@@ -127,7 +127,19 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
 
   protected def revisionAsOfsObservable: Observable[Seq[Instant]] = toScalaObservable(redisApi.lrange(asOfsKey, 0, -1)).asInstanceOf[Observable[Instant]].toList
 
-  override protected def eventTimeline(cutoffRevision: Revision): Seq[SerializableEvent] = eventTimelineFrom(pertinentEventDatumsObservable(cutoffRevision).toBlocking.toList)
+  override protected def eventTimeline(cutoffRevision: Revision): Seq[SerializableEvent] =
+    try {
+      eventTimelineFrom((for {
+        _ <- toScalaObservable(redisApi.watch(asOfsKey))
+        transactionStart = toScalaObservable(redisApi.multi())
+        transactionBody = pertinentEventDatumsObservable(cutoffRevision).toList
+        transactionEnd = toScalaObservable(redisApi.exec())
+        ((_, eventDatums), _) <- transactionStart zip transactionBody zip transactionEnd
+      } yield eventDatums).toBlocking.single)
+    } catch {
+      case _: NoSuchElementException  =>
+        throw new RuntimeException("Concurrent revision attempt detected in query.")
+    }
 
   type EventIdInclusion = EventId => Boolean
 
@@ -159,8 +171,6 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
   override protected def transactNewRevision(asOf: Instant,
                                              newEventDatumsFor: Revision => Map[EventId, AbstractEventData],
                                              buildAndValidateEventTimelineForProposedNewRevision: (Map[EventId, AbstractEventData], Revision, Seq[AbstractEventData]) => Unit): Revision = {
-    // TODO - concurrency safety!
-
     try {
       (for {
         _ <- toScalaObservable(redisApi.watch(asOfsKey))
