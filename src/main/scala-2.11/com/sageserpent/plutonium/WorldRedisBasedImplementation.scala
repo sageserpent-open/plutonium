@@ -131,10 +131,14 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
     try {
       eventTimelineFrom((for {
         _ <- toScalaObservable(redisApi.watch(asOfsKey))
+        eventDatums <- pertinentEventDatumsObservable(cutoffRevision).toList
         transactionStart = toScalaObservable(redisApi.multi())
-        transactionBody = pertinentEventDatumsObservable(cutoffRevision).toList
+        // NASTY HACK: there needs to be at least one Redis command sent in a
+        // transaction for the result of the 'exec' command to yield a difference
+        // between an aborted transaction and a completed one. Yuk!
+        transactionBody = toScalaObservable(redisApi.llen(asOfsKey))
         transactionEnd = toScalaObservable(redisApi.exec())
-        ((_, eventDatums), _) <- transactionStart zip transactionBody zip transactionEnd
+        ((_, _), _) <- transactionStart zip transactionBody zip transactionEnd
       } yield eventDatums).toBlocking.single)
     } catch {
       case _: NoSuchElementException  =>
