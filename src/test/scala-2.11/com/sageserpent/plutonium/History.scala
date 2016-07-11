@@ -4,8 +4,6 @@ package com.sageserpent.plutonium
   * Created by Gerard on 21/09/2015.
   */
 abstract class History extends Identified {
-  override def hashCode = super.hashCode
-
   override def checkInvariant(): Unit = {
     super.checkInvariant()
     if (invariantBreakageScheduled) {
