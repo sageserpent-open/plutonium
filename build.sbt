@@ -1,6 +1,6 @@
 lazy val settings = Seq(organization := "com.sageserpent",
   name := "plutonium",
-  version := "1.0.1",
+  version := "1.0.2-SNAPSHOT",
   scalaVersion := "2.11.8",
   scalacOptions += "-Xexperimental",
 
