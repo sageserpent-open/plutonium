@@ -46,7 +46,7 @@ class MutableState[EventId] {
   import World._
   import WorldImplementationCodeFactoring._
 
-  var idOfThreadMostRecentlyStartingARevision: Long = -1L
+  var threadsThatHaveNotBeenBouncedByARevision: mutable.Set[Long] = mutable.Set.empty
 
   val eventIdToEventCorrectionsMap: EventIdToEventCorrectionsMap[EventId] = mutable.Map.empty
   val _revisionAsOfs: MutableList[Instant] = MutableList.empty
@@ -123,13 +123,25 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
 
   override def revisionAsOfs: Seq[Instant] = mutableState.revisionAsOfs
 
-  override protected def eventTimeline(cutoffRevision: Revision): Seq[SerializableEvent] = eventTimelineFrom(mutableState.pertinentEventDatums(cutoffRevision))
+  override protected def eventTimeline(cutoffRevision: Revision): Seq[SerializableEvent] = {
+    val idOfThreadThatMostlyRecentlyStartedARevisionBeforehand = mutableState.synchronized {
+      mutableState.threadsThatHaveNotBeenBouncedByARevision += Thread.currentThread.getId
+    }
+    val result = eventTimelineFrom(mutableState.pertinentEventDatums(cutoffRevision))
+    mutableState.synchronized {
+      if (!mutableState.threadsThatHaveNotBeenBouncedByARevision.contains(Thread.currentThread.getId)) {
+        throw new RuntimeException("Concurrent revision attempt detected in query.")
+      }
+    }
+    result
+  }
 
   override protected def transactNewRevision(asOf: Instant,
                                              newEventDatumsFor: Revision => Map[EventId, AbstractEventData],
                                              buildAndValidateEventTimelineForProposedNewRevision: (Map[EventId, AbstractEventData], Revision, Seq[AbstractEventData]) => Unit): Revision = {
     mutableState.synchronized {
-      mutableState.idOfThreadMostRecentlyStartingARevision = Thread.currentThread.getId
+      mutableState.threadsThatHaveNotBeenBouncedByARevision.clear()
+      mutableState.threadsThatHaveNotBeenBouncedByARevision += Thread.currentThread.getId
       checkRevisionPrecondition(asOf, revisionAsOfs)
     }
 
@@ -142,7 +154,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
     buildAndValidateEventTimelineForProposedNewRevision(newEventDatums, nextRevisionPriorToUpdate, pertinentEventDatumsExcludingTheNewRevision)
 
     mutableState.synchronized {
-      if (mutableState.idOfThreadMostRecentlyStartingARevision != Thread.currentThread.getId) {
+      if (!mutableState.threadsThatHaveNotBeenBouncedByARevision.contains(Thread.currentThread.getId)) {
         throw new RuntimeException("Concurrent revision attempt detected in revision.")
       }
 
