@@ -141,6 +141,10 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
         ((_, _), _) <- transactionStart zip transactionBody zip transactionEnd
       } yield eventDatums).toBlocking.single)
     } catch {
+      case exception: EncoderException =>
+        recoverRedisApi
+        throw exception.getCause
+
       case _: NoSuchElementException  =>
         throw new RuntimeException("Concurrent revision attempt detected in query.")
     }
@@ -210,12 +214,18 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
     }
     catch {
       case exception: EncoderException =>
-        teardownRedisApi()
-        setupRedisApi()
+        recoverRedisApi
         throw exception.getCause
 
       case _: NoSuchElementException  =>
         throw new RuntimeException("Concurrent revision attempt detected in revision.")
     }
     }
+
+  private def recoverRedisApi: Observable[String] = {
+    teardownRedisApi()
+    setupRedisApi()
+    redisApi.unwatch()
+    redisApi.discard()
   }
+}
