@@ -10,7 +10,7 @@ class Drum(val id: String, var mass: Double, var chemicalAssay: ChemicalAssay) e
 
   def isotopeMasses = chemicalAssay.isotopeMolarFractions.mapValues(mass * _)
 
-  def fissileUraniumMass = isotopeMasses.collectFirst { case ((Uranium.symbol, massNumber), fissileMass) if Uranium.fissileUraniumMassNumbers contains massNumber => fissileMass }
+  def fissileUraniumMass = isotopeMasses.collect { case ((Uranium.symbol, massNumber), fissileMass) if Uranium.fissileUraniumMassNumbers contains massNumber => fissileMass } sum
 }
 
 class ChemicalAssay(val id: String, var elementMolarFractions: Map[String, Double], var isotopicAssay: IsotopicAssay) {
