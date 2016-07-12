@@ -393,9 +393,9 @@ trait WorldBehaviours extends FlatSpec with Matchers with Checkers with WorldSpe
 
             if (checks.nonEmpty) {
               Prop.all(checks.map { case (referringHistoryId, referencedHistoryId) =>
-                val directAccessBitemporaQuery: Bitemporal[History] = Bitemporal.withId[History](referencedHistoryId.asInstanceOf[History#Id])
+                val directAccessBitemporalQuery: Bitemporal[History] = Bitemporal.withId[History](referencedHistoryId.asInstanceOf[History#Id])
                 val indirectAccessBitemporalQuery: Bitemporal[History] = Bitemporal.withId[ReferringHistory](referringHistoryId.asInstanceOf[ReferringHistory#Id]) map (_.referencedHistories(referencedHistoryId))
-                val agglomeratedBitemporalQuery: Bitemporal[(History, History)] = (directAccessBitemporaQuery |@| indirectAccessBitemporalQuery) ((_: History, _: History))
+                val agglomeratedBitemporalQuery: Bitemporal[(History, History)] = (directAccessBitemporalQuery |@| indirectAccessBitemporalQuery) ((_: History, _: History))
                 val Seq((directlyAccessedReferencedHistory: History, indirectlyAccessedReferencedHistory: History)) = scope.render(agglomeratedBitemporalQuery)
                 (directlyAccessedReferencedHistory eq indirectlyAccessedReferencedHistory) :| s"Expected item: '$indirectlyAccessedReferencedHistory' accessed indirectly via referring item of id: '$referringHistoryId' to have the same object identity as '$directlyAccessedReferencedHistory' accessed directly via id: '$referencedHistoryId'."
               }: _*)
