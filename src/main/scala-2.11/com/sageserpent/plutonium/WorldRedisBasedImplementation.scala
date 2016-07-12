@@ -129,7 +129,7 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
 
   override protected def eventTimeline(cutoffRevision: Revision): Seq[SerializableEvent] =
     try {
-      eventTimelineFrom((for {
+      val eventDatumsObservable = for {
         _ <- toScalaObservable(redisApi.watch(asOfsKey))
         eventDatums <- pertinentEventDatumsObservable(cutoffRevision).toList
         transactionStart = toScalaObservable(redisApi.multi())
@@ -139,7 +139,9 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
         transactionBody = toScalaObservable(redisApi.llen(asOfsKey))
         transactionEnd = toScalaObservable(redisApi.exec())
         ((_, _), _) <- transactionStart zip transactionBody zip transactionEnd
-      } yield eventDatums).toBlocking.single)
+      } yield eventDatums
+
+      eventTimelineFrom(eventDatumsObservable.toBlocking.single)
     } catch {
       case exception: EncoderException =>
         recoverRedisApi
@@ -180,7 +182,7 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
                                              newEventDatumsFor: Revision => Map[EventId, AbstractEventData],
                                              buildAndValidateEventTimelineForProposedNewRevision: (Map[EventId, AbstractEventData], Revision, Seq[AbstractEventData]) => Unit): Revision = {
     try {
-      (for {
+      val revisionObservable = for {
         _ <- toScalaObservable(redisApi.watch(asOfsKey))
         nextRevisionPriorToUpdate <- nextRevisionObservable
         newEventDatums: Map[EventId, AbstractEventData] = newEventDatumsFor(nextRevisionPriorToUpdate)
@@ -210,7 +212,9 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
         // the 'multi', body commands and 'exec' verbs in the correct order, even though the processing of the results is
         // handled by ReactiveX, which simply sees three streams of replies.
         _ <- transactionStart zip transactionBody zip transactionEnd
-      } yield nextRevisionPriorToUpdate).toBlocking.first
+      } yield nextRevisionPriorToUpdate
+
+      revisionObservable.toBlocking.first
     }
     catch {
       case exception: EncoderException =>
