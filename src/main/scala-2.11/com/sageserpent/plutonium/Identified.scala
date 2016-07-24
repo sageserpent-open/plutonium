@@ -7,6 +7,7 @@ abstract class Identified {
   val id: Id
 
   def checkInvariant(): Unit = {
+    throw new RuntimeException(s"Item: '$id' has been annihilated but is being referred to in an invariant.")
   }
 
 

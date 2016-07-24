@@ -5,7 +5,7 @@ No, you are not about to be invited to purchase some fissile material of any iso
 
 Plutonium is a software component that:-
 *  Stores data that _models things in the real world_; this is object oriented data, the sort that Java applications deal with. POJOs.
-*  Does so in a way that _tracks the historical evolution of those things in the real world, and the consequences_. What things and what consequences? Say, your electricity consumption and the consequent bill; the location of a lorry filled with boxes of your products, who is in possession of those products and whether sales have been realised; the contracts managed by a trading desk how much money a the desk might owe if the GBP/EUR FX rate might drop by 1%.
+*  Does so in a way that _tracks the historical evolution of those things in the real world, and the consequences_. What things and what consequences? Say, your electricity consumption and the consequent bill; the location of a delivery van filled with boxes of your products, who is in possession of those products and whether sales have been realised; the contracts managed by a trading desk how much money a the desk might owe if the GBP/EUR FX rate might drop by 1%.
 *  Tracks _relationships between things that can change, and the consequences_. For example, what accounts an electricity provider has on its books, what lorries are carrying what things, what trades are being managed in a portfolio.
 *  Supports queries about these things from the point of view of some _instant in time_ - at the current time, at some point back in the past, or extrapolated to some point in the future.
 *  Allows the _historical record to be revised_, reflecting that prior knowledge may have been inaccurate or incomplete. Queries reflect both a time in the real world, and a revision of our knowledge about the world.
@@ -20,3 +20,14 @@ Plutonium does **not**:-
 *  Want to take over your application architecture - it is just a library that you use, not a framework that dictates how your application is structured.
 
 In other words, **_Plutonium is a bitemporal, big data system for Plain Old Java Objects_**.
+
+## Example: Deliveries ##
+
+A dispatch business sends packages from warehouses to customers via delivery vans.
+* It needs to know what items it dealt with and where they are.
+* It also needs to track its financial exposure resulting from having lots of goods paid-for out on the road that have not yet been delivered - suppose they don't make it to their destinations?
+* Information is sometimes misreported - so packages that should have gone into vans are left behind on the floor of the warehouse; packages are reported as being successfully delivered, but later it is found out that they were dropped off at the wrong address. That information needs to be corrected, and in the case of wrong delivery, it would be good to keep track of such occurrences.
+
+
+
+
