@@ -59,10 +59,10 @@ trait ExperimentalWorldBehaviours extends FlatSpec with Matchers with Checkers w
 
             val (scopeToDefineFork, experimentalWorld) = scopeAndExperimentalWorldFor(baseWorld, forkWhen, forkAsOf, seed)
 
-            val filteredRevisionsFromBaseWorld = baseWorld.revisionAsOfs.takeWhile(revisionAsOf => !forkAsOf.isBefore(revisionAsOf)).toList
+            val filteredRevisionsFromBaseWorld = baseWorld.revisionAsOfs.takeWhile(revisionAsOf => !forkAsOf.isBefore(revisionAsOf))
 
             (scopeToDefineFork.nextRevision == experimentalWorld.nextRevision) :| s"Expected 'experimentalWorld.nextRevision' to be: ${scopeToDefineFork.nextRevision}, but it was: ${experimentalWorld.nextRevision}." &&
-              (filteredRevisionsFromBaseWorld == experimentalWorld.revisionAsOfs) :| s"Expected 'experimentalWorld.revisionAsOfs' to be: '$filteredRevisionsFromBaseWorld', but they were: '${experimentalWorld.revisionAsOfs}'."
+              (filteredRevisionsFromBaseWorld sameElements experimentalWorld.revisionAsOfs) :| s"Expected 'experimentalWorld.revisionAsOfs' to be: '$filteredRevisionsFromBaseWorld', but they were: '${experimentalWorld.revisionAsOfs}'."
         }
       })
     }
