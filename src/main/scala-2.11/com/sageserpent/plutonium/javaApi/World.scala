@@ -5,7 +5,7 @@ import java.util.Optional
 import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.{Event, javaApi}
 
-trait World[EventId] {
+trait World[EventId] extends WorldConstants {
   def nextRevision: Int  // NOTE: this is the number of *revisions* that have all been made via 'revise'.
 
   def revisionAsOfs: Array[Instant]  // Adjacent duplicates are permitted - this is taken to mean that successive revisions were booked in faster than than the time resolution.
@@ -33,7 +33,6 @@ trait World[EventId] {
   // case the same way?
   def revise(events: Map[EventId, Option[Event]], asOf: Instant): Int
 
-  // Alien intruder from planet Java!
   def revise(events: java.util.Map[EventId, Optional[Event]], asOf: Instant): Int
 
   def revise(eventId: EventId, event: Event, asOf: Instant): Int
