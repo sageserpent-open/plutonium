@@ -62,6 +62,10 @@ trait WorldStateSharingBehaviours extends FlatSpec with Matchers with Checkers w
         override def forkExperimentalWorld(scope: javaApi.Scope): World[Int] = world.forkExperimentalWorld(scope)
 
         override def revisionAsOfs: Seq[Instant] = world.revisionAsOfs
+
+        override def revise(eventId: Revision, event: Event, asOf: Instant): Revision = world.revise(eventId, event, asOf)
+
+        override def annul(eventId: Revision, asOf: Instant): Revision = world.annul(eventId, asOf)
       }
 
       val testCaseGenerator = for {
@@ -117,6 +121,10 @@ trait WorldStateSharingBehaviours extends FlatSpec with Matchers with Checkers w
       override def forkExperimentalWorld(scope: javaApi.Scope): World[Int] = world.forkExperimentalWorld(scope)
 
       override def revisionAsOfs: Seq[Instant] = world.revisionAsOfs
+
+      override def revise(eventId: Revision, event: Event, asOf: Instant): Revision = world.revise(eventId, event, asOf)
+
+      override def annul(eventId: Revision, asOf: Instant): Revision = world.annul(eventId, asOf)
     }
 
     val integerHistoryRecordingsGroupedByIdThatAreRobustAgainstConcurrencyGenerator = recordingsGroupedByIdGenerator_(integerDataSamplesForAnIdGenerator, forbidAnnihilations = true)
@@ -155,7 +163,7 @@ trait WorldStateSharingBehaviours extends FlatSpec with Matchers with Checkers w
     }
 
     they should "allow queries to be attempted on instances while one other is being revised" in {
-      // PLAN: book events are various business times that define objects that all have an integer property,
+      // PLAN: book events at various business times that define objects that all have an integer property,
       // such that sorting the property values by the associated id of their host instances yields either
       // a monotonic increasing or decreasing sequence.
 

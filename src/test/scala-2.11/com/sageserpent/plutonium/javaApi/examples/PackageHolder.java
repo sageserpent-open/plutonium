@@ -8,9 +8,15 @@ import java.util.Set;
 public class PackageHolder extends Identified {
     private String name;
     private Set<PackageItem> packageItems;
+    private String location;
 
     public PackageHolder(String name){
         this.name = name;
+    }
+
+    @Override
+    public String id() {
+        return name;
     }
 
     @Override
@@ -25,9 +31,12 @@ public class PackageHolder extends Identified {
         }
     }
 
-    @Override
-    public String id() {
-        return name;
+    public String getLocation() {
+        return location;
+    }
+
+    public void setLocation(String location) {
+        this.location = location;
     }
 
     public Set<PackageItem> packageItems(){

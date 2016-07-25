@@ -7,7 +7,7 @@ import com.sageserpent.americium.{Finite, NegativeInfinity, Unbounded}
 import com.sageserpent.plutonium.World.Revision
 
 
-object  World {
+object World {
   type Revision = Int
   val initialRevision: Revision = 0 // NOTE: this is the revision defined when the world is first revised.
   // For now, this implies that if we want to book in events that have always been
@@ -45,6 +45,10 @@ trait World[EventId] {
 
   // Alien intruder from planet Java!
   def revise(events: java.util.Map[EventId, Optional[Event]], asOf: Instant): Revision
+
+  def revise(eventId: EventId, event: Event, asOf: Instant): Revision
+
+  def annul(eventId: EventId, asOf: Instant): Revision
 
   // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
   // I can imagine queries being set to 'the beginning of time' and 'past the latest event'...

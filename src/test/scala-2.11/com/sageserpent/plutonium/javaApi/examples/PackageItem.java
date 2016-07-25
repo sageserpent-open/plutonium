@@ -8,10 +8,17 @@ public class PackageItem extends Identified{
     private PackageHolder holder;
     private String intendedDestination;
     private String actualDestination;
+
+    private double valuePaid = 0.0;
     private boolean isWrongItem = false;
 
     public PackageItem(long orderNumber){
         this.orderNumber = orderNumber;
+    }
+
+    @Override
+    public Long id() {
+        return orderNumber;
     }
 
     @Override
@@ -43,11 +50,6 @@ public class PackageItem extends Identified{
 
     public boolean hasBeenDeliveredToTheWrongDestination(){
         return hasBeenDelivered() && getIntendedDestination() != actualDestination();
-    }
-
-    @Override
-    public Long id() {
-        return orderNumber;
     }
 
     public void recordDelivery(){
@@ -111,5 +113,14 @@ public class PackageItem extends Identified{
 
             this.holder = holder;
         }
+    }
+
+
+    public double getValuePaid() {
+        return valuePaid;
+    }
+
+    public void setValuePaid(double valuePaid) {
+        this.valuePaid = valuePaid;
     }
 }
