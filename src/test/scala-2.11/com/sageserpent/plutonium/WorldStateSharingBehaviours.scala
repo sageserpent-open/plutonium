@@ -61,7 +61,7 @@ trait WorldStateSharingBehaviours extends FlatSpec with Matchers with Checkers w
 
         override def forkExperimentalWorld(scope: javaApi.Scope): World[Int] = world.forkExperimentalWorld(scope)
 
-        override def revisionAsOfs: Seq[Instant] = world.revisionAsOfs
+        override def revisionAsOfs: Array[Instant] = world.revisionAsOfs
 
         override def revise(eventId: Revision, event: Event, asOf: Instant): Revision = world.revise(eventId, event, asOf)
 
@@ -120,7 +120,7 @@ trait WorldStateSharingBehaviours extends FlatSpec with Matchers with Checkers w
 
       override def forkExperimentalWorld(scope: javaApi.Scope): World[Int] = world.forkExperimentalWorld(scope)
 
-      override def revisionAsOfs: Seq[Instant] = world.revisionAsOfs
+      override def revisionAsOfs: Array[Instant] = world.revisionAsOfs
 
       override def revise(eventId: Revision, event: Event, asOf: Instant): Revision = world.revise(eventId, event, asOf)
 

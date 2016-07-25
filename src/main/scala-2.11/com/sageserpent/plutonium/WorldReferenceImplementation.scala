@@ -51,7 +51,7 @@ class MutableState[EventId] {
   val eventIdToEventCorrectionsMap: EventIdToEventCorrectionsMap[EventId] = mutable.Map.empty
   val _revisionAsOfs: MutableList[Instant] = MutableList.empty
 
-  def revisionAsOfs: Seq[Instant] = _revisionAsOfs.toList
+  def revisionAsOfs: Array[Instant] = _revisionAsOfs.toArray
 
   def nextRevision: Revision = _revisionAsOfs.size
 
@@ -106,7 +106,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
 
       override def nextRevision: Revision = numberOfRevisionsInCommon + super.nextRevision
 
-      override def revisionAsOfs: Seq[Instant] = (baseMutableState.revisionAsOfs take numberOfRevisionsInCommon) ++ super.revisionAsOfs
+      override def revisionAsOfs: Array[Instant] = (baseMutableState.revisionAsOfs take numberOfRevisionsInCommon) ++ super.revisionAsOfs
 
       override def pertinentEventDatums(cutoffRevision: Revision, cutoffWhen: Unbounded[Instant], eventIdInclusion: EventIdInclusion): Seq[AbstractEventData] = {
         val cutoffWhenForBaseWorld = cutoffWhen min cutoffWhenAfterWhichHistoriesDiverge
@@ -121,7 +121,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
     new WorldReferenceImplementation[EventId](forkedMutableState)
   }
 
-  override def revisionAsOfs: Seq[Instant] = mutableState.revisionAsOfs
+  override def revisionAsOfs: Array[Instant] = mutableState.revisionAsOfs
 
   override protected def eventTimeline(cutoffRevision: Revision): Seq[SerializableEvent] = {
     val idOfThreadThatMostlyRecentlyStartedARevisionBeforehand = mutableState.synchronized {
