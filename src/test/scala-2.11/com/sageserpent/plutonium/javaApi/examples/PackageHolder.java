@@ -3,11 +3,12 @@ package com.sageserpent.plutonium.javaApi.examples;
 import com.sageserpent.plutonium.Identified;
 
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Set;
 
 public class PackageHolder extends Identified {
     private String name;
-    private Set<PackageItem> packageItems;
+    private Set<PackageItem> packageItems = new HashSet<>();
     private String location;
 
     public PackageHolder(String name){

@@ -23,6 +23,7 @@ lazy val settings = Seq(organization := "com.sageserpent",
   libraryDependencies += "org.scalaz" % "scalaz-scalacheck-binding_2.11" % "7.2.2" % "test",
   libraryDependencies += "com.github.kstyrc" % "embedded-redis" % "0.6" % "test",
   libraryDependencies += "junit" % "junit" % "4.12" % "test",
+  libraryDependencies += "com.google.guava" % "guava" % "19.0",
 
   publishMavenStyle := true,
   publishTo := Some(Resolver.file("file",  new File(Path.userHome.absolutePath+"/.m2/repository"))))

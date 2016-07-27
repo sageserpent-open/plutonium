@@ -4,21 +4,21 @@ import com.sageserpent.plutonium.Identified;
 
 
 public class PackageItem extends Identified{
-    private final long orderNumber;
+    private final String id;
     private PackageHolder holder;
     private String intendedDestination;
     private String actualDestination;
-
+    private String contents;
     private double valuePaid = 0.0;
     private boolean isWrongItem = false;
 
-    public PackageItem(long orderNumber){
-        this.orderNumber = orderNumber;
+    public PackageItem(String id){
+        this.id = id;
     }
 
     @Override
-    public Long id() {
-        return orderNumber;
+    public String id() {
+        return id;
     }
 
     @Override
@@ -92,6 +92,14 @@ public class PackageItem extends Identified{
 
     public String actualDestination() {
         return actualDestination;
+    }
+
+    public String getContents() {
+        return contents;
+    }
+
+    public void setContents(String contents) {
+        this.contents = contents;
     }
 
     public PackageHolder holder(){
