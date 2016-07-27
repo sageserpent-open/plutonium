@@ -52,11 +52,11 @@ public class DeliveringPackages {
         final String thisEventWillEventuallyBeCorrected = "Put package #1 in warehouse";
 
         final int revision = world.revise(thisEventWillEventuallyBeCorrected, Change.forTwoItems(Instant.parse("2016-12-03T00:00:00Z"),
-                warehouseName, PackageHolder.class,
                 "Package #1", PackageItem.class,
-                (warehouse, packageItem) -> {
+                warehouseName, PackageHolder.class,
+                (packageItem, warehouse) -> {
                     packageItem.setContents("SuperTron HiPlasmatic Telly");
-                    warehouse.hold(packageItem);
+                    packageItem.heldBy(warehouse);
                 }), Instant.now() /*As-of time for the *revision*.*/);
 
         assert 2 + initialRevision == revision; // I think we've got the idea now, thanks.
@@ -75,9 +75,9 @@ public class DeliveringPackages {
         // Note use of method reference instead of an explicit lambda for brevity.
 
         world.revise("Load package #1 into van registration JA10 PIE", Change.forTwoItems(Instant.parse("2016-12-04T15:00:00Z"),
-                "JA10 PIE", PackageHolder.class,
                 "Package #1", PackageItem.class,
-                PackageHolder::hold), Instant.now() /*As-of time for the *revision*.*/);
+                "JA10 PIE", PackageHolder.class,
+                PackageItem::heldBy), Instant.now() /*As-of time for the *revision*.*/);
 
 
         // 5. Fred gets his package!
@@ -97,17 +97,17 @@ public class DeliveringPackages {
         // 7. Back in the van it goes...
 
         world.revise("Load package #1 back into van registration JA10 PIE", Change.forTwoItems(Instant.parse("2016-12-06T10:00:00Z"),
-                "JA10 PIE", PackageHolder.class,
                 "Package #1", PackageItem.class,
-                PackageHolder::hold), Instant.now() /*As-of time for the *revision*.*/);
+                "JA10 PIE", PackageHolder.class,
+                PackageItem::heldBy), Instant.now() /*As-of time for the *revision*.*/);
 
 
         // 8. ... to be dropped off back in the warehouse.
 
         world.revise("Unload package #1 back into warehouse", Change.forTwoItems(Instant.parse("2016-12-07T10:00:00Z"),
-                warehouseName, PackageHolder.class,
                 "Package #1", PackageItem.class,
-                PackageHolder::hold), Instant.now() /*As-of time for the *revision*.*/);
+                warehouseName, PackageHolder.class,
+                PackageItem::heldBy), Instant.now() /*As-of time for the *revision*.*/);
 
 
         // So far, all revisions have been booking in *new* events, so history is being
@@ -122,11 +122,11 @@ public class DeliveringPackages {
         // the event being corrected.
 
         world.revise(thisEventWillEventuallyBeCorrected, Change.forTwoItems(Instant.parse("2016-12-03T00:00:00Z"),
-                warehouseName, PackageHolder.class,
                 "Package #1", PackageItem.class,
-                (warehouse, packageItem) -> {
+                warehouseName, PackageHolder.class,
+                (packageItem, warehouse) -> {
                     packageItem.setContents("Krasster kipper ties");
-                    warehouse.hold(packageItem);
+                    packageItem.heldBy(warehouse);
                 }), Instant.now() /*As-of time for the *revision*.*/);
 
 
@@ -143,18 +143,18 @@ public class DeliveringPackages {
         {
             Map<String, Optional<Event>> warehouseLoadingEvents =
                     ImmutableMap.of("Put package #2 in warehouse", Optional.of(Change.forTwoItems(Instant.parse("2016-12-03T00:00:00Z"),
-                            warehouseName, PackageHolder.class,
                             "Package #2", PackageItem.class,
-                            (warehouse, packageItem) -> {
+                            warehouseName, PackageHolder.class,
+                            (packageItem, warehouse) -> {
                                 packageItem.setContents("SuperTron HiPlasmatic Telly");
-                                warehouse.hold(packageItem);
+                                packageItem.heldBy(warehouse);
                             })),
                             "Put package #3 in warehouse", Optional.of(Change.forTwoItems(Instant.parse("2016-12-03T00:30:00Z"),
-                                    warehouseName, PackageHolder.class,
                                     "Package #3", PackageItem.class,
-                                    (warehouse, packageItem) -> {
+                                    warehouseName, PackageHolder.class,
+                                    (packageItem, warehouse) -> {
                                         packageItem.setContents("SuperTron Connoisseur Music System.");
-                                        warehouse.hold(packageItem);
+                                        packageItem.heldBy(warehouse);
                                     })));
 
             world.revise(warehouseLoadingEvents, Instant.now() /*As-of time for the *revision*.*/);
