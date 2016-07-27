@@ -30,7 +30,7 @@ public class DeliveringPackages {
 
         {
             // Make a query at the end of time for any kind of thing that could be booked into the world via a revision...
-            final Scope scope = world.scopeFor(PositiveInfinity.apply(), Instant.now() /*As-of time that picks out the *revision*.*/);
+            final Scope scope = world.scopeFor(PositiveInfinity.apply(), Instant.now() /*As-of time that picks out the revision.*/);
             assert scope.render(Bitemporal.wildcard(Identified.class)).isEmpty();
         }
 
@@ -42,11 +42,11 @@ public class DeliveringPackages {
         {
             world.revise("Define warehouse", Change.forOneItem(warehouseName, PackageHolder.class, warehouse -> {
                 warehouse.setLocation("By a motorway");
-            }), Instant.now() /*As-of time for the *revision*.*/);
+            }), Instant.now() /*As-of time for the revision.*/);
 
             {
                 // Make a query at the beginning of time...
-                final Scope scope = world.scopeFor(NegativeInfinity.apply(), Instant.now() /*As-of time that picks out the *revision*.*/);
+                final Scope scope = world.scopeFor(NegativeInfinity.apply(), Instant.now() /*As-of time that picks out the revision.*/);
                 assert "By a motorway".equals(scope.render(Bitemporal.singleOneOf(warehouseName, PackageHolder.class)).head().getLocation());
             }
         }
@@ -54,8 +54,7 @@ public class DeliveringPackages {
 
         // 2. Record a package being stored in the warehouse as a single revision of the world.
         // Also note how we can make several state changes to the item in the real world from
-        // within one event by using a statement lambda with several method calls in it. We'll
-        // come back to this event later...
+        // within one event by using a statement lambda with several method calls in it.
 
         final String thisEventWillEventuallyBeCorrected = "Put package #1 in warehouse";
 
@@ -65,11 +64,11 @@ public class DeliveringPackages {
                 (packageItem, warehouse) -> {
                     packageItem.setContents("SuperTron HiPlasmatic Telly");
                     packageItem.heldBy(warehouse);
-                }), Instant.now() /*As-of time for the *revision*.*/);
+                }), Instant.now() /*As-of time for the revision.*/);
 
         {
             // Make a query at the point in time when the event took place...
-            final com.sageserpent.plutonium.javaApi.Scope scope = world.scopeFor(Finite.apply(Instant.parse("2016-12-03T00:00:00Z")), Instant.now() /*As-of time that picks out the *revision*.*/);
+            final Scope scope = world.scopeFor(Finite.apply(Instant.parse("2016-12-03T00:00:00Z")), Instant.now() /*As-of time that picks out the revision.*/);
             assert "By a motorway".equals(scope.render(Bitemporal.singleOneOf(warehouseName, PackageHolder.class)).head().getLocation());
             assert "SuperTron HiPlasmatic Telly".equals(scope.render(Bitemporal.singleOneOf("Package #1", PackageItem.class)).head().getContents());
         }
@@ -81,7 +80,7 @@ public class DeliveringPackages {
                 "Package #1", PackageItem.class, packageItem -> {
                     packageItem.setIntendedDestination("Fred's house");
                     packageItem.setValuePaid(800);    // Nice TV, eh Fred?
-                }), Instant.now() /*As-of time for the *revision*.*/);
+                }), Instant.now() /*As-of time for the revision.*/);
 
 
         // 4. The TV goes out in a van...
@@ -90,21 +89,21 @@ public class DeliveringPackages {
         world.revise("Load package #1 into van registration JA10 PIE", Change.forTwoItems(Instant.parse("2016-12-04T15:00:00Z"),
                 "Package #1", PackageItem.class,
                 "JA10 PIE", PackageHolder.class,
-                PackageItem::heldBy), Instant.now() /*As-of time for the *revision*.*/);
+                PackageItem::heldBy), Instant.now() /*As-of time for the revision.*/);
 
 
         // 5. Fred gets his package!
 
         world.revise("Delivery of package #1", Change.forOneItem(Instant.parse("2016-12-05T10:00:00Z"),
                 "Package #1", PackageItem.class,
-                PackageItem::recordDelivery), Instant.now() /*As-of time for the *revision*.*/);
+                PackageItem::recordDelivery), Instant.now() /*As-of time for the revision.*/);
 
 
         // 6. No, its the wrong item - turns out it is a year's supply of kipper ties. What?!
 
         world.revise("Package #1 doesn't contain a TV", Change.forOneItem(Instant.parse("2016-12-05T10:30:00Z"),
                 "Package #1", PackageItem.class,
-                PackageItem::recordThatPackageWasWrongItem), Instant.now() /*As-of time for the *revision*.*/);
+                PackageItem::recordThatPackageWasWrongItem), Instant.now() /*As-of time for the revision.*/);
 
 
         // 7. Back in the van it goes...
@@ -112,7 +111,7 @@ public class DeliveringPackages {
         world.revise("Load package #1 back into van registration JA10 PIE", Change.forTwoItems(Instant.parse("2016-12-06T10:00:00Z"),
                 "Package #1", PackageItem.class,
                 "JA10 PIE", PackageHolder.class,
-                PackageItem::heldBy), Instant.now() /*As-of time for the *revision*.*/);
+                PackageItem::heldBy), Instant.now() /*As-of time for the revision.*/);
 
 
         // 8. ... to be dropped off back in the warehouse.
@@ -120,7 +119,7 @@ public class DeliveringPackages {
         world.revise("Unload package #1 back into warehouse", Change.forTwoItems(Instant.parse("2016-12-07T10:00:00Z"),
                 "Package #1", PackageItem.class,
                 warehouseName, PackageHolder.class,
-                PackageItem::heldBy), Instant.now() /*As-of time for the *revision*.*/);
+                PackageItem::heldBy), Instant.now() /*As-of time for the revision.*/);
 
 
         // So far, all revisions have been booking in *new* events, so history is being
@@ -140,11 +139,11 @@ public class DeliveringPackages {
                 (packageItem, warehouse) -> {
                     packageItem.setContents("Krasster kipper ties");
                     packageItem.heldBy(warehouse);
-                }), Instant.now() /*As-of time for the *revision*.*/);
+                }), Instant.now() /*As-of time for the revision.*/);
 
         {
             // Make a query at the point in time when the event took place...
-            final com.sageserpent.plutonium.javaApi.Scope scope = world.scopeFor(Finite.apply(Instant.parse("2016-12-03T00:00:00Z")), Instant.now() /*As-of time that picks out the *revision*.*/);
+            final Scope scope = world.scopeFor(Finite.apply(Instant.parse("2016-12-03T00:00:00Z")), Instant.now() /*As-of time that picks out the revision.*/);
             assert "By a motorway".equals(scope.render(Bitemporal.singleOneOf(warehouseName, PackageHolder.class)).head().getLocation());
             assert "Krasster kipper ties".equals(scope.render(Bitemporal.singleOneOf("Package #1", PackageItem.class)).head().getContents());
         }
@@ -177,7 +176,48 @@ public class DeliveringPackages {
                                         packageItem.heldBy(warehouse);
                                     })));
 
-            world.revise(warehouseLoadingEvents, Instant.now() /*As-of time for the *revision*.*/);
+            world.revise(warehouseLoadingEvents, Instant.now() /*As-of time for the revision.*/);
         }
+
+        // 3. The music system is ordered....
+
+        world.revise("Order music system for Bert", Change.forOneItem(Instant.parse("2016-12-08T20:00:00Z"),
+                "Package #3", PackageItem.class, packageItem -> {
+                    packageItem.setIntendedDestination("Bert's house");
+                    packageItem.setValuePaid(300);
+                }), Instant.now() /*As-of time for the revision.*/);        
+
+        // 11. The music system goes out in a van...
+
+        final String thisEventWillBeAnnulled = "Load package #3 into van registration JA10 PIE";
+        
+        world.revise(thisEventWillBeAnnulled, Change.forTwoItems(Instant.parse("2016-12-09T01:00:00Z"),
+                "Package #3", PackageItem.class,
+                "JA10 PIE", PackageHolder.class,
+                PackageItem::heldBy), Instant.now() /*As-of time for the revision.*/);
+        
+        // 12 Hold on ... somebody finds package #3 on the floor of the warehouse. They look it up and
+        // realise that is recorded as being loaded in the van, which it clearly wasn't. The package is put back
+        // where it should be in the warehouse and the loading event is then annulled to reflect reality.
+
+        {
+            final Scope scope = world.scopeFor(Finite.apply(Instant.parse("2016-12-09T01:00:00Z")), Instant.now() /*As-of time that picks out the revision.*/);
+            assert "JA10 PIE".equals(scope.render(Bitemporal.singleOneOf("Package #3", PackageItem.class)).head().holder().id());
+        }
+
+        world.annul(thisEventWillBeAnnulled,  Instant.now() /*As-of time for the revision.*/);
+
+        {
+            final Scope scope = world.scopeFor(Finite.apply(Instant.parse("2016-12-09T01:00:00Z")), Instant.now() /*As-of time that picks out the revision.*/);
+            assert warehouseName.equals(scope.render(Bitemporal.singleOneOf("Package #3", PackageItem.class)).head().holder().id());
+        }
+        
+        // Let's generate some reports...
+        
+        // Where are the items?
+        
+        // How much money from paid orders is not covered by delivered items?
+        
+        // 
     }
 }

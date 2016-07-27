@@ -26,7 +26,7 @@ In other words, **_Plutonium is a bitemporal, big data system for Plain Old Java
 A dispatch business sends packages from warehouses to customers via delivery vans.
 * It needs to know what items it dealt with and where they are.
 * It also needs to track its financial exposure resulting from having lots of goods paid-for out on the road that have not yet been delivered - suppose they don't make it to their destinations?
-* Information is sometimes misreported - so packages that should have gone into vans are left behind on the floor of the warehouse; packages are reported as being successfully delivered, but later it is found out that they were dropped off at the wrong address. That information needs to be corrected, and in the case of wrong delivery, it would be good to keep track of such occurrences.
+* Information is sometimes misreported - perhaps the wrong thing was in a package, or a package that should have gone into a van was left behind on the floor of the warehouse. That information needs to be corrected.
 
 
 
