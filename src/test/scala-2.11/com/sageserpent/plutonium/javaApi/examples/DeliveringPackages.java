@@ -2,18 +2,18 @@ package com.sageserpent.plutonium.javaApi.examples;
 
 import com.google.common.collect.ImmutableMap;
 import com.lambdaworks.redis.RedisClient;
-import com.sageserpent.plutonium.Event;
-import com.sageserpent.plutonium.MutableState;
-import com.sageserpent.plutonium.WorldRedisBasedImplementation;
-import com.sageserpent.plutonium.WorldReferenceImplementation;
+import com.sageserpent.americium.Finite;
+import com.sageserpent.americium.NegativeInfinity;
+import com.sageserpent.americium.PositiveInfinity;
+import com.sageserpent.plutonium.*;
+import com.sageserpent.plutonium.javaApi.Bitemporal;
 import com.sageserpent.plutonium.javaApi.Change;
+import com.sageserpent.plutonium.javaApi.Scope;
 import com.sageserpent.plutonium.javaApi.World;
 
 import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
-
-import static com.sageserpent.plutonium.javaApi.World.initialRevision;
 
 public class DeliveringPackages {
     private static String warehouseName = "BigDepot";
@@ -28,7 +28,11 @@ public class DeliveringPackages {
                 new WorldReferenceImplementation<>(new MutableState<>()) :
                 new WorldRedisBasedImplementation<>(redisClient, "TheBigStoreOfDataOwnedByTheDispatchLineOfBusiness");
 
-        assert initialRevision == world.nextRevision(); // Making a point about revision numbers.
+        {
+            // Make a query at the end of time for any kind of thing that could be booked into the world via a revision...
+            final Scope scope = world.scopeFor(PositiveInfinity.apply(), Instant.now() /*As-of time that picks out the *revision*.*/);
+            assert scope.render(Bitemporal.wildcard(Identified.class)).isEmpty();
+        }
 
 
         // 1. Let there be a warehouse - it has always existed since the dawn of time.
@@ -36,11 +40,15 @@ public class DeliveringPackages {
         // case let's show that we can model something as being 'always there' too.
 
         {
-            final int revision = world.revise("Define warehouse", Change.forOneItem(warehouseName, PackageHolder.class, warehouse -> {
+            world.revise("Define warehouse", Change.forOneItem(warehouseName, PackageHolder.class, warehouse -> {
                 warehouse.setLocation("By a motorway");
             }), Instant.now() /*As-of time for the *revision*.*/);
 
-            assert 1 + initialRevision == revision; // Making a point about revision numbers again.
+            {
+                // Make a query at the beginning of time...
+                final Scope scope = world.scopeFor(NegativeInfinity.apply(), Instant.now() /*As-of time that picks out the *revision*.*/);
+                assert "By a motorway".equals(scope.render(Bitemporal.singleOneOf(warehouseName, PackageHolder.class)).head().getLocation());
+            }
         }
 
 
@@ -51,7 +59,7 @@ public class DeliveringPackages {
 
         final String thisEventWillEventuallyBeCorrected = "Put package #1 in warehouse";
 
-        final int revision = world.revise(thisEventWillEventuallyBeCorrected, Change.forTwoItems(Instant.parse("2016-12-03T00:00:00Z"),
+        world.revise(thisEventWillEventuallyBeCorrected, Change.forTwoItems(Instant.parse("2016-12-03T00:00:00Z"),
                 "Package #1", PackageItem.class,
                 warehouseName, PackageHolder.class,
                 (packageItem, warehouse) -> {
@@ -59,7 +67,12 @@ public class DeliveringPackages {
                     packageItem.heldBy(warehouse);
                 }), Instant.now() /*As-of time for the *revision*.*/);
 
-        assert 2 + initialRevision == revision; // I think we've got the idea now, thanks.
+        {
+            // Make a query at the point in time when the event took place...
+            final com.sageserpent.plutonium.javaApi.Scope scope = world.scopeFor(Finite.apply(Instant.parse("2016-12-03T00:00:00Z")), Instant.now() /*As-of time that picks out the *revision*.*/);
+            assert "By a motorway".equals(scope.render(Bitemporal.singleOneOf(warehouseName, PackageHolder.class)).head().getLocation());
+            assert "SuperTron HiPlasmatic Telly".equals(scope.render(Bitemporal.singleOneOf("Package #1", PackageItem.class)).head().getContents());
+        }
 
 
         // 3. The TV is ordered....
@@ -128,6 +141,13 @@ public class DeliveringPackages {
                     packageItem.setContents("Krasster kipper ties");
                     packageItem.heldBy(warehouse);
                 }), Instant.now() /*As-of time for the *revision*.*/);
+
+        {
+            // Make a query at the point in time when the event took place...
+            final com.sageserpent.plutonium.javaApi.Scope scope = world.scopeFor(Finite.apply(Instant.parse("2016-12-03T00:00:00Z")), Instant.now() /*As-of time that picks out the *revision*.*/);
+            assert "By a motorway".equals(scope.render(Bitemporal.singleOneOf(warehouseName, PackageHolder.class)).head().getLocation());
+            assert "Krasster kipper ties".equals(scope.render(Bitemporal.singleOneOf("Package #1", PackageItem.class)).head().getContents());
+        }
 
 
         // 10. We don't have to book in events one at a time. Let's record some more packages being stored
