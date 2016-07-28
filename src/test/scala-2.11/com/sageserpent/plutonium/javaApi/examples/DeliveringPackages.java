@@ -183,10 +183,10 @@ public class DeliveringPackages {
         // on receipt at the warehouse. Let's update our record of what
         // happened in the first place...
         // We'll use the event id of the initial storage of the package #1
-        // in the warehouse to annul that event, and while we're at it,
-        // we'll record the actual storage that took place. Note how we use
-        // the event id - 'thisEventWillEventuallyBeCorrected' to refer
-        // back to the event being corrected.
+        // in the warehouse to correct that event, recording the actual
+        // storage that took place. Note how we use the event id -
+        // 'thisEventWillEventuallyBeCorrected' to refer back to the event
+        // being corrected.
 
         world.revise(thisEventWillEventuallyBeCorrected,
                      Change.forTwoItems(Instant.parse("2016-12-03T00:00:00Z"),
