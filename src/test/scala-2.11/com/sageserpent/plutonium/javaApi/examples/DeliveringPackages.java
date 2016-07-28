@@ -185,7 +185,7 @@ public class DeliveringPackages {
         // We'll use the event id of the initial storage of the package #1
         // in the warehouse to correct that event, recording the actual
         // storage that took place. Note how we use the event id -
-        // 'thisEventWillEventuallyBeCorrected' to refer back to the event
+        // 'thisEventWillEventuallyBeCorrected' - to refer back to the event
         // being corrected.
 
         world.revise(thisEventWillEventuallyBeCorrected,
@@ -227,7 +227,7 @@ public class DeliveringPackages {
         // record of past events. Also note that events in a revision can
         // occur at different times - a revision of the world is a revision
         // of our *knowledge* about its historical record, not just a log
-        // of new events.
+        // entry for a single event.
 
         {
             Map<String, Optional<Event>> warehouseLoadingEvents =
@@ -260,7 +260,7 @@ public class DeliveringPackages {
              for the revision.*/);
         }
 
-        // 3. The music system is ordered....
+        // 11. The music system is ordered....
 
         world.revise("Order music system for Bert",
                      Change.forOneItem(Instant.parse("2016-12-08T20:00:00Z"),
@@ -272,7 +272,7 @@ public class DeliveringPackages {
                                        }), Instant.now() /*As-of time for
                                        the revision.*/);
 
-        // 11. The music system goes out in a van...
+        // 12. The music system goes out in a van...
 
         final String thisEventWillBeAnnulled =
                 "Load package #3 into van registration JA10 PIE";
@@ -284,7 +284,7 @@ public class DeliveringPackages {
                                         PackageItem::heldBy), Instant.now()
                      /*As-of time for the revision.*/);
 
-        // 12 Hold on ... somebody finds package #3 on the floor of the
+        // 13 Hold on ... somebody finds package #3 on the floor of the
         // warehouse. They look it up and realise that is recorded as being
         // loaded in the van, which it clearly wasn't. The package is put
         // back where it should be in the warehouse and the loading event
