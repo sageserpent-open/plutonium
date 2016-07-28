@@ -11,7 +11,7 @@ public class PackageHolder extends Identified {
     private Set<PackageItem> packageItems = new HashSet<>();
     private String location;
 
-    public PackageHolder(String name){
+    public PackageHolder(String name) {
         this.name = name;
     }
 
@@ -21,13 +21,16 @@ public class PackageHolder extends Identified {
     }
 
     @Override
-    public void checkInvariant(){
+    public void checkInvariant() {
         super.checkInvariant();
 
-        for (PackageItem packageItem: packageItems()) {
+        for (PackageItem packageItem : packageItems()) {
             final PackageHolder holder = packageItem.holder();
-            if (holder != this){
-                throw new RuntimeException(holder == null ? "Package item does not know it is being held.": "Package item thinks it is held by something else.");
+            if (holder != this) {
+                throw new RuntimeException(holder ==
+                                                   null ? "Package item " +
+                        "does not know it is being held." : "Package item " +
+                        "thinks it is held by something else.");
             }
         }
     }
@@ -40,15 +43,15 @@ public class PackageHolder extends Identified {
         this.location = location;
     }
 
-    public Set<PackageItem> packageItems(){
+    public Set<PackageItem> packageItems() {
         return Collections.unmodifiableSet(packageItems);
     }
 
-    void hold(PackageItem packageItem){
+    void hold(PackageItem packageItem) {
         packageItems.add(packageItem);
     }
 
-    void release(PackageItem packageItem){
+    void release(PackageItem packageItem) {
         packageItems.remove(packageItem);
     }
 }

@@ -24,11 +24,12 @@ In other words, **_Plutonium is a bitemporal, big data system for Plain Old Java
 ## Example: Deliveries ##
 
 A dispatch business sends packages from warehouses to customers via delivery vans.
+
 * It needs to know what items it dealt with and where they are.
 * It also needs to track its financial exposure resulting from having lots of goods paid-for out on the road that have not yet been delivered - suppose they don't make it to their destinations?
 * Information is sometimes misreported - perhaps the wrong thing was in a package, or a package that should have gone into a van was left behind on the floor of the warehouse. That information needs to be corrected.
 
-We'll model package items and places / things where they are held in - warehouses and vans, for instance.
+We'll model package items and places / things where they are held in - in this case, warehouses and vans.
 
 We're free to use the usual mechanisms in Java for expressing relationships between objects - in this case, we'll model physical containment via a bidirectional relationship between package items and their holders.
 
