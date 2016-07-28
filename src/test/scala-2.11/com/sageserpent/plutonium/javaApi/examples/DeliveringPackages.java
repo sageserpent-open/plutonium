@@ -14,6 +14,7 @@ import com.sageserpent.plutonium.javaApi.World;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.StreamSupport;
 
 public class DeliveringPackages {
     private static String warehouseName = "BigDepot";
@@ -41,13 +42,13 @@ public class DeliveringPackages {
 
         {
             world.revise("Define warehouse", Change.forOneItem(warehouseName, PackageHolder.class, warehouse -> {
-                warehouse.setLocation("By a motorway");
+                warehouse.setLocation("Big warehouse by motorway");
             }), Instant.now() /*As-of time for the revision.*/);
 
             {
                 // Make a query at the beginning of time...
                 final Scope scope = world.scopeFor(NegativeInfinity.apply(), Instant.now() /*As-of time that picks out the revision.*/);
-                assert "By a motorway".equals(scope.render(Bitemporal.singleOneOf(warehouseName, PackageHolder.class)).head().getLocation());
+                assert "Big warehouse by motorway".equals(scope.render(Bitemporal.singleOneOf(warehouseName, PackageHolder.class)).head().getLocation());
             }
         }
 
@@ -69,7 +70,7 @@ public class DeliveringPackages {
         {
             // Make a query at the point in time when the event took place...
             final Scope scope = world.scopeFor(Finite.apply(Instant.parse("2016-12-03T00:00:00Z")), Instant.now() /*As-of time that picks out the revision.*/);
-            assert "By a motorway".equals(scope.render(Bitemporal.singleOneOf(warehouseName, PackageHolder.class)).head().getLocation());
+            assert "Big warehouse by motorway".equals(scope.render(Bitemporal.singleOneOf(warehouseName, PackageHolder.class)).head().getLocation());
             assert "SuperTron HiPlasmatic Telly".equals(scope.render(Bitemporal.singleOneOf("Package #1", PackageItem.class)).head().getContents());
         }
 
@@ -144,7 +145,7 @@ public class DeliveringPackages {
         {
             // Make a query at the point in time when the event took place...
             final Scope scope = world.scopeFor(Finite.apply(Instant.parse("2016-12-03T00:00:00Z")), Instant.now() /*As-of time that picks out the revision.*/);
-            assert "By a motorway".equals(scope.render(Bitemporal.singleOneOf(warehouseName, PackageHolder.class)).head().getLocation());
+            assert "Big warehouse by motorway".equals(scope.render(Bitemporal.singleOneOf(warehouseName, PackageHolder.class)).head().getLocation());
             assert "Krasster kipper ties".equals(scope.render(Bitemporal.singleOneOf("Package #1", PackageItem.class)).head().getContents());
         }
 
@@ -213,11 +214,45 @@ public class DeliveringPackages {
         }
         
         // Let's generate some reports...
+        /*
+            Resulting console output:-
+
+            Location for: Package #3 is:-
+            Big warehouse by motorway
+            Location for: Package #2 is:-
+            Big warehouse by motorway
+            Location for: Package #1 is:-
+            Big warehouse by motorway
+            Payments received for items awaiting delivery is: 1100.0
+        */
         
-        // Where are the items?
-        
-        // How much money from paid orders is not covered by delivered items?
-        
-        // 
+        {
+            // Use the revision-based overload here to make a scope that will include the latest revision of the world.
+            final Scope scope = world.scopeFor(Finite.apply(Instant.parse("2016-12-10T07:00:00Z")), world.nextRevision());
+
+            // Where are the items now?
+
+            final com.sageserpent.plutonium.Bitemporal<PackageItem> packageItemsBitemporal = Bitemporal.wildcard(PackageItem.class);
+
+            for (PackageItem packageItem: scope.renderAsIterable(packageItemsBitemporal)){
+                System.out.println("Location for: " + packageItem.id() + " is:-");
+                if (packageItem.hasBeenDelivered()){
+                    System.out.println(packageItem.actualDestination());
+                } else  {
+                    PackageHolder packageHolder = packageItem.holder();
+                    if (null != packageHolder){
+                        System.out.println(packageHolder.getLocation());
+                    } else {
+                        System.out.println("Not yet known.");
+                    }
+                }
+            }
+
+            // How much money from paid orders is not covered by delivered items?
+
+            final double uncoveredValue = StreamSupport.stream(scope.renderAsIterable(packageItemsBitemporal).spliterator(), false).map(PackageItem::getValuePaid).reduce(0.0, (lhs, rhs) -> lhs + rhs);
+
+            System.out.println("Payments received for items awaiting delivery is: " + uncoveredValue);
+        }
     }
 }
