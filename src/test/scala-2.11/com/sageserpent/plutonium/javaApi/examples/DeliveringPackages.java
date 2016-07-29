@@ -72,7 +72,7 @@ public class DeliveringPackages {
 
 
         // 2. Record a package being stored in the warehouse as a single
-        // revision of the world. Also note how we can make several state
+        // revision of the world. Note how we can make several state
         // changes to the item in the real world from within one event by
         // using a statement lambda with several method calls in it.
 
@@ -226,8 +226,8 @@ public class DeliveringPackages {
         // order of time, we'll do this here to add more information to our
         // record of past events. Also note that events in a revision can
         // occur at different times - a revision of the world is a revision
-        // of our *knowledge* about its historical record, not just a log
-        // entry for a single event.
+        // of our *knowledge* about its entire historical record, not just
+        // a log entry for a single event.
 
         {
             Map<String, Optional<Event>> warehouseLoadingEvents =
