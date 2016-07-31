@@ -4,6 +4,7 @@ import com.sageserpent.americium.Finite;
 import com.sageserpent.americium.NegativeInfinity;
 import com.sageserpent.americium.Unbounded;
 import com.sageserpent.plutonium.*;
+import com.sageserpent.plutonium.javaApi.*;
 import org.junit.Test;
 import static org.junit.Assert.assertEquals;
 
@@ -85,7 +86,7 @@ public class JavaApiTest {
         {
             int followingRevision = 0;
 
-            com.sageserpent.plutonium.Scope scope = world.scopeFor(queryTime, followingRevision);
+            Scope scope = world.scopeFor(queryTime, followingRevision);
 
             assert (scope.render(Bitemporal.withId("Fred", Example.class)).isEmpty());
         }
@@ -93,7 +94,7 @@ public class JavaApiTest {
         {
             int followingRevision = 1;
 
-            com.sageserpent.plutonium.Scope scope = world.scopeFor(agesAgo, followingRevision);
+            Scope scope = world.scopeFor(agesAgo, followingRevision);
 
             Example example = scope.render(Bitemporal.withId("Fred", Example.class)).head();
 
@@ -103,7 +104,7 @@ public class JavaApiTest {
         {
             int followingRevision = 2;
 
-            com.sageserpent.plutonium.Scope scope = world.scopeFor(agesAgo, followingRevision);
+            Scope scope = world.scopeFor(agesAgo, followingRevision);
 
             Example example = scope.render(Bitemporal.withId("Fred", Example.class)).head();
 
@@ -114,7 +115,7 @@ public class JavaApiTest {
             int followingRevision = 3;
 
             {
-                com.sageserpent.plutonium.Scope scope = world.scopeFor(agesAgo, followingRevision);
+                Scope scope = world.scopeFor(agesAgo, followingRevision);
 
                 Example example = scope.render(Bitemporal.withId("Fred", Example.class)).head();
 
@@ -122,7 +123,7 @@ public class JavaApiTest {
             }
 
             {
-                com.sageserpent.plutonium.Scope scope = world.scopeFor(queryTime, followingRevision);
+                Scope scope = world.scopeFor(queryTime, followingRevision);
 
                 Example example = scope.render(Bitemporal.withId("Fred", Example.class)).head();
 
@@ -133,7 +134,7 @@ public class JavaApiTest {
         {
             int followingRevision = 4;
 
-            com.sageserpent.plutonium.Scope scope = world.scopeFor(queryTime, followingRevision);
+            Scope scope = world.scopeFor(queryTime, followingRevision);
 
             final Iterable<Example> exampleIterable = scope.renderAsIterable(Bitemporal.withId("Fred", Example.class));
             assert !exampleIterable.iterator().hasNext();
@@ -142,7 +143,7 @@ public class JavaApiTest {
         {
             int followingRevision = 5;
 
-            com.sageserpent.plutonium.Scope scope = world.scopeFor(agesAgo, followingRevision);
+            Scope scope = world.scopeFor(agesAgo, followingRevision);
 
             Example example = scope.render(Bitemporal.withId("Fred", Example.class)).head();
 

@@ -69,7 +69,7 @@ object WorldRedisBasedImplementation {
   }
 }
 
-class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, identityGuid: String) extends WorldImplementationCodeFactoring[EventId] {
+class WorldRedisBasedImplementation[EventId](redisClient: RedisClient, identityGuid: String) extends WorldImplementationCodeFactoring[EventId] {
   parentWorld =>
 
   import World._
@@ -107,7 +107,7 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
 
     override protected def nextRevisionObservable: Observable[Revision] = super.nextRevisionObservable map (numberOfRevisionsInCommon + _)
 
-    override protected def revisionAsOfsObservable: Observable[Seq[Instant]] = for {
+    override protected def revisionAsOfsObservable: Observable[Array[Instant]] = for {
       revisionAsOfsFromBaseWorld <- baseWorld.revisionAsOfsObservable
       revisionAsOfsFromSuper <- super.revisionAsOfsObservable
     } yield (revisionAsOfsFromBaseWorld take numberOfRevisionsInCommon) ++ revisionAsOfsFromSuper
@@ -123,9 +123,9 @@ class WorldRedisBasedImplementation[EventId: TypeTag](redisClient: RedisClient, 
     }
   }
 
-  override def revisionAsOfs: Seq[Instant] = revisionAsOfsObservable.toBlocking.first
+  override def revisionAsOfs: Array[Instant] = revisionAsOfsObservable.toBlocking.first
 
-  protected def revisionAsOfsObservable: Observable[Seq[Instant]] = toScalaObservable(redisApi.lrange(asOfsKey, 0, -1)).asInstanceOf[Observable[Instant]].toList
+  protected def revisionAsOfsObservable: Observable[Array[Instant]] = toScalaObservable(redisApi.lrange(asOfsKey, 0, -1)).asInstanceOf[Observable[Instant]].toArray
 
   override protected def eventTimeline(cutoffRevision: Revision): Seq[SerializableEvent] =
     try {

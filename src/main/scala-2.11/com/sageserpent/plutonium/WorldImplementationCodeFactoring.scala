@@ -461,6 +461,12 @@ abstract class WorldImplementationCodeFactoring[EventId] extends World[EventId] 
     revise(eventsAsScalaImmutableMap, asOf)
   }
 
+  def revise(eventId: EventId, event: Event, asOf: Instant): Revision =
+    revise(Map(eventId -> Some(event)), asOf)
+
+  def annul(eventId: EventId, asOf: Instant): Revision  =
+    revise(Map(eventId -> None), asOf)
+
   def revise(events: Map[EventId, Option[Event]], asOf: Instant): Revision = {
     def newEventDatumsFor(nextRevisionPriorToUpdate: Revision): Map[EventId, AbstractEventData] = {
       events.zipWithIndex map { case ((eventId, event), tiebreakerIndex) =>

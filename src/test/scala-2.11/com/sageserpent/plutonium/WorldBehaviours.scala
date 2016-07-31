@@ -941,7 +941,7 @@ trait WorldBehaviours extends FlatSpec with Matchers with Checkers with WorldSpe
             recordEventsInWorldWithoutGivingUpOnFailure(liftRecordings(mergedShuffledHistoryOverLotsOfThings.toStream), mergedAsOfs.toList, distopia)
 
             assert(utopia.nextRevision == distopia.nextRevision)
-            assert(utopia.revisionAsOfs == distopia.revisionAsOfs)
+            assert(utopia.revisionAsOfs sameElements distopia.revisionAsOfs)
 
             val utopianScope = utopia.scopeFor(queryWhen, utopia.nextRevision)
             val distopianScope = distopia.scopeFor(queryWhen, distopia.nextRevision)
