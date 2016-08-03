@@ -69,7 +69,7 @@ object WorldRedisBasedImplementation {
   }
 }
 
-class WorldRedisBasedImplementation[EventId](redisClient: RedisClient, identityGuid: String) extends WorldImplementationCodeFactoring[EventId] {
+class WorldRedisBasedImplementation[EventId](redisClient: RedisClient, identityGuid: String) extends WorldInefficientImplementationCodeFactoring[EventId] {
   parentWorld =>
 
   import World._

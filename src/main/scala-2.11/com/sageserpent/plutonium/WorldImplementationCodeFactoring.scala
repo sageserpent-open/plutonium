@@ -168,7 +168,7 @@ object WorldImplementationCodeFactoring {
     val (constructor, clazz) = cachedProxyConstructors.get((typeOfRaw, additionalInterfaces, callbackFilter)) match {
       case Some(cachedProxyConstructorData) => cachedProxyConstructorData
       case None => val (constructor, clazz) = constructorFor(typeOfRaw)
-        cachedProxyConstructors += ((typeOfRaw, additionalInterfaces, callbackFilter) ->(constructor, clazz))
+        cachedProxyConstructors += ((typeOfRaw, additionalInterfaces, callbackFilter) -> (constructor, clazz))
         constructor -> clazz
     }
     if (!isForRecordingOnly && Modifier.isAbstract(clazz.getModifiers)) {
@@ -412,11 +412,10 @@ object WorldImplementationCodeFactoring {
 
     override def numberOf[Raw <: Identified : TypeTag](id: Raw#Id): Int = identifiedItemsScope.itemsFor(id).size
   }
+
 }
 
 abstract class WorldImplementationCodeFactoring[EventId] extends World[EventId] {
-
-  import WorldImplementationCodeFactoring._
 
   abstract class ScopeBasedOnNextRevision(val when: Unbounded[Instant], val nextRevision: Revision) extends com.sageserpent.plutonium.Scope {
     val asOf = nextRevision match {
@@ -443,18 +442,6 @@ abstract class WorldImplementationCodeFactoring[EventId] extends World[EventId] 
     }
   }
 
-  trait SelfPopulatedScope extends ScopeImplementation {
-    val identifiedItemsScope = {
-      new IdentifiedItemsScope(when, nextRevision, asOf, eventTimeline(nextRevision))
-    }
-  }
-
-  // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
-  override def scopeFor(when: Unbounded[Instant], nextRevision: Revision): Scope = new ScopeBasedOnNextRevision(when, nextRevision) with SelfPopulatedScope
-
-  // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
-  override def scopeFor(when: Unbounded[Instant], asOf: Instant): Scope = new ScopeBasedOnAsOf(when, asOf) with SelfPopulatedScope
-
   def revise(events: java.util.Map[EventId, Optional[Event]], asOf: Instant): Revision = {
     val sam: java.util.function.Function[Event, Option[Event]] = event => Some(event): Option[Event]
     val eventsAsScalaImmutableMap = Map(events mapValues (_.map[Option[Event]](sam).orElse(None)) toSeq: _*)
@@ -464,8 +451,28 @@ abstract class WorldImplementationCodeFactoring[EventId] extends World[EventId] 
   def revise(eventId: EventId, event: Event, asOf: Instant): Revision =
     revise(Map(eventId -> Some(event)), asOf)
 
-  def annul(eventId: EventId, asOf: Instant): Revision  =
+  def annul(eventId: EventId, asOf: Instant): Revision =
     revise(Map(eventId -> None), asOf)
+
+}
+
+abstract class WorldInefficientImplementationCodeFactoring[EventId] extends WorldImplementationCodeFactoring[EventId] {
+
+  import WorldImplementationCodeFactoring._
+
+  trait SelfPopulatedScope extends ScopeImplementation {
+    val identifiedItemsScope = {
+      new IdentifiedItemsScope(when, nextRevision, asOf, eventTimeline(nextRevision))
+    }
+  }
+
+  protected def eventTimeline(nextRevision: Revision): Seq[SerializableEvent]
+
+  // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
+  override def scopeFor(when: Unbounded[Instant], nextRevision: Revision): Scope = new ScopeBasedOnNextRevision(when, nextRevision) with SelfPopulatedScope
+
+  // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
+  override def scopeFor(when: Unbounded[Instant], asOf: Instant): Scope = new ScopeBasedOnAsOf(when, asOf) with SelfPopulatedScope
 
   def revise(events: Map[EventId, Option[Event]], asOf: Instant): Revision = {
     def newEventDatumsFor(nextRevisionPriorToUpdate: Revision): Map[EventId, AbstractEventData] = {
@@ -492,7 +499,6 @@ abstract class WorldImplementationCodeFactoring[EventId] extends World[EventId] 
     transactNewRevision(asOf, newEventDatumsFor, buildAndValidateEventTimelineForProposedNewRevision)
   }
 
-  protected def eventTimeline(nextRevision: Revision): Seq[SerializableEvent]
 
   protected def transactNewRevision(asOf: Instant,
                                     newEventDatumsFor: Revision => Map[EventId, AbstractEventData],
@@ -503,4 +509,16 @@ abstract class WorldImplementationCodeFactoring[EventId] extends World[EventId] 
   }
 }
 
+class WorldEfficientInMemoryImplementation[EventId] extends WorldImplementationCodeFactoring[EventId] {
+  override def nextRevision: Revision = ???
 
+  override def revisionAsOfs: Array[Instant] = ???
+
+  override def revise(events: Map[EventId, Option[Event]], asOf: Instant): Revision = ???
+
+  override def scopeFor(when: Unbounded[Instant], nextRevision: Revision): Scope = ???
+
+  override def scopeFor(when: Unbounded[Instant], asOf: Instant): Scope = ???
+
+  override def forkExperimentalWorld(scope: javaApi.Scope): World[EventId] = ???
+}

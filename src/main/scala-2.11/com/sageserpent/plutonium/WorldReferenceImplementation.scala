@@ -89,7 +89,7 @@ class MutableState[EventId] {
 }
 
 
-class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId]) extends WorldImplementationCodeFactoring[EventId] {
+class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId]) extends WorldInefficientImplementationCodeFactoring[EventId] {
 
   import World._
   import WorldImplementationCodeFactoring._
