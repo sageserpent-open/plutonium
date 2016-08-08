@@ -190,23 +190,14 @@ class WorldRedisBasedImplementation[EventId](redisClient: RedisClient, identityG
         pertinentEventDatumsObservable(nextRevisionPriorToUpdate, newEventDatums.keys.toSeq).toList zip
           (for (revisionAsOfs <- revisionAsOfsObservable) yield checkRevisionPrecondition(asOf, revisionAsOfs))
         _ = buildAndValidateEventTimelineForProposedNewRevision(newEventDatums, nextRevisionPriorToUpdate, pertinentEventDatumsExcludingTheNewRevision)
-        transactionGuid = UUID.randomUUID()
         foo <- Observable.from(newEventDatums map {
           case (eventId, eventDatum) =>
             val eventCorrectionsKey = eventCorrectionsKeyFrom(eventId)
-            val timeToExpireGarbageInSeconds = 5
-            redisApi.zadd(s"${eventCorrectionsKey}:${transactionGuid}", nextRevisionPriorToUpdate.toDouble, eventDatum) zip
-              redisApi.sadd(s"${eventIdsKey}:${transactionGuid}", eventId) zip
-              redisApi.expire(s"${eventCorrectionsKey}:${transactionGuid}", timeToExpireGarbageInSeconds) zip
-              redisApi.expire(s"${eventIdsKey}:${transactionGuid}", timeToExpireGarbageInSeconds)
+            redisApi.zadd(eventCorrectionsKey, nextRevisionPriorToUpdate.toDouble, eventDatum) zip
+              redisApi.sadd(eventIdsKey, eventId)
         }).flatten.toList
         transactionStart = toScalaObservable(redisApi.multi())
-        transactionBody = Observable.from(newEventDatums map {
-          case (eventId, eventDatum) =>
-            val eventCorrectionsKey = eventCorrectionsKeyFrom(eventId)
-            redisApi.zunionstore(eventCorrectionsKey, eventCorrectionsKey, s"${eventCorrectionsKey}:${transactionGuid}") zip
-              redisApi.sunionstore(eventIdsKey, eventIdsKey, s"${eventIdsKey}:${transactionGuid}")
-        }).flatten.toList zip redisApi.rpush(asOfsKey, asOf)
+        transactionBody = toScalaObservable(redisApi.rpush(asOfsKey, asOf))
         transactionEnd = toScalaObservable(redisApi.exec())
         // NASTY HACK: the order of evaluation of the subterms in the next double-zip is vital to ensure that Redis sees
         // the 'multi', body commands and 'exec' verbs in the correct order, even though the processing of the results is
