@@ -76,8 +76,8 @@ class MutableState[EventId] {
   }
 
   def pertinentEventDatums(cutoffRevision: Revision, eventIds: Iterable[EventId]): Seq[AbstractEventData] = {
-    val eventIdsToBeIncluded = eventIds.toSet
-    pertinentEventDatums(cutoffRevision, PositiveInfinity(), eventId => !eventIdsToBeIncluded.contains(eventId))
+    val eventIdsToBeExcluded = eventIds.toSet
+    pertinentEventDatums(cutoffRevision, PositiveInfinity(), eventId => !eventIdsToBeExcluded.contains(eventId))
   }
 
   def pertinentEventDatums(cutoffRevision: Revision): Seq[AbstractEventData] =
