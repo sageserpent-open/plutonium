@@ -50,11 +50,10 @@ public class DeliveringPackages {
         {
             world.revise("Define warehouse",
                          Change.forOneItem(warehouseName, PackageHolder.class,
-                                           warehouse -> {
-                                               warehouse.setLocation(
-                                                       "Big warehouse by " +
-                                                               "motorway");
-                                           }), Instant.now() /*As-of time
+                                           warehouse -> warehouse.setLocation(
+                                                   "Big warehouse by " +
+                                                           "motorway")),
+                         Instant.now() /*As-of time
                                            for the revision.*/);
 
             {
@@ -317,11 +316,11 @@ public class DeliveringPackages {
         /*
             Resulting console output:-
 
-            Location for: Package #3 is:-
+            Location for: Package #3(SuperTron Connoisseur Music System.) is:-
             Big warehouse by motorway
-            Location for: Package #2 is:-
+            Location for: Package #2(SuperTron HiPlasmatic Telly) is:-
             Big warehouse by motorway
-            Location for: Package #1 is:-
+            Location for: Package #1(Krasster kipper ties) is:-
             Big warehouse by motorway
             Payments received for items awaiting delivery is: 1100.0
         */
@@ -342,7 +341,8 @@ public class DeliveringPackages {
             for (PackageItem packageItem : scope
                     .renderAsIterable(packageItemsBitemporal)) {
                 System.out.println(
-                        "Location for: " + packageItem.id() + " is:-");
+                        "Location for: " + packageItem.id() + "(" +
+                                packageItem.getContents() + ") is:-");
                 if (packageItem.hasBeenDelivered()) {
                     System.out.println(packageItem.actualDestination());
                 } else {
@@ -361,6 +361,8 @@ public class DeliveringPackages {
             final double uncoveredValue = StreamSupport
                     .stream(scope.renderAsIterable(packageItemsBitemporal)
                                     .spliterator(), false)
+                    .filter(((java.util.function.Predicate<PackageItem>)
+                            PackageItem::hasBeenDelivered).negate())
                     .map(PackageItem::getValuePaid)
                     .reduce(0.0, (lhs, rhs) -> lhs + rhs);
 
