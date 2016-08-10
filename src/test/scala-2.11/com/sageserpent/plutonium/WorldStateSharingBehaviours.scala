@@ -27,7 +27,7 @@ trait WorldStateSharingBehaviours extends FlatSpec with Matchers with Checkers w
   val worldSharingCommonStateFactoryResourceGenerator: Gen[ManagedResource[() => World[Int]]]
 
   def multipleInstancesRepresentingTheSameWorldBehaviour = {
-    they should "yield the same results to scope queries regardless of which instance is used to define a revision" in {
+    ignore should "yield the same results to scope queries regardless of which instance is used to define a revision" in {
       class DemultiplexingWorld(worldFactory: () => World[Int], seed: Long) extends World[Int] {
         val random = new scala.util.Random(seed)
 
@@ -129,8 +129,7 @@ trait WorldStateSharingBehaviours extends FlatSpec with Matchers with Checkers w
 
     val integerHistoryRecordingsGroupedByIdThatAreRobustAgainstConcurrencyGenerator = recordingsGroupedByIdGenerator_(integerDataSamplesForAnIdGenerator, forbidAnnihilations = true)
 
-    they should "allow concurrent revisions to be attempted on distinct instances" in {
-
+    ignore should "allow concurrent revisions to be attempted on distinct instances" in {
       val testCaseGenerator = for {
         worldSharingCommonStateFactoryResource <- worldSharingCommonStateFactoryResourceGenerator
         recordingsGroupedById <- integerHistoryRecordingsGroupedByIdThatAreRobustAgainstConcurrencyGenerator
@@ -151,7 +150,7 @@ trait WorldStateSharingBehaviours extends FlatSpec with Matchers with Checkers w
 
               try {
                 revisionActions(bigShuffledHistoryOverLotsOfThings, asOfs.iterator, demultiplexingWorld).toParArray foreach (_.apply)
-                Prop.collect("No concurrent revision attempt detected.")(Prop.undecided)
+                Prop.collect("No concurrent revision attempt detected in revision.")(Prop.undecided)
               } catch {
                 case exception: RuntimeException if exception.getMessage.startsWith("Concurrent revision attempt detected in revision") =>
                   Prop.collect("Concurrent revision attempt detected in revision.")(Prop.proved)
@@ -163,9 +162,9 @@ trait WorldStateSharingBehaviours extends FlatSpec with Matchers with Checkers w
     }
 
     they should "allow queries to be attempted on instances while one other is being revised" in {
-      // PLAN: book events at various business times that define objects that all have an integer property,
-      // such that sorting the property values by the associated id of their host instances yields either
-      // a monotonic increasing or decreasing sequence.
+      // PLAN: book events that define objects that all have an integer property, such that sorting
+      // the property values by the associated id of their host instances yields either a monotonic
+      // increasing or decreasing sequence.
 
       // By switching between increasing and decreasing from one revision to another, we hope to provoke
       // an inconsistent mixture of property values due to data racing between the N query threads and the
@@ -192,13 +191,18 @@ trait WorldStateSharingBehaviours extends FlatSpec with Matchers with Checkers w
               val queries = for {
                 _ <- 1 to 100 * numberOfRevisions
               } yield () => {
-                val scope = demultiplexingWorld.scopeFor(PositiveInfinity[Instant](), finalAsOf)
-                val itemInstancesSortedById = scope.render(Bitemporal.wildcard[Item]).toList.sortBy(_.id)
-                Prop(itemInstancesSortedById.isEmpty || (itemInstancesSortedById zip itemInstancesSortedById.tail forall {
-                  case (first, second) => first.property < second.property
-                }) || (itemInstancesSortedById zip itemInstancesSortedById.tail forall {
-                  case (first, second) => first.property > second.property
-                }))
+                try {
+                  val scope = demultiplexingWorld.scopeFor(PositiveInfinity[Instant](), finalAsOf)
+                  val itemInstancesSortedById = scope.render(Bitemporal.wildcard[Item]).toList.sortBy(_.id)
+                  Prop.collect("No concurrent revision attempt detected in query.")(itemInstancesSortedById.isEmpty || (itemInstancesSortedById zip itemInstancesSortedById.tail forall {
+                    case (first, second) => first.property < second.property
+                  }) || (itemInstancesSortedById zip itemInstancesSortedById.tail forall {
+                    case (first, second) => first.property > second.property
+                  }))
+                } catch {
+                  case exception: RuntimeException if exception.getMessage.startsWith("Concurrent revision attempt detected in query") =>
+                    Prop.collect("Concurrent revision attempt detected in query.")(Prop.proved)
+                }
               }
 
               def toggledChoices(firstChoice: Boolean): Stream[Boolean] = firstChoice #:: toggledChoices(!firstChoice)
@@ -218,15 +222,78 @@ trait WorldStateSharingBehaviours extends FlatSpec with Matchers with Checkers w
                   else None
                     )) toMap, asOf)
                 }
-                Prop.undecided
+                Prop.proved
               }
-              try {
-                val checks = (revisionCommandSequence +: queries).toParArray map (_.apply)
-                Prop.collect("No concurrent revision attempt detected.")(Prop.all(checks.toList: _*))
-              } catch {
-                case exception: RuntimeException if exception.getMessage.startsWith("Concurrent revision attempt detected in query") =>
-                  Prop.collect("Concurrent revision attempt detected in query.")(Prop.proved)
+
+              val checks = (revisionCommandSequence +: queries).toParArray map (_.apply)
+              Prop.all(checks.toList: _*)
+          }
+      }, Test.Parameters.defaultVerbose)
+    }
+
+    they should "allow lots of concurrent revisions to be attempted on distinct instances" in {
+      // PLAN: book events that define objects that all have an integer property; each revision
+      // confines its events to dealing with one of several sequences of item ids, such that all
+      // the sequences taken together covers all of the items that can exist, and none of the
+      // sequences overlap. That way, by comparing items queried from pairs of successive
+      // revisions, we expect to show that each new revision only shows changes for item whose ids
+      // belong to a single sequence.
+
+      // By mixing lots of concurrent revisions, we hope to provoke a mixing of events due to data racing
+      // between the N revising threads. This should not be allowed to happen in a successful test case. We
+      // also expect the test to report the detection of revision attempts that would have produced such
+      // mixing - IOW, we expect revisions to fail fast, *not* to acquire locks.
+
+      val numberOfDistinctIdSequences = 10
+
+      val idSequenceLength = 10
+
+      val universalSetOfIds = scala.collection.immutable.Set(0 until (idSequenceLength * numberOfDistinctIdSequences): _*)
+
+      val testCaseGenerator = for {
+        worldSharingCommonStateFactoryResource <- worldSharingCommonStateFactoryResourceGenerator
+        asOfs <- Gen.nonEmptyListOf(instantGenerator) map (_.sorted)
+      } yield (worldSharingCommonStateFactoryResource, asOfs)
+      check(Prop.forAllNoShrink(testCaseGenerator) {
+        case (worldSharingCommonStateFactoryResource, asOfs) =>
+          worldSharingCommonStateFactoryResource acquireAndGet {
+            worldFactory =>
+              val demultiplexingWorld = new DemultiplexingWorld(worldFactory)
+
+              val asOfsIterator = asOfs.iterator
+
+              val revisionCommands = for {
+                index <- 0 until asOfs.size
+              } yield () => {
+                try {
+                  demultiplexingWorld.revise(0 until idSequenceLength map (index % numberOfDistinctIdSequences + numberOfDistinctIdSequences * _) map (id => id ->
+                    Some(Change.forOneItem[Item](id, {
+                      (item: Item) =>
+                        item.property = index
+                    }))
+                    ) toMap, asOfsIterator.next())
+                  Prop.collect("No concurrent revision attempt detected.")(Prop.proved)
+                } catch {
+                  case exception: RuntimeException if exception.getMessage.startsWith("Concurrent revision attempt detected in revision") =>
+                    Prop.collect("Concurrent revision attempt detected in revision.")(Prop.proved)
+                  case exception: RuntimeException if exception.getMessage.contains("should be no earlier than") =>
+                    Prop.collect("Asofs were presented out of order due to racing.")(Prop.undecided)
+                }
               }
+              val revisionChecks = (revisionCommands.toParArray map (_.apply)).toList
+              val revisionRange = World.initialRevision until demultiplexingWorld.nextRevision
+              val queryChecks = for {
+                (previousNextRevision, nextRevision) <- revisionRange zip revisionRange.tail
+              } yield {
+                val previousScope = demultiplexingWorld.scopeFor(PositiveInfinity[Instant](), previousNextRevision)
+                val scope = demultiplexingWorld.scopeFor(PositiveInfinity[Instant](), nextRevision)
+                val itemsFromPreviousScope = (previousScope.render(Bitemporal.wildcard[Item]) map (item => item.id -> item.property)).toSet
+                val itemsFromScope = (scope.render(Bitemporal.wildcard[Item]) map (item => item.id -> item.property)).toSet
+                val itemsThatHaveChanged = itemsFromScope diff itemsFromPreviousScope
+                val sequenceIndicesOfChangedItems = itemsThatHaveChanged map (_._1 % numberOfDistinctIdSequences)
+                (1 == (sequenceIndicesOfChangedItems groupBy identity).size) :| "Detected changes contributed by another revision."
+              }
+              Prop.all((revisionChecks ++ queryChecks): _*)
           }
       }, Test.Parameters.defaultVerbose)
     }
