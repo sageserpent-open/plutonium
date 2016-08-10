@@ -27,7 +27,7 @@ trait WorldStateSharingBehaviours extends FlatSpec with Matchers with Checkers w
   val worldSharingCommonStateFactoryResourceGenerator: Gen[ManagedResource[() => World[Int]]]
 
   def multipleInstancesRepresentingTheSameWorldBehaviour = {
-    ignore should "yield the same results to scope queries regardless of which instance is used to define a revision" in {
+    they should "yield the same results to scope queries regardless of which instance is used to define a revision" in {
       class DemultiplexingWorld(worldFactory: () => World[Int], seed: Long) extends World[Int] {
         val random = new scala.util.Random(seed)
 
@@ -129,7 +129,7 @@ trait WorldStateSharingBehaviours extends FlatSpec with Matchers with Checkers w
 
     val integerHistoryRecordingsGroupedByIdThatAreRobustAgainstConcurrencyGenerator = recordingsGroupedByIdGenerator_(integerDataSamplesForAnIdGenerator, forbidAnnihilations = true)
 
-    ignore should "allow concurrent revisions to be attempted on distinct instances" in {
+    they should "allow concurrent revisions to be attempted on distinct instances" in {
       val testCaseGenerator = for {
         worldSharingCommonStateFactoryResource <- worldSharingCommonStateFactoryResourceGenerator
         recordingsGroupedById <- integerHistoryRecordingsGroupedByIdThatAreRobustAgainstConcurrencyGenerator
