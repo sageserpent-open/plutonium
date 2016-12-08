@@ -31,8 +31,6 @@ trait World[EventId] extends WorldConstants {
   // is to make it easy for clients to do annulments en-bloc without querying to see what events are in force in the world's current state. Furthermore,
   // the API issues no constraints on when to define an event id key for the first time and when to use it for correction, so why not treat the annulment
   // case the same way?
-  def revise(events: Map[EventId, Option[Event]], asOf: Instant): Int
-
   def revise(events: java.util.Map[EventId, Optional[Event]], asOf: Instant): Int
 
   def revise(eventId: EventId, event: Event, asOf: Instant): Int
