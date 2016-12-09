@@ -1,13 +1,13 @@
 package com.sageserpent.plutonium
 
-import org.scalatest.Suite
+import org.scalatest.TestSuite
 import redis.embedded.RedisServer
 import resource._
 
 /**
   * Created by Gerard on 02/06/2016.
   */
-trait RedisServerFixture extends Suite {
+trait RedisServerFixture extends TestSuite {
   val redisServerPort: Int
 
   private def withRedisServerRunning[Result](block: => Result): Result = {
