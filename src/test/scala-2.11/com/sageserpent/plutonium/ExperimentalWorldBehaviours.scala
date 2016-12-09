@@ -18,7 +18,7 @@ import resource.ManagedResource
 trait ExperimentalWorldBehaviours extends FlatSpec with Matchers with Checkers with WorldSpecSupport {
   this: WorldResource =>
 
-  implicit override val generatorDrivenConfig =
+  implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
     PropertyCheckConfig(maxSize = 20, minSuccessful = 200)
 
   def experimentalWorldBehaviour = {
