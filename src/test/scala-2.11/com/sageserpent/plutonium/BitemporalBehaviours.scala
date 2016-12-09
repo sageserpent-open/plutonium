@@ -22,7 +22,7 @@ import scalaz.syntax.applicativePlus._
 trait BitemporalBehaviours extends FlatSpec with Checkers with WorldSpecSupport {
   this: WorldResource =>
 
-  implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
+  implicit override val generatorDrivenConfig =
     PropertyCheckConfig(maxSize = 30)
 
   def bitemporalBehaviour = {
