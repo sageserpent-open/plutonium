@@ -61,8 +61,10 @@ trait ExperimentalWorldBehaviours extends FlatSpec with Matchers with Checkers w
 
             val filteredRevisionsFromBaseWorld = baseWorld.revisionAsOfs.takeWhile(revisionAsOf => !forkAsOf.isBefore(revisionAsOf))
 
+            val experimentalWorldRevisionAsOfsEvaluatedEarlyWhileRedisConnectionIsOpen = experimentalWorld.revisionAsOfs
+
             (scopeToDefineFork.nextRevision == experimentalWorld.nextRevision) :| s"Expected 'experimentalWorld.nextRevision' to be: ${scopeToDefineFork.nextRevision}, but it was: ${experimentalWorld.nextRevision}." &&
-              (filteredRevisionsFromBaseWorld sameElements experimentalWorld.revisionAsOfs) :| s"Expected 'experimentalWorld.revisionAsOfs' to be: '$filteredRevisionsFromBaseWorld', but they were: '${experimentalWorld.revisionAsOfs}'."
+              (filteredRevisionsFromBaseWorld sameElements experimentalWorldRevisionAsOfsEvaluatedEarlyWhileRedisConnectionIsOpen) :| s"Expected 'experimentalWorld.revisionAsOfs' to be: '$filteredRevisionsFromBaseWorld', but they were: '${experimentalWorldRevisionAsOfsEvaluatedEarlyWhileRedisConnectionIsOpen}'."
         }
       })
     }
@@ -300,8 +302,8 @@ trait ExperimentalWorldBehaviours extends FlatSpec with Matchers with Checkers w
             } else Prop.undecided
         }
       })
-    }
   }
+}
 }
 
 class ExperimentalWorldSpecUsingWorldReferenceImplementation extends ExperimentalWorldBehaviours with WorldReferenceImplementationResource {
