@@ -21,7 +21,7 @@ import scala.util.Random
   * Created by Gerard on 13/02/2016.
   */
 trait WorldStateSharingBehaviours extends FlatSpec with Matchers with Checkers with WorldSpecSupport {
-  implicit override val generatorDrivenConfig =
+  implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
     PropertyCheckConfig(maxSize = 40, minSuccessful = 200)
 
   val worldSharingCommonStateFactoryResourceGenerator: Gen[ManagedResource[() => World[Int]]]

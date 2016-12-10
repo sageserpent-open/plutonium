@@ -22,7 +22,7 @@ import scalaz.syntax.applicativePlus._
 trait BitemporalBehaviours extends FlatSpec with Checkers with WorldSpecSupport {
   this: WorldResource =>
 
-  implicit override val generatorDrivenConfig =
+  implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
     PropertyCheckConfig(maxSize = 30)
 
   def bitemporalBehaviour = {
@@ -56,17 +56,19 @@ trait BitemporalBehaviours extends FlatSpec with Checkers with WorldSpecSupport 
 
             implicit def arbitraryBitemporalOfInt(implicit rawArbitrary: Arbitrary[Int]): Arbitrary[Bitemporal[Int]] = {
               def intFrom(item: IntegerHistory) = item.datums.hashCode()
+              val generatorsThatAlwaysWork = Seq(5 -> (Arbitrary.arbitrary[Int] map (ApplicativePlus[Bitemporal].point(_))),
+                10 -> (Gen.oneOf(ids) map (Bitemporal.zeroOrOneOf[IntegerHistory](_) map (_.integerProperty))),
+                10 -> (Gen.oneOf(ids) map (Bitemporal.withId[IntegerHistory](_) map (_.integerProperty))),
+                3 -> Gen.const(Bitemporal.wildcard[IntegerHistory] map (_.integerProperty)),
+                10 -> (Gen.oneOf(ids) map (Bitemporal.zeroOrOneOf[IntegerHistory](_) map intFrom)),
+                10 -> (Gen.oneOf(ids) map (Bitemporal.withId[IntegerHistory](_) map intFrom)),
+                3 -> Gen.const(Bitemporal.wildcard[IntegerHistory] map intFrom),
+                1 -> Gen.const(Bitemporal.none[Int]))
+              val generatorsThatOnlyWorkWhenIdsAreInExistence = if (idsInExistence.nonEmpty) Seq(5 -> (Arbitrary.arbitrary[Int] map (ApplicativePlus[Bitemporal].point(_))),
+                10 -> (Gen.oneOf(idsInExistence) map (Bitemporal.singleOneOf[IntegerHistory](_) map (_.integerProperty))),
+                10 -> (Gen.oneOf(idsInExistence) map (Bitemporal.singleOneOf[IntegerHistory](_) map intFrom))) else Seq()
               Arbitrary(
-                Gen.frequency(5 -> (Arbitrary.arbitrary[Int] map (ApplicativePlus[Bitemporal].point(_))),
-                  10 -> (Gen.oneOf(ids) map (Bitemporal.zeroOrOneOf[IntegerHistory](_) map (_.integerProperty))),
-                  10 -> (Gen.oneOf(idsInExistence) map (Bitemporal.singleOneOf[IntegerHistory](_) map (_.integerProperty))),
-                  10 -> (Gen.oneOf(ids) map (Bitemporal.withId[IntegerHistory](_) map (_.integerProperty))),
-                  3 -> Gen.const(Bitemporal.wildcard[IntegerHistory] map (_.integerProperty)),
-                  10 -> (Gen.oneOf(ids) map (Bitemporal.zeroOrOneOf[IntegerHistory](_) map intFrom)),
-                  10 -> (Gen.oneOf(idsInExistence) map (Bitemporal.singleOneOf[IntegerHistory](_) map intFrom)),
-                  10 -> (Gen.oneOf(ids) map (Bitemporal.withId[IntegerHistory](_) map intFrom)),
-                  3 -> Gen.const(Bitemporal.wildcard[IntegerHistory] map intFrom),
-                  1 -> Gen.const(Bitemporal.none[Int]))
+                Gen.frequency(generatorsThatAlwaysWork ++ generatorsThatOnlyWorkWhenIdsAreInExistence: _*)
               )
             }
 
