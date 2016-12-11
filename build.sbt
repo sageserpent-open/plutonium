@@ -1,3 +1,5 @@
+import sbt.Keys.libraryDependencies
+
 lazy val settings = Seq(organization := "com.sageserpent",
   name := "plutonium",
   version := "1.0.2-SNAPSHOT",
@@ -6,6 +8,7 @@ lazy val settings = Seq(organization := "com.sageserpent",
 
   libraryDependencies += "org.scalaz" %% "scalaz-core" % "7.2.8",
   libraryDependencies += "cglib" % "cglib" % "3.2.4",
+  libraryDependencies += "net.bytebuddy" % "byte-buddy" % "1.5.8",
   libraryDependencies += "com.sageserpent" %% "americium" % "0.1.1",
   libraryDependencies += "com.jsuereth" %% "scala-arm" % "2.0",
   libraryDependencies += "org.scala-lang" % "scala-reflect" % "2.11.8",
