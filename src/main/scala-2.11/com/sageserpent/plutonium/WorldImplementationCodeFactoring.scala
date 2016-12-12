@@ -74,6 +74,7 @@ object WorldImplementationCodeFactoring {
 
           override val callbackFilter: CallbackFilter = RecordingCallbackStuff.callbackFilter
           override val additionalInterfaces: Array[Class[_]] = RecordingCallbackStuff.additionalInterfaces
+          override val cachedProxyConstructors: mutable.Map[Type, (universe.MethodMirror, Class[_])] = RecordingCallbackStuff.cachedProxyConstructors
         }
 
         proxyFactory.constructFrom[Raw](id)
@@ -147,8 +148,6 @@ object WorldImplementationCodeFactoring {
     val isRecordAnnihilationMethod = classOf[AnnihilationHook].getMethod("recordAnnihilation")
   }
 
-  val cachedProxyConstructors = scala.collection.mutable.Map.empty[(Type, ProxyFactory), (universe.MethodMirror, RuntimeClass)]
-
   trait ProxyFactory {
     private def createProxyClass(clazz: Class[_]): Class[_] = {
       val enhancer = new Enhancer
@@ -178,10 +177,10 @@ object WorldImplementationCodeFactoring {
       // read-only.
 
       val typeOfRaw = typeOf[Raw]
-      val (constructor, clazz) = cachedProxyConstructors.get((typeOfRaw, this)) match {
+      val (constructor, clazz) = cachedProxyConstructors.get(typeOfRaw) match {
         case Some(cachedProxyConstructorData) => cachedProxyConstructorData
         case None => val (constructor, clazz) = constructorFor(typeOfRaw)
-          cachedProxyConstructors += ((typeOfRaw, this) -> (constructor, clazz))
+          cachedProxyConstructors += (typeOfRaw -> (constructor, clazz))
           constructor -> clazz
       }
 
@@ -198,6 +197,7 @@ object WorldImplementationCodeFactoring {
     val callbacks: Array[Callback]
     val callbackFilter: CallbackFilter
     val additionalInterfaces: Array[Class[_]]
+    val cachedProxyConstructors: scala.collection.mutable.Map[(Type), (universe.MethodMirror, Class[_])]
   }
 
   object RecordingCallbackStuff {
@@ -211,12 +211,15 @@ object WorldImplementationCodeFactoring {
     val callbackFilter = new CallbackFilter {
       override def accept(method: Method): Revision = {
         def isFinalizer: Boolean = method.getName == "finalize" && method.getParameterCount == 0 && method.getReturnType == classOf[Unit]
+
         if (firstMethodIsOverrideCompatibleWithSecond(method, IdentifiedItemsScope.itemReconstitutionDataProperty)) itemReconstitutionDataIndex
         else if (IdentifiedItemsScope.alwaysAllowsReadAccessTo(method) || isFinalizer) permittedReadAccessIndex
         else if (method.getReturnType != classOf[Unit]) forbiddenReadAccessIndex
         else mutationIndex
       }
     }
+
+    val cachedProxyConstructors = mutable.Map.empty[universe.Type, (universe.MethodMirror, Class[_])]
   }
 
   object QueryCallbackStuff {
@@ -237,6 +240,8 @@ object WorldImplementationCodeFactoring {
         else checkedReadAccessIndex
       }
     }
+
+    val cachedProxyConstructors = mutable.Map.empty[universe.Type, (universe.MethodMirror, Class[_])]
   }
 
   def firstMethodIsOverrideCompatibleWithSecond(firstMethod: Method, secondMethod: Method): Boolean = {
@@ -330,9 +335,10 @@ object WorldImplementationCodeFactoring {
           val unconditionalReadAccessCallback = NoOp.INSTANCE
 
           val callbacks = Array(mutationCallback, isGhostCallback, recordAnnihilationCallback, checkedReadAccessCallback, unconditionalReadAccessCallback)
-          
+
           override val callbackFilter: CallbackFilter = QueryCallbackStuff.callbackFilter
           override val additionalInterfaces: Array[Class[_]] = QueryCallbackStuff.additionalInterfaces
+          override val cachedProxyConstructors: mutable.Map[universe.Type, (universe.MethodMirror, Class[_])] = QueryCallbackStuff.cachedProxyConstructors
         }
 
         val item = proxyFactory.constructFrom(id)
