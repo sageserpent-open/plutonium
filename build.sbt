@@ -1,3 +1,5 @@
+import sbt.Keys.libraryDependencies
+
 lazy val settings = Seq(organization := "com.sageserpent",
   name := "plutonium",
   version := "1.0.2-SNAPSHOT",
