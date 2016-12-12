@@ -68,7 +68,7 @@ object WorldImplementationCodeFactoring {
 
         val callbacks = Array(itemReconstitutionCallback, permittedReadAccessCallback, forbiddenReadAccessCallback, mutationCallback)
 
-        constructFrom[Raw](id, RecordingCallbackStuff.filter, callbacks, isForRecordingOnly = true, RecordingCallbackStuff.additionalInterfaces)
+        constructFrom[Raw](id, new RecordingProxyFactory(callbacks), isForRecordingOnly = true)
       }
     }
 
@@ -139,9 +139,9 @@ object WorldImplementationCodeFactoring {
     val isRecordAnnihilationMethod = classOf[AnnihilationHook].getMethod("recordAnnihilation")
   }
 
-  val cachedProxyConstructors = scala.collection.mutable.Map.empty[(Type, Array[Class[_]], CallbackFilter), (universe.MethodMirror, RuntimeClass)]
+  val cachedProxyConstructors = scala.collection.mutable.Map.empty[(Type, ProxyFactory), (universe.MethodMirror, RuntimeClass)]
 
-  def constructFrom[Raw <: Identified : TypeTag](id: Raw#Id, callbackFilter: CallbackFilter, callbacks: Array[Callback], isForRecordingOnly: Boolean, additionalInterfaces: Array[Class[_]]) = {
+  def constructFrom[Raw <: Identified : TypeTag](id: Raw#Id, proxyFactory: ProxyFactory, isForRecordingOnly: Boolean) = {
     // NOTE: this returns items that are proxies to raw values, rather than the raw values themselves. Depending on the
     // context (using a scope created by a client from a world, as opposed to while building up that scope from patches),
     // the items may forbid certain operations on them - e.g. for rendering from a client's scope, the items should be
@@ -150,14 +150,7 @@ object WorldImplementationCodeFactoring {
     def constructorFor(identifiableType: Type) = {
       val clazz = currentMirror.runtimeClass(identifiableType.typeSymbol.asClass)
 
-      val enhancer = new Enhancer
-      enhancer.setInterceptDuringConstruction(false)
-      enhancer.setSuperclass(clazz)
-      enhancer.setInterfaces(additionalInterfaces)
-      enhancer.setCallbackFilter(callbackFilter)
-      enhancer.setCallbackTypes(callbacks map (_.getClass))
-
-      val proxyClazz = enhancer.createClass()
+      val proxyClazz = proxyFactory(clazz)
 
       val proxyClassSymbol = currentMirror.classSymbol(proxyClazz)
       val classMirror = currentMirror.reflectClass(proxyClassSymbol.asClass)
@@ -165,10 +158,10 @@ object WorldImplementationCodeFactoring {
       classMirror.reflectConstructor(constructor.asMethod) -> clazz
     }
     val typeOfRaw = typeOf[Raw]
-    val (constructor, clazz) = cachedProxyConstructors.get((typeOfRaw, additionalInterfaces, callbackFilter)) match {
+    val (constructor, clazz) = cachedProxyConstructors.get((typeOfRaw, proxyFactory)) match {
       case Some(cachedProxyConstructorData) => cachedProxyConstructorData
       case None => val (constructor, clazz) = constructorFor(typeOfRaw)
-        cachedProxyConstructors += ((typeOfRaw, additionalInterfaces, callbackFilter) -> (constructor, clazz))
+        cachedProxyConstructors += ((typeOfRaw, proxyFactory) -> (constructor, clazz))
         constructor -> clazz
     }
     if (!isForRecordingOnly && Modifier.isAbstract(clazz.getModifiers)) {
@@ -176,11 +169,27 @@ object WorldImplementationCodeFactoring {
     }
     val proxy = constructor(id).asInstanceOf[Raw]
     val proxyFactoryApi = proxy.asInstanceOf[Factory]
-    proxyFactoryApi.setCallbacks(callbacks)
+    proxyFactoryApi.setCallbacks(proxyFactory.callbacks)  // TODO - hopefully, this won't be necessary!
     proxy
   }
 
-  object RecordingCallbackStuff {
+  trait ProxyFactory{
+    def apply(clazz: Class[_]): Class[_] = {
+      val enhancer = new Enhancer
+      enhancer.setInterceptDuringConstruction(false)
+      enhancer.setSuperclass(clazz)
+      enhancer.setInterfaces(additionalInterfaces)
+      enhancer.setCallbackFilter(callbackFilter)
+      enhancer.setCallbackTypes(callbacks map (_.getClass))
+      enhancer.createClass()
+    }
+
+    val callbackFilter: CallbackFilter
+    val callbacks: Array[Callback]
+    val additionalInterfaces: Array[Class[_]]
+  }
+
+  class RecordingProxyFactory(override val callbacks: Array[Callback]) extends ProxyFactory {
     val itemReconstitutionDataIndex = 0
     val permittedReadAccessIndex = 1
     val forbiddenReadAccessIndex = 2
@@ -188,7 +197,7 @@ object WorldImplementationCodeFactoring {
 
     val additionalInterfaces: Array[Class[_]] = Array(classOf[Recorder])
 
-    val filter = new CallbackFilter {
+    val callbackFilter = new CallbackFilter {
       override def accept(method: Method): Revision = {
         def isFinalizer: Boolean = method.getName == "finalize" && method.getParameterCount == 0 && method.getReturnType == classOf[Unit]
         if (firstMethodIsOverrideCompatibleWithSecond(method, IdentifiedItemsScope.itemReconstitutionDataProperty)) itemReconstitutionDataIndex
@@ -199,7 +208,7 @@ object WorldImplementationCodeFactoring {
     }
   }
 
-  object QueryCallbackStuff {
+  class QueryProxyFactory(override val callbacks: Array[Callback]) extends ProxyFactory {
     val mutationIndex = 0
     val isGhostIndex = 1
     val recordAnnihilationIndex = 2
@@ -208,7 +217,7 @@ object WorldImplementationCodeFactoring {
 
     val additionalInterfaces: Array[Class[_]] = Array(classOf[AnnihilationHook])
 
-    val filter = new CallbackFilter {
+    val callbackFilter = new CallbackFilter {
       override def accept(method: Method): Revision = {
         if (firstMethodIsOverrideCompatibleWithSecond(method, IdentifiedItemsScope.isRecordAnnihilationMethod)) recordAnnihilationIndex
         else if (method.getReturnType == classOf[Unit] && !WorldImplementationCodeFactoring.isInvariantCheck(method)) mutationIndex
@@ -308,7 +317,7 @@ object WorldImplementationCodeFactoring {
 
         val callbacks = Array(mutationCallback, isGhostCallback, recordAnnihilationCallback, checkedReadAccessCallback, unconditionalReadAccessCallback)
 
-        val item = constructFrom(id, QueryCallbackStuff.filter, callbacks, isForRecordingOnly = false, QueryCallbackStuff.additionalInterfaces)
+        val item = constructFrom(id, new QueryProxyFactory(callbacks), isForRecordingOnly = false)
         idToItemsMultiMap.addBinding(id, item)
         item
       }
