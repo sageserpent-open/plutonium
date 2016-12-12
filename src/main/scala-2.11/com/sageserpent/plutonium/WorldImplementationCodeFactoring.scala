@@ -50,24 +50,6 @@ object WorldImplementationCodeFactoring {
         val proxyFactory = new ProxyFactory {
           val isForRecordingOnly = true
 
-          val itemReconstitutionDataIndex = 0
-          val permittedReadAccessIndex = 1
-          val forbiddenReadAccessIndex = 2
-          val mutationIndex = 3
-
-          val additionalInterfaces: Array[Class[_]] = Array(classOf[Recorder])
-
-          val callbackFilter = new CallbackFilter {
-            override def accept(method: Method): Revision = {
-              def isFinalizer: Boolean = method.getName == "finalize" && method.getParameterCount == 0 && method.getReturnType == classOf[Unit]
-
-              if (firstMethodIsOverrideCompatibleWithSecond(method, IdentifiedItemsScope.itemReconstitutionDataProperty)) itemReconstitutionDataIndex
-              else if (IdentifiedItemsScope.alwaysAllowsReadAccessTo(method) || isFinalizer) permittedReadAccessIndex
-              else if (method.getReturnType != classOf[Unit]) forbiddenReadAccessIndex
-              else mutationIndex
-            }
-          }
-
           val itemReconstitutionCallback = new FixedValue {
             override def loadObject(): AnyRef = id -> typeTag[Raw]
           }
@@ -89,6 +71,9 @@ object WorldImplementationCodeFactoring {
           }
 
           val callbacks = Array(itemReconstitutionCallback, permittedReadAccessCallback, forbiddenReadAccessCallback, mutationCallback)
+
+          override val callbackFilter: CallbackFilter = RecordingCallbackStuff.callbackFilter
+          override val additionalInterfaces: Array[Class[_]] = RecordingCallbackStuff.additionalInterfaces
         }
 
         proxyFactory.constructFrom[Raw](id)
@@ -186,8 +171,12 @@ object WorldImplementationCodeFactoring {
       classMirror.reflectConstructor(constructor.asMethod) -> clazz
     }
 
-    // TODO - inline!
-    private def apply[Raw <: Identified : TypeTag]() = {
+    def constructFrom[Raw <: Identified : TypeTag](id: Raw#Id) = {
+      // NOTE: this returns items that are proxies to raw values, rather than the raw values themselves. Depending on the
+      // context (using a scope created by a client from a world, as opposed to while building up that scope from patches),
+      // the items may forbid certain operations on them - e.g. for rendering from a client's scope, the items should be
+      // read-only.
+
       val typeOfRaw = typeOf[Raw]
       val (constructor, clazz) = cachedProxyConstructors.get((typeOfRaw, this)) match {
         case Some(cachedProxyConstructorData) => cachedProxyConstructorData
@@ -195,16 +184,6 @@ object WorldImplementationCodeFactoring {
           cachedProxyConstructors += ((typeOfRaw, this) -> (constructor, clazz))
           constructor -> clazz
       }
-      (constructor, clazz)
-    }
-
-    def constructFrom[Raw <: Identified : TypeTag](id: Raw#Id) = {
-      // NOTE: this returns items that are proxies to raw values, rather than the raw values themselves. Depending on the
-      // context (using a scope created by a client from a world, as opposed to while building up that scope from patches),
-      // the items may forbid certain operations on them - e.g. for rendering from a client's scope, the items should be
-      // read-only.
-
-      val (constructor, clazz) = this ()
 
       if (!isForRecordingOnly && Modifier.isAbstract(clazz.getModifiers)) {
         throw new UnsupportedOperationException(s"Attempt to create an instance of an abstract class '$clazz' for id: '$id'.")
@@ -216,10 +195,48 @@ object WorldImplementationCodeFactoring {
     }
 
     val isForRecordingOnly: Boolean
-
-    val callbackFilter: CallbackFilter
     val callbacks: Array[Callback]
+    val callbackFilter: CallbackFilter
     val additionalInterfaces: Array[Class[_]]
+  }
+
+  object RecordingCallbackStuff {
+    val itemReconstitutionDataIndex = 0
+    val permittedReadAccessIndex = 1
+    val forbiddenReadAccessIndex = 2
+    val mutationIndex = 3
+
+    val additionalInterfaces: Array[Class[_]] = Array(classOf[Recorder])
+
+    val callbackFilter = new CallbackFilter {
+      override def accept(method: Method): Revision = {
+        def isFinalizer: Boolean = method.getName == "finalize" && method.getParameterCount == 0 && method.getReturnType == classOf[Unit]
+        if (firstMethodIsOverrideCompatibleWithSecond(method, IdentifiedItemsScope.itemReconstitutionDataProperty)) itemReconstitutionDataIndex
+        else if (IdentifiedItemsScope.alwaysAllowsReadAccessTo(method) || isFinalizer) permittedReadAccessIndex
+        else if (method.getReturnType != classOf[Unit]) forbiddenReadAccessIndex
+        else mutationIndex
+      }
+    }
+  }
+
+  object QueryCallbackStuff {
+    val mutationIndex = 0
+    val isGhostIndex = 1
+    val recordAnnihilationIndex = 2
+    val checkedReadAccessIndex = 3
+    val unconditionalReadAccessIndex = 4
+
+    val additionalInterfaces: Array[Class[_]] = Array(classOf[AnnihilationHook])
+
+    val callbackFilter = new CallbackFilter {
+      override def accept(method: Method): Revision = {
+        if (firstMethodIsOverrideCompatibleWithSecond(method, IdentifiedItemsScope.isRecordAnnihilationMethod)) recordAnnihilationIndex
+        else if (method.getReturnType == classOf[Unit] && !WorldImplementationCodeFactoring.isInvariantCheck(method)) mutationIndex
+        else if (firstMethodIsOverrideCompatibleWithSecond(method, IdentifiedItemsScope.isGhostProperty)) isGhostIndex
+        else if (IdentifiedItemsScope.alwaysAllowsReadAccessTo(method)) unconditionalReadAccessIndex
+        else checkedReadAccessIndex
+      }
+    }
   }
 
   def firstMethodIsOverrideCompatibleWithSecond(firstMethod: Method, secondMethod: Method): Boolean = {
@@ -273,24 +290,6 @@ object WorldImplementationCodeFactoring {
         val proxyFactory = new ProxyFactory {
           val isForRecordingOnly = false
 
-          val mutationIndex = 0
-          val isGhostIndex = 1
-          val recordAnnihilationIndex = 2
-          val checkedReadAccessIndex = 3
-          val unconditionalReadAccessIndex = 4
-
-          val additionalInterfaces: Array[Class[_]] = Array(classOf[AnnihilationHook])
-
-          val callbackFilter = new CallbackFilter {
-            override def accept(method: Method): Revision = {
-              if (firstMethodIsOverrideCompatibleWithSecond(method, IdentifiedItemsScope.isRecordAnnihilationMethod)) recordAnnihilationIndex
-              else if (method.getReturnType == classOf[Unit] && !WorldImplementationCodeFactoring.isInvariantCheck(method)) mutationIndex
-              else if (firstMethodIsOverrideCompatibleWithSecond(method, IdentifiedItemsScope.isGhostProperty)) isGhostIndex
-              else if (IdentifiedItemsScope.alwaysAllowsReadAccessTo(method)) unconditionalReadAccessIndex
-              else checkedReadAccessIndex
-            }
-          }
-
           val isGhostCallback = new FixedValue with AnnihilationHook {
             override def loadObject(): AnyRef = {
               boolean2Boolean(isGhost)
@@ -331,6 +330,9 @@ object WorldImplementationCodeFactoring {
           val unconditionalReadAccessCallback = NoOp.INSTANCE
 
           val callbacks = Array(mutationCallback, isGhostCallback, recordAnnihilationCallback, checkedReadAccessCallback, unconditionalReadAccessCallback)
+          
+          override val callbackFilter: CallbackFilter = QueryCallbackStuff.callbackFilter
+          override val additionalInterfaces: Array[Class[_]] = QueryCallbackStuff.additionalInterfaces
         }
 
         val item = proxyFactory.constructFrom(id)
