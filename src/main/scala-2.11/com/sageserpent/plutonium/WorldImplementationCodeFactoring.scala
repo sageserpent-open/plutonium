@@ -194,10 +194,11 @@ object WorldImplementationCodeFactoring {
     }
 
     val isForRecordingOnly: Boolean
-    val callbacks: Array[Callback]
-    val callbackFilter: CallbackFilter
-    val additionalInterfaces: Array[Class[_]]
-    val cachedProxyConstructors: scala.collection.mutable.Map[(Type), (universe.MethodMirror, Class[_])]
+    
+    protected val callbacks: Array[Callback]
+    protected val callbackFilter: CallbackFilter
+    protected val additionalInterfaces: Array[Class[_]]
+    protected val cachedProxyConstructors: scala.collection.mutable.Map[(Type), (universe.MethodMirror, Class[_])]
   }
 
   object RecordingCallbackStuff {
