@@ -47,7 +47,9 @@ object WorldImplementationCodeFactoring {
 
     class LocalRecorderFactory extends RecorderFactory {
       override def apply[Raw <: Identified : TypeTag](id: Raw#Id): Raw = {
-        val recordingProxyFactory = new ProxyFactory {
+        val proxyFactory = new ProxyFactory {
+          val isForRecordingOnly = true
+
           val itemReconstitutionDataIndex = 0
           val permittedReadAccessIndex = 1
           val forbiddenReadAccessIndex = 2
@@ -89,7 +91,7 @@ object WorldImplementationCodeFactoring {
           val callbacks = Array(itemReconstitutionCallback, permittedReadAccessCallback, forbiddenReadAccessCallback, mutationCallback)
         }
 
-        constructFrom[Raw](id, recordingProxyFactory, isForRecordingOnly = true)
+        proxyFactory.constructFrom[Raw](id)
       }
     }
 
@@ -162,41 +164,8 @@ object WorldImplementationCodeFactoring {
 
   val cachedProxyConstructors = scala.collection.mutable.Map.empty[(Type, ProxyFactory), (universe.MethodMirror, RuntimeClass)]
 
-  def constructFrom[Raw <: Identified : TypeTag](id: Raw#Id, proxyFactory: ProxyFactory, isForRecordingOnly: Boolean) = {
-    // NOTE: this returns items that are proxies to raw values, rather than the raw values themselves. Depending on the
-    // context (using a scope created by a client from a world, as opposed to while building up that scope from patches),
-    // the items may forbid certain operations on them - e.g. for rendering from a client's scope, the items should be
-    // read-only.
-
-    def constructorFor(identifiableType: Type) = {
-      val clazz = currentMirror.runtimeClass(identifiableType.typeSymbol.asClass)
-
-      val proxyClazz = proxyFactory(clazz)
-
-      val proxyClassSymbol = currentMirror.classSymbol(proxyClazz)
-      val classMirror = currentMirror.reflectClass(proxyClassSymbol.asClass)
-      val constructor = proxyClassSymbol.toType.decls.find(_.isConstructor).get
-      classMirror.reflectConstructor(constructor.asMethod) -> clazz
-    }
-
-    val typeOfRaw = typeOf[Raw]
-    val (constructor, clazz) = cachedProxyConstructors.get((typeOfRaw, proxyFactory)) match {
-      case Some(cachedProxyConstructorData) => cachedProxyConstructorData
-      case None => val (constructor, clazz) = constructorFor(typeOfRaw)
-        cachedProxyConstructors += ((typeOfRaw, proxyFactory) -> (constructor, clazz))
-        constructor -> clazz
-    }
-    if (!isForRecordingOnly && Modifier.isAbstract(clazz.getModifiers)) {
-      throw new UnsupportedOperationException(s"Attempt to create an instance of an abstract class '$clazz' for id: '$id'.")
-    }
-    val proxy = constructor(id).asInstanceOf[Raw]
-    val proxyFactoryApi = proxy.asInstanceOf[Factory]
-    proxyFactoryApi.setCallbacks(proxyFactory.callbacks) // TODO - hopefully, this won't be necessary!
-    proxy
-  }
-
   trait ProxyFactory {
-    def apply(clazz: Class[_]): Class[_] = {
+    private def createProxyClass(clazz: Class[_]): Class[_] = {
       val enhancer = new Enhancer
       enhancer.setInterceptDuringConstruction(false)
       enhancer.setSuperclass(clazz)
@@ -205,6 +174,48 @@ object WorldImplementationCodeFactoring {
       enhancer.setCallbackTypes(callbacks map (_.getClass))
       enhancer.createClass()
     }
+
+    private def constructorFor(identifiableType: Type) = {
+      val clazz = currentMirror.runtimeClass(identifiableType.typeSymbol.asClass)
+
+      val proxyClazz = createProxyClass(clazz)
+
+      val proxyClassSymbol = currentMirror.classSymbol(proxyClazz)
+      val classMirror = currentMirror.reflectClass(proxyClassSymbol.asClass)
+      val constructor = proxyClassSymbol.toType.decls.find(_.isConstructor).get
+      classMirror.reflectConstructor(constructor.asMethod) -> clazz
+    }
+
+    // TODO - inline!
+    private def apply[Raw <: Identified : TypeTag]() = {
+      val typeOfRaw = typeOf[Raw]
+      val (constructor, clazz) = cachedProxyConstructors.get((typeOfRaw, this)) match {
+        case Some(cachedProxyConstructorData) => cachedProxyConstructorData
+        case None => val (constructor, clazz) = constructorFor(typeOfRaw)
+          cachedProxyConstructors += ((typeOfRaw, this) -> (constructor, clazz))
+          constructor -> clazz
+      }
+      (constructor, clazz)
+    }
+
+    def constructFrom[Raw <: Identified : TypeTag](id: Raw#Id) = {
+      // NOTE: this returns items that are proxies to raw values, rather than the raw values themselves. Depending on the
+      // context (using a scope created by a client from a world, as opposed to while building up that scope from patches),
+      // the items may forbid certain operations on them - e.g. for rendering from a client's scope, the items should be
+      // read-only.
+
+      val (constructor, clazz) = this ()
+
+      if (!isForRecordingOnly && Modifier.isAbstract(clazz.getModifiers)) {
+        throw new UnsupportedOperationException(s"Attempt to create an instance of an abstract class '$clazz' for id: '$id'.")
+      }
+      val proxy = constructor(id).asInstanceOf[Raw]
+      val proxyFactoryApi = proxy.asInstanceOf[Factory]
+      proxyFactoryApi.setCallbacks(callbacks) // TODO - hopefully, this won't be necessary!
+      proxy
+    }
+
+    val isForRecordingOnly: Boolean
 
     val callbackFilter: CallbackFilter
     val callbacks: Array[Callback]
@@ -259,7 +270,9 @@ object WorldImplementationCodeFactoring {
 
     def itemFor[Raw <: Identified : TypeTag](id: Raw#Id): Raw = {
       def constructAndCacheItem(): Raw = {
-        val queryProxyFactory = new ProxyFactory {
+        val proxyFactory = new ProxyFactory {
+          val isForRecordingOnly = false
+
           val mutationIndex = 0
           val isGhostIndex = 1
           val recordAnnihilationIndex = 2
@@ -320,7 +333,7 @@ object WorldImplementationCodeFactoring {
           val callbacks = Array(mutationCallback, isGhostCallback, recordAnnihilationCallback, checkedReadAccessCallback, unconditionalReadAccessCallback)
         }
 
-        val item = constructFrom(id, queryProxyFactory, isForRecordingOnly = false)
+        val item = proxyFactory.constructFrom(id)
         idToItemsMultiMap.addBinding(id, item)
         item
       }
