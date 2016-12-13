@@ -6,6 +6,9 @@ import java.util.Optional
 
 import com.sageserpent.americium.{Finite, NegativeInfinity, PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.World.Revision
+import net.bytebuddy.ByteBuddy
+import net.bytebuddy.dynamic.loading.ClassLoadingStrategy
+import net.bytebuddy.dynamic.scaffold.subclass.ConstructorStrategy
 import net.sf.cglib.proxy._
 import resource.{ManagedResource, makeManagedResource}
 
@@ -110,10 +113,11 @@ object WorldImplementationCodeFactoring {
     def itemClass[Raw <: Identified : TypeTag](item: Identified) = {
       if (Enhancer.isEnhanced(item.getClass))
       // HACK: in reality, everything with an id is likely to be an
-      // an instance of a proxy subclass of 'Raw', so in this case we
-      // have to climb up one level in the class hierarchy in order
-      // to do type comparisons from the point of view of client code.
-        item.getClass.getSuperclass
+      // an instance of a CGLib proxy subclass of a ByteBuddy proxy
+      // subclass of 'Raw', so in this case we have to climb up two
+      // levels in the class hierarchy in order to do type comparisons
+      // from the point of view of client code.
+        item.getClass.getSuperclass.getSuperclass
       else item.getClass
     }
 
@@ -148,12 +152,18 @@ object WorldImplementationCodeFactoring {
     val isRecordAnnihilationMethod = classOf[AnnihilationHook].getMethod("recordAnnihilation")
   }
 
+  val byteBuddy = new ByteBuddy()
+
   trait ProxyFactory {
+    private def createProxyClassUsingByteBuddy(clazz: Class[_]): Class[_] = {
+      val builder = byteBuddy.subclass(clazz, ConstructorStrategy.Default.IMITATE_SUPER_CLASS_PUBLIC).implement(additionalInterfaces.toSeq)
+      builder.make().load(getClass.getClassLoader, ClassLoadingStrategy.Default.INJECTION).getLoaded
+    }
+
     private def createProxyClass(clazz: Class[_]): Class[_] = {
       val enhancer = new Enhancer
       enhancer.setInterceptDuringConstruction(false)
       enhancer.setSuperclass(clazz)
-      enhancer.setInterfaces(additionalInterfaces)
       enhancer.setCallbackFilter(callbackFilter)
       enhancer.setCallbackTypes(callbacks map (_.getClass))
       enhancer.createClass()
@@ -162,7 +172,7 @@ object WorldImplementationCodeFactoring {
     private def constructorFor(identifiableType: Type) = {
       val clazz = currentMirror.runtimeClass(identifiableType.typeSymbol.asClass)
 
-      val proxyClazz = createProxyClass(clazz)
+      val proxyClazz = createProxyClass(createProxyClassUsingByteBuddy(clazz))
 
       val proxyClassSymbol = currentMirror.classSymbol(proxyClazz)
       val classMirror = currentMirror.reflectClass(proxyClassSymbol.asClass)
