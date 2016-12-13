@@ -7,6 +7,7 @@ import java.util.Optional
 import com.sageserpent.americium.{Finite, NegativeInfinity, PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.World.Revision
 import net.bytebuddy.ByteBuddy
+import net.bytebuddy.description.method.MethodDescription
 import net.bytebuddy.dynamic.loading.ClassLoadingStrategy
 import net.bytebuddy.dynamic.scaffold.subclass.ConstructorStrategy
 import net.sf.cglib.proxy._
@@ -255,12 +256,16 @@ object WorldImplementationCodeFactoring {
     val cachedProxyConstructors = mutable.Map.empty[universe.Type, (universe.MethodMirror, Class[_])]
   }
 
-  def firstMethodIsOverrideCompatibleWithSecond(firstMethod: Method, secondMethod: Method): Boolean = {
+  def firstMethodIsOverrideCompatibleWithSecond(firstMethod: MethodDescription, secondMethod: MethodDescription): Boolean = {
     secondMethod.getName == firstMethod.getName &&
-      secondMethod.getDeclaringClass.isAssignableFrom(firstMethod.getDeclaringClass) &&
-      secondMethod.getReturnType.isAssignableFrom(firstMethod.getReturnType) &&
-      secondMethod.getParameterCount == firstMethod.getParameterCount &&
-      secondMethod.getParameterTypes.toSeq == firstMethod.getParameterTypes.toSeq // What about contravariance? Hmmm...
+      secondMethod.getReceiverType.asErasure.isAssignableFrom(firstMethod.getReceiverType.asErasure) &&
+      secondMethod.getReturnType.asErasure.isAssignableFrom(firstMethod.getReturnType.asErasure) &&
+      secondMethod.getParameters.size == firstMethod.getParameters.size &&
+      secondMethod.getParameters.toSeq.map(_.getType) == firstMethod.getParameters.toSeq.map(_.getType) // What about contravariance? Hmmm...
+  }
+
+  def firstMethodIsOverrideCompatibleWithSecond(firstMethod: Method, secondMethod: Method): Boolean = {
+    firstMethodIsOverrideCompatibleWithSecond(new MethodDescription.ForLoadedMethod(firstMethod), new MethodDescription.ForLoadedMethod(secondMethod))
   }
 
   val invariantCheckMethod = classOf[Identified].getMethod("checkInvariant")
