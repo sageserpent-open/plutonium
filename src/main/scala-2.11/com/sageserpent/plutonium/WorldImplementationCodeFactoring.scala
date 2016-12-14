@@ -3,6 +3,7 @@ package com.sageserpent.plutonium
 import java.lang.reflect.{Method, Modifier}
 import java.time.Instant
 import java.util.Optional
+import java.util.concurrent.Callable
 
 import com.sageserpent.americium.{Finite, NegativeInfinity, PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.World.Revision
@@ -13,7 +14,7 @@ import net.bytebuddy.dynamic.loading.ClassLoadingStrategy
 import net.bytebuddy.dynamic.scaffold.subclass.ConstructorStrategy
 import net.bytebuddy.implementation.bind.annotation._
 import net.bytebuddy.implementation.{FixedValue, MethodDelegation}
-import net.bytebuddy.matcher.{BooleanMatcher, ElementMatcher}
+import net.bytebuddy.matcher.{BooleanMatcher, ElementMatcher, ElementMatchers, NameMatcher}
 import resource.{ManagedResource, makeManagedResource}
 
 import scala.collection.JavaConversions._
@@ -67,18 +68,16 @@ object WorldImplementationCodeFactoring {
 
           val matchMutation: ElementMatcher[MethodDescription] = new BooleanMatcher(true)
 
-          object permittedReadAccess {
+          class permittedReadAccess {
             @RuntimeType
-            def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @Super targetInSuperGuise: AnyRef) = {
-              println(s"permittedReadAccess, $method")
-              method.invoke(targetInSuperGuise, arguments: _*)
+            def apply(@SuperCall superCall: Callable[_]) = {
+              superCall.call()
             }
           }
 
           object forbiddenReadAccess {
             @RuntimeType
-            def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @This target: AnyRef) = {
-              println("forbiddenReadAccess", method, arguments, target)
+            def apply(@Origin method: Method, @This target: AnyRef) = {
               throw new UnsupportedOperationException(s"Attempt to call method: '$method' with a non-unit return type on a recorder proxy: '$target' while capturing a change or measurement.")
             }
           }
@@ -86,7 +85,6 @@ object WorldImplementationCodeFactoring {
           object mutation {
             @RuntimeType
             def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @This target: AnyRef) = {
-              println("mutation", method, arguments, target)
               val item = target.asInstanceOf[Recorder]
               // Remember, the outer context is making a proxy of type 'Raw'.
               val capturedPatch = Patch(item, method, arguments)
@@ -99,7 +97,7 @@ object WorldImplementationCodeFactoring {
             builder
               .method(matchMutation).intercept(MethodDelegation.to(mutation))
               .method(matchForbiddenReadAccess).intercept(MethodDelegation.to(forbiddenReadAccess))
-              .method(matchPermittedReadAccess).intercept(MethodDelegation.to(permittedReadAccess))
+              .method(matchPermittedReadAccess).intercept(MethodDelegation.to(new permittedReadAccess))
               .method(matchItemReconstitutionData).intercept(FixedValue.value(id -> typeTag[Raw]))
         }
 
@@ -179,7 +177,7 @@ object WorldImplementationCodeFactoring {
 
   trait ProxyFactory {
     private def createProxyClass(clazz: Class[_]): Class[_] = {
-      val builder = byteBuddy.subclass(clazz, ConstructorStrategy.Default.IMITATE_SUPER_CLASS_PUBLIC).implement(additionalInterfaces.toSeq)
+      val builder = byteBuddy.subclass(clazz, ConstructorStrategy.Default.IMITATE_SUPER_CLASS_PUBLIC).implement(additionalInterfaces.toSeq).ignoreAlso(ElementMatchers.named[MethodDescription]("_isGhost"))
       configureInterceptions(builder).make().load(getClass.getClassLoader, ClassLoadingStrategy.Default.INJECTION).getLoaded
     }
 
@@ -303,10 +301,9 @@ object WorldImplementationCodeFactoring {
 
           val matchCheckedReadAccess: ElementMatcher[MethodDescription] = new BooleanMatcher(true)
 
-          object recordAnnihilation {
+          class recordAnnihilation {
             @RuntimeType
             def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @This target: AnyRef) = {
-              println("recordAnnihilation (in query)", method, arguments, target)
               isGhost.recordAnnihilation()
               null
             }
@@ -314,8 +311,7 @@ object WorldImplementationCodeFactoring {
 
           object mutation {
             @RuntimeType
-            def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @Super target: AnyRef) = {
-              println("mutation (in query)", method, arguments, target)
+            def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @Super target: AnyRef, @SuperCall superCall: Callable[_]) = {
               if (itemsAreLocked) {
                 throw new UnsupportedOperationException(s"Attempt to write via: '$method' to an item: '$target' rendered from a bitemporal query.")
               }
@@ -324,35 +320,33 @@ object WorldImplementationCodeFactoring {
                 throw new UnsupportedOperationException(s"Attempt to write via: '$method' to a ghost item of id: '$id' and type '${typeOf[Raw]}'.")
               }
 
-              method.invoke(target, arguments: _*)
+              superCall.call()
             }
           }
 
           object isGhost extends AnnihilationHook {
             @RuntimeType
             def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @This target: AnyRef) = {
-              println("isGhost (in query)", method, arguments, target)
               isGhost
             }
           }
 
           object unconditionalReadAccess {
             @RuntimeType
-            def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @Super target: AnyRef) = {
-              println("unconditionalReadAccess (in query)", method)
-              method.invoke(target, arguments: _*)
+            def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @Super target: AnyRef, @SuperCall superCall: Callable[_]) = {
+              superCall.call()
             }
           }
 
           object checkedReadAccess {
             @RuntimeType
-            def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @Super target: AnyRef) = {
+            def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @Super target: AnyRef, @SuperCall superCall: Callable[_]) = {
               println("checkedReadAccess", method, arguments, target)
               if (isGhost.isGhost) {
                 throw new UnsupportedOperationException(s"Attempt to read via: '$method' from a ghost item of id: '$id' and type '${typeOf[Raw]}'.")
               }
 
-              method.invoke(target, arguments: _*)
+              superCall.call()
             }
           }
 
@@ -362,7 +356,7 @@ object WorldImplementationCodeFactoring {
               .method(matchUnconditionalReadAccess).intercept(MethodDelegation.to(unconditionalReadAccess))
               .method(matchIsGhost).intercept(MethodDelegation.to(isGhost))
               .method(matchMutation).intercept(MethodDelegation.to(mutation))
-              .method(matchRecordAnnihilation).intercept(MethodDelegation.to(recordAnnihilation))
+              .method(matchRecordAnnihilation).intercept(MethodDelegation.to(new recordAnnihilation))
         }
 
         val item = proxyFactory.constructFrom(id)
