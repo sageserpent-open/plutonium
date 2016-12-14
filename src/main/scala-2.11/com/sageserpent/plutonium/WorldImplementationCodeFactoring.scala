@@ -201,12 +201,7 @@ object WorldImplementationCodeFactoring {
       // read-only.
 
       val typeOfRaw = typeOf[Raw]
-      val (constructor, clazz) = cachedProxyConstructors.get(typeOfRaw) match {
-        case Some(cachedProxyConstructorData) => cachedProxyConstructorData
-        case None => val (constructor, clazz) = constructorFor(typeOfRaw)
-          cachedProxyConstructors += (typeOfRaw -> (constructor, clazz))
-          constructor -> clazz
-      }
+      val (constructor, clazz) = constructorFor(typeOfRaw)
 
       if (!isForRecordingOnly && Modifier.isAbstract(clazz.getModifiers)) {
         throw new UnsupportedOperationException(s"Attempt to create an instance of an abstract class '$clazz' for id: '$id'.")
@@ -326,22 +321,17 @@ object WorldImplementationCodeFactoring {
 
           object isGhost extends AnnihilationHook {
             @RuntimeType
-            def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @This target: AnyRef) = {
-              isGhost
-            }
+            def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @This target: AnyRef) = isGhost
           }
 
           object unconditionalReadAccess {
             @RuntimeType
-            def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @Super target: AnyRef, @SuperCall superCall: Callable[_]) = {
-              superCall.call()
-            }
+            def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @Super target: AnyRef, @SuperCall superCall: Callable[_]) = superCall.call()
           }
 
           object checkedReadAccess {
             @RuntimeType
             def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @Super target: AnyRef, @SuperCall superCall: Callable[_]) = {
-              println("checkedReadAccess", method, arguments, target)
               if (isGhost.isGhost) {
                 throw new UnsupportedOperationException(s"Attempt to read via: '$method' from a ghost item of id: '$id' and type '${typeOf[Raw]}'.")
               }
