@@ -68,11 +68,10 @@ object WorldImplementationCodeFactoring {
 
           val matchMutation: ElementMatcher[MethodDescription] = new BooleanMatcher(true)
 
-          class permittedReadAccess {
+          // TODO - this is just a hokey no-operation - remove it!
+          class PermittedReadAccess {
             @RuntimeType
-            def apply(@SuperCall superCall: Callable[_]) = {
-              superCall.call()
-            }
+            def apply(@SuperCall superCall: Callable[_]) = superCall.call()
           }
 
           object forbiddenReadAccess {
@@ -97,7 +96,7 @@ object WorldImplementationCodeFactoring {
             builder
               .method(matchMutation).intercept(MethodDelegation.to(mutation))
               .method(matchForbiddenReadAccess).intercept(MethodDelegation.to(forbiddenReadAccess))
-              .method(matchPermittedReadAccess).intercept(MethodDelegation.to(new permittedReadAccess))
+              .method(matchPermittedReadAccess).intercept(MethodDelegation.to(new PermittedReadAccess))
               .method(matchItemReconstitutionData).intercept(FixedValue.value(id -> typeTag[Raw]))
         }
 
@@ -296,7 +295,7 @@ object WorldImplementationCodeFactoring {
 
           val matchCheckedReadAccess: ElementMatcher[MethodDescription] = new BooleanMatcher(true)
 
-          class recordAnnihilation {
+          class RecordAnnihilation {
             @RuntimeType
             def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @This target: AnyRef) = {
               isGhost.recordAnnihilation()
@@ -324,6 +323,7 @@ object WorldImplementationCodeFactoring {
             def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @This target: AnyRef) = isGhost
           }
 
+          // TODO - this is just a hokey no-operation - remove it!
           object unconditionalReadAccess {
             @RuntimeType
             def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @Super target: AnyRef, @SuperCall superCall: Callable[_]) = superCall.call()
@@ -346,7 +346,7 @@ object WorldImplementationCodeFactoring {
               .method(matchUnconditionalReadAccess).intercept(MethodDelegation.to(unconditionalReadAccess))
               .method(matchIsGhost).intercept(MethodDelegation.to(isGhost))
               .method(matchMutation).intercept(MethodDelegation.to(mutation))
-              .method(matchRecordAnnihilation).intercept(MethodDelegation.to(new recordAnnihilation))
+              .method(matchRecordAnnihilation).intercept(MethodDelegation.to(new RecordAnnihilation))
         }
 
         val item = proxyFactory.constructFrom(id)
