@@ -13,7 +13,7 @@ import net.bytebuddy.dynamic.DynamicType.Builder
 import net.bytebuddy.dynamic.loading.ClassLoadingStrategy
 import net.bytebuddy.dynamic.scaffold.subclass.ConstructorStrategy
 import net.bytebuddy.implementation.bind.annotation._
-import net.bytebuddy.implementation.{FixedValue, MethodDelegation}
+import net.bytebuddy.implementation.{FieldAccessor, FixedValue, MethodDelegation}
 import net.bytebuddy.matcher.{BooleanMatcher, ElementMatcher, ElementMatchers, NameMatcher}
 import resource.{ManagedResource, makeManagedResource}
 
@@ -57,6 +57,18 @@ object WorldImplementationCodeFactoring {
         val proxyFactory = new ProxyFactory {
           val isForRecordingOnly = true
 
+          class AcquiredState{
+            val _id: Raw#Id = id
+            val _typeTag: TypeTag[Raw] = typeTag[Raw]
+            def capturePatch(patch: AbstractPatch) {
+              patchesPickedUpFromAnEventBeingApplied += patch
+            }
+          }
+
+          override val stateToBeAcquiredByProxy: AcquiredState = new AcquiredState
+
+          val stateAcquisitionTrait = classOf[StateAcquisition]
+
           override val additionalInterfaces: Array[Class[_]] = RecordingCallbackStuff.additionalInterfaces
           override val cachedProxyConstructors: mutable.Map[Type, (universe.MethodMirror, Class[_])] = RecordingCallbackStuff.cachedProxyConstructors
 
@@ -68,8 +80,13 @@ object WorldImplementationCodeFactoring {
 
           val matchMutation: ElementMatcher[MethodDescription] = new BooleanMatcher(true)
 
+          object itemReconstitutionData {
+            @RuntimeType
+            def apply(@FieldValue("acquiredState") acquiredState: AcquiredState) = acquiredState._id -> acquiredState._typeTag
+          }
+
           // TODO - this is just a hokey no-operation - remove it!
-          class PermittedReadAccess {
+          object permittedReadAccess {
             @RuntimeType
             def apply(@SuperCall superCall: Callable[_]) = superCall.call()
             }
@@ -83,11 +100,10 @@ object WorldImplementationCodeFactoring {
 
           object mutation {
             @RuntimeType
-            def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @This target: AnyRef) = {
+            def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @This target: AnyRef, @FieldValue("acquiredState") acquiredState: AcquiredState) = {
               val item = target.asInstanceOf[Recorder]
               // Remember, the outer context is making a proxy of type 'Raw'.
-              val capturedPatch = Patch(item, method, arguments)
-              patchesPickedUpFromAnEventBeingApplied += capturedPatch
+              acquiredState.capturePatch(Patch(item, method, arguments))
               null // Representation of a unit value by a ByteBuddy interceptor.
             }
           }
@@ -96,8 +112,8 @@ object WorldImplementationCodeFactoring {
             builder
               .method(matchMutation).intercept(MethodDelegation.to(mutation))
               .method(matchForbiddenReadAccess).intercept(MethodDelegation.to(forbiddenReadAccess))
-              .method(matchPermittedReadAccess).intercept(MethodDelegation.to(new PermittedReadAccess))
-              .method(matchItemReconstitutionData).intercept(FixedValue.value(id -> typeTag[Raw]))
+              .method(matchPermittedReadAccess).intercept(MethodDelegation.to(permittedReadAccess))
+              .method(matchItemReconstitutionData).intercept(MethodDelegation.to(itemReconstitutionData))
         }
 
         proxyFactory.constructFrom[Raw](id)
@@ -175,9 +191,26 @@ object WorldImplementationCodeFactoring {
   val byteBuddy = new ByteBuddy()
 
   trait ProxyFactory {
+    val isForRecordingOnly: Boolean
+
+    type UntypedAcquiredState = AnyRef
+
+    val stateToBeAcquiredByProxy: UntypedAcquiredState
+
+    private [plutonium] trait StateAcquisition {
+      def acquire(acquiredState: UntypedAcquiredState)
+    }
+
     private def createProxyClass(clazz: Class[_]): Class[_] = {
-      val builder = byteBuddy.subclass(clazz, ConstructorStrategy.Default.IMITATE_SUPER_CLASS_PUBLIC).implement(additionalInterfaces.toSeq).ignoreAlso(ElementMatchers.named[MethodDescription]("_isGhost"))
-      configureInterceptions(builder).make().load(getClass.getClassLoader, ClassLoadingStrategy.Default.INJECTION).getLoaded
+      val builder = byteBuddy
+        .subclass(clazz, ConstructorStrategy.Default.IMITATE_SUPER_CLASS_PUBLIC)
+        .implement(additionalInterfaces.toSeq)
+        .ignoreAlso(ElementMatchers.named[MethodDescription]("_isGhost"))
+        .defineField("acquiredState", classOf[AnyRef])
+
+      val builderWithInterceptions = configureInterceptions(builder).implement(classOf[StateAcquisition]).method(ElementMatchers.named("acquire")).intercept(FieldAccessor.ofField("acquiredState"))
+
+      builderWithInterceptions.make().load(getClass.getClassLoader, ClassLoadingStrategy.Default.INJECTION).getLoaded
     }
 
     protected def configureInterceptions(builder: Builder[_]): Builder[_]
@@ -211,10 +244,11 @@ object WorldImplementationCodeFactoring {
         throw new UnsupportedOperationException(s"Attempt to create an instance of an abstract class '$clazz' for id: '$id'.")
       }
       val proxy = constructor(id).asInstanceOf[Raw]
+
+      proxy.asInstanceOf[StateAcquisition].acquire(stateToBeAcquiredByProxy)
+
       proxy
     }
-
-    val isForRecordingOnly: Boolean
 
     protected val additionalInterfaces: Array[Class[_]]
     protected val cachedProxyConstructors: scala.collection.mutable.Map[(Type), (universe.MethodMirror, Class[_])]
@@ -287,6 +321,16 @@ object WorldImplementationCodeFactoring {
         val proxyFactory = new ProxyFactory {
           val isForRecordingOnly = false
 
+          class AcquiredState extends AnnihilationHook{
+            def itemsAreLocked: Boolean = identifiedItemsScopeThis.itemsAreLocked
+          }
+
+          private [plutonium] trait StateAcquisition {
+            def acquire(acquiredState: AcquiredState)
+          }
+
+          override val stateToBeAcquiredByProxy: AcquiredState = new AcquiredState
+
           override val additionalInterfaces: Array[Class[_]] = QueryCallbackStuff.additionalInterfaces
           override val cachedProxyConstructors: mutable.Map[universe.Type, (universe.MethodMirror, Class[_])] = QueryCallbackStuff.cachedProxyConstructors
 
@@ -302,20 +346,20 @@ object WorldImplementationCodeFactoring {
 
           class RecordAnnihilation {
             @RuntimeType
-            def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @This target: AnyRef) = {
-              isGhost.recordAnnihilation()
+            def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @This target: AnyRef, @FieldValue("acquiredState") acquiredState: AcquiredState) = {
+              acquiredState.recordAnnihilation()
               null
             }
           }
 
           object mutation {
             @RuntimeType
-            def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @Super target: AnyRef, @SuperCall superCall: Callable[_]) = {
-              if (itemsAreLocked) {
+            def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @Super target: AnyRef, @SuperCall superCall: Callable[_], @FieldValue("acquiredState") acquiredState: AcquiredState) = {
+              if (acquiredState.itemsAreLocked) {
                 throw new UnsupportedOperationException(s"Attempt to write via: '$method' to an item: '$target' rendered from a bitemporal query.")
               }
 
-              if (isGhost.isGhost) {
+              if (acquiredState.isGhost) {
                 throw new UnsupportedOperationException(s"Attempt to write via: '$method' to a ghost item of id: '$id' and type '${typeOf[Raw]}'.")
               }
 
@@ -325,7 +369,7 @@ object WorldImplementationCodeFactoring {
 
           object isGhost extends AnnihilationHook {
             @RuntimeType
-            def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @This target: AnyRef) = isGhost
+            def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @This target: AnyRef, @FieldValue("acquiredState") acquiredState: AcquiredState) = acquiredState.isGhost
           }
 
           // TODO - this is just a hokey no-operation - remove it!
@@ -336,8 +380,8 @@ object WorldImplementationCodeFactoring {
 
           object checkedReadAccess {
             @RuntimeType
-            def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @Super target: AnyRef, @SuperCall superCall: Callable[_]) = {
-              if (isGhost.isGhost) {
+            def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @Super target: AnyRef, @SuperCall superCall: Callable[_], @FieldValue("acquiredState") acquiredState: AcquiredState) = {
+              if (acquiredState.isGhost) {
                 throw new UnsupportedOperationException(s"Attempt to read via: '$method' from a ghost item of id: '$id' and type '${typeOf[Raw]}'.")
               }
 
