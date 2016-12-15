@@ -72,7 +72,7 @@ object WorldImplementationCodeFactoring {
           class PermittedReadAccess {
             @RuntimeType
             def apply(@SuperCall superCall: Callable[_]) = superCall.call()
-          }
+            }
 
           object forbiddenReadAccess {
             @RuntimeType
@@ -200,7 +200,12 @@ object WorldImplementationCodeFactoring {
       // read-only.
 
       val typeOfRaw = typeOf[Raw]
-      val (constructor, clazz) = constructorFor(typeOfRaw)
+      val (constructor, clazz) = cachedProxyConstructors.get(typeOfRaw) match {
+        case Some(cachedProxyConstructorData) => cachedProxyConstructorData
+        case None => val (constructor, clazz) = constructorFor(typeOfRaw)
+          cachedProxyConstructors += (typeOfRaw -> (constructor, clazz))
+          constructor -> clazz
+      }
 
       if (!isForRecordingOnly && Modifier.isAbstract(clazz.getModifiers)) {
         throw new UnsupportedOperationException(s"Attempt to create an instance of an abstract class '$clazz' for id: '$id'.")
