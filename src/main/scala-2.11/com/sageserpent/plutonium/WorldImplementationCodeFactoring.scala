@@ -58,8 +58,7 @@ object WorldImplementationCodeFactoring {
           val isForRecordingOnly = true
 
           class AcquiredState{
-            val _id: Raw#Id = id
-            val _typeTag: TypeTag[Raw] = typeTag[Raw]
+            def itemReconstitutionData = id -> typeTag[Raw]
             def capturePatch(patch: AbstractPatch) {
               patchesPickedUpFromAnEventBeingApplied += patch
             }
@@ -82,7 +81,7 @@ object WorldImplementationCodeFactoring {
 
           class ItemReconstitutionData {
             @RuntimeType
-            def apply(@RuntimeType @FieldValue("acquiredState") acquiredState: AcquiredState) = acquiredState._id -> acquiredState._typeTag
+            def apply(@RuntimeType @FieldValue("acquiredState") acquiredState: AcquiredState) = acquiredState.itemReconstitutionData
           }
 
           // TODO - this is just a hokey no-operation - remove it!
