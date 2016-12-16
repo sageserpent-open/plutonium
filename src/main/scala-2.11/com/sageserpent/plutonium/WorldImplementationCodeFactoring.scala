@@ -80,9 +80,9 @@ object WorldImplementationCodeFactoring {
 
           val matchMutation: ElementMatcher[MethodDescription] = new BooleanMatcher(true)
 
-          object itemReconstitutionData {
+          class ItemReconstitutionData {
             @RuntimeType
-            def apply(@FieldValue("acquiredState") acquiredState: AcquiredState) = acquiredState._id -> acquiredState._typeTag
+            def apply(@RuntimeType @FieldValue("acquiredState") acquiredState: AcquiredState) = acquiredState._id -> acquiredState._typeTag
           }
 
           // TODO - this is just a hokey no-operation - remove it!
@@ -100,7 +100,7 @@ object WorldImplementationCodeFactoring {
 
           object mutation {
             @RuntimeType
-            def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @This target: AnyRef, @FieldValue("acquiredState") acquiredState: AcquiredState) = {
+            def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @This target: AnyRef, @RuntimeType @FieldValue("acquiredState") acquiredState: AcquiredState) = {
               val item = target.asInstanceOf[Recorder]
               // Remember, the outer context is making a proxy of type 'Raw'.
               acquiredState.capturePatch(Patch(item, method, arguments))
@@ -113,7 +113,7 @@ object WorldImplementationCodeFactoring {
               .method(matchMutation).intercept(MethodDelegation.to(mutation))
               .method(matchForbiddenReadAccess).intercept(MethodDelegation.to(forbiddenReadAccess))
               .method(matchPermittedReadAccess).intercept(MethodDelegation.to(permittedReadAccess))
-              .method(matchItemReconstitutionData).intercept(MethodDelegation.to(itemReconstitutionData))
+              .method(matchItemReconstitutionData).intercept(MethodDelegation.to(new ItemReconstitutionData))
         }
 
         proxyFactory.constructFrom[Raw](id)
@@ -346,7 +346,7 @@ object WorldImplementationCodeFactoring {
 
           class RecordAnnihilation {
             @RuntimeType
-            def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @This target: AnyRef, @FieldValue("acquiredState") acquiredState: AcquiredState) = {
+            def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @This target: AnyRef, @RuntimeType @FieldValue("acquiredState") acquiredState: AcquiredState) = {
               acquiredState.recordAnnihilation()
               null
             }
@@ -354,7 +354,7 @@ object WorldImplementationCodeFactoring {
 
           object mutation {
             @RuntimeType
-            def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @Super target: AnyRef, @SuperCall superCall: Callable[_], @FieldValue("acquiredState") acquiredState: AcquiredState) = {
+            def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @Super target: AnyRef, @SuperCall superCall: Callable[_], @RuntimeType @FieldValue("acquiredState") acquiredState: AcquiredState) = {
               if (acquiredState.itemsAreLocked) {
                 throw new UnsupportedOperationException(s"Attempt to write via: '$method' to an item: '$target' rendered from a bitemporal query.")
               }
@@ -367,9 +367,9 @@ object WorldImplementationCodeFactoring {
             }
           }
 
-          object isGhost extends AnnihilationHook {
+          object isGhost {
             @RuntimeType
-            def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @This target: AnyRef, @FieldValue("acquiredState") acquiredState: AcquiredState) = acquiredState.isGhost
+            def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @This target: AnyRef, @RuntimeType @FieldValue("acquiredState") acquiredState: AcquiredState) = acquiredState.isGhost
           }
 
           // TODO - this is just a hokey no-operation - remove it!
@@ -380,7 +380,7 @@ object WorldImplementationCodeFactoring {
 
           object checkedReadAccess {
             @RuntimeType
-            def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @Super target: AnyRef, @SuperCall superCall: Callable[_], @FieldValue("acquiredState") acquiredState: AcquiredState) = {
+            def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @Super target: AnyRef, @SuperCall superCall: Callable[_], @RuntimeType @FieldValue("acquiredState") acquiredState: AcquiredState) = {
               if (acquiredState.isGhost) {
                 throw new UnsupportedOperationException(s"Attempt to read via: '$method' from a ghost item of id: '$id' and type '${typeOf[Raw]}'.")
               }
