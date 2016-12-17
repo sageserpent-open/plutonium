@@ -13,8 +13,8 @@ import net.bytebuddy.dynamic.DynamicType.Builder
 import net.bytebuddy.dynamic.loading.ClassLoadingStrategy
 import net.bytebuddy.dynamic.scaffold.subclass.ConstructorStrategy
 import net.bytebuddy.implementation.bind.annotation._
-import net.bytebuddy.implementation.{FieldAccessor, FixedValue, MethodDelegation}
-import net.bytebuddy.matcher.{BooleanMatcher, ElementMatcher, ElementMatchers, NameMatcher}
+import net.bytebuddy.implementation.{FieldAccessor, MethodDelegation}
+import net.bytebuddy.matcher.{BooleanMatcher, ElementMatcher, ElementMatchers}
 import resource.{ManagedResource, makeManagedResource}
 
 import scala.collection.JavaConversions._
@@ -71,11 +71,17 @@ object WorldImplementationCodeFactoring {
           override val additionalInterfaces: Array[Class[_]] = RecordingCallbackStuff.additionalInterfaces
           override val cachedProxyConstructors: mutable.Map[Type, (universe.MethodMirror, Class[_])] = RecordingCallbackStuff.cachedProxyConstructors
 
+          // TODO - this is just a hokey no-operation - remove it!
+          class PermittedReadAccess {
+            @RuntimeType
+            def apply(@SuperCall superCall: Callable[_]) = superCall.call()
+          }
+
           override protected def configureInterceptions(builder: Builder[_]): Builder[_] =
             builder
               .method(matchMutation).intercept(MethodDelegation.to(mutation))
               .method(matchForbiddenReadAccess).intercept(MethodDelegation.to(forbiddenReadAccess))
-              .method(matchPermittedReadAccess).intercept(MethodDelegation.to(permittedReadAccess))
+              .method(matchPermittedReadAccess).intercept(MethodDelegation.to(new PermittedReadAccess))
               .method(matchItemReconstitutionData).intercept(MethodDelegation.to(itemReconstitutionData))
         }
 
@@ -239,12 +245,6 @@ object WorldImplementationCodeFactoring {
     object itemReconstitutionData {
       @RuntimeType
       def apply(@RuntimeType @FieldValue("acquiredState") acquiredState: AcquiredState) = acquiredState.itemReconstitutionData
-    }
-
-    // TODO - this is just a hokey no-operation - remove it!
-    object permittedReadAccess {
-      @RuntimeType
-      def apply(@SuperCall superCall: Callable[_]) = superCall.call()
     }
 
     object forbiddenReadAccess {
