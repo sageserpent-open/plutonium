@@ -13,8 +13,7 @@ import net.bytebuddy.dynamic.DynamicType.Builder
 import net.bytebuddy.dynamic.loading.ClassLoadingStrategy
 import net.bytebuddy.dynamic.scaffold.subclass.ConstructorStrategy
 import net.bytebuddy.implementation.bind.annotation._
-import net.bytebuddy.implementation.{FieldAccessor, MethodDelegation}
-import net.bytebuddy.matcher.ElementMatcher.Junction
+import net.bytebuddy.implementation.{FieldAccessor, FixedValue, MethodDelegation}
 import net.bytebuddy.matcher.{BooleanMatcher, ElementMatcher, ElementMatchers}
 import resource.{ManagedResource, makeManagedResource}
 
@@ -106,20 +105,9 @@ object WorldImplementationCodeFactoring {
       val reflectedType = typeTag[Raw].tpe
       val clazzOfRaw = currentMirror.runtimeClass(reflectedType)
       items.exists { item =>
-        val itemClazz = itemClass(item)
+        val itemClazz = item.getClass
         itemClazz.isAssignableFrom(clazzOfRaw) && itemClazz != clazzOfRaw
       }
-    }
-
-    def itemClass[Raw <: Identified : TypeTag](item: Identified) = {
-      if (true) // TODO - detect ByteBuddy proxy here.
-      // HACK: in reality, everything with an id is likely to be an
-      // an instance of a ByteBuddy proxy subclass of 'Raw', so in
-      // this case we have to climb up one level in the class hierarchy
-      // in order to do type comparisons from the point of view of
-      // client code.
-        item.getClass.getSuperclass
-      else item.getClass
     }
 
     def yieldOnlyItemsOfSupertypeOf[Raw <: Identified : TypeTag](items: Traversable[Identified]) = {
@@ -128,7 +116,7 @@ object WorldImplementationCodeFactoring {
 
       items filter {
         item =>
-          val itemClazz = itemClass(item)
+          val itemClazz = item.getClass
           itemClazz.isAssignableFrom(clazzOfRaw) && itemClazz != clazzOfRaw
       }
     }
@@ -155,6 +143,8 @@ object WorldImplementationCodeFactoring {
 
   val byteBuddy = new ByteBuddy()
 
+  val matchGetClass: ElementMatcher[MethodDescription] = ElementMatchers.is(classOf[AnyRef].getMethod("getClass"))
+
   trait ProxyFactory {
     val isForRecordingOnly: Boolean
 
@@ -170,6 +160,7 @@ object WorldImplementationCodeFactoring {
       val builder = byteBuddy
         .subclass(clazz, ConstructorStrategy.Default.IMITATE_SUPER_CLASS_PUBLIC)
         .implement(additionalInterfaces.toSeq)
+        .method(matchGetClass).intercept(FixedValue.value(clazz))
         .ignoreAlso(ElementMatchers.named[MethodDescription]("_isGhost"))
         .defineField("acquiredState", classOf[AnyRef])
 
