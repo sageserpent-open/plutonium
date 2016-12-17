@@ -71,12 +71,6 @@ object WorldImplementationCodeFactoring {
           override val additionalInterfaces: Array[Class[_]] = RecordingCallbackStuff.additionalInterfaces
           override val cachedProxyConstructors: mutable.Map[Type, (universe.MethodMirror, Class[_])] = RecordingCallbackStuff.cachedProxyConstructors
 
-          // TODO - this is just a hokey no-operation - remove it!
-          class PermittedReadAccess {
-            @RuntimeType
-            def apply(@SuperCall superCall: Callable[_]) = superCall.call()
-          }
-
           override protected def configureInterceptions(builder: Builder[_]): Builder[_] =
             builder
               .method(matchMutation).intercept(MethodDelegation.to(mutation))
@@ -245,6 +239,12 @@ object WorldImplementationCodeFactoring {
     object itemReconstitutionData {
       @RuntimeType
       def apply(@RuntimeType @FieldValue("acquiredState") acquiredState: AcquiredState) = acquiredState.itemReconstitutionData
+    }
+
+    // TODO - this is just a hokey no-operation - remove it!
+    class PermittedReadAccess {
+      @RuntimeType
+      def apply(@SuperCall superCall: Callable[_]) = superCall.call()
     }
 
     object forbiddenReadAccess {
