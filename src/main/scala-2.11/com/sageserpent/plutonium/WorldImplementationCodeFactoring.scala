@@ -54,7 +54,7 @@ object WorldImplementationCodeFactoring {
     val patchesPickedUpFromAnEventBeingApplied = mutable.MutableList.empty[AbstractPatch]
 
     class LocalRecorderFactory extends RecorderFactory {
-      import RecordingCallbackStuff.AcquiredState
+      import RecordingCallbackStuff._
 
       override def apply[Raw <: Identified : TypeTag](id: Raw#Id): Raw = {
         val proxyFactory = new ProxyFactory {
@@ -71,48 +71,12 @@ object WorldImplementationCodeFactoring {
           override val additionalInterfaces: Array[Class[_]] = RecordingCallbackStuff.additionalInterfaces
           override val cachedProxyConstructors: mutable.Map[Type, (universe.MethodMirror, Class[_])] = RecordingCallbackStuff.cachedProxyConstructors
 
-          val matchItemReconstitutionData: ElementMatcher[MethodDescription] = methodDescription => firstMethodIsOverrideCompatibleWithSecond(methodDescription, IdentifiedItemsScope.itemReconstitutionDataProperty)
-
-          val matchPermittedReadAccess: ElementMatcher[MethodDescription] = methodDescription => IdentifiedItemsScope.alwaysAllowsReadAccessTo(methodDescription) || RecordingCallbackStuff.isFinalizer(methodDescription)
-
-          val matchForbiddenReadAccess: ElementMatcher[MethodDescription] = methodDescription => !methodDescription.getReturnType.represents(classOf[Unit])
-
-          val matchMutation: ElementMatcher[MethodDescription] = new BooleanMatcher(true)
-
-          class ItemReconstitutionData {
-            @RuntimeType
-            def apply(@RuntimeType @FieldValue("acquiredState") acquiredState: AcquiredState) = acquiredState.itemReconstitutionData
-          }
-
-          // TODO - this is just a hokey no-operation - remove it!
-          object permittedReadAccess {
-            @RuntimeType
-            def apply(@SuperCall superCall: Callable[_]) = superCall.call()
-          }
-
-          object forbiddenReadAccess {
-            @RuntimeType
-            def apply(@Origin method: Method, @This target: AnyRef) = {
-              throw new UnsupportedOperationException(s"Attempt to call method: '$method' with a non-unit return type on a recorder proxy: '$target' while capturing a change or measurement.")
-            }
-          }
-
-          object mutation {
-            @RuntimeType
-            def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @This target: AnyRef, @RuntimeType @FieldValue("acquiredState") acquiredState: AcquiredState) = {
-              val item = target.asInstanceOf[Recorder]
-              // Remember, the outer context is making a proxy of type 'Raw'.
-              acquiredState.capturePatch(Patch(item, method, arguments))
-              null // Representation of a unit value by a ByteBuddy interceptor.
-            }
-          }
-
           override protected def configureInterceptions(builder: Builder[_]): Builder[_] =
             builder
               .method(matchMutation).intercept(MethodDelegation.to(mutation))
               .method(matchForbiddenReadAccess).intercept(MethodDelegation.to(forbiddenReadAccess))
               .method(matchPermittedReadAccess).intercept(MethodDelegation.to(permittedReadAccess))
-              .method(matchItemReconstitutionData).intercept(MethodDelegation.to(new ItemReconstitutionData))
+              .method(matchItemReconstitutionData).intercept(MethodDelegation.to(itemReconstitutionData))
         }
 
         proxyFactory.constructFrom[Raw](id)
@@ -261,10 +225,44 @@ object WorldImplementationCodeFactoring {
 
     trait AcquiredState {
       def itemReconstitutionData: Recorder#ItemReconstitutionData[_ <: Identified]
-
       def capturePatch(patch: AbstractPatch): Unit
     }
 
+    val matchItemReconstitutionData: ElementMatcher[MethodDescription] = methodDescription => firstMethodIsOverrideCompatibleWithSecond(methodDescription, IdentifiedItemsScope.itemReconstitutionDataProperty)
+
+    val matchPermittedReadAccess: ElementMatcher[MethodDescription] = methodDescription => IdentifiedItemsScope.alwaysAllowsReadAccessTo(methodDescription) || RecordingCallbackStuff.isFinalizer(methodDescription)
+
+    val matchForbiddenReadAccess: ElementMatcher[MethodDescription] = methodDescription => !methodDescription.getReturnType.represents(classOf[Unit])
+
+    val matchMutation: ElementMatcher[MethodDescription] = new BooleanMatcher(true)
+
+    object itemReconstitutionData {
+      @RuntimeType
+      def apply(@RuntimeType @FieldValue("acquiredState") acquiredState: AcquiredState) = acquiredState.itemReconstitutionData
+    }
+
+    // TODO - this is just a hokey no-operation - remove it!
+    object permittedReadAccess {
+      @RuntimeType
+      def apply(@SuperCall superCall: Callable[_]) = superCall.call()
+    }
+
+    object forbiddenReadAccess {
+      @RuntimeType
+      def apply(@Origin method: Method, @This target: AnyRef) = {
+        throw new UnsupportedOperationException(s"Attempt to call method: '$method' with a non-unit return type on a recorder proxy: '$target' while capturing a change or measurement.")
+      }
+    }
+
+    object mutation {
+      @RuntimeType
+      def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @This target: AnyRef, @RuntimeType @FieldValue("acquiredState") acquiredState: AcquiredState) = {
+        val item = target.asInstanceOf[Recorder]
+        // Remember, the outer context is making a proxy of type 'Raw'.
+        acquiredState.capturePatch(Patch(item, method, arguments))
+        null // Representation of a unit value by a ByteBuddy interceptor.
+      }
+    }
   }
 
   object QueryCallbackStuff {
@@ -272,9 +270,66 @@ object WorldImplementationCodeFactoring {
     val cachedProxyConstructors = mutable.Map.empty[universe.Type, (universe.MethodMirror, Class[_])]
 
     trait AcquiredState extends AnnihilationHook {
+      def itemReconstitutionData: Recorder#ItemReconstitutionData[_ <: Identified]
       def itemsAreLocked: Boolean
     }
 
+    val matchRecordAnnihilation: ElementMatcher[MethodDescription] = methodDescription => firstMethodIsOverrideCompatibleWithSecond(methodDescription, IdentifiedItemsScope.isRecordAnnihilationMethod)
+
+    val matchMutation: ElementMatcher[MethodDescription] = methodDescription => methodDescription.getReturnType.represents(classOf[Unit]) && !WorldImplementationCodeFactoring.isInvariantCheck(methodDescription)
+
+    val matchIsGhost: ElementMatcher[MethodDescription] = methodDescription => firstMethodIsOverrideCompatibleWithSecond(methodDescription, IdentifiedItemsScope.isGhostProperty)
+
+    val matchUnconditionalReadAccess: ElementMatcher[MethodDescription] = methodDescription => IdentifiedItemsScope.alwaysAllowsReadAccessTo(methodDescription)
+
+    val matchCheckedReadAccess: ElementMatcher[MethodDescription] = new BooleanMatcher(true)
+
+    object recordAnnihilation {
+      @RuntimeType
+      def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @This target: AnyRef, @RuntimeType @FieldValue("acquiredState") acquiredState: AcquiredState) = {
+        acquiredState.recordAnnihilation()
+        null
+      }
+    }
+
+    object mutation {
+      @RuntimeType
+      def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @Super target: AnyRef, @SuperCall superCall: Callable[_], @RuntimeType @FieldValue("acquiredState") acquiredState: AcquiredState) = {
+        if (acquiredState.itemsAreLocked) {
+          throw new UnsupportedOperationException(s"Attempt to write via: '$method' to an item: '$target' rendered from a bitemporal query.")
+        }
+
+        if (acquiredState.isGhost) {
+          val itemReconstitutionData = acquiredState.itemReconstitutionData
+          throw new UnsupportedOperationException(s"Attempt to write via: '$method' to a ghost item of id: '${itemReconstitutionData._1}' and type '${itemReconstitutionData._2}'.")
+        }
+
+        superCall.call()
+      }
+    }
+
+    object isGhost {
+      @RuntimeType
+      def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @This target: AnyRef, @RuntimeType @FieldValue("acquiredState") acquiredState: AcquiredState) = acquiredState.isGhost
+    }
+
+    // TODO - this is just a hokey no-operation - remove it!
+    object unconditionalReadAccess {
+      @RuntimeType
+      def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @Super target: AnyRef, @SuperCall superCall: Callable[_]) = superCall.call()
+    }
+
+    object checkedReadAccess {
+      @RuntimeType
+      def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @Super target: AnyRef, @SuperCall superCall: Callable[_], @RuntimeType @FieldValue("acquiredState") acquiredState: AcquiredState) = {
+        if (acquiredState.isGhost) {
+          val itemReconstitutionData = acquiredState.itemReconstitutionData
+          throw new UnsupportedOperationException(s"Attempt to read via: '$method' from a ghost item of id: '${itemReconstitutionData._1}' and type '${itemReconstitutionData._2}'.")
+        }
+
+        superCall.call()
+      }
+    }
   }
 
   def firstMethodIsOverrideCompatibleWithSecond(firstMethod: MethodDescription, secondMethod: MethodDescription): Boolean = {
@@ -330,7 +385,7 @@ object WorldImplementationCodeFactoring {
     def itemFor[Raw <: Identified : TypeTag](id: Raw#Id): Raw = {
       def constructAndCacheItem(): Raw = {
         val proxyFactory = new ProxyFactory {
-          import QueryCallbackStuff.AcquiredState
+          import QueryCallbackStuff._
 
           val isForRecordingOnly = false
 
@@ -339,66 +394,12 @@ object WorldImplementationCodeFactoring {
           }
 
           override val stateToBeAcquiredByProxy: AcquiredState = new AcquiredState {
+            def itemReconstitutionData: Recorder#ItemReconstitutionData[Raw] = id -> typeTag[Raw]
             def itemsAreLocked: Boolean = identifiedItemsScopeThis.itemsAreLocked
           }
 
           override val additionalInterfaces: Array[Class[_]] = QueryCallbackStuff.additionalInterfaces
           override val cachedProxyConstructors: mutable.Map[universe.Type, (universe.MethodMirror, Class[_])] = QueryCallbackStuff.cachedProxyConstructors
-
-          val matchRecordAnnihilation: ElementMatcher[MethodDescription] = methodDescription => firstMethodIsOverrideCompatibleWithSecond(methodDescription, IdentifiedItemsScope.isRecordAnnihilationMethod)
-
-          val matchMutation: ElementMatcher[MethodDescription] = methodDescription => methodDescription.getReturnType.represents(classOf[Unit]) && !WorldImplementationCodeFactoring.isInvariantCheck(methodDescription)
-
-          val matchIsGhost: ElementMatcher[MethodDescription] = methodDescription => firstMethodIsOverrideCompatibleWithSecond(methodDescription, IdentifiedItemsScope.isGhostProperty)
-
-          val matchUnconditionalReadAccess: ElementMatcher[MethodDescription] = methodDescription => IdentifiedItemsScope.alwaysAllowsReadAccessTo(methodDescription)
-
-          val matchCheckedReadAccess: ElementMatcher[MethodDescription] = new BooleanMatcher(true)
-
-          class RecordAnnihilation {
-            @RuntimeType
-            def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @This target: AnyRef, @RuntimeType @FieldValue("acquiredState") acquiredState: AcquiredState) = {
-              acquiredState.recordAnnihilation()
-              null
-            }
-          }
-
-          object mutation {
-            @RuntimeType
-            def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @Super target: AnyRef, @SuperCall superCall: Callable[_], @RuntimeType @FieldValue("acquiredState") acquiredState: AcquiredState) = {
-              if (acquiredState.itemsAreLocked) {
-                throw new UnsupportedOperationException(s"Attempt to write via: '$method' to an item: '$target' rendered from a bitemporal query.")
-              }
-
-              if (acquiredState.isGhost) {
-                throw new UnsupportedOperationException(s"Attempt to write via: '$method' to a ghost item of id: '$id' and type '${typeOf[Raw]}'.")
-              }
-
-              superCall.call()
-            }
-          }
-
-          object isGhost {
-            @RuntimeType
-            def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @This target: AnyRef, @RuntimeType @FieldValue("acquiredState") acquiredState: AcquiredState) = acquiredState.isGhost
-          }
-
-          // TODO - this is just a hokey no-operation - remove it!
-          object unconditionalReadAccess {
-            @RuntimeType
-            def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @Super target: AnyRef, @SuperCall superCall: Callable[_]) = superCall.call()
-          }
-
-          object checkedReadAccess {
-            @RuntimeType
-            def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @Super target: AnyRef, @SuperCall superCall: Callable[_], @RuntimeType @FieldValue("acquiredState") acquiredState: AcquiredState) = {
-              if (acquiredState.isGhost) {
-                throw new UnsupportedOperationException(s"Attempt to read via: '$method' from a ghost item of id: '$id' and type '${typeOf[Raw]}'.")
-              }
-
-              superCall.call()
-            }
-          }
 
           override protected def configureInterceptions(builder: Builder[_]): Builder[_] =
             builder
@@ -406,7 +407,7 @@ object WorldImplementationCodeFactoring {
               .method(matchUnconditionalReadAccess).intercept(MethodDelegation.to(unconditionalReadAccess))
               .method(matchIsGhost).intercept(MethodDelegation.to(isGhost))
               .method(matchMutation).intercept(MethodDelegation.to(mutation))
-              .method(matchRecordAnnihilation).intercept(MethodDelegation.to(new RecordAnnihilation))
+              .method(matchRecordAnnihilation).intercept(MethodDelegation.to(recordAnnihilation))
         }
 
         val item = proxyFactory.constructFrom(id)
