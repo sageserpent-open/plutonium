@@ -22,6 +22,7 @@ import scala.collection.Searching._
 import scala.collection.mutable
 import scala.reflect.runtime._
 import scala.reflect.runtime.universe.{Super => _, This => _, _}
+
 /**
   * Created by Gerard on 19/07/2015.
   */
@@ -53,20 +54,19 @@ object WorldImplementationCodeFactoring {
     val patchesPickedUpFromAnEventBeingApplied = mutable.MutableList.empty[AbstractPatch]
 
     class LocalRecorderFactory extends RecorderFactory {
+      import RecordingCallbackStuff.AcquiredState
+
       override def apply[Raw <: Identified : TypeTag](id: Raw#Id): Raw = {
         val proxyFactory = new ProxyFactory {
           val isForRecordingOnly = true
 
-          class AcquiredState{
-            def itemReconstitutionData = id -> typeTag[Raw]
+          override val stateToBeAcquiredByProxy = new AcquiredState {
+            def itemReconstitutionData: Recorder#ItemReconstitutionData[Raw] = id -> typeTag[Raw]
+
             def capturePatch(patch: AbstractPatch) {
               patchesPickedUpFromAnEventBeingApplied += patch
             }
           }
-
-          override val stateToBeAcquiredByProxy: AcquiredState = new AcquiredState
-
-          val stateAcquisitionTrait = classOf[StateAcquisition]
 
           override val additionalInterfaces: Array[Class[_]] = RecordingCallbackStuff.additionalInterfaces
           override val cachedProxyConstructors: mutable.Map[Type, (universe.MethodMirror, Class[_])] = RecordingCallbackStuff.cachedProxyConstructors
@@ -88,7 +88,7 @@ object WorldImplementationCodeFactoring {
           object permittedReadAccess {
             @RuntimeType
             def apply(@SuperCall superCall: Callable[_]) = superCall.call()
-            }
+          }
 
           object forbiddenReadAccess {
             @RuntimeType
@@ -196,7 +196,7 @@ object WorldImplementationCodeFactoring {
 
     val stateToBeAcquiredByProxy: UntypedAcquiredState
 
-    private [plutonium] trait StateAcquisition {
+    private[plutonium] trait StateAcquisition {
       def acquire(acquiredState: UntypedAcquiredState)
     }
 
@@ -258,11 +258,23 @@ object WorldImplementationCodeFactoring {
     val cachedProxyConstructors = mutable.Map.empty[universe.Type, (universe.MethodMirror, Class[_])]
 
     def isFinalizer(methodDescription: MethodDescription): Boolean = methodDescription.getName == "finalize" && methodDescription.getParameters.isEmpty && methodDescription.getReturnType.represents(classOf[Unit])
+
+    trait AcquiredState {
+      def itemReconstitutionData: Recorder#ItemReconstitutionData[_ <: Identified]
+
+      def capturePatch(patch: AbstractPatch): Unit
+    }
+
   }
 
   object QueryCallbackStuff {
     val additionalInterfaces: Array[Class[_]] = Array(classOf[AnnihilationHook])
     val cachedProxyConstructors = mutable.Map.empty[universe.Type, (universe.MethodMirror, Class[_])]
+
+    trait AcquiredState extends AnnihilationHook {
+      def itemsAreLocked: Boolean
+    }
+
   }
 
   def firstMethodIsOverrideCompatibleWithSecond(firstMethod: MethodDescription, secondMethod: MethodDescription): Boolean = {
@@ -318,17 +330,17 @@ object WorldImplementationCodeFactoring {
     def itemFor[Raw <: Identified : TypeTag](id: Raw#Id): Raw = {
       def constructAndCacheItem(): Raw = {
         val proxyFactory = new ProxyFactory {
+          import QueryCallbackStuff.AcquiredState
+
           val isForRecordingOnly = false
 
-          class AcquiredState extends AnnihilationHook{
-            def itemsAreLocked: Boolean = identifiedItemsScopeThis.itemsAreLocked
-          }
-
-          private [plutonium] trait StateAcquisition {
+          private[plutonium] trait StateAcquisition {
             def acquire(acquiredState: AcquiredState)
           }
 
-          override val stateToBeAcquiredByProxy: AcquiredState = new AcquiredState
+          override val stateToBeAcquiredByProxy: AcquiredState = new AcquiredState {
+            def itemsAreLocked: Boolean = identifiedItemsScopeThis.itemsAreLocked
+          }
 
           override val additionalInterfaces: Array[Class[_]] = QueryCallbackStuff.additionalInterfaces
           override val cachedProxyConstructors: mutable.Map[universe.Type, (universe.MethodMirror, Class[_])] = QueryCallbackStuff.cachedProxyConstructors
