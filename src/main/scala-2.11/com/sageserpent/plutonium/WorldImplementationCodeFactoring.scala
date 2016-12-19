@@ -387,10 +387,6 @@ object WorldImplementationCodeFactoring {
 
           val isForRecordingOnly = false
 
-          private[plutonium] trait StateAcquisition {
-            def acquire(acquiredState: AcquiredState)
-          }
-
           override val stateToBeAcquiredByProxy: AcquiredState = new AcquiredState {
             def itemReconstitutionData: Recorder#ItemReconstitutionData[Raw] = id -> typeTag[Raw]
 
