@@ -3,17 +3,26 @@ package com.sageserpent.plutonium
 import java.lang.reflect.{Method, Modifier}
 import java.time.Instant
 import java.util.Optional
+import java.util.concurrent.Callable
 
 import com.sageserpent.americium.{Finite, NegativeInfinity, PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.World.Revision
-import net.sf.cglib.proxy._
+import net.bytebuddy.ByteBuddy
+import net.bytebuddy.description.`type`.TypeDescription
+import net.bytebuddy.description.method.MethodDescription
+import net.bytebuddy.dynamic.DynamicType.Builder
+import net.bytebuddy.dynamic.loading.ClassLoadingStrategy
+import net.bytebuddy.dynamic.scaffold.subclass.ConstructorStrategy
+import net.bytebuddy.implementation.bind.annotation._
+import net.bytebuddy.implementation.{FieldAccessor, FixedValue, MethodDelegation}
+import net.bytebuddy.matcher.{BooleanMatcher, ElementMatcher, ElementMatchers}
 import resource.{ManagedResource, makeManagedResource}
 
 import scala.collection.JavaConversions._
 import scala.collection.Searching._
 import scala.collection.mutable
 import scala.reflect.runtime._
-import scala.reflect.runtime.universe._
+import scala.reflect.runtime.universe.{Super => _, This => _, _}
 
 /**
   * Created by Gerard on 19/07/2015.
@@ -47,34 +56,30 @@ object WorldImplementationCodeFactoring {
 
     class LocalRecorderFactory extends RecorderFactory {
       override def apply[Raw <: Identified : TypeTag](id: Raw#Id): Raw = {
-        val proxyFactory = new ProxyFactory {
+        import RecordingCallbackStuff._
+
+        val proxyFactory = new ProxyFactory[AcquiredState] {
           val isForRecordingOnly = true
 
-          val itemReconstitutionCallback = new FixedValue {
-            override def loadObject(): AnyRef = id -> typeTag[Raw]
-          }
+          override val stateToBeAcquiredByProxy = new AcquiredState {
+            def itemReconstitutionData: Recorder#ItemReconstitutionData[Raw] = id -> typeTag[Raw]
 
-          val permittedReadAccessCallback = NoOp.INSTANCE
-
-          val forbiddenReadAccessCallback = new FixedValue {
-            override def loadObject(): AnyRef = throw new UnsupportedOperationException("Attempt to call method: '$method' with a non-unit return type on a recorder proxy: '$target' while capturing a change or measurement.")
-          }
-
-          val mutationCallback = new MethodInterceptor {
-            override def intercept(target: Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy): AnyRef = {
-              val item = target.asInstanceOf[Recorder]
-              // Remember, the outer context is making a proxy of type 'Raw'.
-              val capturedPatch = Patch(item, method, arguments, methodProxy)
-              patchesPickedUpFromAnEventBeingApplied += capturedPatch
-              null // Representation of a unit value by a CGLIB interceptor.
+            def capturePatch(patch: AbstractPatch) {
+              patchesPickedUpFromAnEventBeingApplied += patch
             }
           }
 
-          val callbacks = Array(itemReconstitutionCallback, permittedReadAccessCallback, forbiddenReadAccessCallback, mutationCallback)
+          override val acquiredStateClazz = classOf[AcquiredState]
 
-          override val callbackFilter: CallbackFilter = RecordingCallbackStuff.callbackFilter
           override val additionalInterfaces: Array[Class[_]] = RecordingCallbackStuff.additionalInterfaces
           override val cachedProxyConstructors: mutable.Map[Type, (universe.MethodMirror, Class[_])] = RecordingCallbackStuff.cachedProxyConstructors
+
+          override protected def configureInterceptions(builder: Builder[_]): Builder[_] =
+            builder
+              .method(matchMutation).intercept(MethodDelegation.to(mutation))
+              .method(matchForbiddenReadAccess).intercept(MethodDelegation.to(forbiddenReadAccess))
+              .method(matchPermittedReadAccess).intercept(MethodDelegation.to(new PermittedReadAccess))
+              .method(matchItemReconstitutionData).intercept(MethodDelegation.to(itemReconstitutionData))
         }
 
         proxyFactory.constructFrom[Raw](id)
@@ -102,19 +107,9 @@ object WorldImplementationCodeFactoring {
       val reflectedType = typeTag[Raw].tpe
       val clazzOfRaw = currentMirror.runtimeClass(reflectedType)
       items.exists { item =>
-        val itemClazz = itemClass(item)
+        val itemClazz = item.getClass
         itemClazz.isAssignableFrom(clazzOfRaw) && itemClazz != clazzOfRaw
       }
-    }
-
-    def itemClass[Raw <: Identified : TypeTag](item: Identified) = {
-      if (Enhancer.isEnhanced(item.getClass))
-      // HACK: in reality, everything with an id is likely to be an
-      // an instance of a proxy subclass of 'Raw', so in this case we
-      // have to climb up one level in the class hierarchy in order
-      // to do type comparisons from the point of view of client code.
-        item.getClass.getSuperclass
-      else item.getClass
     }
 
     def yieldOnlyItemsOfSupertypeOf[Raw <: Identified : TypeTag](items: Traversable[Identified]) = {
@@ -123,7 +118,7 @@ object WorldImplementationCodeFactoring {
 
       items filter {
         item =>
-          val itemClazz = itemClass(item)
+          val itemClazz = item.getClass
           itemClazz.isAssignableFrom(clazzOfRaw) && itemClazz != clazzOfRaw
       }
     }
@@ -135,29 +130,50 @@ object WorldImplementationCodeFactoring {
       items.toStream filter (clazzOfRaw.isInstance(_)) map (clazzOfRaw.cast(_))
     }
 
-    def alwaysAllowsReadAccessTo(method: Method) = nonMutableMembersThatCanAlwaysBeReadFrom.exists(exclusionMethod => {
+    def alwaysAllowsReadAccessTo(method: MethodDescription) = nonMutableMembersThatCanAlwaysBeReadFrom.exists(exclusionMethod => {
       firstMethodIsOverrideCompatibleWithSecond(method, exclusionMethod)
     })
 
-    val nonMutableMembersThatCanAlwaysBeReadFrom = classOf[Identified].getMethods ++ classOf[AnyRef].getMethods
+    val nonMutableMembersThatCanAlwaysBeReadFrom = (classOf[Identified].getMethods ++ classOf[AnyRef].getMethods) map (new MethodDescription.ForLoadedMethod(_))
 
-    val itemReconstitutionDataProperty = classOf[Recorder].getMethod("itemReconstitutionData")
+    val itemReconstitutionDataProperty = new MethodDescription.ForLoadedMethod(classOf[Recorder].getMethod("itemReconstitutionData"))
 
-    val isGhostProperty = classOf[Identified].getMethod("isGhost")
+    val isGhostProperty = new MethodDescription.ForLoadedMethod(classOf[Identified].getMethod("isGhost"))
 
-    val isRecordAnnihilationMethod = classOf[AnnihilationHook].getMethod("recordAnnihilation")
+    val isRecordAnnihilationMethod = new MethodDescription.ForLoadedMethod(classOf[AnnihilationHook].getMethod("recordAnnihilation"))
   }
 
-  trait ProxyFactory {
+  val byteBuddy = new ByteBuddy()
+
+  val matchGetClass: ElementMatcher[MethodDescription] = ElementMatchers.is(classOf[AnyRef].getMethod("getClass"))
+
+  private[plutonium] trait StateAcquisition[AcquiredState] {
+    def acquire(acquiredState: AcquiredState)
+  }
+
+  trait ProxyFactory[AcquiredState <: AnyRef] {
+    val isForRecordingOnly: Boolean
+
+    val stateToBeAcquiredByProxy: AcquiredState
+
+    val acquiredStateClazz: Class[_ <: AcquiredState]
+
     private def createProxyClass(clazz: Class[_]): Class[_] = {
-      val enhancer = new Enhancer
-      enhancer.setInterceptDuringConstruction(false)
-      enhancer.setSuperclass(clazz)
-      enhancer.setInterfaces(additionalInterfaces)
-      enhancer.setCallbackFilter(callbackFilter)
-      enhancer.setCallbackTypes(callbacks map (_.getClass))
-      enhancer.createClass()
+      val builder = byteBuddy
+        .subclass(clazz, ConstructorStrategy.Default.IMITATE_SUPER_CLASS_PUBLIC)
+        .implement(additionalInterfaces.toSeq)
+        .method(matchGetClass).intercept(FixedValue.value(clazz))
+        .ignoreAlso(ElementMatchers.named[MethodDescription]("_isGhost"))
+        .defineField("acquiredState", acquiredStateClazz)
+
+      val stateAcquisitionTypeBuilder = TypeDescription.Generic.Builder.parameterizedType(classOf[StateAcquisition[AcquiredState]], Seq(acquiredStateClazz))
+
+      val builderWithInterceptions = configureInterceptions(builder).implement(stateAcquisitionTypeBuilder.build).method(ElementMatchers.named("acquire")).intercept(FieldAccessor.ofField("acquiredState"))
+
+      builderWithInterceptions.make().load(getClass.getClassLoader, ClassLoadingStrategy.Default.INJECTION).getLoaded
     }
+
+    protected def configureInterceptions(builder: Builder[_]): Builder[_]
 
     private def constructorFor(identifiableType: Type) = {
       val clazz = currentMirror.runtimeClass(identifiableType.typeSymbol.asClass)
@@ -188,74 +204,150 @@ object WorldImplementationCodeFactoring {
         throw new UnsupportedOperationException(s"Attempt to create an instance of an abstract class '$clazz' for id: '$id'.")
       }
       val proxy = constructor(id).asInstanceOf[Raw]
-      val proxyFactoryApi = proxy.asInstanceOf[Factory]
-      proxyFactoryApi.setCallbacks(callbacks) // TODO - hopefully, this won't be necessary!
+
+      proxy.asInstanceOf[StateAcquisition[AcquiredState]].acquire(stateToBeAcquiredByProxy)
+
       proxy
     }
 
-    val isForRecordingOnly: Boolean
-    
-    protected val callbacks: Array[Callback]
-    protected val callbackFilter: CallbackFilter
     protected val additionalInterfaces: Array[Class[_]]
     protected val cachedProxyConstructors: scala.collection.mutable.Map[(Type), (universe.MethodMirror, Class[_])]
   }
 
   object RecordingCallbackStuff {
-    val itemReconstitutionDataIndex = 0
-    val permittedReadAccessIndex = 1
-    val forbiddenReadAccessIndex = 2
-    val mutationIndex = 3
-
     val additionalInterfaces: Array[Class[_]] = Array(classOf[Recorder])
+    val cachedProxyConstructors = mutable.Map.empty[universe.Type, (universe.MethodMirror, Class[_])]
 
-    val callbackFilter = new CallbackFilter {
-      override def accept(method: Method): Revision = {
-        def isFinalizer: Boolean = method.getName == "finalize" && method.getParameterCount == 0 && method.getReturnType == classOf[Unit]
+    def isFinalizer(methodDescription: MethodDescription): Boolean = methodDescription.getName == "finalize" && methodDescription.getParameters.isEmpty && methodDescription.getReturnType.represents(classOf[Unit])
 
-        if (firstMethodIsOverrideCompatibleWithSecond(method, IdentifiedItemsScope.itemReconstitutionDataProperty)) itemReconstitutionDataIndex
-        else if (IdentifiedItemsScope.alwaysAllowsReadAccessTo(method) || isFinalizer) permittedReadAccessIndex
-        else if (method.getReturnType != classOf[Unit]) forbiddenReadAccessIndex
-        else mutationIndex
+    trait AcquiredState {
+      def itemReconstitutionData: Recorder#ItemReconstitutionData[_ <: Identified]
+
+      def capturePatch(patch: AbstractPatch): Unit
+    }
+
+    val matchItemReconstitutionData: ElementMatcher[MethodDescription] = methodDescription => firstMethodIsOverrideCompatibleWithSecond(methodDescription, IdentifiedItemsScope.itemReconstitutionDataProperty)
+
+    val matchPermittedReadAccess: ElementMatcher[MethodDescription] = methodDescription => !methodDescription.isAbstract && IdentifiedItemsScope.alwaysAllowsReadAccessTo(methodDescription) || RecordingCallbackStuff.isFinalizer(methodDescription)
+
+    val matchForbiddenReadAccess: ElementMatcher[MethodDescription] = methodDescription => !methodDescription.getReturnType.represents(classOf[Unit])
+
+    val matchMutation: ElementMatcher[MethodDescription] = methodDescription => !methodDescription.isAbstract
+
+    object itemReconstitutionData {
+      @RuntimeType
+      def apply(@RuntimeType @FieldValue("acquiredState") acquiredState: AcquiredState) = acquiredState.itemReconstitutionData
+    }
+
+    // TODO - this is just a hokey no-operation - remove it!
+    class PermittedReadAccess {
+      @RuntimeType
+      def apply(@SuperCall superCall: Callable[_]) = superCall.call()
+    }
+
+    object forbiddenReadAccess {
+      @RuntimeType
+      def apply(@Origin method: Method, @This target: AnyRef) = {
+        throw new UnsupportedOperationException(s"Attempt to call method: '$method' with a non-unit return type on a recorder proxy: '$target' while capturing a change or measurement.")
       }
     }
 
-    val cachedProxyConstructors = mutable.Map.empty[universe.Type, (universe.MethodMirror, Class[_])]
+    object mutation {
+      @RuntimeType
+      def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @This target: AnyRef, @RuntimeType @FieldValue("acquiredState") acquiredState: AcquiredState) = {
+        val item = target.asInstanceOf[Recorder]
+        // Remember, the outer context is making a proxy of type 'Raw'.
+        acquiredState.capturePatch(Patch(item, method, arguments))
+        null // Representation of a unit value by a ByteBuddy interceptor.
+      }
+    }
+
   }
 
   object QueryCallbackStuff {
-    val mutationIndex = 0
-    val isGhostIndex = 1
-    val recordAnnihilationIndex = 2
-    val checkedReadAccessIndex = 3
-    val unconditionalReadAccessIndex = 4
-
     val additionalInterfaces: Array[Class[_]] = Array(classOf[AnnihilationHook])
+    val cachedProxyConstructors = mutable.Map.empty[universe.Type, (universe.MethodMirror, Class[_])]
 
-    val callbackFilter = new CallbackFilter {
-      override def accept(method: Method): Revision = {
-        if (firstMethodIsOverrideCompatibleWithSecond(method, IdentifiedItemsScope.isRecordAnnihilationMethod)) recordAnnihilationIndex
-        else if (method.getReturnType == classOf[Unit] && !WorldImplementationCodeFactoring.isInvariantCheck(method)) mutationIndex
-        else if (firstMethodIsOverrideCompatibleWithSecond(method, IdentifiedItemsScope.isGhostProperty)) isGhostIndex
-        else if (IdentifiedItemsScope.alwaysAllowsReadAccessTo(method)) unconditionalReadAccessIndex
-        else checkedReadAccessIndex
+    trait AcquiredState extends AnnihilationHook {
+      def itemReconstitutionData: Recorder#ItemReconstitutionData[_ <: Identified]
+
+      def itemsAreLocked: Boolean
+    }
+
+    val matchRecordAnnihilation: ElementMatcher[MethodDescription] = methodDescription => firstMethodIsOverrideCompatibleWithSecond(methodDescription, IdentifiedItemsScope.isRecordAnnihilationMethod)
+
+    val matchMutation: ElementMatcher[MethodDescription] = methodDescription => methodDescription.getReturnType.represents(classOf[Unit]) && !WorldImplementationCodeFactoring.isInvariantCheck(methodDescription)
+
+    val matchIsGhost: ElementMatcher[MethodDescription] = methodDescription => firstMethodIsOverrideCompatibleWithSecond(methodDescription, IdentifiedItemsScope.isGhostProperty)
+
+    val matchUnconditionalReadAccess: ElementMatcher[MethodDescription] = methodDescription => IdentifiedItemsScope.alwaysAllowsReadAccessTo(methodDescription)
+
+    val matchCheckedReadAccess: ElementMatcher[MethodDescription] = new BooleanMatcher(true)
+
+    object recordAnnihilation {
+      @RuntimeType
+      def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @This target: AnyRef, @RuntimeType @FieldValue("acquiredState") acquiredState: AcquiredState) = {
+        acquiredState.recordAnnihilation()
+        null
       }
     }
 
-    val cachedProxyConstructors = mutable.Map.empty[universe.Type, (universe.MethodMirror, Class[_])]
+    object mutation {
+      @RuntimeType
+      def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @Super target: AnyRef, @SuperCall superCall: Callable[_], @RuntimeType @FieldValue("acquiredState") acquiredState: AcquiredState) = {
+        if (acquiredState.itemsAreLocked) {
+          throw new UnsupportedOperationException(s"Attempt to write via: '$method' to an item: '$target' rendered from a bitemporal query.")
+        }
+
+        if (acquiredState.isGhost) {
+          val itemReconstitutionData = acquiredState.itemReconstitutionData
+          throw new UnsupportedOperationException(s"Attempt to write via: '$method' to a ghost item of id: '${itemReconstitutionData._1}' and type '${itemReconstitutionData._2}'.")
+        }
+
+        superCall.call()
+      }
+    }
+
+    object isGhost {
+      @RuntimeType
+      def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @This target: AnyRef, @RuntimeType @FieldValue("acquiredState") acquiredState: AcquiredState) = acquiredState.isGhost
+    }
+
+    // TODO - this is just a hokey no-operation - remove it!
+    object unconditionalReadAccess {
+      @RuntimeType
+      def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @Super target: AnyRef, @SuperCall superCall: Callable[_]) = superCall.call()
+    }
+
+    object checkedReadAccess {
+      @RuntimeType
+      def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @Super target: AnyRef, @SuperCall superCall: Callable[_], @RuntimeType @FieldValue("acquiredState") acquiredState: AcquiredState) = {
+        if (acquiredState.isGhost) {
+          val itemReconstitutionData = acquiredState.itemReconstitutionData
+          throw new UnsupportedOperationException(s"Attempt to read via: '$method' from a ghost item of id: '${itemReconstitutionData._1}' and type '${itemReconstitutionData._2}'.")
+        }
+
+        superCall.call()
+      }
+    }
+
+  }
+
+  def firstMethodIsOverrideCompatibleWithSecond(firstMethod: MethodDescription, secondMethod: MethodDescription): Boolean = {
+    secondMethod.getName == firstMethod.getName &&
+      secondMethod.getReceiverType.asErasure.isAssignableFrom(firstMethod.getReceiverType.asErasure) &&
+      secondMethod.getReturnType.asErasure.isAssignableFrom(firstMethod.getReturnType.asErasure) &&
+      secondMethod.getParameters.size == firstMethod.getParameters.size &&
+      secondMethod.getParameters.toSeq.map(_.getType) == firstMethod.getParameters.toSeq.map(_.getType) // What about contravariance? Hmmm...
   }
 
   def firstMethodIsOverrideCompatibleWithSecond(firstMethod: Method, secondMethod: Method): Boolean = {
-    secondMethod.getName == firstMethod.getName &&
-      secondMethod.getDeclaringClass.isAssignableFrom(firstMethod.getDeclaringClass) &&
-      secondMethod.getReturnType.isAssignableFrom(firstMethod.getReturnType) &&
-      secondMethod.getParameterCount == firstMethod.getParameterCount &&
-      secondMethod.getParameterTypes.toSeq == firstMethod.getParameterTypes.toSeq // What about contravariance? Hmmm...
+    firstMethodIsOverrideCompatibleWithSecond(new MethodDescription.ForLoadedMethod(firstMethod), new MethodDescription.ForLoadedMethod(secondMethod))
   }
 
-  val invariantCheckMethod = classOf[Identified].getMethod("checkInvariant")
+  val invariantCheckMethod = new MethodDescription.ForLoadedMethod(classOf[Identified].getMethod("checkInvariant"))
 
-  def isInvariantCheck(method: Method): Boolean = firstMethodIsOverrideCompatibleWithSecond(method, invariantCheckMethod)
+  def isInvariantCheck(method: MethodDescription): Boolean = firstMethodIsOverrideCompatibleWithSecond(method, invariantCheckMethod)
 
   class IdentifiedItemsScope {
     identifiedItemsScopeThis =>
@@ -293,53 +385,29 @@ object WorldImplementationCodeFactoring {
 
     def itemFor[Raw <: Identified : TypeTag](id: Raw#Id): Raw = {
       def constructAndCacheItem(): Raw = {
-        val proxyFactory = new ProxyFactory {
+        import QueryCallbackStuff._
+
+        val proxyFactory = new ProxyFactory[AcquiredState] {
           val isForRecordingOnly = false
 
-          val isGhostCallback = new FixedValue with AnnihilationHook {
-            override def loadObject(): AnyRef = {
-              boolean2Boolean(isGhost)
-            }
+          override val stateToBeAcquiredByProxy: AcquiredState = new AcquiredState {
+            def itemReconstitutionData: Recorder#ItemReconstitutionData[Raw] = id -> typeTag[Raw]
+
+            def itemsAreLocked: Boolean = identifiedItemsScopeThis.itemsAreLocked
           }
 
-          val recordAnnihilationCallback = new FixedValue {
-            override def loadObject(): AnyRef = {
-              isGhostCallback.recordAnnihilation()
-              null
-            }
-          }
+          override val acquiredStateClazz = classOf[AcquiredState]
 
-          val mutationCallback = new MethodInterceptor {
-            override def intercept(target: Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy): AnyRef = {
-              if (itemsAreLocked) {
-                throw new UnsupportedOperationException(s"Attempt to write via: '$method' to an item: '$target' rendered from a bitemporal query.")
-              }
-
-              if (isGhostCallback.isGhost) {
-                throw new UnsupportedOperationException(s"Attempt to write via: '$method' to a ghost item of id: '$id' and type '${typeOf[Raw]}'.")
-              }
-
-              methodProxy.invokeSuper(target, arguments)
-            }
-          }
-
-          val checkedReadAccessCallback = new MethodInterceptor {
-            override def intercept(target: Any, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy): AnyRef = {
-              if (isGhostCallback.isGhost) {
-                throw new UnsupportedOperationException(s"Attempt to read via: '$method' from a ghost item of id: '$id' and type '${typeOf[Raw]}'.")
-              }
-
-              methodProxy.invokeSuper(target, arguments)
-            }
-          }
-
-          val unconditionalReadAccessCallback = NoOp.INSTANCE
-
-          val callbacks = Array(mutationCallback, isGhostCallback, recordAnnihilationCallback, checkedReadAccessCallback, unconditionalReadAccessCallback)
-
-          override val callbackFilter: CallbackFilter = QueryCallbackStuff.callbackFilter
           override val additionalInterfaces: Array[Class[_]] = QueryCallbackStuff.additionalInterfaces
           override val cachedProxyConstructors: mutable.Map[universe.Type, (universe.MethodMirror, Class[_])] = QueryCallbackStuff.cachedProxyConstructors
+
+          override protected def configureInterceptions(builder: Builder[_]): Builder[_] =
+            builder
+              .method(matchCheckedReadAccess).intercept(MethodDelegation.to(checkedReadAccess))
+              .method(matchUnconditionalReadAccess).intercept(MethodDelegation.to(unconditionalReadAccess))
+              .method(matchIsGhost).intercept(MethodDelegation.to(isGhost))
+              .method(matchMutation).intercept(MethodDelegation.to(mutation))
+              .method(matchRecordAnnihilation).intercept(MethodDelegation.to(recordAnnihilation))
         }
 
         val item = proxyFactory.constructFrom(id)
