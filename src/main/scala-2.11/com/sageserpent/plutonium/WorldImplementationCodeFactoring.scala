@@ -76,10 +76,9 @@ object WorldImplementationCodeFactoring {
 
           override protected def configureInterceptions(builder: Builder[_]): Builder[_] =
             builder
-              .method(matchMutation).intercept(MethodDelegation.to(mutation))
               .method(matchForbiddenReadAccess).intercept(MethodDelegation.to(forbiddenReadAccess))
-              .method(matchPermittedReadAccess).intercept(MethodDelegation.to(permittedReadAccess))
               .method(matchItemReconstitutionData).intercept(MethodDelegation.to(itemReconstitutionData))
+              .method(matchMutation).intercept(MethodDelegation.to(mutation))
         }
 
         proxyFactory.constructFrom[Raw](id)
@@ -226,31 +225,12 @@ object WorldImplementationCodeFactoring {
       def capturePatch(patch: AbstractPatch): Unit
     }
 
+
+    val matchMutation: ElementMatcher[MethodDescription] = methodDescription => methodDescription.getReturnType.represents(classOf[Unit]) && !methodDescription.isAbstract
+
     val matchItemReconstitutionData: ElementMatcher[MethodDescription] = methodDescription => firstMethodIsOverrideCompatibleWithSecond(methodDescription, IdentifiedItemsScope.itemReconstitutionDataProperty)
 
-    val matchPermittedReadAccess: ElementMatcher[MethodDescription] = methodDescription => !methodDescription.isAbstract && IdentifiedItemsScope.alwaysAllowsReadAccessTo(methodDescription) || RecordingCallbackStuff.isFinalizer(methodDescription)
-
-    val matchForbiddenReadAccess: ElementMatcher[MethodDescription] = methodDescription => !methodDescription.getReturnType.represents(classOf[Unit])
-
-    val matchMutation: ElementMatcher[MethodDescription] = methodDescription => !methodDescription.isAbstract
-
-    object itemReconstitutionData {
-      @RuntimeType
-      def apply(@FieldValue("acquiredState") acquiredState: AcquiredState) = acquiredState.itemReconstitutionData
-    }
-
-    // TODO - this is just a hokey no-operation - remove it!
-    object permittedReadAccess {
-      @RuntimeType
-      def apply(@SuperCall superCall: Callable[_]) = superCall.call()
-    }
-
-    object forbiddenReadAccess {
-      @RuntimeType
-      def apply(@Origin method: Method, @This target: AnyRef) = {
-        throw new UnsupportedOperationException(s"Attempt to call method: '$method' with a non-unit return type on a recorder proxy: '$target' while capturing a change or measurement.")
-      }
-    }
+    val matchForbiddenReadAccess: ElementMatcher[MethodDescription] = methodDescription => (methodDescription.isAbstract || !IdentifiedItemsScope.alwaysAllowsReadAccessTo(methodDescription)) && !RecordingCallbackStuff.isFinalizer(methodDescription)
 
     object mutation {
       @RuntimeType
@@ -262,6 +242,17 @@ object WorldImplementationCodeFactoring {
       }
     }
 
+    object itemReconstitutionData {
+      @RuntimeType
+      def apply(@FieldValue("acquiredState") acquiredState: AcquiredState) = acquiredState.itemReconstitutionData
+    }
+
+    object forbiddenReadAccess {
+      @RuntimeType
+      def apply(@Origin method: Method, @This target: AnyRef) = {
+        throw new UnsupportedOperationException(s"Attempt to call method: '$method' with a non-unit return type on a recorder proxy: '$target' while capturing a change or measurement.")
+      }
+    }
   }
 
   object QueryCallbackStuff {
