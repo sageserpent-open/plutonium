@@ -170,8 +170,8 @@ class WorldRedisBasedImplementation[EventId](redisClient: RedisClient, identityG
       } yield eventIdAndDataPair
   }
 
-  def pertinentEventDatumsObservable(cutoffRevision: Revision, eventIds: Iterable[EventId]): Observable[AbstractEventData] = {
-    val eventIdsToBeExcluded = eventIds.toSet
+  def pertinentEventDatumsObservable(cutoffRevision: Revision, eventIdsForNewEvents: Iterable[EventId]): Observable[AbstractEventData] = {
+    val eventIdsToBeExcluded = eventIdsForNewEvents.toSet
     pertinentEventDatumsObservable(cutoffRevision, PositiveInfinity(), eventId => !eventIdsToBeExcluded.contains(eventId))
   }
 
