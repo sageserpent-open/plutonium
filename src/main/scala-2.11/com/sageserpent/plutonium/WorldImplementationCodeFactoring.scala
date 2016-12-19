@@ -280,9 +280,7 @@ object WorldImplementationCodeFactoring {
 
     val matchIsGhost: ElementMatcher[MethodDescription] = methodDescription => firstMethodIsOverrideCompatibleWithSecond(methodDescription, IdentifiedItemsScope.isGhostProperty)
 
-    val matchUnconditionalReadAccess: ElementMatcher[MethodDescription] = methodDescription => IdentifiedItemsScope.alwaysAllowsReadAccessTo(methodDescription)
-
-    val matchCheckedReadAccess: ElementMatcher[MethodDescription] = new BooleanMatcher(true)
+    val matchCheckedReadAccess: ElementMatcher[MethodDescription] = methodDescription => !IdentifiedItemsScope.alwaysAllowsReadAccessTo(methodDescription)
 
     object recordAnnihilation {
       @RuntimeType
@@ -311,12 +309,6 @@ object WorldImplementationCodeFactoring {
     object isGhost {
       @RuntimeType
       def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @This target: AnyRef, @FieldValue("acquiredState") acquiredState: AcquiredState) = acquiredState.isGhost
-    }
-
-    // TODO - this is just a hokey no-operation - remove it!
-    object unconditionalReadAccess {
-      @RuntimeType
-      def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @Super target: AnyRef, @SuperCall superCall: Callable[_]) = superCall.call()
     }
 
     object checkedReadAccess {
@@ -404,7 +396,6 @@ object WorldImplementationCodeFactoring {
           override protected def configureInterceptions(builder: Builder[_]): Builder[_] =
             builder
               .method(matchCheckedReadAccess).intercept(MethodDelegation.to(checkedReadAccess))
-              .method(matchUnconditionalReadAccess).intercept(MethodDelegation.to(unconditionalReadAccess))
               .method(matchIsGhost).intercept(MethodDelegation.to(isGhost))
               .method(matchMutation).intercept(MethodDelegation.to(mutation))
               .method(matchRecordAnnihilation).intercept(MethodDelegation.to(recordAnnihilation))
