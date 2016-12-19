@@ -8,6 +8,7 @@ import java.util.concurrent.Callable
 import com.sageserpent.americium.{Finite, NegativeInfinity, PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.World.Revision
 import net.bytebuddy.ByteBuddy
+import net.bytebuddy.description.`type`.TypeDescription
 import net.bytebuddy.description.method.MethodDescription
 import net.bytebuddy.dynamic.DynamicType.Builder
 import net.bytebuddy.dynamic.loading.ClassLoadingStrategy
@@ -54,11 +55,10 @@ object WorldImplementationCodeFactoring {
     val patchesPickedUpFromAnEventBeingApplied = mutable.MutableList.empty[AbstractPatch]
 
     class LocalRecorderFactory extends RecorderFactory {
-
-      import RecordingCallbackStuff._
-
       override def apply[Raw <: Identified : TypeTag](id: Raw#Id): Raw = {
-        val proxyFactory = new ProxyFactory {
+        import RecordingCallbackStuff._
+
+        val proxyFactory = new ProxyFactory[AcquiredState] {
           val isForRecordingOnly = true
 
           override val stateToBeAcquiredByProxy = new AcquiredState {
@@ -68,6 +68,8 @@ object WorldImplementationCodeFactoring {
               patchesPickedUpFromAnEventBeingApplied += patch
             }
           }
+
+          override val acquiredStateClazz = classOf[AcquiredState]
 
           override val additionalInterfaces: Array[Class[_]] = RecordingCallbackStuff.additionalInterfaces
           override val cachedProxyConstructors: mutable.Map[Type, (universe.MethodMirror, Class[_])] = RecordingCallbackStuff.cachedProxyConstructors
@@ -145,16 +147,16 @@ object WorldImplementationCodeFactoring {
 
   val matchGetClass: ElementMatcher[MethodDescription] = ElementMatchers.is(classOf[AnyRef].getMethod("getClass"))
 
-  trait ProxyFactory {
+  private[plutonium] trait StateAcquisition[AcquiredState] {
+    def acquire(acquiredState: AcquiredState)
+  }
+
+  trait ProxyFactory[AcquiredState <: AnyRef] {
     val isForRecordingOnly: Boolean
 
-    type UntypedAcquiredState = AnyRef
+    val stateToBeAcquiredByProxy: AcquiredState
 
-    val stateToBeAcquiredByProxy: UntypedAcquiredState
-
-    private[plutonium] trait StateAcquisition {
-      def acquire(acquiredState: UntypedAcquiredState)
-    }
+    val acquiredStateClazz: Class[_ <: AcquiredState]
 
     private def createProxyClass(clazz: Class[_]): Class[_] = {
       val builder = byteBuddy
@@ -162,9 +164,11 @@ object WorldImplementationCodeFactoring {
         .implement(additionalInterfaces.toSeq)
         .method(matchGetClass).intercept(FixedValue.value(clazz))
         .ignoreAlso(ElementMatchers.named[MethodDescription]("_isGhost"))
-        .defineField("acquiredState", classOf[AnyRef])
+        .defineField("acquiredState", acquiredStateClazz)
 
-      val builderWithInterceptions = configureInterceptions(builder).implement(classOf[StateAcquisition]).method(ElementMatchers.named("acquire")).intercept(FieldAccessor.ofField("acquiredState"))
+      val stateAcquisitionTypeBuilder = TypeDescription.Generic.Builder.parameterizedType(classOf[StateAcquisition[AcquiredState]], Seq(acquiredStateClazz))
+
+      val builderWithInterceptions = configureInterceptions(builder).implement(stateAcquisitionTypeBuilder.build).method(ElementMatchers.named("acquire")).intercept(FieldAccessor.ofField("acquiredState"))
 
       builderWithInterceptions.make().load(getClass.getClassLoader, ClassLoadingStrategy.Default.INJECTION).getLoaded
     }
@@ -201,7 +205,7 @@ object WorldImplementationCodeFactoring {
       }
       val proxy = constructor(id).asInstanceOf[Raw]
 
-      proxy.asInstanceOf[StateAcquisition].acquire(stateToBeAcquiredByProxy)
+      proxy.asInstanceOf[StateAcquisition[AcquiredState]].acquire(stateToBeAcquiredByProxy)
 
       proxy
     }
@@ -381,10 +385,9 @@ object WorldImplementationCodeFactoring {
 
     def itemFor[Raw <: Identified : TypeTag](id: Raw#Id): Raw = {
       def constructAndCacheItem(): Raw = {
-        val proxyFactory = new ProxyFactory {
+        import QueryCallbackStuff._
 
-          import QueryCallbackStuff._
-
+        val proxyFactory = new ProxyFactory[AcquiredState] {
           val isForRecordingOnly = false
 
           override val stateToBeAcquiredByProxy: AcquiredState = new AcquiredState {
@@ -392,6 +395,8 @@ object WorldImplementationCodeFactoring {
 
             def itemsAreLocked: Boolean = identifiedItemsScopeThis.itemsAreLocked
           }
+
+          override val acquiredStateClazz = classOf[AcquiredState]
 
           override val additionalInterfaces: Array[Class[_]] = QueryCallbackStuff.additionalInterfaces
           override val cachedProxyConstructors: mutable.Map[universe.Type, (universe.MethodMirror, Class[_])] = QueryCallbackStuff.cachedProxyConstructors
