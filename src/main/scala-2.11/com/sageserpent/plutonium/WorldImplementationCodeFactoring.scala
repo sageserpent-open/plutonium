@@ -78,7 +78,7 @@ object WorldImplementationCodeFactoring {
             builder
               .method(matchMutation).intercept(MethodDelegation.to(mutation))
               .method(matchForbiddenReadAccess).intercept(MethodDelegation.to(forbiddenReadAccess))
-              .method(matchPermittedReadAccess).intercept(MethodDelegation.to(new PermittedReadAccess))
+              .method(matchPermittedReadAccess).intercept(MethodDelegation.to(permittedReadAccess))
               .method(matchItemReconstitutionData).intercept(MethodDelegation.to(itemReconstitutionData))
         }
 
@@ -240,7 +240,7 @@ object WorldImplementationCodeFactoring {
     }
 
     // TODO - this is just a hokey no-operation - remove it!
-    class PermittedReadAccess {
+    object permittedReadAccess {
       @RuntimeType
       def apply(@SuperCall superCall: Callable[_]) = superCall.call()
     }
