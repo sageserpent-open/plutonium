@@ -14,7 +14,7 @@ import net.bytebuddy.dynamic.loading.ClassLoadingStrategy
 import net.bytebuddy.dynamic.scaffold.subclass.ConstructorStrategy
 import net.bytebuddy.implementation.bind.annotation._
 import net.bytebuddy.implementation.{FieldAccessor, FixedValue, MethodDelegation}
-import net.bytebuddy.matcher.{BooleanMatcher, ElementMatcher, ElementMatchers, NameMatcher}
+import net.bytebuddy.matcher.{BooleanMatcher, ElementMatcher, ElementMatchers}
 import resource.{ManagedResource, makeManagedResource}
 
 import scala.collection.JavaConversions._
@@ -54,6 +54,7 @@ object WorldImplementationCodeFactoring {
     val patchesPickedUpFromAnEventBeingApplied = mutable.MutableList.empty[AbstractPatch]
 
     class LocalRecorderFactory extends RecorderFactory {
+
       import RecordingCallbackStuff._
 
       override def apply[Raw <: Identified : TypeTag](id: Raw#Id): Raw = {
@@ -75,7 +76,7 @@ object WorldImplementationCodeFactoring {
             builder
               .method(matchMutation).intercept(MethodDelegation.to(mutation))
               .method(matchForbiddenReadAccess).intercept(MethodDelegation.to(forbiddenReadAccess))
-              .method(matchPermittedReadAccess).intercept(MethodDelegation.to(permittedReadAccess))
+              .method(matchPermittedReadAccess).intercept(MethodDelegation.to(new PermittedReadAccess))
               .method(matchItemReconstitutionData).intercept(MethodDelegation.to(itemReconstitutionData))
         }
 
@@ -104,20 +105,9 @@ object WorldImplementationCodeFactoring {
       val reflectedType = typeTag[Raw].tpe
       val clazzOfRaw = currentMirror.runtimeClass(reflectedType)
       items.exists { item =>
-        val itemClazz = itemClass(item)
+        val itemClazz = item.getClass
         itemClazz.isAssignableFrom(clazzOfRaw) && itemClazz != clazzOfRaw
       }
-    }
-
-    def itemClass[Raw <: Identified : TypeTag](item: Identified) = {
-      if (true) // TODO - detect ByteBuddy proxy here.
-      // HACK: in reality, everything with an id is likely to be an
-      // an instance of a ByteBuddy proxy subclass of 'Raw', so in
-      // this case we have to climb up one level in the class hierarchy
-      // in order to do type comparisons from the point of view of
-      // client code.
-        item.getClass.getSuperclass
-      else item.getClass
     }
 
     def yieldOnlyItemsOfSupertypeOf[Raw <: Identified : TypeTag](items: Traversable[Identified]) = {
@@ -126,7 +116,7 @@ object WorldImplementationCodeFactoring {
 
       items filter {
         item =>
-          val itemClazz = itemClass(item)
+          val itemClazz = item.getClass
           itemClazz.isAssignableFrom(clazzOfRaw) && itemClazz != clazzOfRaw
       }
     }
@@ -153,6 +143,8 @@ object WorldImplementationCodeFactoring {
 
   val byteBuddy = new ByteBuddy()
 
+  val matchGetClass: ElementMatcher[MethodDescription] = ElementMatchers.is(classOf[AnyRef].getMethod("getClass"))
+
   trait ProxyFactory {
     val isForRecordingOnly: Boolean
 
@@ -168,6 +160,7 @@ object WorldImplementationCodeFactoring {
       val builder = byteBuddy
         .subclass(clazz, ConstructorStrategy.Default.IMITATE_SUPER_CLASS_PUBLIC)
         .implement(additionalInterfaces.toSeq)
+        .method(matchGetClass).intercept(FixedValue.value(clazz))
         .ignoreAlso(ElementMatchers.named[MethodDescription]("_isGhost"))
         .defineField("acquiredState", classOf[AnyRef])
 
@@ -225,16 +218,17 @@ object WorldImplementationCodeFactoring {
 
     trait AcquiredState {
       def itemReconstitutionData: Recorder#ItemReconstitutionData[_ <: Identified]
+
       def capturePatch(patch: AbstractPatch): Unit
     }
 
     val matchItemReconstitutionData: ElementMatcher[MethodDescription] = methodDescription => firstMethodIsOverrideCompatibleWithSecond(methodDescription, IdentifiedItemsScope.itemReconstitutionDataProperty)
 
-    val matchPermittedReadAccess: ElementMatcher[MethodDescription] = methodDescription => IdentifiedItemsScope.alwaysAllowsReadAccessTo(methodDescription) || RecordingCallbackStuff.isFinalizer(methodDescription)
+    val matchPermittedReadAccess: ElementMatcher[MethodDescription] = methodDescription => !methodDescription.isAbstract && IdentifiedItemsScope.alwaysAllowsReadAccessTo(methodDescription) || RecordingCallbackStuff.isFinalizer(methodDescription)
 
     val matchForbiddenReadAccess: ElementMatcher[MethodDescription] = methodDescription => !methodDescription.getReturnType.represents(classOf[Unit])
 
-    val matchMutation: ElementMatcher[MethodDescription] = new BooleanMatcher(true)
+    val matchMutation: ElementMatcher[MethodDescription] = methodDescription => !methodDescription.isAbstract
 
     object itemReconstitutionData {
       @RuntimeType
@@ -242,7 +236,7 @@ object WorldImplementationCodeFactoring {
     }
 
     // TODO - this is just a hokey no-operation - remove it!
-    object permittedReadAccess {
+    class PermittedReadAccess {
       @RuntimeType
       def apply(@SuperCall superCall: Callable[_]) = superCall.call()
     }
@@ -263,6 +257,7 @@ object WorldImplementationCodeFactoring {
         null // Representation of a unit value by a ByteBuddy interceptor.
       }
     }
+
   }
 
   object QueryCallbackStuff {
@@ -271,6 +266,7 @@ object WorldImplementationCodeFactoring {
 
     trait AcquiredState extends AnnihilationHook {
       def itemReconstitutionData: Recorder#ItemReconstitutionData[_ <: Identified]
+
       def itemsAreLocked: Boolean
     }
 
@@ -330,6 +326,7 @@ object WorldImplementationCodeFactoring {
         superCall.call()
       }
     }
+
   }
 
   def firstMethodIsOverrideCompatibleWithSecond(firstMethod: MethodDescription, secondMethod: MethodDescription): Boolean = {
@@ -385,6 +382,7 @@ object WorldImplementationCodeFactoring {
     def itemFor[Raw <: Identified : TypeTag](id: Raw#Id): Raw = {
       def constructAndCacheItem(): Raw = {
         val proxyFactory = new ProxyFactory {
+
           import QueryCallbackStuff._
 
           val isForRecordingOnly = false
@@ -395,6 +393,7 @@ object WorldImplementationCodeFactoring {
 
           override val stateToBeAcquiredByProxy: AcquiredState = new AcquiredState {
             def itemReconstitutionData: Recorder#ItemReconstitutionData[Raw] = id -> typeTag[Raw]
+
             def itemsAreLocked: Boolean = identifiedItemsScopeThis.itemsAreLocked
           }
 
