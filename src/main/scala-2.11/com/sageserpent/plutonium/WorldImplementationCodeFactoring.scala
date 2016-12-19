@@ -236,7 +236,7 @@ object WorldImplementationCodeFactoring {
 
     object itemReconstitutionData {
       @RuntimeType
-      def apply(@RuntimeType @FieldValue("acquiredState") acquiredState: AcquiredState) = acquiredState.itemReconstitutionData
+      def apply(@FieldValue("acquiredState") acquiredState: AcquiredState) = acquiredState.itemReconstitutionData
     }
 
     // TODO - this is just a hokey no-operation - remove it!
@@ -254,7 +254,7 @@ object WorldImplementationCodeFactoring {
 
     object mutation {
       @RuntimeType
-      def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @This target: AnyRef, @RuntimeType @FieldValue("acquiredState") acquiredState: AcquiredState) = {
+      def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @This target: AnyRef, @FieldValue("acquiredState") acquiredState: AcquiredState) = {
         val item = target.asInstanceOf[Recorder]
         // Remember, the outer context is making a proxy of type 'Raw'.
         acquiredState.capturePatch(Patch(item, method, arguments))
@@ -286,7 +286,7 @@ object WorldImplementationCodeFactoring {
 
     object recordAnnihilation {
       @RuntimeType
-      def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @This target: AnyRef, @RuntimeType @FieldValue("acquiredState") acquiredState: AcquiredState) = {
+      def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @This target: AnyRef, @FieldValue("acquiredState") acquiredState: AcquiredState) = {
         acquiredState.recordAnnihilation()
         null
       }
@@ -294,7 +294,7 @@ object WorldImplementationCodeFactoring {
 
     object mutation {
       @RuntimeType
-      def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @Super target: AnyRef, @SuperCall superCall: Callable[_], @RuntimeType @FieldValue("acquiredState") acquiredState: AcquiredState) = {
+      def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @Super target: AnyRef, @SuperCall superCall: Callable[_], @FieldValue("acquiredState") acquiredState: AcquiredState) = {
         if (acquiredState.itemsAreLocked) {
           throw new UnsupportedOperationException(s"Attempt to write via: '$method' to an item: '$target' rendered from a bitemporal query.")
         }
@@ -310,7 +310,7 @@ object WorldImplementationCodeFactoring {
 
     object isGhost {
       @RuntimeType
-      def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @This target: AnyRef, @RuntimeType @FieldValue("acquiredState") acquiredState: AcquiredState) = acquiredState.isGhost
+      def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @This target: AnyRef, @FieldValue("acquiredState") acquiredState: AcquiredState) = acquiredState.isGhost
     }
 
     // TODO - this is just a hokey no-operation - remove it!
@@ -321,7 +321,7 @@ object WorldImplementationCodeFactoring {
 
     object checkedReadAccess {
       @RuntimeType
-      def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @Super target: AnyRef, @SuperCall superCall: Callable[_], @RuntimeType @FieldValue("acquiredState") acquiredState: AcquiredState) = {
+      def apply(@Origin method: Method, @AllArguments arguments: Array[AnyRef], @Super target: AnyRef, @SuperCall superCall: Callable[_], @FieldValue("acquiredState") acquiredState: AcquiredState) = {
         if (acquiredState.isGhost) {
           val itemReconstitutionData = acquiredState.itemReconstitutionData
           throw new UnsupportedOperationException(s"Attempt to read via: '$method' from a ghost item of id: '${itemReconstitutionData._1}' and type '${itemReconstitutionData._2}'.")
