@@ -194,11 +194,11 @@ trait WorldStateSharingBehaviours extends FlatSpec with Matchers with Checkers w
                 try {
                   val scope = demultiplexingWorld.scopeFor(PositiveInfinity[Instant](), finalAsOf)
                   val itemInstancesSortedById = scope.render(Bitemporal.wildcard[Item]).toList.sortBy(_.id)
-                  Prop.collect("No concurrent revision attempt detected in query.")(itemInstancesSortedById.isEmpty || (itemInstancesSortedById zip itemInstancesSortedById.tail forall {
+                  Prop.collect("No concurrent revision attempt detected in query.")(Prop.undecided && (itemInstancesSortedById.isEmpty || (itemInstancesSortedById zip itemInstancesSortedById.tail forall {
                     case (first, second) => first.property < second.property
                   }) || (itemInstancesSortedById zip itemInstancesSortedById.tail forall {
                     case (first, second) => first.property > second.property
-                  }))
+                  })))
                 } catch {
                   case exception: RuntimeException if exception.getMessage.startsWith("Concurrent revision attempt detected in query") =>
                     Prop.collect("Concurrent revision attempt detected in query.")(Prop.proved)
@@ -222,11 +222,11 @@ trait WorldStateSharingBehaviours extends FlatSpec with Matchers with Checkers w
                   else None
                     )) toMap, asOf)
                 }
-                Prop.proved
+                Prop.undecided
               }
 
               val checks = (revisionCommandSequence +: queries).toParArray map (_.apply)
-              Prop.all(checks.toList: _*)
+              checks.reduce(_ ++ _)
           }
       }, Test.Parameters.defaultVerbose)
     }
@@ -263,7 +263,7 @@ trait WorldStateSharingBehaviours extends FlatSpec with Matchers with Checkers w
               val asOfsIterator = asOfs.iterator
 
               val revisionCommands = for {
-                index <- 0 until asOfs.size
+                index <- asOfs.indices
               } yield () => {
                 try {
                   demultiplexingWorld.revise(0 until idSequenceLength map (index % numberOfDistinctIdSequences + numberOfDistinctIdSequences * _) map (id => id ->
@@ -272,7 +272,7 @@ trait WorldStateSharingBehaviours extends FlatSpec with Matchers with Checkers w
                         item.property = index
                     }))
                     ) toMap, asOfsIterator.next())
-                  Prop.collect("No concurrent revision attempt detected.")(Prop.proved)
+                  Prop.collect("No concurrent revision attempt detected.")(Prop.undecided)
                 } catch {
                   case exception: RuntimeException if exception.getMessage.startsWith("Concurrent revision attempt detected in revision") =>
                     Prop.collect("Concurrent revision attempt detected in revision.")(Prop.proved)
@@ -280,7 +280,7 @@ trait WorldStateSharingBehaviours extends FlatSpec with Matchers with Checkers w
                     Prop.collect("Asofs were presented out of order due to racing.")(Prop.undecided)
                 }
               }
-              val revisionChecks = (revisionCommands.toParArray map (_.apply)).toList
+              val revisionChecks = (revisionCommands.toParArray map (_.apply))
               val revisionRange = World.initialRevision until demultiplexingWorld.nextRevision
               val queryChecks = for {
                 (previousNextRevision, nextRevision) <- revisionRange zip revisionRange.tail
@@ -293,7 +293,7 @@ trait WorldStateSharingBehaviours extends FlatSpec with Matchers with Checkers w
                 val sequenceIndicesOfChangedItems = itemsThatHaveChanged map (_._1 % numberOfDistinctIdSequences)
                 (1 == (sequenceIndicesOfChangedItems groupBy identity).size) :| "Detected changes contributed by another revision."
               }
-              Prop.all((revisionChecks ++ queryChecks): _*)
+              revisionChecks.reduce(_ ++ _) && queryChecks.reduceOption(_ && _).getOrElse(Prop.proved)
           }
       }, Test.Parameters.defaultVerbose)
     }
