@@ -15,7 +15,7 @@ import net.bytebuddy.dynamic.loading.ClassLoadingStrategy
 import net.bytebuddy.dynamic.scaffold.subclass.ConstructorStrategy
 import net.bytebuddy.implementation.bind.annotation._
 import net.bytebuddy.implementation.{FieldAccessor, FixedValue, MethodDelegation}
-import net.bytebuddy.matcher.{BooleanMatcher, ElementMatcher, ElementMatchers}
+import net.bytebuddy.matcher.{ElementMatcher, ElementMatchers}
 import resource.{ManagedResource, makeManagedResource}
 
 import scala.collection.JavaConversions._
@@ -90,14 +90,22 @@ object WorldImplementationCodeFactoring {
     event match {
       case Change(when, update) =>
         update(recorderFactory)
-        SerializableChange(when, patchesPickedUpFromAnEventBeingApplied)
+        SerializableEvent(when, (patchRecorder: PatchRecorder) => for (patch <- patchesPickedUpFromAnEventBeingApplied) {
+          patchRecorder.recordPatchFromChange(when, patch)
+        })
 
       case Measurement(when, reading) =>
         reading(recorderFactory)
-        SerializableMeasurement(when, patchesPickedUpFromAnEventBeingApplied)
+        SerializableEvent(when, (patchRecorder: PatchRecorder) => for (patch <- patchesPickedUpFromAnEventBeingApplied) {
+          patchRecorder.recordPatchFromMeasurement(when, patch)
+        })
 
       case annihilation: Annihilation[_] =>
-        SerializableAnnihilation(annihilation): SerializableEvent
+        SerializableEvent(annihilation.when, (patchRecorder: PatchRecorder) => annihilation match {
+          case workaroundForUseOfExistentialTypeInAnnihilation@Annihilation(when, id) =>
+            implicit val typeTag = workaroundForUseOfExistentialTypeInAnnihilation.capturedTypeTag
+            patchRecorder.recordAnnihilation(when, id)
+        })
     }
   }
 
@@ -253,6 +261,7 @@ object WorldImplementationCodeFactoring {
         throw new UnsupportedOperationException(s"Attempt to call method: '$method' with a non-unit return type on a recorder proxy: '$target' while capturing a change or measurement.")
       }
     }
+
   }
 
   object QueryCallbackStuff {
