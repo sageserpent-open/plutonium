@@ -346,7 +346,7 @@ object WorldImplementationCodeFactoring {
 
     var itemsAreLocked = false
 
-    def this(_when: Unbounded[Instant], _nextRevision: Revision, _asOf: Unbounded[Instant], eventTimeline: Seq[SerializableEvent]) = {
+    def this(_when: Unbounded[Instant], _nextRevision: Revision, eventTimeline: Seq[SerializableEvent]) = {
       this()
       for (_ <- makeManagedResource {
         itemsAreLocked = false
@@ -559,7 +559,7 @@ abstract class WorldInefficientImplementationCodeFactoring[EventId] extends Worl
 
   trait SelfPopulatedScope extends ScopeImplementation {
     val identifiedItemsScope = {
-      new IdentifiedItemsScope(when, nextRevision, asOf, eventTimeline(nextRevision))
+      new IdentifiedItemsScope(when, nextRevision, eventTimeline(nextRevision))
     }
   }
 
@@ -590,7 +590,7 @@ abstract class WorldInefficientImplementationCodeFactoring[EventId] extends Worl
       // This does a check for consistency of the world's history as per this new revision as part of construction.
       // We then throw away the resulting history if successful, the idea being for now to rebuild it as part of
       // constructing a scope to apply queries on.
-      new IdentifiedItemsScope(PositiveInfinity[Instant], nextRevisionAfterTransactionIsCompleted, Finite(asOf), eventTimelineIncludingNewRevision)
+      new IdentifiedItemsScope(PositiveInfinity[Instant], nextRevisionAfterTransactionIsCompleted, eventTimelineIncludingNewRevision)
     }
 
     transactNewRevision(asOf, newEventDatumsFor, buildAndValidateEventTimelineForProposedNewRevision)
