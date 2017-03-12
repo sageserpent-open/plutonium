@@ -69,7 +69,7 @@ object WorldRedisBasedImplementation {
   }
 }
 
-class WorldRedisBasedImplementation[EventId](redisClient: RedisClient, identityGuid: String) extends WorldImplementationCodeFactoring[EventId] {
+class WorldRedisBasedImplementation[EventId](redisClient: RedisClient, identityGuid: String) extends WorldInefficientImplementationCodeFactoring[EventId] {
   parentWorld =>
 
   import World._
@@ -170,9 +170,9 @@ class WorldRedisBasedImplementation[EventId](redisClient: RedisClient, identityG
       } yield eventIdAndDataPair
   }
 
-  def pertinentEventDatumsObservable(cutoffRevision: Revision, eventIds: Iterable[EventId]): Observable[AbstractEventData] = {
-    val eventIdsToBeIncluded = eventIds.toSet
-    pertinentEventDatumsObservable(cutoffRevision, PositiveInfinity(), eventId => !eventIdsToBeIncluded.contains(eventId))
+  def pertinentEventDatumsObservable(cutoffRevision: Revision, eventIdsForNewEvents: Iterable[EventId]): Observable[AbstractEventData] = {
+    val eventIdsToBeExcluded = eventIdsForNewEvents.toSet
+    pertinentEventDatumsObservable(cutoffRevision, PositiveInfinity(), eventId => !eventIdsToBeExcluded.contains(eventId))
   }
 
   def pertinentEventDatumsObservable(cutoffRevision: Revision): Observable[AbstractEventData] =

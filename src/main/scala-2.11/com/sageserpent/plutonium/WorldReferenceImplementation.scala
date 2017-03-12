@@ -46,7 +46,8 @@ class MutableState[EventId] {
   import World._
   import WorldImplementationCodeFactoring._
 
-  var threadsThatHaveNotBeenBouncedByARevision: mutable.Set[Long] = mutable.Set.empty
+  val readerThreadsThatHaveNotBeenBouncedByARevision: mutable.Set[Long] = mutable.Set.empty
+  val writerThreadsThatHaveNotBeenBouncedByARevision: mutable.Set[Long] = mutable.Set.empty
 
   val eventIdToEventCorrectionsMap: EventIdToEventCorrectionsMap[EventId] = mutable.Map.empty
   val _revisionAsOfs: MutableList[Instant] = MutableList.empty
@@ -76,8 +77,8 @@ class MutableState[EventId] {
   }
 
   def pertinentEventDatums(cutoffRevision: Revision, eventIds: Iterable[EventId]): Seq[AbstractEventData] = {
-    val eventIdsToBeIncluded = eventIds.toSet
-    pertinentEventDatums(cutoffRevision, PositiveInfinity(), eventId => !eventIdsToBeIncluded.contains(eventId))
+    val eventIdsToBeExcluded = eventIds.toSet
+    pertinentEventDatums(cutoffRevision, PositiveInfinity(), eventId => !eventIdsToBeExcluded.contains(eventId))
   }
 
   def pertinentEventDatums(cutoffRevision: Revision): Seq[AbstractEventData] =
@@ -89,7 +90,7 @@ class MutableState[EventId] {
 }
 
 
-class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId]) extends WorldImplementationCodeFactoring[EventId] {
+class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId]) extends WorldInefficientImplementationCodeFactoring[EventId] {
 
   import World._
   import WorldImplementationCodeFactoring._
@@ -125,11 +126,11 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
 
   override protected def eventTimeline(cutoffRevision: Revision): Seq[SerializableEvent] = {
     val idOfThreadThatMostlyRecentlyStartedARevisionBeforehand = mutableState.synchronized {
-      mutableState.threadsThatHaveNotBeenBouncedByARevision += Thread.currentThread.getId
+      mutableState.readerThreadsThatHaveNotBeenBouncedByARevision += Thread.currentThread.getId
     }
     val result = eventTimelineFrom(mutableState.pertinentEventDatums(cutoffRevision))
     mutableState.synchronized {
-      if (!mutableState.threadsThatHaveNotBeenBouncedByARevision.contains(Thread.currentThread.getId)) {
+      if (!mutableState.readerThreadsThatHaveNotBeenBouncedByARevision.contains(Thread.currentThread.getId)) {
         throw new RuntimeException("Concurrent revision attempt detected in query.")
       }
     }
@@ -139,24 +140,27 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
   override protected def transactNewRevision(asOf: Instant,
                                              newEventDatumsFor: Revision => Map[EventId, AbstractEventData],
                                              buildAndValidateEventTimelineForProposedNewRevision: (Map[EventId, AbstractEventData], Revision, Seq[AbstractEventData]) => Unit): Revision = {
-    mutableState.synchronized {
-      mutableState.threadsThatHaveNotBeenBouncedByARevision.clear()
-      mutableState.threadsThatHaveNotBeenBouncedByARevision += Thread.currentThread.getId
+
+
+
+    val (newEventDatums, nextRevisionPriorToUpdate, pertinentEventDatumsExcludingTheNewRevision) = mutableState.synchronized {
+      mutableState.writerThreadsThatHaveNotBeenBouncedByARevision += Thread.currentThread.getId
       checkRevisionPrecondition(asOf, revisionAsOfs)
+      val nextRevisionPriorToUpdate = nextRevision
+      val newEventDatums: Map[EventId, AbstractEventData] = newEventDatumsFor(nextRevisionPriorToUpdate)
+      val pertinentEventDatumsExcludingTheNewRevision = mutableState.pertinentEventDatums(nextRevisionPriorToUpdate, newEventDatums.keys)
+      (newEventDatums, nextRevisionPriorToUpdate, pertinentEventDatumsExcludingTheNewRevision)
     }
-
-    val nextRevisionPriorToUpdate = nextRevision
-
-    val newEventDatums: Map[EventId, AbstractEventData] = newEventDatumsFor(nextRevisionPriorToUpdate)
-
-    val pertinentEventDatumsExcludingTheNewRevision = mutableState.pertinentEventDatums(nextRevisionPriorToUpdate, newEventDatums.keys)
 
     buildAndValidateEventTimelineForProposedNewRevision(newEventDatums, nextRevisionPriorToUpdate, pertinentEventDatumsExcludingTheNewRevision)
 
     mutableState.synchronized {
-      if (!mutableState.threadsThatHaveNotBeenBouncedByARevision.contains(Thread.currentThread.getId)) {
+      if (!mutableState.writerThreadsThatHaveNotBeenBouncedByARevision.contains(Thread.currentThread.getId)) {
         throw new RuntimeException("Concurrent revision attempt detected in revision.")
       }
+
+      mutableState.readerThreadsThatHaveNotBeenBouncedByARevision.clear()
+      mutableState.writerThreadsThatHaveNotBeenBouncedByARevision.clear()
 
       for ((eventId, eventDatum) <- newEventDatums) {
         mutableState.eventIdToEventCorrectionsMap.getOrElseUpdate(eventId, MutableList.empty) += eventDatum

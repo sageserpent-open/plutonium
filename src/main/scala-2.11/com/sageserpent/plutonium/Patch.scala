@@ -3,8 +3,6 @@ package com.sageserpent.plutonium
 import java.lang.reflect.Method
 
 import com.sageserpent.plutonium.Patch.MethodPieces
-import net.sf.cglib.core.Signature
-import net.sf.cglib.proxy.MethodProxy
 
 import scalaz.{-\/, \/, \/-}
 
@@ -21,17 +19,15 @@ object Patch {
     case _ => -\/(argument)
   }
 
-  def apply(targetRecorder: Recorder, method: Method, arguments: Array[AnyRef], methodProxy: MethodProxy) = {
-    val methodPieces = MethodPieces(method.getDeclaringClass.asInstanceOf[Class[_ <: Identified]], method.getName, method.getParameterTypes, methodProxy.getSignature.getDescriptor)
+  def apply(targetRecorder: Recorder, method: Method, arguments: Array[AnyRef]) = {
+    val methodPieces = MethodPieces(method.getDeclaringClass.asInstanceOf[Class[_ <: Identified]], method.getName, method.getParameterTypes)
     new Patch(methodPieces,
       targetRecorder.itemReconstitutionData,
       arguments map wrap)
   }
 
-  case class MethodPieces(declaringClassOfMethod: Class[_ <: Identified], methodName: String, methodParameterTypes: Array[Class[_]], signatureDescriptor: String) {
+  case class MethodPieces(declaringClassOfMethod: Class[_ <: Identified], methodName: String, methodParameterTypes: Array[Class[_]]) {
     def method = declaringClassOfMethod.getMethod(methodName, methodParameterTypes: _*)
-
-    def methodProxyFor(proxyClassOfTarget: Class[_ <: Identified]) = MethodProxy.find(proxyClassOfTarget, new Signature(methodName, signatureDescriptor))
   }
 
 }
@@ -51,9 +47,7 @@ class Patch(methodPieces: MethodPieces,
 
   def apply(identifiedItemAccess: IdentifiedItemAccess): Unit = {
     val targetBeingPatched = identifiedItemAccess.reconstitute(targetReconstitutionData)
-    val proxyClassOfTarget = targetBeingPatched.getClass()
-    val methodProxy = methodPieces.methodProxyFor(proxyClassOfTarget)
-    methodProxy.invoke(targetBeingPatched, wrappedArguments map unwrap(identifiedItemAccess))
+    method.invoke(targetBeingPatched, wrappedArguments map unwrap(identifiedItemAccess): _*)
   }
 
   def checkInvariant(identifiedItemAccess: IdentifiedItemAccess): Unit = {

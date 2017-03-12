@@ -31,7 +31,7 @@ trait WorldBehaviours extends FlatSpec with Matchers with Checkers with WorldSpe
     override val id = fail("If I am not supposed to exist, why is something asking for my id?")
   }
 
-  implicit override val generatorDrivenConfig = PropertyCheckConfig(maxSize = 30)
+  implicit override val generatorDrivenConfig: PropertyCheckConfiguration = PropertyCheckConfig(maxSize = 30)
 
   def worldWithNoHistoryBehaviour = {
     it should "not contain any identifiables" in {
