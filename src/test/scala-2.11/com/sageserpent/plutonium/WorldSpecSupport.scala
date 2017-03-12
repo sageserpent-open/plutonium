@@ -14,6 +14,7 @@ import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.seqEnrichment._
 import com.sageserpent.plutonium.World._
 import org.scalacheck.{Arbitrary, Gen}
+import org.scalatest.Assertions
 import resource._
 
 import scala.collection.JavaConversions._
@@ -30,7 +31,8 @@ object WorldSpecSupport {
 }
 
 
-trait WorldSpecSupport {
+trait WorldSpecSupport extends Assertions {
+
   import WorldSpecSupport._
 
   val seedGenerator = Arbitrary.arbitrary[Long]
@@ -61,84 +63,60 @@ trait WorldSpecSupport {
   private def eventConstructorReferringToTwoItems[AHistory <: History : TypeTag, AnotherHistory <: History : TypeTag](makeAChange: Boolean)(when: Unbounded[Instant]): (AHistory#Id, AnotherHistory#Id, (AHistory, AnotherHistory) => Unit) => Event =
     if (makeAChange) Change.forTwoItems(when)(_, _, _) else Measurement.forTwoItems(when)(_, _, _)
 
-  def dataSampleGenerator1(faulty: Boolean) = for {data <- Arbitrary.arbitrary[String]} yield (data, (when: americium.Unbounded[Instant], makeAChange: Boolean, fooHistoryId: FooHistory#Id) => if (!faulty) {
+  def dataSampleGenerator1(faulty: Boolean) = for {data <- Arbitrary.arbitrary[String]} yield (data, (when: americium.Unbounded[Instant], makeAChange: Boolean, fooHistoryId: FooHistory#Id) =>
+    if (!faulty) {
     eventConstructorReferringToOneItem[FooHistory](makeAChange)(when).apply(fooHistoryId, (fooHistory: FooHistory) => {
-      try {
-        fooHistory.id
-        fooHistory.datums
-        fooHistory.property1
-        fooHistory.property2
-        // Neither changes nor measurements are allowed to read from the items they work on.
-        assert(false)
-      }
-      catch {
-        case _: RuntimeException =>
-      }
+      // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
+      val _ = fooHistory.id
+      assertThrows[UnsupportedOperationException](fooHistory.datums)
+      assertThrows[UnsupportedOperationException](fooHistory.property1)
+      assertThrows[UnsupportedOperationException](fooHistory.property2)
+
       fooHistory.property1 = data
     })
   } else {
     eventConstructorReferringToOneItem[BadFooHistory](makeAChange)(when).apply(fooHistoryId, (fooHistory: BadFooHistory) => {
-      try {
-        fooHistory.id
-        fooHistory.datums
-        fooHistory.property1
-        fooHistory.property2
-        // Neither changes nor measurements are allowed to read from the items they work on.
-        assert(false)
-      }
-      catch {
-        case _: RuntimeException =>
-      }
+      // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
+      val _ = fooHistory.id
+      assertThrows[UnsupportedOperationException](fooHistory.datums)
+      assertThrows[UnsupportedOperationException](fooHistory.property1)
+      assertThrows[UnsupportedOperationException](fooHistory.property2)
+
       fooHistory.property1 = data
     })
   })
 
   def dataSampleGenerator2(faulty: Boolean) = for {data <- Arbitrary.arbitrary[Boolean]}
     yield (data, (when: Unbounded[Instant], makeAChange: Boolean, fooHistoryId: FooHistory#Id) => eventConstructorReferringToOneItem[FooHistory](makeAChange)(when).apply(fooHistoryId, (fooHistory: FooHistory) => {
-      try {
-        fooHistory.id
-        fooHistory.datums
-        fooHistory.property1
-        fooHistory.property2
-        // Neither changes nor measurements are allowed to read from the items they work on.
-        assert(false)
-      }
-      catch {
-        case _: RuntimeException =>
-      }
+      // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
+      val _ = fooHistory.id
+      assertThrows[UnsupportedOperationException](fooHistory.datums)
+      assertThrows[UnsupportedOperationException](fooHistory.property1)
+      assertThrows[UnsupportedOperationException](fooHistory.property2)
+
       fooHistory.property2 = data
       if (faulty) throw changeError // Modelling an admissible postcondition failure.
     }))
 
   def dataSampleGenerator3(faulty: Boolean) = for {data <- Arbitrary.arbitrary[Double]}
     yield (data, (when: Unbounded[Instant], makeAChange: Boolean, barHistoryId: BarHistory#Id) => eventConstructorReferringToOneItem[BarHistory](makeAChange)(when).apply(barHistoryId, (barHistory: BarHistory) => {
+      // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
+      val _ = barHistory.id
+      assertThrows[UnsupportedOperationException](barHistory.datums)
+      assertThrows[UnsupportedOperationException](barHistory.property1)
+
       if (faulty) throw changeError // Modelling a precondition failure.
-      try {
-        barHistory.id
-        barHistory.datums
-        barHistory.property1
-        // Neither changes nor measurements are allowed to read from the items they work on.
-        assert(false)
-      }
-      catch {
-        case _: RuntimeException =>
-      }
       barHistory.property1 = data
     }))
 
   def dataSampleGenerator4(faulty: Boolean) = for {data1 <- Arbitrary.arbitrary[String]
                                                    data2 <- Arbitrary.arbitrary[Int]}
     yield (data1 -> data2, (when: americium.Unbounded[Instant], makeAChange: Boolean, barHistoryId: BarHistory#Id) => eventConstructorReferringToOneItem[BarHistory](makeAChange)(when).apply(barHistoryId, (barHistory: BarHistory) => {
-      try {
-        barHistory.id
-        barHistory.datums
-        barHistory.property1
-        // Neither changes nor measurements are allowed to read from the items they work on.
-        assert(false)
-      }
-      catch {
-        case _: RuntimeException =>
-      }
+      // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
+      val _ = barHistory.id
+      assertThrows[UnsupportedOperationException](barHistory.datums)
+      assertThrows[UnsupportedOperationException](barHistory.property1)
+
       barHistory.method1(data1, data2)
       if (faulty) barHistory.forceInvariantBreakage() // Modelling breakage of the bitemporal invariant.
     }))
@@ -147,40 +125,56 @@ trait WorldSpecSupport {
                                                    data2 <- Arbitrary.arbitrary[String]
                                                    data3 <- Arbitrary.arbitrary[Boolean]}
     yield ((data1, data2, data3), (when: Unbounded[Instant], makeAChange: Boolean, barHistoryId: BarHistory#Id) => eventConstructorReferringToOneItem[BarHistory](makeAChange)(when).apply(barHistoryId, (barHistory: BarHistory) => {
-      try {
-        barHistory.id
-        barHistory.datums
-        barHistory.property1
-        // Neither changes nor measurements are allowed to read from the items they work on.
-        assert(false)
-      }
-      catch {
-        case _: RuntimeException =>
-      }
+      // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
+      val _ = barHistory.id
+      assertThrows[UnsupportedOperationException](barHistory.datums)
+      assertThrows[UnsupportedOperationException](barHistory.property1)
+
       barHistory.method2(data1, data2, data3)
       if (faulty) throw changeError // Modelling an admissible postcondition failure.
     }))
 
   def integerDataSampleGenerator(faulty: Boolean) = for {data <- Arbitrary.arbitrary[Int]}
     yield (data, (when: americium.Unbounded[Instant], makeAChange: Boolean, integerHistoryId: IntegerHistory#Id) => eventConstructorReferringToOneItem[IntegerHistory](makeAChange)(when).apply(integerHistoryId, (integerHistory: IntegerHistory) => {
+      // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
+      val _ = integerHistory.id
+      assertThrows[UnsupportedOperationException](integerHistory.datums)
+      assertThrows[UnsupportedOperationException](integerHistory.integerProperty)
+
       if (faulty) throw changeError // Modelling a precondition failure.
       integerHistory.integerProperty = data
     }))
 
   def moreSpecificFooDataSampleGenerator(faulty: Boolean) = for {data <- Arbitrary.arbitrary[String]}
     yield (data, (when: americium.Unbounded[Instant], makeAChange: Boolean, fooHistoryId: MoreSpecificFooHistory#Id) => eventConstructorReferringToOneItem[MoreSpecificFooHistory](makeAChange)(when).apply(fooHistoryId, (fooHistory: MoreSpecificFooHistory) => {
+      // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
+      val _ = fooHistory.id
+      assertThrows[UnsupportedOperationException](fooHistory.datums)
+      assertThrows[UnsupportedOperationException](fooHistory.property1)
+      assertThrows[UnsupportedOperationException](fooHistory.property2)
+
       if (faulty) throw changeError // Modelling a precondition failure.
       fooHistory.property1 = data
     }))
 
   def referringToItemDataSampleGenerator(faulty: Boolean) = for {idToReferToAnotherItem <- Gen.oneOf(ReferringHistory.specialFooIds)}
     yield (idToReferToAnotherItem, (when: americium.Unbounded[Instant], makeAChange: Boolean, referringHistoryId: ReferringHistory#Id) => eventConstructorReferringToTwoItems[ReferringHistory, FooHistory](makeAChange)(when).apply(referringHistoryId, idToReferToAnotherItem, (referringHistory: ReferringHistory, referencedItem: FooHistory) => {
+      val _ = referringHistory.id
+      assertThrows[UnsupportedOperationException](referringHistory.datums)
+      assertThrows[UnsupportedOperationException](referringHistory.referencedDatums)
+      assertThrows[UnsupportedOperationException](referringHistory.referencedHistories)
+
       if (faulty) throw changeError // Modelling a precondition failure.
       referringHistory.referTo(referencedItem)
     }))
 
   def forgettingItemDataSampleGenerator(faulty: Boolean) = for {idToReferToAnotherItem <- Gen.oneOf(ReferringHistory.specialFooIds)}
     yield (idToReferToAnotherItem, (when: americium.Unbounded[Instant], makeAChange: Boolean, referringHistoryId: ReferringHistory#Id) => eventConstructorReferringToTwoItems[ReferringHistory, FooHistory](makeAChange)(when).apply(referringHistoryId, idToReferToAnotherItem, (referringHistory: ReferringHistory, referencedItem: FooHistory) => {
+      val _ = referringHistory.id
+      assertThrows[UnsupportedOperationException](referringHistory.datums)
+      assertThrows[UnsupportedOperationException](referringHistory.referencedDatums)
+      assertThrows[UnsupportedOperationException](referringHistory.referencedHistories)
+
       if (faulty) throw changeError // Modelling a precondition failure.
       referringHistory.forget(referencedItem)
     }))
@@ -387,6 +381,7 @@ trait WorldSpecSupport {
                                                     // Add an extra when for the annihilation at the end of the lifespan...
                                                     dataSamplesGroupedForLimitedLifespans map (1 + _.size)
                                                   }
+
                                                   if (finalLifespanIsOngoing) {
                                                     val (dataSamplesGroupedForLimitedLifespans, Stream(dataSamplesGroupForEternalLife)) = dataSamplesGroupedForLifespans splitAt (dataSamplesGroupedForLifespans.size - 1)
                                                     numberOfEventsForLimitedLifespans(dataSamplesGroupedForLimitedLifespans) :+ dataSamplesGroupForEternalLife.size
@@ -405,7 +400,7 @@ trait WorldSpecSupport {
                                                 noAnnihilationsToWorryAbout = finalLifespanIsOngoing && 1 == sampleWhensGroupedForLifespans.size
                                                 firstAnnihilationHasBeenAlignedWithADefiniteWhen = noAnnihilationsToWorryAbout ||
                                                   PartialFunction.cond(sampleWhensGroupedForLifespans.head.last) { case Finite(_) => true }
-    } yield firstAnnihilationHasBeenAlignedWithADefiniteWhen ->(historyId, historiesFrom, annihilationFor, ineffectiveEventFor, dataSamplesGroupedForLifespans, sampleWhensGroupedForLifespans)
+    } yield firstAnnihilationHasBeenAlignedWithADefiniteWhen -> (historyId, historiesFrom, annihilationFor, ineffectiveEventFor, dataSamplesGroupedForLifespans, sampleWhensGroupedForLifespans)
 
     val parametersGenerator = unconstrainedParametersGenerator retryUntil { case (firstAnnihilationHasBeenAlignedWithADefiniteWhen, _) => firstAnnihilationHasBeenAlignedWithADefiniteWhen } map (_._2)
 
@@ -415,6 +410,7 @@ trait WorldSpecSupport {
     def idsAreNotRepeated(recordingsForVariousIds: List[RecordingsForAnId]) = {
       recordingsForVariousIds groupBy (_.historyId) forall { case (_, repeatedIdGroup) => 1 == repeatedIdGroup.size }
     }
+
     Gen.nonEmptyListOf(recordingsForAnIdGenerator) retryUntil idsAreNotRepeated
   }
 
@@ -473,6 +469,7 @@ trait WorldSpecSupport {
                            eventId: Int,
                            eventsToBeCorrected: Set[Int])
     val onePastMaximumEventId = recordings.size
+
     def yieldEitherARecordingOrAnObsoleteRecording(unfoldState: UnfoldState) = unfoldState match {
       case unfoldState@UnfoldState(recordings, obsoleteRecordings, eventId, eventsToBeCorrected) =>
         if (recordings.isEmpty) {
@@ -503,6 +500,7 @@ trait WorldSpecSupport {
           Some((Some(recording), eventId) -> unfoldState.copy(recordings = remainingRecordings, eventId = 1 + eventId, eventsToBeCorrected = eventsToBeCorrected - eventId))
         }
     }
+
     stream.unfold(UnfoldState(recordings, obsoleteRecordings, 0, Set.empty))(yieldEitherARecordingOrAnObsoleteRecording)
   }
 
