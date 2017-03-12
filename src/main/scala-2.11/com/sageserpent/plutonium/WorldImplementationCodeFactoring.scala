@@ -325,13 +325,13 @@ object WorldImplementationCodeFactoring {
 
   }
 
-  def firstMethodIsOverrideCompatibleWithSecond(firstMethod: MethodDescription, secondMethod: MethodDescription): Boolean = {
+  def firstMethodIsOverrideCompatibleWithSecond(firstMethod: MethodDescription, secondMethod: MethodDescription): Boolean =
     secondMethod.getName == firstMethod.getName &&
-      secondMethod.getReceiverType.asErasure.isAssignableFrom(firstMethod.getReceiverType.asErasure) &&
-      secondMethod.getReturnType.asErasure.isAssignableFrom(firstMethod.getReturnType.asErasure) &&
-      secondMethod.getParameters.size == firstMethod.getParameters.size &&
-      secondMethod.getParameters.toSeq.map(_.getType) == firstMethod.getParameters.toSeq.map(_.getType) // What about contravariance? Hmmm...
-  }
+    secondMethod.getReceiverType.asErasure.isAssignableFrom(firstMethod.getReceiverType.asErasure) &&
+    (secondMethod.getReturnType.asErasure.isAssignableFrom(firstMethod.getReturnType.asErasure) ||
+      secondMethod.getReturnType.asErasure.isAssignableFrom(firstMethod.getReturnType.asErasure.asBoxed)) &&
+    secondMethod.getParameters.size == firstMethod.getParameters.size &&
+    secondMethod.getParameters.toSeq.map(_.getType) == firstMethod.getParameters.toSeq.map(_.getType) // What about contravariance? Hmmm...
 
   def firstMethodIsOverrideCompatibleWithSecond(firstMethod: Method, secondMethod: Method): Boolean = {
     firstMethodIsOverrideCompatibleWithSecond(new MethodDescription.ForLoadedMethod(firstMethod), new MethodDescription.ForLoadedMethod(secondMethod))
