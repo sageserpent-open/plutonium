@@ -6,9 +6,11 @@ import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.{Event, javaApi}
 
 trait World[EventId] extends WorldConstants {
-  def nextRevision: Int  // NOTE: this is the number of *revisions* that have all been made via 'revise'.
+  def nextRevision
+    : Int // NOTE: this is the number of *revisions* that have all been made via 'revise'.
 
-  def revisionAsOfs: Array[Instant]  // Adjacent duplicates are permitted - this is taken to mean that successive revisions were booked in faster than than the time resolution.
+  def revisionAsOfs
+    : Array[Instant] // Adjacent duplicates are permitted - this is taken to mean that successive revisions were booked in faster than than the time resolution.
 
   // Can have duplicated instants associated with different events - more than one thing can happen at a given time.
   // Question: does the order of appearance of the events matter, then? - Hmmm - the answer is that they take effect in order
@@ -31,7 +33,8 @@ trait World[EventId] extends WorldConstants {
   // is to make it easy for clients to do annulments en-bloc without querying to see what events are in force in the world's current state. Furthermore,
   // the API issues no constraints on when to define an event id key for the first time and when to use it for correction, so why not treat the annulment
   // case the same way?
-  def revise(events: java.util.Map[EventId, Optional[Event]], asOf: Instant): Int
+  def revise(events: java.util.Map[EventId, Optional[Event]],
+             asOf: Instant): Int
 
   def revise(eventId: EventId, event: Event, asOf: Instant): Int
 

@@ -16,8 +16,7 @@ abstract class History extends Identified {
       shouldBeUnchanged = false
       // An invariant should not be able to modify its item. End of story, no if or buts.
       assert(false)
-    }
-    catch {
+    } catch {
       case _: RuntimeException =>
     }
   }
@@ -47,5 +46,6 @@ abstract class History extends Identified {
     invariantBreakageScheduled = true
   }
 
-  val propertyAllowingSecondOrderMutation = scala.collection.mutable.MutableList.empty[Any]
+  val propertyAllowingSecondOrderMutation =
+    scala.collection.mutable.MutableList.empty[Any]
 }

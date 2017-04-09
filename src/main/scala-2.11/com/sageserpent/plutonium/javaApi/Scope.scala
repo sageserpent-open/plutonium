@@ -29,8 +29,9 @@ trait Scope {
   val nextRevision: Int
   val asOf: Unbounded[Instant]
 
-  def numberOf[Raw <: Identified : TypeTag](id: Raw#Id): Int
+  def numberOf[Raw <: Identified: TypeTag](id: Raw#Id): Int
 
   def render[Raw](bitemporal: ScalaBitemporal[Raw]): Stream[Raw]
-  def renderAsIterable[Raw](bitemporal: ScalaBitemporal[Raw]): java.lang.Iterable[Raw]
+  def renderAsIterable[Raw](
+      bitemporal: ScalaBitemporal[Raw]): java.lang.Iterable[Raw]
 }
