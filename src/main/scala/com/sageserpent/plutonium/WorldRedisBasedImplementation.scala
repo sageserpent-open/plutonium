@@ -15,9 +15,8 @@ import com.lambdaworks.redis.codec.{
   Utf8StringCodec
 }
 import com.sageserpent.americium.{PositiveInfinity, Unbounded}
-import com.twitter.chill.{KryoInstantiator, KryoPool}
+import com.twitter.chill.{KryoPool, ScalaKryoInstantiator}
 import io.netty.handler.codec.EncoderException
-import org.objenesis.strategy.SerializingInstantiatorStrategy
 import rx.lang.scala.JavaConversions._
 import rx.lang.scala.Observable
 
@@ -55,7 +54,7 @@ object WorldRedisBasedImplementation {
 
   val kryoPool = KryoPool.withByteArrayOutputStream(
     40,
-    new KryoInstantiator().withRegistrar((kryo: Kryo) => {
+    new ScalaKryoInstantiator().withRegistrar((kryo: Kryo) => {
       def registerSerializerForItemReconstitutionData[Raw <: Identified]() = {
         // TODO - I think this is a potential bug, as 'Recorder#ItemReconstitutionData[Raw]' is an alias
         // to a tuple type instance that is erased at runtime - so all kinds of things could be passed to
@@ -64,7 +63,6 @@ object WorldRedisBasedImplementation {
                       new ItemReconstitutionDataSerializer[Raw])
       }
       registerSerializerForItemReconstitutionData()
-      kryo.setInstantiatorStrategy(new SerializingInstantiatorStrategy)
     })
   )
 
