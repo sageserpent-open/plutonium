@@ -18,5 +18,6 @@ trait RedisServerFixture extends TestSuite {
     }(_.stop)(List.empty) acquireAndGet (_ => block)
   }
 
-  protected abstract override def withFixture(test: NoArgTest) = withRedisServerRunning(super.withFixture(test))
+  protected abstract override def withFixture(test: NoArgTest) =
+    withRedisServerRunning(super.withFixture(test))
 }

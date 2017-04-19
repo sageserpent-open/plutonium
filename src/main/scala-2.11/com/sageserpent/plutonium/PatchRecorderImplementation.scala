@@ -3,25 +3,29 @@ package com.sageserpent.plutonium
 import java.lang.reflect.Method
 import java.time.Instant
 
-import com.sageserpent.americium.{Finite, NegativeInfinity, PositiveInfinity, Unbounded}
+import com.sageserpent.americium.{
+  Finite,
+  NegativeInfinity,
+  PositiveInfinity,
+  Unbounded
+}
 import resource.ManagedResource
 
 import scala.collection.{Map, mutable}
 import scala.reflect.runtime._
 import scala.reflect.runtime.universe._
 
-
 /**
   * Created by Gerard on 10/01/2016.
   */
-
-object PatchRecorderImplementation{
+object PatchRecorderImplementation {
   private type SequenceIndex = Long
   val initialSequenceIndex: SequenceIndex = 0L
 }
 
-
-abstract class PatchRecorderImplementation(eventsHaveEffectNoLaterThan: Unbounded[Instant]) extends PatchRecorder {
+abstract class PatchRecorderImplementation(
+    eventsHaveEffectNoLaterThan: Unbounded[Instant])
+    extends PatchRecorder {
   // This class makes no pretence at exception safety - it doesn't need to in the context
   // of the client 'WorldReferenceImplementation', which provides exception safety at a higher level.
   self: BestPatchSelection =>
@@ -30,15 +34,19 @@ abstract class PatchRecorderImplementation(eventsHaveEffectNoLaterThan: Unbounde
   val identifiedItemsScope: WorldImplementationCodeFactoring.IdentifiedItemsScope
   val itemsAreLockedResource: ManagedResource[Unit]
 
-  private var _whenEventPertainedToByLastRecordingTookPlace: Option[Unbounded[Instant]] = None
+  private var _whenEventPertainedToByLastRecordingTookPlace
+    : Option[Unbounded[Instant]] = None
 
   private var _allRecordingsAreCaptured = false
 
-  override def whenEventPertainedToByLastRecordingTookPlace: Option[Unbounded[Instant]] = _whenEventPertainedToByLastRecordingTookPlace
+  override def whenEventPertainedToByLastRecordingTookPlace
+    : Option[Unbounded[Instant]] =
+    _whenEventPertainedToByLastRecordingTookPlace
 
   override def allRecordingsAreCaptured: Boolean = _allRecordingsAreCaptured
 
-  override def recordPatchFromChange(when: Unbounded[Instant], patch: AbstractPatch): Unit = {
+  override def recordPatchFromChange(when: Unbounded[Instant],
+                                     patch: AbstractPatch): Unit = {
     _whenEventPertainedToByLastRecordingTookPlace = Some(when)
 
     val itemState = refineRelevantItemStatesAndYieldTarget(patch)
@@ -48,26 +56,39 @@ abstract class PatchRecorderImplementation(eventsHaveEffectNoLaterThan: Unbounde
     itemState.addPatch(when, patch)
   }
 
-  override def recordPatchFromMeasurement(when: Unbounded[Instant], patch: AbstractPatch): Unit = {
+  override def recordPatchFromMeasurement(when: Unbounded[Instant],
+                                          patch: AbstractPatch): Unit = {
     _whenEventPertainedToByLastRecordingTookPlace = Some(when)
 
     refineRelevantItemStatesAndYieldTarget(patch).addPatch(when, patch)
   }
 
-  def annihilateItemFor_[SubclassOfRaw <: Raw, Raw <: Identified](id: Raw#Id, typeTag: universe.TypeTag[SubclassOfRaw], when: Instant): Unit = {
-    identifiedItemsScope.annihilateItemFor[SubclassOfRaw](id.asInstanceOf[SubclassOfRaw#Id], when)(typeTag)
+  def annihilateItemFor_[SubclassOfRaw <: Raw, Raw <: Identified](
+      id: Raw#Id,
+      typeTag: universe.TypeTag[SubclassOfRaw],
+      when: Instant): Unit = {
+    identifiedItemsScope.annihilateItemFor[SubclassOfRaw](
+      id.asInstanceOf[SubclassOfRaw#Id],
+      when)(typeTag)
   }
 
-  override def recordAnnihilation[Raw <: Identified : TypeTag](when: Instant, id: Raw#Id): Unit = {
+  override def recordAnnihilation[Raw <: Identified: TypeTag](
+      when: Instant,
+      id: Raw#Id): Unit = {
     val liftedWhen = Finite(when)
     _whenEventPertainedToByLastRecordingTookPlace = Some(liftedWhen)
 
-    idToItemStatesMap.get(id).toSeq.flatten filter (!_.itemAnnihilationHasBeenNoted) match {
-      case Seq() => throw new RuntimeException(s"Attempt to annihilate item of id: $id that does not exist at all at: $when.")
+    idToItemStatesMap
+      .get(id)
+      .toSeq
+      .flatten filter (!_.itemAnnihilationHasBeenNoted) match {
+      case Seq() =>
+        throw new RuntimeException(
+          s"Attempt to annihilate item of id: $id that does not exist at all at: $when.")
       case itemStates =>
         val expectedTypeTag = typeTag[Raw]
-        val compatibleItemStates = itemStates filter (_.canBeAnnihilatedAs(expectedTypeTag))
-
+        val compatibleItemStates = itemStates filter (_.canBeAnnihilatedAs(
+          expectedTypeTag))
 
         val sequenceIndex = nextSequenceIndex()
 
@@ -77,23 +98,31 @@ abstract class PatchRecorderImplementation(eventsHaveEffectNoLaterThan: Unbounde
             itemState.noteAnnihilation(sequenceIndex)
           }
 
-          actionQueue.enqueue((sequenceIndex, Unit => for (itemStateToBeAnnihilated <- compatibleItemStates) {
-            val typeTagForSpecificItem = itemStateToBeAnnihilated.lowerBoundTypeTag
-            annihilateItemFor_(id, typeTagForSpecificItem, when)
+          actionQueue.enqueue(
+            (sequenceIndex,
+             Unit =>
+               for (itemStateToBeAnnihilated <- compatibleItemStates) {
+                 val typeTagForSpecificItem =
+                   itemStateToBeAnnihilated.lowerBoundTypeTag
+                 annihilateItemFor_(id, typeTagForSpecificItem, when)
 
-            val itemStates = idToItemStatesMap(id)
+                 val itemStates = idToItemStatesMap(id)
 
-            itemStates -= itemStateToBeAnnihilated
+                 itemStates -= itemStateToBeAnnihilated
 
-            if (itemStates.isEmpty){
-              idToItemStatesMap -= id
-            }
-          }, liftedWhen, () => true))
+                 if (itemStates.isEmpty) {
+                   idToItemStatesMap -= id
+                 }
+             },
+             liftedWhen,
+             () => true))
 
           outstandingSequenceIndices -= sequenceIndex
 
           applyPatches(drainDownQueue = false)
-        } else throw new RuntimeException(s"Attempt to annihilate item of id: $id that does not exist with the expected type of '${expectedTypeTag.tpe}' at: $when, the items that do exist have types: '${compatibleItemStates map (_.lowerBoundTypeTag.tpe) toList}'.")
+        } else
+          throw new RuntimeException(
+            s"Attempt to annihilate item of id: $id that does not exist with the expected type of '${expectedTypeTag.tpe}' at: $when, the items that do exist have types: '${compatibleItemStates map (_.lowerBoundTypeTag.tpe) toList}'.")
     }
   }
 
@@ -110,19 +139,22 @@ abstract class PatchRecorderImplementation(eventsHaveEffectNoLaterThan: Unbounde
   }
 
   private def applyPatches(drainDownQueue: Boolean): Unit = {
-    if (drainDownQueue){
+    if (drainDownQueue) {
       assert(outstandingSequenceIndices.isEmpty)
     }
 
     while (actionQueue.nonEmpty && (actionQueue.head match {
-      case (sequenceIndex, _, whenForAction, incrementalApplicationCanProceed) =>
-        {
-          val actionIsNotOutOfSequence = outstandingSequenceIndices.isEmpty || sequenceIndex < outstandingSequenceIndices.min
-          val actionIsRelevantToCutoffTime = whenForAction <= eventsHaveEffectNoLaterThan
-          actionIsNotOutOfSequence && actionIsRelevantToCutoffTime && (drainDownQueue || incrementalApplicationCanProceed())
-        }
-    })) {
-      val (sequenceIndex, actionToBeExecuted, whenForAction, _) = actionQueue.dequeue()
+             case (sequenceIndex,
+                   _,
+                   whenForAction,
+                   incrementalApplicationCanProceed) => {
+               val actionIsNotOutOfSequence     = outstandingSequenceIndices.isEmpty || sequenceIndex < outstandingSequenceIndices.min
+               val actionIsRelevantToCutoffTime = whenForAction <= eventsHaveEffectNoLaterThan
+               actionIsNotOutOfSequence && actionIsRelevantToCutoffTime && (drainDownQueue || incrementalApplicationCanProceed())
+             }
+           })) {
+      val (sequenceIndex, actionToBeExecuted, whenForAction, _) =
+        actionQueue.dequeue()
       actionToBeExecuted(whenForAction)
     }
   }
@@ -131,13 +163,17 @@ abstract class PatchRecorderImplementation(eventsHaveEffectNoLaterThan: Unbounde
 
   private type CandidatePatches = mutable.MutableList[CandidatePatchTuple]
 
-  private class ItemState(initialTypeTag: TypeTag[_ <: Identified],
-                          private var _itemWouldConflictWithEarlierLifecyclePriorTo: SequenceIndex) {
-    def itemWouldConflictWithEarlierLifecyclePriorTo = _itemWouldConflictWithEarlierLifecyclePriorTo
+  private class ItemState(
+      initialTypeTag: TypeTag[_ <: Identified],
+      private var _itemWouldConflictWithEarlierLifecyclePriorTo: SequenceIndex) {
+    def itemWouldConflictWithEarlierLifecyclePriorTo =
+      _itemWouldConflictWithEarlierLifecyclePriorTo
 
-    def refineCutoffForEarliestExistence(itemCannotExistEarlierThan: SequenceIndex) = {
-      if (itemCannotExistEarlierThan > _itemWouldConflictWithEarlierLifecyclePriorTo){
-        _itemWouldConflictWithEarlierLifecyclePriorTo = itemCannotExistEarlierThan
+    def refineCutoffForEarliestExistence(
+        itemCannotExistEarlierThan: SequenceIndex) = {
+      if (itemCannotExistEarlierThan > _itemWouldConflictWithEarlierLifecyclePriorTo) {
+        _itemWouldConflictWithEarlierLifecyclePriorTo =
+          itemCannotExistEarlierThan
       }
     }
 
@@ -151,9 +187,11 @@ abstract class PatchRecorderImplementation(eventsHaveEffectNoLaterThan: Unbounde
 
     private var _upperBoundTypeTag = initialTypeTag
 
-    def isInconsistentWith(typeTag: TypeTag[_ <: Identified]) = typeTag.tpe <:< this._upperBoundTypeTag.tpe && !isFusibleWith(typeTag)
+    def isInconsistentWith(typeTag: TypeTag[_ <: Identified]) =
+      typeTag.tpe <:< this._upperBoundTypeTag.tpe && !isFusibleWith(typeTag)
 
-    def isFusibleWith(typeTag: TypeTag[_ <: Identified]) = this._lowerBoundTypeTag.tpe <:< typeTag.tpe || typeTag.tpe <:< this._lowerBoundTypeTag.tpe
+    def isFusibleWith(typeTag: TypeTag[_ <: Identified]) =
+      this._lowerBoundTypeTag.tpe <:< typeTag.tpe || typeTag.tpe <:< this._lowerBoundTypeTag.tpe
 
     def canBeAnnihilatedAs(typeTag: TypeTag[_ <: Identified]) =
       this._lowerBoundTypeTag.tpe <:< typeTag.tpe
@@ -163,16 +201,21 @@ abstract class PatchRecorderImplementation(eventsHaveEffectNoLaterThan: Unbounde
       methodAndItsCandidatePatchTuplesFor(patch.method) match {
         case (Some((exemplarMethod, candidatePatchTuples))) =>
           candidatePatchTuples += candidatePatchTuple
-          if (WorldImplementationCodeFactoring.firstMethodIsOverrideCompatibleWithSecond(exemplarMethod, patch.method)) {
+          if (WorldImplementationCodeFactoring
+                .firstMethodIsOverrideCompatibleWithSecond(exemplarMethod,
+                                                           patch.method)) {
             exemplarMethodToCandidatePatchesMap -= exemplarMethod
             exemplarMethodToCandidatePatchesMap += (patch.method -> candidatePatchTuples)
           }
         case None =>
-          exemplarMethodToCandidatePatchesMap += (patch.method -> mutable.MutableList(candidatePatchTuple))
+          exemplarMethodToCandidatePatchesMap += (patch.method -> mutable
+            .MutableList(candidatePatchTuple))
       }
     }
 
-    def refineType(typeTag: _root_.scala.reflect.runtime.universe.TypeTag[_ <: Identified]): Unit = {
+    def refineType(
+        typeTag: _root_.scala.reflect.runtime.universe.TypeTag[
+          _ <: Identified]): Unit = {
       if (typeTag.tpe <:< this._lowerBoundTypeTag.tpe) {
         this._lowerBoundTypeTag = typeTag
       } else if (this._upperBoundTypeTag.tpe <:< typeTag.tpe) {
@@ -180,13 +223,19 @@ abstract class PatchRecorderImplementation(eventsHaveEffectNoLaterThan: Unbounde
       }
     }
 
-    private def methodAndItsCandidatePatchTuplesFor(method: Method): Option[(Method, CandidatePatches)] = {
+    private def methodAndItsCandidatePatchTuplesFor(
+        method: Method): Option[(Method, CandidatePatches)] = {
       // Direct use of key into map...
       exemplarMethodToCandidatePatchesMap.get(method) map (method -> _) orElse
         // ... fallback to doing a linear search if the methods are not equal, but are related.
         exemplarMethodToCandidatePatchesMap.find {
-          case (exemplarMethod, _) => WorldImplementationCodeFactoring.firstMethodIsOverrideCompatibleWithSecond(method, exemplarMethod) ||
-            WorldImplementationCodeFactoring.firstMethodIsOverrideCompatibleWithSecond(exemplarMethod, method)
+          case (exemplarMethod, _) =>
+            WorldImplementationCodeFactoring
+              .firstMethodIsOverrideCompatibleWithSecond(method,
+                                                         exemplarMethod) ||
+              WorldImplementationCodeFactoring
+                .firstMethodIsOverrideCompatibleWithSecond(exemplarMethod,
+                                                           method)
         }
     }
 
@@ -197,14 +246,16 @@ abstract class PatchRecorderImplementation(eventsHaveEffectNoLaterThan: Unbounde
       exemplarMethodToCandidatePatchesMap.clear()
     }
 
-    def submitCandidatePatches(method: Method): Unit = methodAndItsCandidatePatchTuplesFor(method) match {
-      case Some((exemplarMethod, candidatePatchTuples)) =>
-        enqueueBestCandidatePatchFrom(candidatePatchTuples)
-        exemplarMethodToCandidatePatchesMap -= exemplarMethod
-      case None =>
-    }
+    def submitCandidatePatches(method: Method): Unit =
+      methodAndItsCandidatePatchTuplesFor(method) match {
+        case Some((exemplarMethod, candidatePatchTuples)) =>
+          enqueueBestCandidatePatchFrom(candidatePatchTuples)
+          exemplarMethodToCandidatePatchesMap -= exemplarMethod
+        case None =>
+      }
 
-    private val exemplarMethodToCandidatePatchesMap: mutable.Map[Method, CandidatePatches] = mutable.Map.empty
+    private val exemplarMethodToCandidatePatchesMap
+      : mutable.Map[Method, CandidatePatches] = mutable.Map.empty
 
     def sequenceIndexForAnnihilation = _sequenceIndexForAnnihilation.get
 
@@ -213,73 +264,95 @@ abstract class PatchRecorderImplementation(eventsHaveEffectNoLaterThan: Unbounde
     private var _sequenceIndexForAnnihilation: Option[SequenceIndex] = None
   }
 
-  private val idToItemStatesMap = mutable.Map.empty[Any, mutable.Set[ItemState]]
+  private val idToItemStatesMap =
+    mutable.Map.empty[Any, mutable.Set[ItemState]]
 
-  private type ItemReconstitutionDataToItemStateMap = mutable.Map[Recorder#ItemReconstitutionData[_ <: Identified], ItemState]
+  private type ItemReconstitutionDataToItemStateMap =
+    mutable.Map[Recorder#ItemReconstitutionData[_ <: Identified], ItemState]
 
-  private val patchToItemStatesMap = mutable.Map.empty[AbstractPatch, ItemReconstitutionDataToItemStateMap]
+  private val patchToItemStatesMap =
+    mutable.Map.empty[AbstractPatch, ItemReconstitutionDataToItemStateMap]
 
   private var _nextSequenceIndex: SequenceIndex = initialSequenceIndex
 
-  private type IndexedAction = (SequenceIndex, Unbounded[Instant] => Unit, Unbounded[Instant], () => Boolean)
+  private type IndexedAction = (SequenceIndex,
+                                Unbounded[Instant] => Unit,
+                                Unbounded[Instant],
+                                () => Boolean)
 
-  implicit val indexedActionOrdering = Ordering.by[IndexedAction, SequenceIndex](-_._1)
+  implicit val indexedActionOrdering =
+    Ordering.by[IndexedAction, SequenceIndex](-_._1)
 
   private val actionQueue = mutable.PriorityQueue[IndexedAction]()
 
-  private val outstandingSequenceIndices = mutable.SortedSet.empty[SequenceIndex]
+  private val outstandingSequenceIndices =
+    mutable.SortedSet.empty[SequenceIndex]
 
-
-  private def enqueueBestCandidatePatchFrom(candidatePatchTuples: CandidatePatches): Unit = {
+  private def enqueueBestCandidatePatchFrom(
+      candidatePatchTuples: CandidatePatches): Unit = {
     val bestPatch = self(candidatePatchTuples.map(_._2))
 
     val patchRepresentingTheEvent = candidatePatchTuples.head
 
     // The best patch has to be applied as if it occurred when the patch representing
     // the event would have taken place - so it steals the latter's sequence index.
-    val (sequenceIndexForBestPatch, _, whenTheBestPatchOccurs) = patchRepresentingTheEvent
+    val (sequenceIndexForBestPatch, _, whenTheBestPatchOccurs) =
+      patchRepresentingTheEvent
 
-    val reconstitutionDataToItemStateMap = patchToItemStatesMap.remove(bestPatch).get
+    val reconstitutionDataToItemStateMap =
+      patchToItemStatesMap.remove(bestPatch).get
 
     class IdentifiedItemAccessImplementation extends IdentifiedItemAccess {
-      for (((id, _), itemState) <- reconstitutionDataToItemStateMap){
-        if (itemState.itemWouldConflictWithEarlierLifecyclePriorTo > sequenceIndexForBestPatch){
-          throw new RuntimeException(s"Attempt to execute patch involving id: '$id' of type: '${itemState.lowerBoundTypeTag.tpe}' for a later lifecycle that cannot exist at time: $whenTheBestPatchOccurs, as there is at least one item from a previous lifecycle up until: ${itemState.itemWouldConflictWithEarlierLifecyclePriorTo}.")
+      for (((id, _), itemState) <- reconstitutionDataToItemStateMap) {
+        if (itemState.itemWouldConflictWithEarlierLifecyclePriorTo > sequenceIndexForBestPatch) {
+          throw new RuntimeException(
+            s"Attempt to execute patch involving id: '$id' of type: '${itemState.lowerBoundTypeTag.tpe}' for a later lifecycle that cannot exist at time: $whenTheBestPatchOccurs, as there is at least one item from a previous lifecycle up until: ${itemState.itemWouldConflictWithEarlierLifecyclePriorTo}.")
         }
       }
 
-      override def reconstitute[Raw <: Identified](itemReconstitutionData: Recorder#ItemReconstitutionData[Raw]): Raw = {
+      override def reconstitute[Raw <: Identified](
+          itemReconstitutionData: Recorder#ItemReconstitutionData[Raw])
+        : Raw = {
         val id = itemReconstitutionData._1
-        val itemState = reconstitutionDataToItemStateMap(itemReconstitutionData)
+        val itemState = reconstitutionDataToItemStateMap(
+          itemReconstitutionData)
 
         itemFor_(id, itemState.lowerBoundTypeTag).asInstanceOf[Raw]
       }
 
-      def itemFor_[SubclassOfRaw <: Raw, Raw <: Identified](id: Raw#Id, typeTag: universe.TypeTag[SubclassOfRaw]): SubclassOfRaw = {
-        PatchRecorderImplementation.this.identifiedItemsScope.itemFor[SubclassOfRaw](id.asInstanceOf[SubclassOfRaw#Id])(typeTag)
+      def itemFor_[SubclassOfRaw <: Raw, Raw <: Identified](
+          id: Raw#Id,
+          typeTag: universe.TypeTag[SubclassOfRaw]): SubclassOfRaw = {
+        PatchRecorderImplementation.this.identifiedItemsScope
+          .itemFor[SubclassOfRaw](id.asInstanceOf[SubclassOfRaw#Id])(typeTag)
       }
     }
 
-    val identifiedItemAccess = new IdentifiedItemAccessImplementation with IdentifiedItemAccessContracts
+    val identifiedItemAccess = new IdentifiedItemAccessImplementation
+    with IdentifiedItemAccessContracts
 
-    val itemStatesReferencedByBestPatch = reconstitutionDataToItemStateMap.values
+    val itemStatesReferencedByBestPatch =
+      reconstitutionDataToItemStateMap.values
 
-    actionQueue.enqueue((sequenceIndexForBestPatch, (when: Unbounded[Instant]) => {
-      bestPatch(identifiedItemAccess)
-      for (_ <- itemsAreLockedResource) {
-        bestPatch.checkInvariant(identifiedItemAccess)
-      }
-    }, whenTheBestPatchOccurs, () => {
-      itemStatesReferencedByBestPatch.forall(_.itemAnnihilationHasBeenNoted)
-    }))
+    actionQueue.enqueue(
+      (sequenceIndexForBestPatch, (when: Unbounded[Instant]) => {
+        bestPatch(identifiedItemAccess)
+        for (_ <- itemsAreLockedResource) {
+          bestPatch.checkInvariant(identifiedItemAccess)
+        }
+      }, whenTheBestPatchOccurs, () => {
+        itemStatesReferencedByBestPatch.forall(_.itemAnnihilationHasBeenNoted)
+      }))
 
-    for ((sequenceIndex, _, whenThePatchOccurs) <- candidatePatchTuples){
+    for ((sequenceIndex, _, whenThePatchOccurs) <- candidatePatchTuples) {
       outstandingSequenceIndices -= sequenceIndex
     }
   }
 
-  private def refineRelevantItemStatesAndYieldTarget(patch: AbstractPatch): ItemState = {
-    def refinedItemStateFor(reconstitutionData: Recorder#ItemReconstitutionData[_ <: Identified]) = {
+  private def refineRelevantItemStatesAndYieldTarget(
+      patch: AbstractPatch): ItemState = {
+    def refinedItemStateFor(
+        reconstitutionData: Recorder#ItemReconstitutionData[_ <: Identified]) = {
       val itemState = itemStateFor(reconstitutionData)
       itemState.refineType(reconstitutionData._2)
       patchToItemStatesMap.getOrElseUpdate(patch, mutable.Map.empty) += reconstitutionData -> itemState
@@ -292,42 +365,55 @@ abstract class PatchRecorderImplementation(eventsHaveEffectNoLaterThan: Unbounde
     refinedItemStateFor(patch.targetReconstitutionData)
   }
 
-  private def itemStateFor(itemReconstitutionData: Recorder#ItemReconstitutionData[_ <: Identified]): ItemState = {
+  private def itemStateFor(
+      itemReconstitutionData: Recorder#ItemReconstitutionData[_ <: Identified])
+    : ItemState = {
     val (id, typeTag) = itemReconstitutionData
 
-    val (itemStatesFromPreviousLifecycles, itemStates) = idToItemStatesMap.get(id).toSeq.flatten partition (_.itemAnnihilationHasBeenNoted)
+    val (itemStatesFromPreviousLifecycles, itemStates) = idToItemStatesMap
+      .get(id)
+      .toSeq
+      .flatten partition (_.itemAnnihilationHasBeenNoted)
 
     val clashingItemStates = itemStates filter (_.isInconsistentWith(typeTag))
 
     if (clashingItemStates.nonEmpty) {
-      throw new RuntimeException(s"There is at least one item of id: '${id}' that would be inconsistent with type '${typeTag.tpe}', these have types: '${clashingItemStates map (_.lowerBoundTypeTag.tpe)}'.")
+      throw new RuntimeException(
+        s"There is at least one item of id: '${id}' that would be inconsistent with type '${typeTag.tpe}', these have types: '${clashingItemStates map (_.lowerBoundTypeTag.tpe)}'.")
     }
 
     //TODO: there should be a way of purging item states whose items have had their annihilation recorded... Perhaps I can do that by detecting supertype matches here or when doing subsequent annihilations?
 
-    val itemStatesFromPreviousLifecyclesThatAreNotConsistentWithTheTypeUnderConsideration = itemStatesFromPreviousLifecycles filter (_.isInconsistentWith(typeTag))
+    val itemStatesFromPreviousLifecyclesThatAreNotConsistentWithTheTypeUnderConsideration = itemStatesFromPreviousLifecycles filter (_.isInconsistentWith(
+      typeTag))
 
-    val itemStatesFromPreviousLifecyclesThatAreFusibleWithTheTypeUnderConsideration = itemStatesFromPreviousLifecycles filter (_.isFusibleWith(typeTag))
+    val itemStatesFromPreviousLifecyclesThatAreFusibleWithTheTypeUnderConsideration = itemStatesFromPreviousLifecycles filter (_.isFusibleWith(
+      typeTag))
 
     val itemStatesFromPreviousLifecyclesThatEstablishALowerBoundOnTheNewLifecycle = itemStatesFromPreviousLifecyclesThatAreNotConsistentWithTheTypeUnderConsideration ++ itemStatesFromPreviousLifecyclesThatAreFusibleWithTheTypeUnderConsideration
 
-    val itemCannotExistEarlierThan = if (itemStatesFromPreviousLifecyclesThatEstablishALowerBoundOnTheNewLifecycle.nonEmpty) itemStatesFromPreviousLifecyclesThatEstablishALowerBoundOnTheNewLifecycle map (_.sequenceIndexForAnnihilation) max else initialSequenceIndex
+    val itemCannotExistEarlierThan = if (itemStatesFromPreviousLifecyclesThatEstablishALowerBoundOnTheNewLifecycle.nonEmpty)
+      itemStatesFromPreviousLifecyclesThatEstablishALowerBoundOnTheNewLifecycle map (_.sequenceIndexForAnnihilation) max
+    else initialSequenceIndex
 
     val compatibleItemStates = itemStates filter (_.isFusibleWith(typeTag))
 
-    val itemState = if (compatibleItemStates.nonEmpty) if (1 < compatibleItemStates.size) {
-      throw new scala.RuntimeException(s"There is more than one item of id: '${id}' compatible with type '${typeTag.tpe}', these have types: '${compatibleItemStates map (_.lowerBoundTypeTag.tpe)}'.")
-    } else {
-      val compatibleItemState = compatibleItemStates.head
-      compatibleItemState.refineCutoffForEarliestExistence(itemCannotExistEarlierThan)
-      compatibleItemState
-    }
-    else {
-      val itemState = new ItemState(typeTag, itemCannotExistEarlierThan)
-      val mutableItemStates = idToItemStatesMap.getOrElseUpdate(id, mutable.Set.empty)
-      mutableItemStates += itemState
-      itemState
-    }
+    val itemState =
+      if (compatibleItemStates.nonEmpty) if (1 < compatibleItemStates.size) {
+        throw new scala.RuntimeException(
+          s"There is more than one item of id: '${id}' compatible with type '${typeTag.tpe}', these have types: '${compatibleItemStates map (_.lowerBoundTypeTag.tpe)}'.")
+      } else {
+        val compatibleItemState = compatibleItemStates.head
+        compatibleItemState.refineCutoffForEarliestExistence(
+          itemCannotExistEarlierThan)
+        compatibleItemState
+      } else {
+        val itemState = new ItemState(typeTag, itemCannotExistEarlierThan)
+        val mutableItemStates =
+          idToItemStatesMap.getOrElseUpdate(id, mutable.Set.empty)
+        mutableItemStates += itemState
+        itemState
+      }
 
     itemState
   }

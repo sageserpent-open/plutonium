@@ -1,8 +1,8 @@
 package com.sageserpent.plutonium
 
 /**
- * Created by Gerard on 21/09/2015.
- */
+  * Created by Gerard on 21/09/2015.
+  */
 class FooHistory(val id: FooHistory#Id) extends History {
   type Id = String
 

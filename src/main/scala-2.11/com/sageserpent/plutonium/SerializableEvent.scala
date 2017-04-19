@@ -4,5 +4,5 @@ import java.time.Instant
 
 import com.sageserpent.americium.Unbounded
 
-case class SerializableEvent(when: Unbounded[Instant], recordOnTo: PatchRecorder => Unit)
-
+case class SerializableEvent(when: Unbounded[Instant],
+                             recordOnTo: PatchRecorder => Unit)

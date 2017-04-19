@@ -4,27 +4,64 @@ import java.time.Instant
 import java.util.function.{BiConsumer, Consumer}
 
 import com.sageserpent.americium.Unbounded
-import com.sageserpent.plutonium.{Change => ScalaChange, Identified, typeTagForClass}
+import com.sageserpent.plutonium.{
+  Change => ScalaChange,
+  Identified,
+  typeTagForClass
+}
 
 /**
   * Created by Gerard on 02/05/2016.
   */
 object Change {
-    def forOneItem[Raw <: Identified](when: Unbounded[Instant], id: Raw#Id, clazz: Class[Raw], update: Consumer[Raw]): ScalaChange =
-        ScalaChange.forOneItem(when)(id, update.accept(_: Raw))(typeTagForClass(clazz))
+  def forOneItem[Raw <: Identified](when: Unbounded[Instant],
+                                    id: Raw#Id,
+                                    clazz: Class[Raw],
+                                    update: Consumer[Raw]): ScalaChange =
+    ScalaChange.forOneItem(when)(id, update.accept(_: Raw))(
+      typeTagForClass(clazz))
 
-    def forOneItem[Raw <: Identified](when: Instant, id: Raw#Id, clazz: Class[Raw], update: Consumer[Raw]): ScalaChange =
-        ScalaChange.forOneItem(when)(id, update.accept(_: Raw))(typeTagForClass(clazz))
+  def forOneItem[Raw <: Identified](when: Instant,
+                                    id: Raw#Id,
+                                    clazz: Class[Raw],
+                                    update: Consumer[Raw]): ScalaChange =
+    ScalaChange.forOneItem(when)(id, update.accept(_: Raw))(
+      typeTagForClass(clazz))
 
-    def forOneItem[Raw <: Identified](id: Raw#Id, clazz: Class[Raw], update: Consumer[Raw]): ScalaChange =
-        ScalaChange.forOneItem(id, update.accept(_: Raw))(typeTagForClass(clazz))
+  def forOneItem[Raw <: Identified](id: Raw#Id,
+                                    clazz: Class[Raw],
+                                    update: Consumer[Raw]): ScalaChange =
+    ScalaChange.forOneItem(id, update.accept(_: Raw))(typeTagForClass(clazz))
 
-    def forTwoItems[Raw1 <: Identified, Raw2 <: Identified](when: Unbounded[Instant], id1: Raw1#Id, clazz1: Class[Raw1], id2: Raw2#Id, clazz2: Class[Raw2], update: BiConsumer[Raw1, Raw2]): ScalaChange =
-        ScalaChange.forTwoItems(when)(id1, id2, update.accept(_: Raw1, _: Raw2))(typeTagForClass(clazz1), typeTagForClass(clazz2))
+  def forTwoItems[Raw1 <: Identified, Raw2 <: Identified](
+      when: Unbounded[Instant],
+      id1: Raw1#Id,
+      clazz1: Class[Raw1],
+      id2: Raw2#Id,
+      clazz2: Class[Raw2],
+      update: BiConsumer[Raw1, Raw2]): ScalaChange =
+    ScalaChange.forTwoItems(when)(id1, id2, update.accept(_: Raw1, _: Raw2))(
+      typeTagForClass(clazz1),
+      typeTagForClass(clazz2))
 
-    def forTwoItems[Raw1 <: Identified, Raw2 <: Identified](when: Instant, id1: Raw1#Id, clazz1: Class[Raw1], id2: Raw2#Id, clazz2: Class[Raw2], update: BiConsumer[Raw1, Raw2]): ScalaChange =
-        ScalaChange.forTwoItems(when)(id1, id2, update.accept(_: Raw1, _: Raw2))(typeTagForClass(clazz1), typeTagForClass(clazz2))
+  def forTwoItems[Raw1 <: Identified, Raw2 <: Identified](
+      when: Instant,
+      id1: Raw1#Id,
+      clazz1: Class[Raw1],
+      id2: Raw2#Id,
+      clazz2: Class[Raw2],
+      update: BiConsumer[Raw1, Raw2]): ScalaChange =
+    ScalaChange.forTwoItems(when)(id1, id2, update.accept(_: Raw1, _: Raw2))(
+      typeTagForClass(clazz1),
+      typeTagForClass(clazz2))
 
-    def forTwoItems[Raw1 <: Identified, Raw2 <: Identified](id1: Raw1#Id, clazz1: Class[Raw1], id2: Raw2#Id, clazz2: Class[Raw2], update: BiConsumer[Raw1, Raw2]): ScalaChange =
-        ScalaChange.forTwoItems(id1, id2, update.accept(_: Raw1, _: Raw2))(typeTagForClass(clazz1), typeTagForClass(clazz2))
+  def forTwoItems[Raw1 <: Identified, Raw2 <: Identified](
+      id1: Raw1#Id,
+      clazz1: Class[Raw1],
+      id2: Raw2#Id,
+      clazz2: Class[Raw2],
+      update: BiConsumer[Raw1, Raw2]): ScalaChange =
+    ScalaChange.forTwoItems(id1, id2, update.accept(_: Raw1, _: Raw2))(
+      typeTagForClass(clazz1),
+      typeTagForClass(clazz2))
 }
