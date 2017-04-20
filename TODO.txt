@@ -75,4 +75,23 @@ that the scope in a spore captures all the history up to, but not including, the
 
 (DONE)
 
+---------------------------------------------------------------------------------------------------------------------------
 
+12. Time to introduce the scalable implementation - this will be based on a timeline whose implementation will take over from the existing patch recorder implementation.
+
+A timeline will exhibit a pure functional API that creates a brand new timeline from an existing one, given the same inputs that would be given to the existing 'World.revise'.
+
+If the world history for the new timeline turns out to be inconsistent, the creation is aborted by throwing an exception.
+
+This means that experimental worlds can be supported directly simply by branching a new timeline off an old one, provided that old timelines are kept around. Hmm.
+
+This also paves the way for only evaluating a world timeline once and persisting the resulting item states in a manner associated with the timeline. Hmm.
+
+Need to share state efficiently too, both for timelines and for item states. This also has to take into account the branching implicit when doing experimental worlds.
+
+One possibility is to calculate a new world timeline without regard to exception safety, persisting as we go into an experimental world.
+If everything works out, the data in the experimental world is moved across into the original world, otherwise all keys in the experimental world are simply purged.
+
+What are the goals - all we want to do now is to be able to *incrementally* define a new world revision - queries can be slow if needs be for now. So can experimental worlds, for that matter.
+
+Also, start with an in-memory implementation that holds on to all events, lifecycle bits and pieces and snapshotted item states.
