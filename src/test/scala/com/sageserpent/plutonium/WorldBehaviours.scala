@@ -2767,6 +2767,15 @@ class WorldSpecUsingWorldRedisBasedImplementation
 
   "A world with events that have since been corrected (using the world Redis-based implementation)" should behave like worldWithEventsThatHaveSinceBeenCorrectedBehaviour
 
+  implicit class ThrowableEnhancement(throwable: Throwable) {
+    def rootCause = rootCauseOf(throwable)
+
+    private def rootCauseOf(throwable: Throwable): Throwable = {
+      val cause = Option(throwable.getCause)
+      cause.fold(throwable)(rootCauseOf(_))
+    }
+  }
+
   "A world" should "be usable even if (de)serialization fails" in {
     val testCaseGenerator = for {
       worldResource <- worldResourceGenerator
@@ -2786,7 +2795,7 @@ class WorldSpecUsingWorldRedisBasedImplementation
                     NegativeInfinity[Instant]())(itemOneId,
                                                  (_.property = "Fred")))),
                 asOf)
-            } getCause
+            } rootCause
 
             val serializationFailedInExpectedManner = (exceptionDueToFailedSerialization == BadSerializationException()) :| s"Expected an instance of 'BadSerializationException', but got a '$exceptionDueToFailedSerialization' instead."
 
@@ -2808,7 +2817,7 @@ class WorldSpecUsingWorldRedisBasedImplementation
                       NegativeInfinity[Instant]())(itemOneId,
                                                    (_.property = "Alfred")))),
                   asOf)
-              } getCause
+              } rootCause
 
             val secondSerializationFailedInExpectedManner = (exceptionDueToFailedSecondSerialization == BadSerializationException()) :| s"Expected an instance of 'BadSerializationException', but got a '$exceptionDueToFailedSerialization' instead."
 
@@ -2834,7 +2843,7 @@ class WorldSpecUsingWorldRedisBasedImplementation
               intercept[KryoException] {
                 val scope = world.scopeFor(queryWhen, world.nextRevision)
                 scope.render(Bitemporal.wildcard[History]())
-              } getCause
+              } rootCause
 
             val deserializationFailedInExpectedManner = (exceptionDueToFailedDeserialization == BadDeserializationException()) :| s"Expected an instance of 'BadDeserializationException', but got a '$exceptionDueToFailedDeserialization' instead."
 
