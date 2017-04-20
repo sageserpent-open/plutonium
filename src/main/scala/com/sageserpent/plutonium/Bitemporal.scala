@@ -6,71 +6,71 @@ package com.sageserpent.plutonium
 import scala.reflect.runtime.universe._
 import scalaz.ApplicativePlus
 
-sealed trait Bitemporal[Raw] {
-  def map[Raw2] =
-    implicitly[ApplicativePlus[Bitemporal]].map[Raw, Raw2](this) _
+sealed trait Bitemporal[Item] {
+  def map[Item2] =
+    implicitly[ApplicativePlus[Bitemporal]].map[Item, Item2](this) _
 
-  def ap[Raw2](stage: Bitemporal[Raw => Raw2]): Bitemporal[Raw2] =
+  def ap[Item2](stage: Bitemporal[Item => Item2]): Bitemporal[Item2] =
     ApBitemporalResult(preceedingContext = this, stage = stage)
 
-  def plus(another: Bitemporal[Raw]): Bitemporal[Raw] =
+  def plus(another: Bitemporal[Item]): Bitemporal[Item] =
     PlusBitemporalResult(lhs = this, rhs = another)
 }
 
-case class ApBitemporalResult[ContextRaw, Raw](
+case class ApBitemporalResult[ContextRaw, Item](
     preceedingContext: Bitemporal[ContextRaw],
-    stage: Bitemporal[ContextRaw => Raw])
-    extends Bitemporal[Raw]
+    stage: Bitemporal[ContextRaw => Item])
+    extends Bitemporal[Item]
 
-case class PlusBitemporalResult[Raw](lhs: Bitemporal[Raw],
-                                     rhs: Bitemporal[Raw])
-    extends Bitemporal[Raw]
+case class PlusBitemporalResult[Item](lhs: Bitemporal[Item],
+                                      rhs: Bitemporal[Item])
+    extends Bitemporal[Item]
 
-case class PointBitemporalResult[Raw](raw: Raw) extends Bitemporal[Raw]
+case class PointBitemporalResult[Item](raw: Item) extends Bitemporal[Item]
 
-case class NoneBitemporalResult[Raw]() extends Bitemporal[Raw]
+case class NoneBitemporalResult[Item]() extends Bitemporal[Item]
 
-case class IdentifiedItemsBitemporalResult[Raw <: Identified: TypeTag](
-    id: Raw#Id)
-    extends Bitemporal[Raw] {
-  val capturedTypeTag = typeTag[Raw]
+case class IdentifiedItemsBitemporalResult[Item <: Identified: TypeTag](
+    id: Item#Id)
+    extends Bitemporal[Item] {
+  val capturedTypeTag = typeTag[Item]
 }
 
-case class ZeroOrOneIdentifiedItemBitemporalResult[Raw <: Identified: TypeTag](
-    id: Raw#Id)
-    extends Bitemporal[Raw] {
-  val capturedTypeTag = typeTag[Raw]
+case class ZeroOrOneIdentifiedItemBitemporalResult[Item <: Identified: TypeTag](
+    id: Item#Id)
+    extends Bitemporal[Item] {
+  val capturedTypeTag = typeTag[Item]
 }
 
-case class SingleIdentifiedItemBitemporalResult[Raw <: Identified: TypeTag](
-    id: Raw#Id)
-    extends Bitemporal[Raw] {
-  val capturedTypeTag = typeTag[Raw]
+case class SingleIdentifiedItemBitemporalResult[Item <: Identified: TypeTag](
+    id: Item#Id)
+    extends Bitemporal[Item] {
+  val capturedTypeTag = typeTag[Item]
 }
 
-case class WildcardBitemporalResult[Raw <: Identified: TypeTag]()
-    extends Bitemporal[Raw] {
-  val capturedTypeTag = typeTag[Raw]
+case class WildcardBitemporalResult[Item <: Identified: TypeTag]()
+    extends Bitemporal[Item] {
+  val capturedTypeTag = typeTag[Item]
 }
 
 // This companion object can produce a bitemporal instance that refers to zero, one or many raw instances depending
 // how many of those raw instances match the id or wildcard.
 object Bitemporal {
-  def apply[Raw](raw: Raw) = PointBitemporalResult(raw)
+  def apply[Item](raw: Item) = PointBitemporalResult(raw)
 
-  def withId[Raw <: Identified: TypeTag](id: Raw#Id): Bitemporal[Raw] =
+  def withId[Item <: Identified: TypeTag](id: Item#Id): Bitemporal[Item] =
     IdentifiedItemsBitemporalResult(id)
 
-  def zeroOrOneOf[Raw <: Identified: TypeTag](id: Raw#Id): Bitemporal[Raw] =
+  def zeroOrOneOf[Item <: Identified: TypeTag](id: Item#Id): Bitemporal[Item] =
     ZeroOrOneIdentifiedItemBitemporalResult(id)
 
-  def singleOneOf[Raw <: Identified: TypeTag](id: Raw#Id): Bitemporal[Raw] =
+  def singleOneOf[Item <: Identified: TypeTag](id: Item#Id): Bitemporal[Item] =
     SingleIdentifiedItemBitemporalResult(id)
 
-  def wildcard[Raw <: Identified: TypeTag](): Bitemporal[Raw] =
-    WildcardBitemporalResult[Raw]
+  def wildcard[Item <: Identified: TypeTag](): Bitemporal[Item] =
+    WildcardBitemporalResult[Item]
 
-  def none[Raw]: Bitemporal[Raw] = NoneBitemporalResult[Raw]
+  def none[Item]: Bitemporal[Item] = NoneBitemporalResult[Item]
 
   // TODO - a Bitemporal[Instant] that yields the query scope's 'when' from within the monad.
 

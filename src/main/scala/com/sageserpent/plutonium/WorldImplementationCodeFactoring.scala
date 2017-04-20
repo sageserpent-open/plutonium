@@ -72,15 +72,15 @@ object WorldImplementationCodeFactoring {
       mutable.MutableList.empty[AbstractPatch]
 
     class LocalRecorderFactory extends RecorderFactory {
-      override def apply[Raw <: Identified: TypeTag](id: Raw#Id): Raw = {
+      override def apply[Item <: Identified: TypeTag](id: Item#Id): Item = {
         import RecordingCallbackStuff._
 
         val proxyFactory = new ProxyFactory[AcquiredState] {
           val isForRecordingOnly = true
 
           override val stateToBeAcquiredByProxy = new AcquiredState {
-            def itemReconstitutionData: Recorder#ItemReconstitutionData[Raw] =
-              id -> typeTag[Raw]
+            def itemReconstitutionData: Recorder#ItemReconstitutionData[Item] =
+              id -> typeTag[Item]
 
             def capturePatch(patch: AbstractPatch) {
               patchesPickedUpFromAnEventBeingApplied += patch
@@ -106,7 +106,7 @@ object WorldImplementationCodeFactoring {
               .intercept(MethodDelegation.to(mutation))
         }
 
-        proxyFactory.constructFrom[Raw](id)
+        proxyFactory.constructFrom[Item](id)
       }
     }
 
@@ -148,9 +148,9 @@ object WorldImplementationCodeFactoring {
   }
 
   object IdentifiedItemsScope {
-    def hasItemOfSupertypeOf[Raw <: Identified: TypeTag](
+    def hasItemOfSupertypeOf[Item <: Identified: TypeTag](
         items: scala.collection.mutable.Set[Identified]) = {
-      val reflectedType = typeTag[Raw].tpe
+      val reflectedType = typeTag[Item].tpe
       val clazzOfRaw    = currentMirror.runtimeClass(reflectedType)
       items.exists { item =>
         val itemClazz = item.getClass
@@ -158,11 +158,11 @@ object WorldImplementationCodeFactoring {
       }
     }
 
-    def yieldOnlyItemsOfSupertypeOf[Raw <: Identified: TypeTag](
+    def yieldOnlyItemsOfSupertypeOf[Item <: Identified: TypeTag](
         items: Traversable[Identified]) = {
-      val reflectedType = typeTag[Raw].tpe
+      val reflectedType = typeTag[Item].tpe
       val clazzOfRaw =
-        currentMirror.runtimeClass(reflectedType).asInstanceOf[Class[Raw]]
+        currentMirror.runtimeClass(reflectedType).asInstanceOf[Class[Item]]
 
       items filter { item =>
         val itemClazz = item.getClass
@@ -170,11 +170,11 @@ object WorldImplementationCodeFactoring {
       }
     }
 
-    def yieldOnlyItemsOfType[Raw <: Identified: TypeTag](
+    def yieldOnlyItemsOfType[Item <: Identified: TypeTag](
         items: Traversable[Identified]) = {
-      val reflectedType = typeTag[Raw].tpe
+      val reflectedType = typeTag[Item].tpe
       val clazzOfRaw =
-        currentMirror.runtimeClass(reflectedType).asInstanceOf[Class[Raw]]
+        currentMirror.runtimeClass(reflectedType).asInstanceOf[Class[Item]]
 
       items.toStream filter (clazzOfRaw.isInstance(_)) map (clazzOfRaw.cast(_))
     }
@@ -253,13 +253,13 @@ object WorldImplementationCodeFactoring {
       classMirror.reflectConstructor(constructor.asMethod) -> clazz
     }
 
-    def constructFrom[Raw <: Identified: TypeTag](id: Raw#Id) = {
+    def constructFrom[Item <: Identified: TypeTag](id: Item#Id) = {
       // NOTE: this returns items that are proxies to raw values, rather than the raw values themselves. Depending on the
       // context (using a scope created by a client from a world, as opposed to while building up that scope from patches),
       // the items may forbid certain operations on them - e.g. for rendering from a client's scope, the items should be
       // read-only.
 
-      val typeOfRaw = typeOf[Raw]
+      val typeOfRaw = typeOf[Item]
       val (constructor, clazz) = cachedProxyConstructors.get(typeOfRaw) match {
         case Some(cachedProxyConstructorData) => cachedProxyConstructorData
         case None =>
@@ -272,7 +272,7 @@ object WorldImplementationCodeFactoring {
         throw new UnsupportedOperationException(
           s"Attempt to create an instance of an abstract class '$clazz' for id: '$id'.")
       }
-      val proxy = constructor(id).asInstanceOf[Raw]
+      val proxy = constructor(id).asInstanceOf[Item]
 
       proxy
         .asInstanceOf[StateAcquisition[AcquiredState]]
@@ -325,7 +325,7 @@ object WorldImplementationCodeFactoring {
                 @This target: AnyRef,
                 @FieldValue("acquiredState") acquiredState: AcquiredState) = {
         val item = target.asInstanceOf[Recorder]
-        // Remember, the outer context is making a proxy of type 'Raw'.
+        // Remember, the outer context is making a proxy of type 'Item'.
         acquiredState.capturePatch(Patch(item, method, arguments))
         null // Representation of a unit value by a ByteBuddy interceptor.
       }
@@ -511,8 +511,8 @@ object WorldImplementationCodeFactoring {
 
     val idToItemsMultiMap = new MultiMap[Identified#Id, Identified]
 
-    def itemFor[Raw <: Identified: TypeTag](id: Raw#Id): Raw = {
-      def constructAndCacheItem(): Raw = {
+    def itemFor[Item <: Identified: TypeTag](id: Item#Id): Item = {
+      def constructAndCacheItem(): Item = {
         import QueryCallbackStuff._
 
         val proxyFactory = new ProxyFactory[AcquiredState] {
@@ -521,7 +521,7 @@ object WorldImplementationCodeFactoring {
           override val stateToBeAcquiredByProxy: AcquiredState =
             new AcquiredState {
               def itemReconstitutionData
-                : Recorder#ItemReconstitutionData[Raw] = id -> typeTag[Raw]
+                : Recorder#ItemReconstitutionData[Item] = id -> typeTag[Item]
 
               def itemsAreLocked: Boolean =
                 identifiedItemsScopeThis.itemsAreLocked
@@ -559,13 +559,13 @@ object WorldImplementationCodeFactoring {
         case Some(items) => {
           assert(items.nonEmpty)
           val conflictingItems =
-            IdentifiedItemsScope.yieldOnlyItemsOfSupertypeOf[Raw](items)
+            IdentifiedItemsScope.yieldOnlyItemsOfSupertypeOf[Item](items)
           assert(
             conflictingItems.isEmpty,
             s"Found conflicting items for id: '$id' with type tag: '${typeTag[
-              Raw].tpe}', these are: '${conflictingItems.toList}'.")
+              Item].tpe}', these are: '${conflictingItems.toList}'.")
           val itemsOfDesiredType =
-            IdentifiedItemsScope.yieldOnlyItemsOfType[Raw](items).force
+            IdentifiedItemsScope.yieldOnlyItemsOfType[Item](items).force
           if (itemsOfDesiredType.isEmpty)
             constructAndCacheItem()
           else {
@@ -576,8 +576,8 @@ object WorldImplementationCodeFactoring {
       }
     }
 
-    def annihilateItemFor[Raw <: Identified: TypeTag](id: Raw#Id,
-                                                      when: Instant): Unit = {
+    def annihilateItemFor[Item <: Identified: TypeTag](id: Item#Id,
+                                                       when: Instant): Unit = {
       idToItemsMultiMap.get(id) match {
         case Some(items) =>
           assert(items.nonEmpty)
@@ -585,7 +585,7 @@ object WorldImplementationCodeFactoring {
           // Have to force evaluation of the stream so that the call to '--=' below does not try to incrementally
           // evaluate the stream as the underlying source collection, namely 'items' is being mutated. This is
           // what you get when you go back to imperative programming after too much referential transparency.
-          val itemsSelectedForAnnihilation: Stream[Raw] =
+          val itemsSelectedForAnnihilation: Stream[Item] =
             IdentifiedItemsScope.yieldOnlyItemsOfType(items).force
           assert(1 == itemsSelectedForAnnihilation.size)
 
@@ -605,13 +605,13 @@ object WorldImplementationCodeFactoring {
       }
     }
 
-    def itemsFor[Raw <: Identified: TypeTag](id: Raw#Id): Stream[Raw] = {
-      val items = idToItemsMultiMap.getOrElse(id, Set.empty[Raw])
+    def itemsFor[Item <: Identified: TypeTag](id: Item#Id): Stream[Item] = {
+      val items = idToItemsMultiMap.getOrElse(id, Set.empty[Item])
 
       IdentifiedItemsScope.yieldOnlyItemsOfType(items)
     }
 
-    def allItems[Raw <: Identified: TypeTag](): Stream[Raw] =
+    def allItems[Item <: Identified: TypeTag](): Stream[Item] =
       IdentifiedItemsScope.yieldOnlyItemsOfType(
         idToItemsMultiMap.values.flatten)
   }
@@ -619,13 +619,13 @@ object WorldImplementationCodeFactoring {
   trait ScopeImplementation extends com.sageserpent.plutonium.Scope {
     val identifiedItemsScope: IdentifiedItemsScope
 
-    override def render[Raw](bitemporal: Bitemporal[Raw]): Stream[Raw] = {
-      def itemsFor[Raw <: Identified: TypeTag](id: Raw#Id): Stream[Raw] = {
+    override def render[Item](bitemporal: Bitemporal[Item]): Stream[Item] = {
+      def itemsFor[Item <: Identified: TypeTag](id: Item#Id): Stream[Item] = {
         identifiedItemsScope.itemsFor(id)
       }
 
-      def zeroOrOneItemFor[Raw <: Identified: TypeTag](
-          id: Raw#Id): Stream[Raw] = {
+      def zeroOrOneItemFor[Item <: Identified: TypeTag](
+          id: Item#Id): Stream[Item] = {
         itemsFor(id) match {
           case zeroOrOneItems @ (Stream.Empty | _ #:: Stream.Empty) =>
             zeroOrOneItems
@@ -635,7 +635,8 @@ object WorldImplementationCodeFactoring {
         }
       }
 
-      def singleItemFor[Raw <: Identified: TypeTag](id: Raw#Id): Stream[Raw] = {
+      def singleItemFor[Item <: Identified: TypeTag](
+          id: Item#Id): Stream[Item] = {
         zeroOrOneItemFor(id) match {
           case Stream.Empty =>
             throw new scala.RuntimeException(
@@ -644,13 +645,13 @@ object WorldImplementationCodeFactoring {
         }
       }
 
-      def allItems[Raw <: Identified: TypeTag]: Stream[Raw] = {
+      def allItems[Item <: Identified: TypeTag]: Stream[Item] = {
         identifiedItemsScope.allItems()
       }
 
       bitemporal match {
         case ApBitemporalResult(preceedingContext,
-                                stage: (Bitemporal[(_) => Raw])) =>
+                                stage: (Bitemporal[(_) => Item])) =>
           for {
             preceedingContext <- render(preceedingContext)
             stage             <- render(stage)
@@ -673,7 +674,7 @@ object WorldImplementationCodeFactoring {
       }
     }
 
-    override def numberOf[Raw <: Identified: TypeTag](id: Raw#Id): Int =
+    override def numberOf[Item <: Identified: TypeTag](id: Item#Id): Int =
       identifiedItemsScope.itemsFor(id).size
   }
 

@@ -63,8 +63,8 @@ abstract class PatchRecorderImplementation(
     refineRelevantItemStatesAndYieldTarget(patch).addPatch(when, patch)
   }
 
-  def annihilateItemFor_[SubclassOfRaw <: Raw, Raw <: Identified](
-      id: Raw#Id,
+  def annihilateItemFor_[SubclassOfRaw <: Item, Item <: Identified](
+      id: Item#Id,
       typeTag: universe.TypeTag[SubclassOfRaw],
       when: Instant): Unit = {
     identifiedItemsScope.annihilateItemFor[SubclassOfRaw](
@@ -72,9 +72,9 @@ abstract class PatchRecorderImplementation(
       when)(typeTag)
   }
 
-  override def recordAnnihilation[Raw <: Identified: TypeTag](
+  override def recordAnnihilation[Item <: Identified: TypeTag](
       when: Instant,
-      id: Raw#Id): Unit = {
+      id: Item#Id): Unit = {
     val liftedWhen = Finite(when)
     _whenEventPertainedToByLastRecordingTookPlace = Some(liftedWhen)
 
@@ -86,7 +86,7 @@ abstract class PatchRecorderImplementation(
         throw new RuntimeException(
           s"Attempt to annihilate item of id: $id that does not exist at all at: $when.")
       case itemStates =>
-        val expectedTypeTag = typeTag[Raw]
+        val expectedTypeTag = typeTag[Item]
         val compatibleItemStates = itemStates filter (_.canBeAnnihilatedAs(
           expectedTypeTag))
 
@@ -310,18 +310,18 @@ abstract class PatchRecorderImplementation(
         }
       }
 
-      override def reconstitute[Raw <: Identified](
-          itemReconstitutionData: Recorder#ItemReconstitutionData[Raw])
-        : Raw = {
+      override def reconstitute[Item <: Identified](
+          itemReconstitutionData: Recorder#ItemReconstitutionData[Item])
+        : Item = {
         val id = itemReconstitutionData._1
         val itemState = reconstitutionDataToItemStateMap(
           itemReconstitutionData)
 
-        itemFor_(id, itemState.lowerBoundTypeTag).asInstanceOf[Raw]
+        itemFor_(id, itemState.lowerBoundTypeTag).asInstanceOf[Item]
       }
 
-      def itemFor_[SubclassOfRaw <: Raw, Raw <: Identified](
-          id: Raw#Id,
+      def itemFor_[SubclassOfRaw <: Item, Item <: Identified](
+          id: Item#Id,
           typeTag: universe.TypeTag[SubclassOfRaw]): SubclassOfRaw = {
         PatchRecorderImplementation.this.identifiedItemsScope
           .itemFor[SubclassOfRaw](id.asInstanceOf[SubclassOfRaw#Id])(typeTag)

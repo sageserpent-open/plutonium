@@ -1,11 +1,11 @@
 import scala.spores._
 
 trait Foo {
-  def render[Raw](): Iterable[Raw] = ???
+  def render[Item](): Iterable[Item] = ???
 }
 
 object Bar {
-  def apply[Raw](id: Int) = {
+  def apply[Item](id: Int) = {
     spore { (foo: Foo) =>
       {
         val raws = foo.render()

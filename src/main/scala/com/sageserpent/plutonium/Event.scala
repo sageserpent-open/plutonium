@@ -26,29 +26,29 @@ case class Change(val when: Unbounded[Instant],
     extends Event {}
 
 object Change {
-  def forOneItem[Raw <: Identified: TypeTag](
-      when: Unbounded[Instant])(id: Raw#Id, update: Raw => Unit): Change = {
-    val typeTag = implicitly[TypeTag[Raw]]
+  def forOneItem[Item <: Identified: TypeTag](
+      when: Unbounded[Instant])(id: Item#Id, update: Item => Unit): Change = {
+    val typeTag = implicitly[TypeTag[Item]]
     Change(when, (recorderFactory: RecorderFactory) => {
       val recorder = recorderFactory(id)(typeTag)
       update(recorder)
     })
   }
 
-  def forOneItem[Raw <: Identified: TypeTag](
-      when: Instant)(id: Raw#Id, update: Raw => Unit): Change =
+  def forOneItem[Item <: Identified: TypeTag](
+      when: Instant)(id: Item#Id, update: Item => Unit): Change =
     forOneItem(Finite(when))(id, update)
 
-  def forOneItem[Raw <: Identified: TypeTag](id: Raw#Id,
-                                             update: Raw => Unit): Change =
+  def forOneItem[Item <: Identified: TypeTag](id: Item#Id,
+                                              update: Item => Unit): Change =
     forOneItem(americium.NegativeInfinity[Instant]())(id, update)
 
-  def forTwoItems[Raw1 <: Identified: TypeTag, Raw2 <: Identified: TypeTag](
-      when: Unbounded[Instant])(id1: Raw1#Id,
-                                id2: Raw2#Id,
-                                update: (Raw1, Raw2) => Unit): Change = {
-    val typeTag1 = implicitly[TypeTag[Raw1]]
-    val typeTag2 = implicitly[TypeTag[Raw2]]
+  def forTwoItems[Item1 <: Identified: TypeTag, Item2 <: Identified: TypeTag](
+      when: Unbounded[Instant])(id1: Item1#Id,
+                                id2: Item2#Id,
+                                update: (Item1, Item2) => Unit): Change = {
+    val typeTag1 = implicitly[TypeTag[Item1]]
+    val typeTag2 = implicitly[TypeTag[Item2]]
     Change(
       when,
       (recorderFactory: RecorderFactory) => {
@@ -59,16 +59,16 @@ object Change {
     )
   }
 
-  def forTwoItems[Raw1 <: Identified: TypeTag, Raw2 <: Identified: TypeTag](
-      when: Instant)(id1: Raw1#Id,
-                     id2: Raw2#Id,
-                     update: (Raw1, Raw2) => Unit): Change =
+  def forTwoItems[Item1 <: Identified: TypeTag, Item2 <: Identified: TypeTag](
+      when: Instant)(id1: Item1#Id,
+                     id2: Item2#Id,
+                     update: (Item1, Item2) => Unit): Change =
     forTwoItems(Finite(when))(id1, id2, update)
 
-  def forTwoItems[Raw1 <: Identified: TypeTag, Raw2 <: Identified: TypeTag](
-      id1: Raw1#Id,
-      id2: Raw2#Id,
-      update: (Raw1, Raw2) => Unit): Change =
+  def forTwoItems[Item1 <: Identified: TypeTag, Item2 <: Identified: TypeTag](
+      id1: Item1#Id,
+      id2: Item2#Id,
+      update: (Item1, Item2) => Unit): Change =
     forTwoItems(americium.NegativeInfinity[Instant]())(id1, id2, update)
 }
 
@@ -77,31 +77,32 @@ case class Measurement(val when: Unbounded[Instant],
     extends Event {}
 
 object Measurement {
-  def forOneItem[Raw <: Identified: TypeTag](when: Unbounded[Instant])(
-      id: Raw#Id,
-      measurement: Raw => Unit): Measurement = {
-    val typeTag = implicitly[TypeTag[Raw]]
+  def forOneItem[Item <: Identified: TypeTag](when: Unbounded[Instant])(
+      id: Item#Id,
+      measurement: Item => Unit): Measurement = {
+    val typeTag = implicitly[TypeTag[Item]]
     Measurement(when, (recorderFactory: RecorderFactory) => {
       val recorder = recorderFactory(id)(typeTag)
       measurement(recorder)
     })
   }
 
-  def forOneItem[Raw <: Identified: TypeTag](
-      when: Instant)(id: Raw#Id, update: Raw => Unit): Measurement =
+  def forOneItem[Item <: Identified: TypeTag](
+      when: Instant)(id: Item#Id, update: Item => Unit): Measurement =
     forOneItem(Finite(when))(id, update)
 
-  def forOneItem[Raw <: Identified: TypeTag](
-      id: Raw#Id,
-      update: Raw => Unit): Measurement =
+  def forOneItem[Item <: Identified: TypeTag](
+      id: Item#Id,
+      update: Item => Unit): Measurement =
     forOneItem(americium.NegativeInfinity[Instant]())(id, update)
 
-  def forTwoItems[Raw1 <: Identified: TypeTag, Raw2 <: Identified: TypeTag](
-      when: Unbounded[Instant])(id1: Raw1#Id,
-                                id2: Raw2#Id,
-                                update: (Raw1, Raw2) => Unit): Measurement = {
-    val typeTag1 = implicitly[TypeTag[Raw1]]
-    val typeTag2 = implicitly[TypeTag[Raw2]]
+  def forTwoItems[Item1 <: Identified: TypeTag, Item2 <: Identified: TypeTag](
+      when: Unbounded[Instant])(
+      id1: Item1#Id,
+      id2: Item2#Id,
+      update: (Item1, Item2) => Unit): Measurement = {
+    val typeTag1 = implicitly[TypeTag[Item1]]
+    val typeTag2 = implicitly[TypeTag[Item2]]
     Measurement(
       when,
       (recorderFactory: RecorderFactory) => {
@@ -112,16 +113,16 @@ object Measurement {
     )
   }
 
-  def forTwoItems[Raw1 <: Identified: TypeTag, Raw2 <: Identified: TypeTag](
-      when: Instant)(id1: Raw1#Id,
-                     id2: Raw2#Id,
-                     update: (Raw1, Raw2) => Unit): Measurement =
+  def forTwoItems[Item1 <: Identified: TypeTag, Item2 <: Identified: TypeTag](
+      when: Instant)(id1: Item1#Id,
+                     id2: Item2#Id,
+                     update: (Item1, Item2) => Unit): Measurement =
     forTwoItems(Finite(when))(id1, id2, update)
 
-  def forTwoItems[Raw1 <: Identified: TypeTag, Raw2 <: Identified: TypeTag](
-      id1: Raw1#Id,
-      id2: Raw2#Id,
-      update: (Raw1, Raw2) => Unit): Measurement =
+  def forTwoItems[Item1 <: Identified: TypeTag, Item2 <: Identified: TypeTag](
+      id1: Item1#Id,
+      id2: Item2#Id,
+      update: (Item1, Item2) => Unit): Measurement =
     forTwoItems(americium.NegativeInfinity[Instant]())(id1, id2, update)
 }
 
@@ -132,10 +133,10 @@ object Measurement {
 // NOTE: it is OK to have annihilations and other events occurring at the same time: the documentation of 'World.revise'
 // covers how coincident events are resolved. So an item referred to by an id may be changed, then annihilated, then
 // recreated and so on all at the same time.
-case class Annihilation[Raw <: Identified: TypeTag](definiteWhen: Instant,
-                                                    id: Raw#Id)
+case class Annihilation[Item <: Identified: TypeTag](definiteWhen: Instant,
+                                                     id: Item#Id)
     extends Event {
   val when = Finite(definiteWhen)
   @Bind(classOf[JavaSerializer])
-  val capturedTypeTag = typeTag[Raw]
+  val capturedTypeTag = typeTag[Item]
 }

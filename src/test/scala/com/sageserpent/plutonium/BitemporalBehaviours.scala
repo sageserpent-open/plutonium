@@ -74,11 +74,11 @@ trait BitemporalBehaviours
               val idsInExistence = integerHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(
                 queryWhen)) map (_.historyId.asInstanceOf[IntegerHistory#Id])
 
-              implicit def arbitraryGenericBitemporal[Raw](
-                  implicit rawArbitrary: Arbitrary[Raw])
-                : Arbitrary[Bitemporal[Raw]] = Arbitrary {
+              implicit def arbitraryGenericBitemporal[Item](
+                  implicit rawArbitrary: Arbitrary[Item])
+                : Arbitrary[Bitemporal[Item]] = Arbitrary {
                 Arbitrary
-                  .arbitrary[Raw] map (ApplicativePlus[Bitemporal].point(_))
+                  .arbitrary[Item] map (ApplicativePlus[Bitemporal].point(_))
               }
 
               implicit def arbitraryBitemporalOfInt(
@@ -122,8 +122,8 @@ trait BitemporalBehaviours
                 )
               }
 
-              implicit def equal[Raw]: Equal[Bitemporal[Raw]] =
-                (lhs: Bitemporal[Raw], rhs: Bitemporal[Raw]) =>
+              implicit def equal[Item]: Equal[Bitemporal[Item]] =
+                (lhs: Bitemporal[Item], rhs: Bitemporal[Item]) =>
                   scope.render(lhs) == scope.render(rhs)
 
               val properties = new Properties("applicativePlusEmpty")

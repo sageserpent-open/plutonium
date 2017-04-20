@@ -31,11 +31,11 @@ object WorldRedisBasedImplementation {
 
   val javaSerializer = new JavaSerializer
 
-  class ItemReconstitutionDataSerializer[Raw <: Identified]
-      extends Serializer[Recorder#ItemReconstitutionData[Raw]] {
+  class ItemReconstitutionDataSerializer[Item <: Identified]
+      extends Serializer[Recorder#ItemReconstitutionData[Item]] {
     override def write(kryo: Kryo,
                        output: Output,
-                       data: Recorder#ItemReconstitutionData[Raw]): Unit = {
+                       data: Recorder#ItemReconstitutionData[Item]): Unit = {
       val (id, typeTag) = data
       kryo.writeClassAndObject(output, id)
       kryo.writeObject(output, typeTag, javaSerializer)
@@ -43,11 +43,13 @@ object WorldRedisBasedImplementation {
 
     override def read(kryo: Kryo,
                       input: Input,
-                      dataType: Class[Recorder#ItemReconstitutionData[Raw]])
-      : Recorder#ItemReconstitutionData[Raw] = {
-      val id = kryo.readClassAndObject(input).asInstanceOf[Raw#Id]
+                      dataType: Class[Recorder#ItemReconstitutionData[Item]])
+      : Recorder#ItemReconstitutionData[Item] = {
+      val id = kryo.readClassAndObject(input).asInstanceOf[Item#Id]
       val typeTag = kryo
-        .readObject[TypeTag[Raw]](input, classOf[TypeTag[Raw]], javaSerializer)
+        .readObject[TypeTag[Item]](input,
+                                   classOf[TypeTag[Item]],
+                                   javaSerializer)
       id -> typeTag
     }
   }
@@ -55,12 +57,12 @@ object WorldRedisBasedImplementation {
   val kryoPool = KryoPool.withByteArrayOutputStream(
     40,
     new ScalaKryoInstantiator().withRegistrar((kryo: Kryo) => {
-      def registerSerializerForItemReconstitutionData[Raw <: Identified]() = {
-        // TODO - I think this is a potential bug, as 'Recorder#ItemReconstitutionData[Raw]' is an alias
+      def registerSerializerForItemReconstitutionData[Item <: Identified]() = {
+        // TODO - I think this is a potential bug, as 'Recorder#ItemReconstitutionData[Item]' is an alias
         // to a tuple type instance that is erased at runtime - so all kinds of things could be passed to
         // the special case serializer. Need to think about this, perhaps a value class wrapper will do the trick?
-        kryo.register(classOf[Recorder#ItemReconstitutionData[Raw]],
-                      new ItemReconstitutionDataSerializer[Raw])
+        kryo.register(classOf[Recorder#ItemReconstitutionData[Item]],
+                      new ItemReconstitutionDataSerializer[Item])
       }
       registerSerializerForItemReconstitutionData()
     })
