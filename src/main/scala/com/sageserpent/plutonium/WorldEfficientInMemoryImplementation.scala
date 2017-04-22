@@ -51,7 +51,7 @@ class WorldEfficientInMemoryImplementation[EventId]
     new ScopeBasedOnAsOf(when, asOf) with ScopeUsingStorage
 
   override def forkExperimentalWorld(scope: javaApi.Scope): World[EventId] =
-    ???
+    ??? // TODO - but much later....
 
   // TODO - consider use of mutable state object instead of having separate bits and pieces.
   private val timelines: MutableList[(Instant, Timeline)] = MutableList.empty
@@ -69,12 +69,18 @@ class WorldEfficientInMemoryImplementation[EventId]
         new ItemStateReferenceResolutionContext {
           override def itemsFor[Item <: Identified: TypeTag](
               id: Item#Id): Stream[Item] = ???
+          // TODO - cache the reconstituted snapshots and extend an internal API so that reconstitution can resolve (type tag, id) pairs to cached items (or reconstitue them).
+          // NOTE: the arguments passed to this method are themselves a (type tag, id) pair - so we already have said 'internal' API - it is precisely this method.
 
           override def idsFor[Item <: Identified: TypeTag]: Stream[Item#Id] =
-            ???
+            itemStateSnapshotStorage.idsFor[Item]
 
           override def allItems[Item <: Identified: universe.TypeTag]()
-            : Stream[Item] = ???
+            : Stream[Item] =
+            for {
+              id    <- idsFor[Item]
+              items <- itemsFor(id)
+            } yield items
         }
 
       def itemsFor[Item <: Identified: TypeTag](id: Item#Id): Stream[Item] = {
