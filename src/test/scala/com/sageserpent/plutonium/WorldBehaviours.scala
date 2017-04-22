@@ -2719,6 +2719,18 @@ class WorldSpecUsingWorldReferenceImplementation
   "A world with events that have since been corrected (using the world reference implementation)" should behave like worldWithEventsThatHaveSinceBeenCorrectedBehaviour
 }
 
+class WorldSpecUsingWorldEfficientInMemoryImplementation
+    extends WorldBehaviours
+    with WorldEfficientInMemoryImplementationResource {
+  "A world with no history (using the world efficient in-memory implementation)" should behave like worldWithNoHistoryBehaviour
+
+  "A world with history added in order of increasing event time (using the world efficient in-memory implementation)" should behave like worldWithHistoryAddedInOrderOfIncreasingEventTimeBehaviour
+
+  "A world (using the world efficient in-memory implementation)" should behave like worldBehaviour
+
+  "A world with events that have since been corrected (using the world efficient in-memory implementation)" should behave like worldWithEventsThatHaveSinceBeenCorrectedBehaviour
+}
+
 class HistoryWhoseIdWontSerialize(val id: HistoryWhoseIdWontSerialize#Id)
     extends History {
   type Id = WontSerializeId

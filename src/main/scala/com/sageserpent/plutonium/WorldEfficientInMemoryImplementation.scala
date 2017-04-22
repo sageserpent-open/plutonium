@@ -21,7 +21,7 @@ class WorldEfficientInMemoryImplementation[EventId]
 
   override def revise(events: Map[EventId, Option[Event]],
                       asOf: Instant): Revision = {
-    // Noddy version - no exception safety etc...
+    // TODO: sort out this noddy implementation - no exception safety etc...
     val resultCapturedBeforeMutation = nextRevision
 
     val baseTimeline =
@@ -53,6 +53,7 @@ class WorldEfficientInMemoryImplementation[EventId]
   override def forkExperimentalWorld(scope: javaApi.Scope): World[EventId] =
     ???
 
+  // TODO - consider use of mutable state object instead of having separate bits and pieces.
   private val timelines: MutableList[(Instant, Timeline)] = MutableList.empty
 
   private var itemStateSnapshotStorage: ItemStateSnapshotStorage =
