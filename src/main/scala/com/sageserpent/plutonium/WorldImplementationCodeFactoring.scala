@@ -25,7 +25,7 @@ import resource.{ManagedResource, makeManagedResource}
 import scala.collection.JavaConversions._
 import scala.collection.Searching._
 import scala.collection.mutable
-import scala.reflect.runtime._
+import scala.reflect.runtime.{universe, _}
 import scala.reflect.runtime.universe.{Super => _, This => _, _}
 
 /**
@@ -611,14 +611,12 @@ object WorldImplementationCodeFactoring {
         idToItemsMultiMap.values.flatten)
   }
 
-  trait ScopeImplementation extends com.sageserpent.plutonium.Scope {
-    val identifiedItemsScope: IdentifiedItemsScope
+  trait AnotherCodeFactoringThingie {
+    def itemsFor[Item <: Identified: TypeTag](id: Item#Id): Stream[Item]
 
-    override def render[Item](bitemporal: Bitemporal[Item]): Stream[Item] = {
-      def itemsFor[Item <: Identified: TypeTag](id: Item#Id): Stream[Item] = {
-        identifiedItemsScope.itemsFor(id)
-      }
+    def allItems[Item <: Identified: TypeTag](): Stream[Item]
 
+    def render[Item](bitemporal: Bitemporal[Item]): Stream[Item] = {
       def zeroOrOneItemFor[Item <: Identified: TypeTag](
           id: Item#Id): Stream[Item] = {
         itemsFor(id) match {
@@ -638,10 +636,6 @@ object WorldImplementationCodeFactoring {
               s"Id: '${id}' does not match any items of type: '${typeTag.tpe}'.")
           case result @ Stream(_) => result
         }
-      }
-
-      def allItems[Item <: Identified: TypeTag]: Stream[Item] = {
-        identifiedItemsScope.allItems()
       }
 
       bitemporal match {
@@ -665,14 +659,31 @@ object WorldImplementationCodeFactoring {
           singleItemFor(id)
         case bitemporal @ WildcardBitemporalResult() =>
           implicit val typeTag = bitemporal.capturedTypeTag
-          allItems
+          allItems()
       }
     }
 
-    override def numberOf[Item <: Identified: TypeTag](id: Item#Id): Int =
-      identifiedItemsScope.itemsFor(id).size
+    def numberOf[Item <: Identified: TypeTag](id: Item#Id): Int =
+      itemsFor(id).size
   }
 
+  trait ScopeImplementation extends com.sageserpent.plutonium.Scope {
+    val identifiedItemsScope: IdentifiedItemsScope
+
+    object itemCache extends AnotherCodeFactoringThingie {
+      override def itemsFor[Item <: Identified: TypeTag](
+          id: Item#Id): Stream[Item] = identifiedItemsScope.itemsFor(id)
+
+      override def allItems[Item <: Identified: TypeTag](): Stream[Item] =
+        identifiedItemsScope.allItems()
+    }
+
+    override def render[Item](bitemporal: Bitemporal[Item]): Stream[Item] =
+      itemCache.render(bitemporal)
+
+    override def numberOf[Item <: Identified: TypeTag](id: Item#Id): Int =
+      itemCache.numberOf(id)
+  }
 }
 
 abstract class WorldImplementationCodeFactoring[EventId]

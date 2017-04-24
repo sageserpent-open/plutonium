@@ -7,7 +7,6 @@ import com.sageserpent.plutonium.World.Revision
 
 import scala.collection.mutable.MutableList
 import scala.reflect.runtime.universe
-import scala.reflect.runtime.universe._
 import scala.reflect.runtime.universe.TypeTag
 
 /**
@@ -60,82 +59,28 @@ class WorldEfficientInMemoryImplementation[EventId]
     noItemStateSnapshots
 
   trait ScopeUsingStorage extends com.sageserpent.plutonium.Scope {
-    override def numberOf[Item <: Identified: TypeTag](id: Item#Id): Revision =
-      itemStateSnapshotStorage.snapshotsFor[Item](id).size
 
-    override def render[Item](bitemporal: Bitemporal[Item]): Stream[Item] = {
-      // TODO: massive deduplication!
-      val itemStateReferenceResolutionContext =
-        new ItemStateReferenceResolutionContext {
-          override def itemsFor[Item <: Identified: TypeTag](
-              id: Item#Id): Stream[Item] = ???
-          // TODO - cache the reconstituted snapshots and extend an internal API so that reconstitution can resolve (type tag, id) pairs to cached items (or reconstitue them).
-          // NOTE: the arguments passed to this method are themselves a (type tag, id) pair - so we already have said 'internal' API - it is precisely this method.
+    private def itemCache() =
+      new WorldImplementationCodeFactoring.AnotherCodeFactoringThingie
+      with ItemStateReferenceResolutionContext {
+        override def itemsFor[Item <: Identified: TypeTag](
+            id: Item#Id): Stream[Item] = ???
 
-          override def idsFor[Item <: Identified: TypeTag]: Stream[Item#Id] =
-            itemStateSnapshotStorage.idsFor[Item]
+        override def idsFor[Item <: Identified: TypeTag]: Stream[Item#Id] =
+          itemStateSnapshotStorage.idsFor[Item]
 
-          override def allItems[Item <: Identified: universe.TypeTag]()
-            : Stream[Item] =
-            for {
-              id    <- idsFor[Item]
-              items <- itemsFor(id)
-            } yield items
-        }
-
-      def itemsFor[Item <: Identified: TypeTag](id: Item#Id): Stream[Item] = {
-        itemStateReferenceResolutionContext.itemsFor(id)
-      }
-
-      def zeroOrOneItemFor[Item <: Identified: TypeTag](
-          id: Item#Id): Stream[Item] = {
-        itemsFor(id) match {
-          case zeroOrOneItems @ (Stream.Empty | _ #:: Stream.Empty) =>
-            zeroOrOneItems
-          case _ =>
-            throw new scala.RuntimeException(
-              s"Id: '${id}' matches more than one item of type: '${typeTag.tpe}'.")
-        }
-      }
-
-      def singleItemFor[Item <: Identified: TypeTag](
-          id: Item#Id): Stream[Item] = {
-        zeroOrOneItemFor(id) match {
-          case Stream.Empty =>
-            throw new scala.RuntimeException(
-              s"Id: '${id}' does not match any items of type: '${typeTag.tpe}'.")
-          case result @ Stream(_) => result
-        }
-      }
-
-      def allItems[Item <: Identified: TypeTag]: Stream[Item] = {
-        itemStateReferenceResolutionContext.allItems()
-      }
-
-      bitemporal match {
-        case ApBitemporalResult(preceedingContext,
-                                stage: (Bitemporal[(_) => Item])) =>
+        def allItems[Item <: Identified: TypeTag](): Stream[Item] =
           for {
-            preceedingContext <- render(preceedingContext)
-            stage             <- render(stage)
-          } yield stage(preceedingContext)
-        case PlusBitemporalResult(lhs, rhs) => render(lhs) ++ render(rhs)
-        case PointBitemporalResult(raw)     => Stream(raw)
-        case NoneBitemporalResult()         => Stream.empty
-        case bitemporal @ IdentifiedItemsBitemporalResult(id) =>
-          implicit val typeTag = bitemporal.capturedTypeTag
-          itemsFor(id)
-        case bitemporal @ ZeroOrOneIdentifiedItemBitemporalResult(id) =>
-          implicit val typeTag = bitemporal.capturedTypeTag
-          zeroOrOneItemFor(id)
-        case bitemporal @ SingleIdentifiedItemBitemporalResult(id) =>
-          implicit val typeTag = bitemporal.capturedTypeTag
-          singleItemFor(id)
-        case bitemporal @ WildcardBitemporalResult() =>
-          implicit val typeTag = bitemporal.capturedTypeTag
-          allItems
+            id    <- idsFor[Item]
+            items <- itemsFor(id)
+          } yield items
       }
-    }
+
+    override def render[Item](bitemporal: Bitemporal[Item]): Stream[Item] =
+      itemCache().render(bitemporal)
+
+    override def numberOf[Item <: Identified: TypeTag](id: Item#Id): Revision =
+      itemCache().numberOf(id)
   }
 
   trait ItemIdQueryApi {
@@ -145,7 +90,6 @@ class WorldEfficientInMemoryImplementation[EventId]
   trait ItemStateReferenceResolutionContext extends ItemIdQueryApi {
     // This will go fetch a snapshot from somewhere - storage or whatever and self-populate if necessary.
     def itemsFor[Item <: Identified: TypeTag](id: Item#Id): Stream[Item]
-    def allItems[Item <: Identified: TypeTag](): Stream[Item]
   }
 
   trait ItemStateSnapshot {
