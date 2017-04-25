@@ -25,7 +25,7 @@ import resource.{ManagedResource, makeManagedResource}
 import scala.collection.JavaConversions._
 import scala.collection.Searching._
 import scala.collection.mutable
-import scala.reflect.runtime.{universe, _}
+import scala.reflect.runtime._
 import scala.reflect.runtime.universe.{Super => _, This => _, _}
 
 /**
@@ -498,20 +498,20 @@ object WorldImplementationCodeFactoring {
       }
     }
 
-    class MultiMap[Key, Value]
+    class MultiMap
         extends scala.collection.mutable.HashMap[
-          Key,
-          scala.collection.mutable.Set[Value]]
-        with scala.collection.mutable.MultiMap[Key, Value] {}
+          Identified#Id,
+          scala.collection.mutable.Set[Identified]]
+        with scala.collection.mutable.MultiMap[Identified#Id, Identified] {}
 
-    val idToItemsMultiMap = new MultiMap[Identified#Id, Identified]
+    val idToItemsMultiMap = new MultiMap
 
     def itemFor[Item <: Identified: TypeTag](id: Item#Id): Item = {
       def constructAndCacheItem(): Item = {
         import QueryCallbackStuff._
 
         val proxyFactory = new ProxyFactory[AcquiredState] {
-          val isForRecordingOnly = false
+          override val isForRecordingOnly = false
 
           override val stateToBeAcquiredByProxy: AcquiredState =
             new AcquiredState {

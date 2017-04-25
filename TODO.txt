@@ -95,3 +95,6 @@ If everything works out, the data in the experimental world is moved across into
 What are the goals - all we want to do now is to be able to *incrementally* define a new world revision - queries can be slow if needs be for now. So can experimental worlds, for that matter.
 
 Also, start with an in-memory implementation that holds on to all events, lifecycle bits and pieces and snapshotted item states.
+
+Do not try to merge the cacheing for the 'ItemStateReferenceResolutionContext' implementation with what's been done for the 'IdentifiedItemsScope' - they are really
+two different things. We can reuse the helpers in the companion object of 'IdentifiedItemsScope', though.
