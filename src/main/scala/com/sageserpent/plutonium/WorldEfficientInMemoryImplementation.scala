@@ -4,10 +4,11 @@ import java.time.Instant
 
 import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.World.Revision
+import com.sageserpent.plutonium.WorldImplementationCodeFactoring.IdentifiedItemsScope
 
 import scala.collection.mutable.MutableList
 import scala.reflect.runtime.universe
-import scala.reflect.runtime.universe.TypeTag
+import scala.reflect.runtime.universe.{TypeTag, typeTag}
 
 /**
   * Created by gerardMurphy on 20/04/2017.
@@ -64,7 +65,36 @@ class WorldEfficientInMemoryImplementation[EventId]
       new WorldImplementationCodeFactoring.AnotherCodeFactoringThingie
       with ItemStateReferenceResolutionContext {
         override def itemsFor[Item <: Identified: TypeTag](
-            id: Item#Id): Stream[Item] = ???
+            id: Item#Id): Stream[Item] = {
+          def constructAndCacheItems(
+              exclusions: Set[Class[_ <: Item]]): Stream[Item] = {
+            for (snapshot <- itemStateSnapshotStorage
+                   .snapshotsFor[Item](id, exclusions))
+              yield {
+                val item = snapshot.reconstitute(this)
+                idToItemsMultiMap.addBinding(id, item)
+                item
+              }
+          }
+
+          idToItemsMultiMap.get(id) match {
+            case None =>
+              constructAndCacheItems(Set.empty)
+            case Some(items) => {
+              assert(items.nonEmpty)
+              val conflictingItems =
+                IdentifiedItemsScope.yieldOnlyItemsOfSupertypeOf[Item](items)
+              assert(
+                conflictingItems.isEmpty,
+                s"Found conflicting items for id: '$id' with type tag: '${typeTag[
+                  Item].tpe}', these are: '${conflictingItems.toList}'.")
+              val itemsOfDesiredType =
+                IdentifiedItemsScope.yieldOnlyItemsOfType[Item](items).force
+              itemsOfDesiredType ++ constructAndCacheItems(
+                itemsOfDesiredType map (_.getClass) toSet)
+            }
+          }
+        }
 
         override def idsFor[Item <: Identified: TypeTag]: Stream[Item#Id] =
           itemStateSnapshotStorage.idsFor[Item]
@@ -74,6 +104,14 @@ class WorldEfficientInMemoryImplementation[EventId]
             id    <- idsFor[Item]
             items <- itemsFor(id)
           } yield items
+
+        class MultiMap
+            extends scala.collection.mutable.HashMap[
+              Identified#Id,
+              scala.collection.mutable.Set[Identified]]
+            with scala.collection.mutable.MultiMap[Identified#Id, Identified] {}
+
+        val idToItemsMultiMap = new MultiMap
       }
 
     override def render[Item](bitemporal: Bitemporal[Item]): Stream[Item] =
@@ -93,14 +131,15 @@ class WorldEfficientInMemoryImplementation[EventId]
   }
 
   trait ItemStateSnapshot {
-    // Called from implementations of 'ItemStateReferenceResolutionContext.itemFor'.
+    // Called from implementations of 'ItemStateReferenceResolutionContext.itemFor' - if it needs
+    // to resolve an (item id, type tag) pair, it uses 'itemStateReferenceResolutionContext' to do it.
     def reconstitute[Item <: Identified: TypeTag](
         itemStateReferenceResolutionContext: ItemStateReferenceResolutionContext)
       : Item
   }
 
   object ItemStateSnapshot {
-    // References to other items will be represented as an encoding of a pair of item id and type tag.
+    // References to other items will be represented as an encoding of a pair of (item id, type tag).
     def apply[Item <: Identified: TypeTag](item: Item): ItemStateSnapshot = ???
   }
 
@@ -125,7 +164,8 @@ class WorldEfficientInMemoryImplementation[EventId]
 
   trait ItemStateSnapshotStorage extends ItemIdQueryApi {
     def snapshotsFor[Item <: Identified: TypeTag](
-        id: Item#Id): Stream[ItemStateSnapshot]
+        id: Item#Id,
+        exclusions: Set[Class[_ <: Item]]): Stream[ItemStateSnapshot]
 
     def openRevision(): ItemStateSnapshotRevisionBuilder
 
@@ -134,7 +174,9 @@ class WorldEfficientInMemoryImplementation[EventId]
 
   object noItemStateSnapshots extends ItemStateSnapshotStorage {
     override def snapshotsFor[Item <: Identified: universe.TypeTag](
-        id: Item#Id): Stream[ItemStateSnapshot] = Stream.empty
+        id: Item#Id,
+        exclusions: Set[Class[_ <: Item]]): Stream[ItemStateSnapshot] =
+      Stream.empty
 
     override def openRevision(): ItemStateSnapshotRevisionBuilder = ???
 
