@@ -5,8 +5,12 @@ import java.time.Instant
 import java.util.Optional
 import java.util.concurrent.Callable
 
+import com.esotericsoftware.kryo.{Kryo, Serializer}
+import com.esotericsoftware.kryo.io.{Input, Output}
 import com.sageserpent.americium.{Finite, NegativeInfinity, Unbounded}
 import com.sageserpent.plutonium.World.Revision
+import com.sageserpent.plutonium.WorldImplementationCodeFactoring.IdentifiedItemsScope
+import com.twitter.chill.{KryoBase, KryoPool, ScalaKryoInstantiator}
 import net.bytebuddy.ByteBuddy
 import net.bytebuddy.description.`type`.TypeDescription
 import net.bytebuddy.description.method.MethodDescription
@@ -27,6 +31,7 @@ import scala.collection.Searching._
 import scala.collection.mutable
 import scala.reflect.runtime._
 import scala.reflect.runtime.universe.{Super => _, This => _, _}
+import scala.util.DynamicVariable
 
 /**
   * Created by Gerard on 19/07/2015.
@@ -688,6 +693,154 @@ object WorldImplementationCodeFactoring {
 
 abstract class WorldImplementationCodeFactoring[EventId]
     extends World[EventId] {
+  object noItemStateSnapshots extends ItemStateSnapshotStorage {
+    override def snapshotsFor[Item <: Identified: TypeTag](
+        id: Item#Id,
+        exclusions: Set[TypeTag[_ <: Item]]): Stream[ItemStateSnapshot] =
+      Stream.empty
+
+    override def openRevision(): ItemStateSnapshotRevisionBuilder = ???
+
+    override def idsFor[Item <: Identified: TypeTag]: Stream[Item#Id] =
+      Stream.empty
+
+    override def fork(scope: javaApi.Scope): ItemStateSnapshotStorage = ???
+  }
+
+  var itemStateSnapshotStorage: ItemStateSnapshotStorage =
+    noItemStateSnapshots
+
+  object ItemStateSnapshot {
+    private val nastyHackAllowingAccessToItemStateReferenceResolutionContext =
+      new DynamicVariable[Option[ItemStateReferenceResolutionContext]](None)
+
+    private val kryoPool =
+      KryoPool.withByteArrayOutputStream(
+        40,
+        new ScalaKryoInstantiator {
+          override def newKryo(): KryoBase = {
+            val kryo = super.newKryo()
+            val originalSerializerForItems: Serializer[Identified] =
+              kryo
+                .getSerializer(classOf[Identified])
+                .asInstanceOf[Serializer[Identified]]
+
+            val serializerForItems = new Serializer[Identified] {
+
+              override def read(kryo: Kryo,
+                                input: Input,
+                                itemType: Class[Identified]): Identified =
+                if (0 < kryo.getDepth) {
+                  def typeWorkaroundViaWildcardCapture[Item <: Identified] = {
+                    val itemId =
+                      kryo.readClassAndObject(input).asInstanceOf[Item#Id]
+                    val itemTypeTag = kryo
+                      .readClassAndObject(input)
+                      .asInstanceOf[TypeTag[Item]]
+                    nastyHackAllowingAccessToItemStateReferenceResolutionContext.value.get
+                      .itemsFor(itemId)(itemTypeTag)
+                      .head
+                  }
+
+                  typeWorkaroundViaWildcardCapture
+                } else originalSerializerForItems.read(kryo, input, itemType)
+
+              override def write(kryo: Kryo,
+                                 output: Output,
+                                 item: Identified): Unit = {
+                if (0 < kryo.getDepth) {
+                  kryo.writeClassAndObject(output, item.id)
+                  kryo.writeClassAndObject(output,
+                                           typeTagForClass(item.getClass))
+                } else
+                  originalSerializerForItems.write(kryo, output, item)
+              }
+            }
+            kryo.register(classOf[Identified], serializerForItems)
+
+            kryo
+          }
+        }
+      )
+
+    // References to other items will be represented as an encoding of a pair of (item id, type tag).
+    def apply[Item <: Identified: TypeTag](item: Item): ItemStateSnapshot = {
+      new ItemStateSnapshot {
+        override def reconstitute[Item <: Identified: universe.TypeTag](
+            itemStateReferenceResolutionContext: ItemStateReferenceResolutionContext)
+          : Item =
+          nastyHackAllowingAccessToItemStateReferenceResolutionContext
+            .withValue(Some(itemStateReferenceResolutionContext)) {
+              kryoPool.fromBytes(payload).asInstanceOf[Item]
+            }
+
+        private val payload: Array[Byte] = kryoPool.toBytesWithClass(item)
+      }
+    }
+  }
+
+  trait ScopeUsingStorage extends com.sageserpent.plutonium.Scope {
+
+    private def itemCache() =
+      new WorldImplementationCodeFactoring.AnotherCodeFactoringThingie
+      with ItemStateReferenceResolutionContext {
+        override def itemsFor[Item <: Identified: TypeTag](
+            id: Item#Id): Stream[Item] = {
+          def constructAndCacheItems(
+              exclusions: Set[TypeTag[_ <: Item]]): Stream[Item] = {
+            for (snapshot <- itemStateSnapshotStorage
+                   .snapshotsFor[Item](id, exclusions))
+              yield {
+                val item = snapshot.reconstitute(this)
+                idToItemsMultiMap.addBinding(id, item)
+                item
+              }
+          }
+
+          idToItemsMultiMap.get(id) match {
+            case None =>
+              constructAndCacheItems(Set.empty)
+            case Some(items) => {
+              assert(items.nonEmpty)
+              val conflictingItems =
+                IdentifiedItemsScope.yieldOnlyItemsOfSupertypeOf[Item](items)
+              assert(
+                conflictingItems.isEmpty,
+                s"Found conflicting items for id: '$id' with type tag: '${typeTag[
+                  Item].tpe}', these are: '${conflictingItems.toList}'.")
+              val itemsOfDesiredType =
+                IdentifiedItemsScope.yieldOnlyItemsOfType[Item](items).force
+              itemsOfDesiredType ++ constructAndCacheItems(
+                itemsOfDesiredType map (excludedItem =>
+                  typeTagForClass(excludedItem.getClass)) toSet)
+            }
+          }
+        }
+
+        override def idsFor[Item <: Identified: TypeTag]: Stream[Item#Id] =
+          itemStateSnapshotStorage.idsFor[Item]
+
+        def allItems[Item <: Identified: TypeTag](): Stream[Item] =
+          for {
+            id   <- idsFor[Item]
+            item <- itemsFor(id)
+          } yield item
+
+        class MultiMap
+            extends scala.collection.mutable.HashMap[
+              Identified#Id,
+              scala.collection.mutable.Set[Identified]]
+            with scala.collection.mutable.MultiMap[Identified#Id, Identified] {}
+
+        val idToItemsMultiMap = new MultiMap
+      }
+
+    override def render[Item](bitemporal: Bitemporal[Item]): Stream[Item] =
+      itemCache().render(bitemporal)
+
+    override def numberOf[Item <: Identified: TypeTag](id: Item#Id): Revision =
+      itemCache().numberOf(id)
+  }
 
   abstract class ScopeBasedOnNextRevision(val when: Unbounded[Instant],
                                           val nextRevision: Revision)
