@@ -5,8 +5,8 @@ import java.time.Instant
 import java.util.Optional
 import java.util.concurrent.Callable
 
-import com.esotericsoftware.kryo.{Kryo, Serializer}
 import com.esotericsoftware.kryo.io.{Input, Output}
+import com.esotericsoftware.kryo.{Kryo, Serializer}
 import com.sageserpent.americium.{Finite, NegativeInfinity, Unbounded}
 import com.sageserpent.plutonium.World.Revision
 import com.sageserpent.plutonium.WorldImplementationCodeFactoring.IdentifiedItemsScope
@@ -693,6 +693,13 @@ object WorldImplementationCodeFactoring {
 
 abstract class WorldImplementationCodeFactoring[EventId]
     extends World[EventId] {
+  override def scopeFor(when: Unbounded[Instant],
+                        nextRevision: Revision): Scope =
+    new ScopeBasedOnNextRevision(when, nextRevision) with ScopeUsingStorage {}
+
+  override def scopeFor(when: Unbounded[Instant], asOf: Instant): Scope =
+    new ScopeBasedOnAsOf(when, asOf) with ScopeUsingStorage
+
   object noItemStateSnapshots extends ItemStateSnapshotStorage {
     override def snapshotsFor[Item <: Identified: TypeTag](
         id: Item#Id,

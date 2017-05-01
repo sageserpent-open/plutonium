@@ -2,7 +2,7 @@ package com.sageserpent.plutonium
 
 import java.time.Instant
 
-import com.sageserpent.americium.{PositiveInfinity, Unbounded}
+import com.sageserpent.americium.PositiveInfinity
 import com.sageserpent.plutonium.World.Revision
 
 /**
@@ -20,15 +20,6 @@ abstract class WorldInefficientImplementationCodeFactoring[EventId]
   }
 
   protected def eventTimeline(nextRevision: Revision): Seq[SerializableEvent]
-
-  // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
-  override def scopeFor(when: Unbounded[Instant],
-                        nextRevision: Revision): Scope =
-    new ScopeBasedOnNextRevision(when, nextRevision) with SelfPopulatedScope
-
-  // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
-  override def scopeFor(when: Unbounded[Instant], asOf: Instant): Scope =
-    new ScopeBasedOnAsOf(when, asOf) with SelfPopulatedScope
 
   def revise(events: Map[EventId, Option[Event]], asOf: Instant): Revision = {
     def newEventDatumsFor(nextRevisionPriorToUpdate: Revision)

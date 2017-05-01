@@ -4,10 +4,8 @@ import java.time.Instant
 
 import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.World.Revision
-import com.sageserpent.plutonium.WorldImplementationCodeFactoring.IdentifiedItemsScope
 
 import scala.collection.mutable.MutableList
-import scala.reflect.runtime.universe.{TypeTag, typeTag}
 
 class WorldEfficientInMemoryImplementation[EventId]
     extends WorldImplementationCodeFactoring[EventId] {
@@ -38,13 +36,6 @@ class WorldEfficientInMemoryImplementation[EventId]
 
     resultCapturedBeforeMutation
   }
-
-  override def scopeFor(when: Unbounded[Instant],
-                        nextRevision: Revision): Scope =
-    new ScopeBasedOnNextRevision(when, nextRevision) with ScopeUsingStorage {}
-
-  override def scopeFor(when: Unbounded[Instant], asOf: Instant): Scope =
-    new ScopeBasedOnAsOf(when, asOf) with ScopeUsingStorage
 
   override def forkExperimentalWorld(scope: javaApi.Scope): World[EventId] =
     ??? // TODO - but much later....
