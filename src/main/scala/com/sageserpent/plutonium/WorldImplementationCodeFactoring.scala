@@ -24,12 +24,14 @@ import net.bytebuddy.implementation.{
   MethodDelegation
 }
 import net.bytebuddy.matcher.{ElementMatcher, ElementMatchers}
+import org.objenesis.instantiator.ObjectInstantiator
+import org.objenesis.strategy.InstantiatorStrategy
 import resource.{ManagedResource, makeManagedResource}
 
 import scala.collection.JavaConversions._
 import scala.collection.Searching._
 import scala.collection.mutable
-import scala.reflect.runtime._
+import scala.reflect.runtime.{universe, _}
 import scala.reflect.runtime.universe.{Super => _, This => _, _}
 import scala.util.DynamicVariable
 
@@ -92,7 +94,8 @@ object WorldImplementationCodeFactoring {
           override val additionalInterfaces: Array[Class[_]] =
             RecordingCallbackStuff.additionalInterfaces
           override val cachedProxyConstructors
-            : mutable.Map[Type, (universe.MethodMirror, Class[_])] =
+            : mutable.Map[Type,
+                          (universe.MethodMirror, Class[_ <: Identified])] =
             RecordingCallbackStuff.cachedProxyConstructors
 
           override protected def configureInterceptions(
@@ -241,9 +244,12 @@ object WorldImplementationCodeFactoring {
 
     protected def configureInterceptions(builder: Builder[_]): Builder[_]
 
-    private def constructorFor(identifiableType: Type) = {
+    private def constructorFor(identifiableType: Type)
+      : (universe.MethodMirror, Class[_ <: Identified]) = {
       val clazz =
-        currentMirror.runtimeClass(identifiableType.typeSymbol.asClass)
+        currentMirror
+          .runtimeClass(identifiableType.typeSymbol.asClass)
+          .asInstanceOf[Class[_ <: Identified]]
 
       val proxyClazz = createProxyClass(clazz)
 
@@ -259,14 +265,7 @@ object WorldImplementationCodeFactoring {
       // the items may forbid certain operations on them - e.g. for rendering from a client's scope, the items should be
       // read-only.
 
-      val typeOfRaw = typeOf[Item]
-      val (constructor, clazz) = cachedProxyConstructors.get(typeOfRaw) match {
-        case Some(cachedProxyConstructorData) => cachedProxyConstructorData
-        case None =>
-          val (constructor, clazz) = constructorFor(typeOfRaw)
-          cachedProxyConstructors += (typeOfRaw -> (constructor, clazz))
-          constructor                           -> clazz
-      }
+      val (constructor, clazz) = constructorAndClassFor()
 
       if (!isForRecordingOnly && Modifier.isAbstract(clazz.getModifiers)) {
         throw new UnsupportedOperationException(
@@ -281,16 +280,30 @@ object WorldImplementationCodeFactoring {
       proxy
     }
 
+    def constructorAndClassFor[Item <: Identified: TypeTag]()
+      : (universe.MethodMirror, Class[_ <: Identified]) = {
+      val typeOfRaw = typeOf[Item]
+      val (constructor, clazz) = cachedProxyConstructors.get(typeOfRaw) match {
+        case Some(cachedProxyConstructorData) => cachedProxyConstructorData
+        case None =>
+          val (constructor, clazz) = constructorFor(typeOfRaw)
+          cachedProxyConstructors += (typeOfRaw -> (constructor, clazz))
+          constructor                           -> clazz
+      }
+      (constructor, clazz)
+    }
+
     protected val additionalInterfaces: Array[Class[_]]
     protected val cachedProxyConstructors: scala.collection.mutable.Map[
       (Type),
-      (universe.MethodMirror, Class[_])]
+      (universe.MethodMirror, Class[_ <: Identified])]
   }
 
   object RecordingCallbackStuff {
     val additionalInterfaces: Array[Class[_]] = Array(classOf[Recorder])
     val cachedProxyConstructors =
-      mutable.Map.empty[universe.Type, (universe.MethodMirror, Class[_])]
+      mutable.Map
+        .empty[universe.Type, (universe.MethodMirror, Class[_ <: Identified])]
 
     def isFinalizer(methodDescription: MethodDescription): Boolean =
       methodDescription.getName == "finalize" && methodDescription.getParameters.isEmpty && methodDescription.getReturnType
@@ -351,7 +364,8 @@ object WorldImplementationCodeFactoring {
     val additionalInterfaces: Array[Class[_]] = Array(
       classOf[AnnihilationHook])
     val cachedProxyConstructors =
-      mutable.Map.empty[universe.Type, (universe.MethodMirror, Class[_])]
+      mutable.Map
+        .empty[universe.Type, (universe.MethodMirror, Class[_ <: Identified])]
 
     trait AcquiredState extends AnnihilationHook {
       def itemReconstitutionData
@@ -532,7 +546,8 @@ object WorldImplementationCodeFactoring {
           override val additionalInterfaces: Array[Class[_]] =
             QueryCallbackStuff.additionalInterfaces
           override val cachedProxyConstructors
-            : mutable.Map[universe.Type, (universe.MethodMirror, Class[_])] =
+            : mutable.Map[universe.Type,
+                          (universe.MethodMirror, Class[_ <: Identified])] =
             QueryCallbackStuff.cachedProxyConstructors
 
           override protected def configureInterceptions(
@@ -732,38 +747,109 @@ abstract class WorldImplementationCodeFactoring[EventId]
                 .getSerializer(classOf[Identified])
                 .asInstanceOf[Serializer[Identified]]
 
-            val serializerForItems = new Serializer[Identified] {
+            val serializerThatDirectlyEncodesInterItemReferences =
+              new Serializer[Identified] {
 
-              override def read(kryo: Kryo,
-                                input: Input,
-                                itemType: Class[Identified]): Identified =
-                if (0 < kryo.getDepth) {
-                  def typeWorkaroundViaWildcardCapture[Item <: Identified] = {
-                    val itemId =
-                      kryo.readClassAndObject(input).asInstanceOf[Item#Id]
-                    val itemTypeTag = kryo
-                      .readClassAndObject(input)
-                      .asInstanceOf[TypeTag[Item]]
-                    nastyHackAllowingAccessToItemStateReferenceResolutionContext.value.get
-                      .itemsFor(itemId)(itemTypeTag)
-                      .head
-                  }
+                override def read(kryo: Kryo,
+                                  input: Input,
+                                  itemType: Class[Identified]): Identified = {
+                  val isForAnInterItemReference = 0 < kryo.getDepth
+                  if (isForAnInterItemReference) {
+                    def typeWorkaroundViaWildcardCapture[Item <: Identified] = {
+                      val itemId =
+                        kryo.readClassAndObject(input).asInstanceOf[Item#Id]
+                      val itemTypeTag = kryo
+                        .readClassAndObject(input)
+                        .asInstanceOf[TypeTag[Item]]
+                      nastyHackAllowingAccessToItemStateReferenceResolutionContext.value.get
+                        .itemsFor(itemId)(itemTypeTag)
+                        .head
+                    }
 
-                  typeWorkaroundViaWildcardCapture
-                } else originalSerializerForItems.read(kryo, input, itemType)
+                    typeWorkaroundViaWildcardCapture
+                  } else originalSerializerForItems.read(kryo, input, itemType)
+                }
 
-              override def write(kryo: Kryo,
-                                 output: Output,
-                                 item: Identified): Unit = {
-                if (0 < kryo.getDepth) {
-                  kryo.writeClassAndObject(output, item.id)
-                  kryo.writeClassAndObject(output,
-                                           typeTagForClass(item.getClass))
-                } else
-                  originalSerializerForItems.write(kryo, output, item)
+                override def write(kryo: Kryo,
+                                   output: Output,
+                                   item: Identified): Unit = {
+                  val isForAnInterItemReference = 0 < kryo.getDepth
+                  if (isForAnInterItemReference) {
+                    kryo.writeClassAndObject(output, item.id)
+                    kryo.writeClassAndObject(output,
+                                             typeTagForClass(item.getClass))
+                  } else
+                    originalSerializerForItems.write(kryo, output, item)
+                }
               }
-            }
-            kryo.register(classOf[Identified], serializerForItems)
+            kryo.register(classOf[Identified],
+                          serializerThatDirectlyEncodesInterItemReferences)
+
+            val originalInstantiatorStrategy = kryo.getInstantiatorStrategy
+
+            val instantiatorStrategyThatCreatesProxiesForItems =
+              new InstantiatorStrategy {
+                override def newInstantiatorOf[T](
+                    clazz: Class[T]): ObjectInstantiator[T] = {
+                  if (classOf[Identified].isAssignableFrom(clazz)) {
+                    import WorldImplementationCodeFactoring.QueryCallbackStuff._
+
+                    // TODO - sort this fiasco out!!!!!!!! Split 'QueryCallbackStuff' into separate parts.
+                    val proxyFactory =
+                      new WorldImplementationCodeFactoring.ProxyFactory[
+                        AcquiredState] {
+                        override val isForRecordingOnly = false
+
+                        override val stateToBeAcquiredByProxy: AcquiredState =
+                          new AcquiredState {
+
+                            def itemsAreLocked: Boolean = true
+
+                            override def itemReconstitutionData
+                              : Recorder#ItemReconstitutionData[
+                                _ <: Identified] = ???
+                          }
+
+                        override val acquiredStateClazz =
+                          classOf[AcquiredState]
+
+                        override val additionalInterfaces: Array[Class[_]] =
+                          WorldImplementationCodeFactoring.QueryCallbackStuff.additionalInterfaces
+                        override val cachedProxyConstructors
+                          : mutable.Map[universe.Type,
+                                        (universe.MethodMirror,
+                                         Class[_ <: Identified])] =
+                          WorldImplementationCodeFactoring.QueryCallbackStuff.cachedProxyConstructors
+
+                        override protected def configureInterceptions(
+                            builder: Builder[_]): Builder[_] =
+                          builder
+                            .method(matchCheckedReadAccess)
+                            .intercept(MethodDelegation.to(checkedReadAccess))
+                            .method(matchIsGhost)
+                            .intercept(MethodDelegation.to(isGhost))
+                            .method(matchMutation)
+                            .intercept(MethodDelegation.to(mutation))
+                            .method(matchRecordAnnihilation)
+                            .intercept(MethodDelegation.to(recordAnnihilation))
+                      }
+
+                    val proxyClazz = proxyFactory
+                      .constructorAndClassFor()(
+                        typeTagForClass(
+                          clazz.asInstanceOf[Class[_ <: Identified]]))
+                      ._2
+
+                    originalInstantiatorStrategy
+                      .newInstantiatorOf(proxyClazz)
+                      .asInstanceOf[ObjectInstantiator[T]]
+                  } else
+                    originalInstantiatorStrategy.newInstantiatorOf(clazz)
+                }
+              }
+
+            kryo.setInstantiatorStrategy(
+              instantiatorStrategyThatCreatesProxiesForItems)
 
             kryo
           }
