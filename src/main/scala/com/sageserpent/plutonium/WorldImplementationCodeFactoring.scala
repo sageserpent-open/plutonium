@@ -729,8 +729,10 @@ abstract class WorldImplementationCodeFactoring[EventId]
     override def fork(scope: javaApi.Scope): ItemStateSnapshotStorage = ???
   }
 
-  var itemStateSnapshotStorage: ItemStateSnapshotStorage =
-    noItemStateSnapshots
+  // TODO - cutover to a mutable random access collection of storages, one per revision.
+
+  def itemStateSnapshotStorageFor(
+      nextRevision: Revision): ItemStateSnapshotStorage
 
   object ItemStateSnapshot {
     private val nastyHackAllowingAccessToItemStateReferenceResolutionContext =
@@ -881,7 +883,7 @@ abstract class WorldImplementationCodeFactoring[EventId]
             id: Item#Id): Stream[Item] = {
           def constructAndCacheItems(
               exclusions: Set[TypeTag[_ <: Item]]): Stream[Item] = {
-            for (snapshot <- itemStateSnapshotStorage
+            for (snapshot <- itemStateSnapshotStorageFor(nextRevision)
                    .snapshotsFor[Item](id, exclusions))
               yield {
                 val item = snapshot.reconstitute(this)
@@ -911,7 +913,7 @@ abstract class WorldImplementationCodeFactoring[EventId]
         }
 
         override def idsFor[Item <: Identified: TypeTag]: Stream[Item#Id] =
-          itemStateSnapshotStorage.idsFor[Item]
+          itemStateSnapshotStorageFor(nextRevision).idsFor[Item]
 
         def allItems[Item <: Identified: TypeTag](): Stream[Item] =
           for {

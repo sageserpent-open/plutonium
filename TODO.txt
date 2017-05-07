@@ -106,3 +106,9 @@ Any references from the top-level item to other items are converted to a placeho
 During reconstitution, the placeholders are deserialized by referring to the context - this either supplies existing items that have already been deserialized, or recursively calls top-level deserialization to create the referenced item and populate the context.
 
 (OPTIMISATION: consider cacheing type tags associated with class objects, possibly pre-populating the cache via known type tags captured from the API, or working directly with class objects where appropriate).
+
+SHORT TERM GOAL: Use the existing 'IdentifiedItemsScope' along with full unoptimized playback, but populate the storage as playback progresses. The scopes used for queries will consult said storage.
+
+Looking at the code, the item state storage abstraction should be similar to 'Timeline' - it has a functional API that yields a new storage object for a new revision, and like timelines,
+each instance pertains to a specific revision. So as with timelines, a world should store multiple storage objects, one per revision. Asking for a scope then selects the appropriate
+storage object.

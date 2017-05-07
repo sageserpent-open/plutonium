@@ -46,6 +46,9 @@ abstract class WorldInefficientImplementationCodeFactoring[EventId]
 
       val nextRevisionAfterTransactionIsCompleted = 1 + nextRevisionPriorToUpdate
 
+      // TODO - harvest snapshots here to pass to some storage, which is
+      // presumably abstracted over the in-memory and Redis implementations....
+
       // This does a check for consistency of the world's history as per this new revision as part of construction.
       // We then throw away the resulting history if successful, the idea being for now to rebuild it as part of
       // constructing a scope to apply queries on.

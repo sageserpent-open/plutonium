@@ -13,6 +13,14 @@ class WorldEfficientInMemoryImplementation[EventId]
 
   override def nextRevision: Revision = timelines.size
 
+  override def itemStateSnapshotStorageFor(
+      nextRevision: Revision): ItemStateSnapshotStorage = {
+    if (World.initialRevision == nextRevision) noItemStateSnapshots
+    else
+      _itemStateSnapshotStoragePerRevision(
+        nextRevision - (1 + World.initialRevision))
+  }
+
   override def revise(events: Map[EventId, Option[Event]],
                       asOf: Instant): Revision = {
     // TODO: sort out this noddy implementation - no exception safety etc...
@@ -24,7 +32,8 @@ class WorldEfficientInMemoryImplementation[EventId]
 
     val (newTimeline, itemStateSnapshotBookings) = baseTimeline.revise(events)
 
-    val builder = itemStateSnapshotStorage.openRevision()
+    val builder =
+      itemStateSnapshotStorageFor(resultCapturedBeforeMutation).openRevision()
 
     for ((id, when, snapshot) <- itemStateSnapshotBookings) {
       builder.recordSnapshot(id, when, snapshot)
@@ -32,7 +41,9 @@ class WorldEfficientInMemoryImplementation[EventId]
 
     timelines += (asOf -> newTimeline)
 
-    itemStateSnapshotStorage = builder.build()
+    val itemStateSnapshotStorageForNewRevision = builder.build()
+
+    _itemStateSnapshotStoragePerRevision += itemStateSnapshotStorageForNewRevision
 
     resultCapturedBeforeMutation
   }
@@ -40,6 +51,10 @@ class WorldEfficientInMemoryImplementation[EventId]
   override def forkExperimentalWorld(scope: javaApi.Scope): World[EventId] =
     ??? // TODO - but much later....
 
+  private val _itemStateSnapshotStoragePerRevision =
+    MutableList.empty[ItemStateSnapshotStorage]
+
+  // TODO - should abstract over access to the timelines in the same manner as 'itemStateSnapshotStoragePerRevision'.
   // TODO - consider use of mutable state object instead of having separate bits and pieces.
   private val timelines: MutableList[(Instant, Timeline)] = MutableList.empty
 
