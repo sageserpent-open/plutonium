@@ -7,11 +7,12 @@ import scala.reflect.runtime.universe.TypeTag
 /**
   * Created by gerardMurphy on 01/05/2017.
   */
-trait ItemStateSnapshotRevisionBuilder {
+trait ItemStateSnapshotRevisionBuilder[EventId] {
   // Once this has been called, the receiver will throw precondition failures on subsequent use.
-  def build(): ItemStateSnapshotStorage
+  def build(): ItemStateSnapshotStorage[EventId]
 
-  def recordSnapshot[Item <: Identified: TypeTag](id: Item#Id,
-                                                  when: Instant,
-                                                  snapshot: ItemStateSnapshot)
+  def recordSnapshot[Item <: Identified: TypeTag](
+      id: Item#Id,
+      when: Instant,
+      snapshot: ItemStateSnapshot[EventId])
 }

@@ -5,12 +5,11 @@ import scala.reflect.runtime.universe.TypeTag
 /**
   * Created by gerardMurphy on 01/05/2017.
   */
-trait ItemStateSnapshotStorage extends ItemIdQueryApi {
+trait ItemStateSnapshotStorage[+EventId] extends ItemIdQueryApi {
   def snapshotsFor[Item <: Identified: TypeTag](
       id: Item#Id,
-      exclusions: Set[TypeTag[_ <: Item]]): Stream[ItemStateSnapshot]
+      exclusions: Set[TypeTag[_ <: Item]]): Stream[ItemStateSnapshot[EventId]]
 
-  def openRevision(): ItemStateSnapshotRevisionBuilder
-
-  def fork(scope: javaApi.Scope): ItemStateSnapshotStorage
+  def openRevision[NewEventId >: EventId]()
+    : ItemStateSnapshotRevisionBuilder[NewEventId]
 }

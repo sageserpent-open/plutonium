@@ -14,7 +14,7 @@ class WorldEfficientInMemoryImplementation[EventId]
   override def nextRevision: Revision = timelines.size
 
   override def itemStateSnapshotStorageFor(
-      nextRevision: Revision): ItemStateSnapshotStorage = {
+      nextRevision: Revision): ItemStateSnapshotStorage[EventId] = {
     if (World.initialRevision == nextRevision) noItemStateSnapshots
     else
       _itemStateSnapshotStoragePerRevision(
@@ -52,7 +52,7 @@ class WorldEfficientInMemoryImplementation[EventId]
     ??? // TODO - but much later....
 
   private val _itemStateSnapshotStoragePerRevision =
-    MutableList.empty[ItemStateSnapshotStorage]
+    MutableList.empty[ItemStateSnapshotStorage[EventId]]
 
   // TODO - should abstract over access to the timelines in the same manner as 'itemStateSnapshotStoragePerRevision'.
   // TODO - consider use of mutable state object instead of having separate bits and pieces.
@@ -60,7 +60,7 @@ class WorldEfficientInMemoryImplementation[EventId]
 
   // These can be in any order, as they are just fed to a builder.
   type ItemStateSnapshotBookings[Item <: Identified] =
-    Seq[(Item#Id, Instant, ItemStateSnapshot)]
+    Seq[(Item#Id, Instant, ItemStateSnapshot[EventId])]
 
   // No notion of what revision a timeline is on, nor the 'asOf' - that is for enclosing 'World' to handle.
   trait Timeline {

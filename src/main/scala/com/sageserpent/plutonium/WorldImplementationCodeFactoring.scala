@@ -715,24 +715,24 @@ abstract class WorldImplementationCodeFactoring[EventId]
   override def scopeFor(when: Unbounded[Instant], asOf: Instant): Scope =
     new ScopeBasedOnAsOf(when, asOf) with ScopeUsingStorage
 
-  object noItemStateSnapshots extends ItemStateSnapshotStorage {
+  object noItemStateSnapshots extends ItemStateSnapshotStorage[Nothing] {
     override def snapshotsFor[Item <: Identified: TypeTag](
         id: Item#Id,
-        exclusions: Set[TypeTag[_ <: Item]]): Stream[ItemStateSnapshot] =
+        exclusions: Set[TypeTag[_ <: Item]])
+      : Stream[ItemStateSnapshot[Nothing]] =
       Stream.empty
 
-    override def openRevision(): ItemStateSnapshotRevisionBuilder = ???
+    override def openRevision[NewEventId]()
+      : ItemStateSnapshotRevisionBuilder[NewEventId] = ???
 
     override def idsFor[Item <: Identified: TypeTag]: Stream[Item#Id] =
       Stream.empty
-
-    override def fork(scope: javaApi.Scope): ItemStateSnapshotStorage = ???
   }
 
   // TODO - cutover to a mutable random access collection of storages, one per revision.
 
   def itemStateSnapshotStorageFor(
-      nextRevision: Revision): ItemStateSnapshotStorage
+      nextRevision: Revision): ItemStateSnapshotStorage[EventId]
 
   object ItemStateSnapshot {
     private val nastyHackAllowingAccessToItemStateReferenceResolutionContext =
@@ -859,8 +859,12 @@ abstract class WorldImplementationCodeFactoring[EventId]
       )
 
     // References to other items will be represented as an encoding of a pair of (item id, type tag).
-    def apply[Item <: Identified: TypeTag](item: Item): ItemStateSnapshot = {
-      new ItemStateSnapshot {
+    def apply[Item <: Identified: TypeTag](
+        item: Item,
+        _eventId: EventId): ItemStateSnapshot[EventId] = {
+      new ItemStateSnapshot[EventId] {
+        override val eventId = _eventId
+
         override def reconstitute[Item <: Identified: universe.TypeTag](
             itemStateReferenceResolutionContext: ItemStateReferenceResolutionContext)
           : Item =
