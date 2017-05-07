@@ -73,9 +73,9 @@ abstract class PatchRecorderImplementation(
   }
 
   override def recordAnnihilation[Raw <: Identified: TypeTag](
-      when: Instant,
+      _when: Instant,
       id: Raw#Id): Unit = {
-    val liftedWhen = Finite(when)
+    val liftedWhen = Finite(_when)
     _whenEventPertainedToByLastRecordingTookPlace = Some(liftedWhen)
 
     idToItemStatesMap
@@ -84,45 +84,49 @@ abstract class PatchRecorderImplementation(
       .flatten filter (!_.itemAnnihilationHasBeenNoted) match {
       case Seq() =>
         throw new RuntimeException(
-          s"Attempt to annihilate item of id: $id that does not exist at all at: $when.")
+          s"Attempt to annihilate item of id: $id that does not exist at all at: ${_when}.")
       case itemStates =>
         val expectedTypeTag = typeTag[Raw]
         val compatibleItemStates = itemStates filter (_.canBeAnnihilatedAs(
           expectedTypeTag))
 
-        val sequenceIndex = nextSequenceIndex()
+        val _sequenceIndex = nextSequenceIndex()
 
         if (compatibleItemStates.nonEmpty) {
           for (itemState <- compatibleItemStates) {
             itemState.submitCandidatePatches()
-            itemState.noteAnnihilation(sequenceIndex)
+            itemState.noteAnnihilation(_sequenceIndex)
           }
 
-          actionQueue.enqueue(
-            (sequenceIndex,
-             Unit =>
-               for (itemStateToBeAnnihilated <- compatibleItemStates) {
-                 val typeTagForSpecificItem =
-                   itemStateToBeAnnihilated.lowerBoundTypeTag
-                 annihilateItemFor_(id, typeTagForSpecificItem, when)
+          actionQueue.enqueue(new IndexedAction() {
+            override val sequenceIndex            = _sequenceIndex
+            override val when: Unbounded[Instant] = liftedWhen
 
-                 val itemStates = idToItemStatesMap(id)
+            override def perform() {
+              for (itemStateToBeAnnihilated <- compatibleItemStates) {
+                val typeTagForSpecificItem =
+                  itemStateToBeAnnihilated.lowerBoundTypeTag
+                annihilateItemFor_(id, typeTagForSpecificItem, _when)
 
-                 itemStates -= itemStateToBeAnnihilated
+                val itemStates = idToItemStatesMap(id)
 
-                 if (itemStates.isEmpty) {
-                   idToItemStatesMap -= id
-                 }
-             },
-             liftedWhen,
-             () => true))
+                itemStates -= itemStateToBeAnnihilated
 
-          outstandingSequenceIndices -= sequenceIndex
+                if (itemStates.isEmpty) {
+                  idToItemStatesMap -= id
+                }
+              }
+            }
+
+            override def canProceed() = true
+          })
+
+          outstandingSequenceIndices -= _sequenceIndex
 
           applyPatches(drainDownQueue = false)
         } else
           throw new RuntimeException(
-            s"Attempt to annihilate item of id: $id that does not exist with the expected type of '${expectedTypeTag.tpe}' at: $when, the items that do exist have types: '${compatibleItemStates map (_.lowerBoundTypeTag.tpe) toList}'.")
+            s"Attempt to annihilate item of id: $id that does not exist with the expected type of '${expectedTypeTag.tpe}' at: ${_when}, the items that do exist have types: '${compatibleItemStates map (_.lowerBoundTypeTag.tpe) toList}'.")
     }
   }
 
@@ -143,20 +147,14 @@ abstract class PatchRecorderImplementation(
       assert(outstandingSequenceIndices.isEmpty)
     }
 
-    while (actionQueue.nonEmpty && (actionQueue.head match {
-             case (sequenceIndex,
-                   _,
-                   whenForAction,
-                   incrementalApplicationCanProceed) => {
-               val actionIsNotOutOfSequence     = outstandingSequenceIndices.isEmpty || sequenceIndex < outstandingSequenceIndices.min
-               val actionIsRelevantToCutoffTime = whenForAction <= eventsHaveEffectNoLaterThan
-               actionIsNotOutOfSequence && actionIsRelevantToCutoffTime && (drainDownQueue || incrementalApplicationCanProceed())
-             }
-           })) {
-      val (sequenceIndex, actionToBeExecuted, whenForAction, _) =
-        actionQueue.dequeue()
-      actionToBeExecuted(whenForAction)
-    }
+    while (actionQueue.nonEmpty && {
+             val action = actionQueue.head
+
+             val actionIsNotOutOfSequence     = outstandingSequenceIndices.isEmpty || action.sequenceIndex < outstandingSequenceIndices.min
+             val actionIsRelevantToCutoffTime = action.when <= eventsHaveEffectNoLaterThan
+             actionIsNotOutOfSequence && actionIsRelevantToCutoffTime && (drainDownQueue || action
+               .canProceed())
+           }) actionQueue.dequeue().perform()
   }
 
   type CandidatePatchTuple = (SequenceIndex, AbstractPatch, Unbounded[Instant])
@@ -275,13 +273,15 @@ abstract class PatchRecorderImplementation(
 
   private var _nextSequenceIndex: SequenceIndex = initialSequenceIndex
 
-  private type IndexedAction = (SequenceIndex,
-                                Unbounded[Instant] => Unit,
-                                Unbounded[Instant],
-                                () => Boolean)
+  private abstract trait IndexedAction {
+    val sequenceIndex: SequenceIndex
+    val when: Unbounded[Instant]
+    def perform(): Unit
+    def canProceed(): Boolean
+  }
 
-  implicit val indexedActionOrdering =
-    Ordering.by[IndexedAction, SequenceIndex](-_._1)
+  private implicit val indexedActionOrdering =
+    Ordering.by[IndexedAction, SequenceIndex](-_.sequenceIndex)
 
   private val actionQueue = mutable.PriorityQueue[IndexedAction]()
 
@@ -334,17 +334,21 @@ abstract class PatchRecorderImplementation(
     val itemStatesReferencedByBestPatch =
       reconstitutionDataToItemStateMap.values
 
-    actionQueue.enqueue(
-      (sequenceIndexForBestPatch, (when: Unbounded[Instant]) => {
+    actionQueue.enqueue(new IndexedAction {
+      override val sequenceIndex: SequenceIndex = sequenceIndexForBestPatch
+      override val when: Unbounded[Instant]     = whenTheBestPatchOccurs
+
+      override def perform() {
         bestPatch(identifiedItemAccess)
         for (_ <- itemsAreLockedResource) {
           bestPatch.checkInvariant(identifiedItemAccess)
         }
-      }, whenTheBestPatchOccurs, () => {
+      }
+      override def canProceed() =
         itemStatesReferencedByBestPatch.forall(_.itemAnnihilationHasBeenNoted)
-      }))
+    })
 
-    for ((sequenceIndex, _, whenThePatchOccurs) <- candidatePatchTuples) {
+    for ((sequenceIndex, _, _) <- candidatePatchTuples) {
       outstandingSequenceIndices -= sequenceIndex
     }
   }
