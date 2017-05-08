@@ -708,6 +708,10 @@ object WorldImplementationCodeFactoring {
 
 abstract class WorldImplementationCodeFactoring[EventId]
     extends World[EventId] {
+  // These can be in any order, as they are just fed to a builder.
+  type ItemStateSnapshotBookings =
+    Seq[(EventId, Identified#Id, Instant, ItemStateSnapshot)]
+
   override def scopeFor(when: Unbounded[Instant],
                         nextRevision: Revision): Scope =
     new ScopeBasedOnNextRevision(when, nextRevision) with ScopeUsingStorage {}
@@ -718,8 +722,7 @@ abstract class WorldImplementationCodeFactoring[EventId]
   object noItemStateSnapshots extends ItemStateSnapshotStorage[Nothing] {
     override def snapshotsFor[Item <: Identified: TypeTag](
         id: Item#Id,
-        exclusions: Set[TypeTag[_ <: Item]])
-      : Stream[ItemStateSnapshot[Nothing]] =
+        exclusions: Set[TypeTag[_ <: Item]]): Stream[ItemStateSnapshot] =
       Stream.empty
 
     override def openRevision[NewEventId]()
@@ -861,10 +864,8 @@ abstract class WorldImplementationCodeFactoring[EventId]
     // References to other items will be represented as an encoding of a pair of (item id, type tag).
     def apply[Item <: Identified: TypeTag](
         item: Item,
-        _eventId: EventId): ItemStateSnapshot[EventId] = {
-      new ItemStateSnapshot[EventId] {
-        override val eventId = _eventId
-
+        _eventId: EventId): ItemStateSnapshot = {
+      new ItemStateSnapshot {
         override def reconstitute[Item <: Identified: universe.TypeTag](
             itemStateReferenceResolutionContext: ItemStateReferenceResolutionContext)
           : Item =

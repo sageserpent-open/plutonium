@@ -35,8 +35,8 @@ class WorldEfficientInMemoryImplementation[EventId]
     val builder =
       itemStateSnapshotStorageFor(resultCapturedBeforeMutation).openRevision()
 
-    for ((id, when, snapshot) <- itemStateSnapshotBookings) {
-      builder.recordSnapshot(id, when, snapshot)
+    for ((eventId, id, when, snapshot) <- itemStateSnapshotBookings) {
+      builder.recordSnapshot(eventId, id, when, snapshot)
     }
 
     timelines += (asOf -> newTimeline)
@@ -58,21 +58,17 @@ class WorldEfficientInMemoryImplementation[EventId]
   // TODO - consider use of mutable state object instead of having separate bits and pieces.
   private val timelines: MutableList[(Instant, Timeline)] = MutableList.empty
 
-  // These can be in any order, as they are just fed to a builder.
-  type ItemStateSnapshotBookings[Item <: Identified] =
-    Seq[(Item#Id, Instant, ItemStateSnapshot[EventId])]
-
   // No notion of what revision a timeline is on, nor the 'asOf' - that is for enclosing 'World' to handle.
   trait Timeline {
     def revise(events: Map[EventId, Option[Event]])
-      : (Timeline, ItemStateSnapshotBookings[_ <: Identified])
+      : (Timeline, ItemStateSnapshotBookings)
 
     def retainUpTo(when: Unbounded[Instant]): Timeline
   }
 
   object emptyTimeline extends Timeline {
     override def revise(events: Map[EventId, Option[Event]])
-      : (Timeline, ItemStateSnapshotBookings[_ <: Identified]) = ???
+      : (Timeline, ItemStateSnapshotBookings) = ???
 
     override def retainUpTo(when: Unbounded[Instant]): Timeline = this
   }

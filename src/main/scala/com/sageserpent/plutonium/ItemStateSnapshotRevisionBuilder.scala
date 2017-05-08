@@ -11,8 +11,8 @@ trait ItemStateSnapshotRevisionBuilder[EventId] {
   // Once this has been called, the receiver will throw precondition failures on subsequent use.
   def build(): ItemStateSnapshotStorage[EventId]
 
-  def recordSnapshot[Item <: Identified: TypeTag](
-      id: Item#Id,
-      when: Instant,
-      snapshot: ItemStateSnapshot[EventId])
+  def recordSnapshot[Item <: Identified: TypeTag](eventId: EventId,
+                                                  id: Item#Id,
+                                                  when: Instant,
+                                                  snapshot: ItemStateSnapshot)
 }
