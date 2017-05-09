@@ -2,7 +2,7 @@ package com.sageserpent.plutonium
 
 import java.time.Instant
 
-import com.sageserpent.americium.PositiveInfinity
+import com.sageserpent.americium.{PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.World.Revision
 
 /**
@@ -18,6 +18,13 @@ abstract class WorldInefficientImplementationCodeFactoring[EventId]
       new IdentifiedItemsScope(when, nextRevision, eventTimeline(nextRevision))
     }
   }
+
+  override def scopeFor(when: Unbounded[Instant],
+                        nextRevision: Revision): Scope =
+    new ScopeBasedOnNextRevision(when, nextRevision) with SelfPopulatedScope {}
+
+  override def scopeFor(when: Unbounded[Instant], asOf: Instant): Scope =
+    new ScopeBasedOnAsOf(when, asOf) with SelfPopulatedScope
 
   protected def eventTimeline(nextRevision: Revision): Seq[SerializableEvent]
 
