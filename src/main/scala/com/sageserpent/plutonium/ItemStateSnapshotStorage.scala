@@ -1,5 +1,9 @@
 package com.sageserpent.plutonium
 
+import java.time.Instant
+
+import com.sageserpent.americium.Unbounded
+
 import scala.reflect.runtime.universe.TypeTag
 
 /**
@@ -8,6 +12,7 @@ import scala.reflect.runtime.universe.TypeTag
 trait ItemStateSnapshotStorage[+EventId] extends ItemIdQueryApi {
   def snapshotsFor[Item <: Identified: TypeTag](
       id: Item#Id,
+      when: Unbounded[Instant],
       exclusions: Set[TypeTag[_ <: Item]]): Stream[ItemStateSnapshot]
 
   def openRevision[NewEventId >: EventId]()
@@ -17,6 +22,7 @@ trait ItemStateSnapshotStorage[+EventId] extends ItemIdQueryApi {
 object noItemStateSnapshots extends ItemStateSnapshotStorage[Nothing] {
   override def snapshotsFor[Item <: Identified: TypeTag](
       id: Item#Id,
+      when: Unbounded[Instant],
       exclusions: Set[TypeTag[_ <: Item]]): Stream[ItemStateSnapshot] =
     Stream.empty
 

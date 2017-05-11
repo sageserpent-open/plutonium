@@ -70,7 +70,7 @@ class WorldEfficientInMemoryImplementation[EventId]
           def constructAndCacheItems(
               exclusions: Set[TypeTag[_ <: Item]]): Stream[Item] = {
             for (snapshot <- itemStateSnapshotStorageFor(nextRevision)
-                   .snapshotsFor[Item](id, exclusions))
+                   .snapshotsFor[Item](id, when, exclusions))
               yield {
                 val item = snapshot.reconstitute(this)
                 idToItemsMultiMap.addBinding(id, item)
