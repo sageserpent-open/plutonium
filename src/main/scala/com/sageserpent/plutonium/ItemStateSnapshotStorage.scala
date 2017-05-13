@@ -9,7 +9,7 @@ import scala.reflect.runtime.universe.TypeTag
 /**
   * Created by gerardMurphy on 01/05/2017.
   */
-trait ItemStateSnapshotStorage[+EventId] extends ItemIdQueryApi {
+trait ItemStateSnapshotStorage[+EventId] {
   def snapshotsFor[Item <: Identified: TypeTag](
       id: Item#Id,
       when: Unbounded[Instant],
@@ -17,6 +17,8 @@ trait ItemStateSnapshotStorage[+EventId] extends ItemIdQueryApi {
 
   def openRevision[NewEventId >: EventId]()
     : ItemStateSnapshotRevisionBuilder[NewEventId]
+
+  def idsFor[Item <: Identified: TypeTag]: Stream[Item#Id]
 }
 
 object noItemStateSnapshots extends ItemStateSnapshotStorage[Nothing] {

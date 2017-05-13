@@ -98,12 +98,9 @@ class WorldEfficientInMemoryImplementation[EventId]
           }
         }
 
-        override def idsFor[Item <: Identified: TypeTag]: Stream[Item#Id] =
-          itemStateSnapshotStorageFor(nextRevision).idsFor[Item]
-
         def allItems[Item <: Identified: TypeTag](): Stream[Item] =
           for {
-            id   <- idsFor[Item]
+            id   <- itemStateSnapshotStorageFor(nextRevision).idsFor[Item]
             item <- itemsFor(id)
           } yield item
 
