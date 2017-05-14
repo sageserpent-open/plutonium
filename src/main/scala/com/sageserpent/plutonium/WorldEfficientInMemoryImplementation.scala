@@ -62,8 +62,8 @@ class WorldEfficientInMemoryImplementation[EventId]
     MutableList.empty
 
   trait ScopeUsingStorage extends com.sageserpent.plutonium.Scope {
-    private def itemCache() =
-      new ItemCache {
+    private def itemCache(): ItemCache = ???
+    /*      new ItemCache {
         override def itemsFor[Item <: Identified: TypeTag](
             id: Item#Id): Stream[Item] = {
           def constructAndCacheItems(
@@ -110,7 +110,7 @@ class WorldEfficientInMemoryImplementation[EventId]
             with scala.collection.mutable.MultiMap[Identified#Id, Identified] {}
 
         val idToItemsMultiMap = new MultiMap
-      }
+      }*/
 
     override def render[Item](bitemporal: Bitemporal[Item]): Stream[Item] =
       itemCache().render(bitemporal)

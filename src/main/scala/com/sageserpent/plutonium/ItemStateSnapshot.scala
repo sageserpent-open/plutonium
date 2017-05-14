@@ -1,6 +1,6 @@
 package com.sageserpent.plutonium
 
-import com.esotericsoftware.kryo.{Kryo, Serializer}
+/*import com.esotericsoftware.kryo.{Kryo, Serializer}
 import com.esotericsoftware.kryo.io.{Input, Output}
 import com.twitter.chill.{KryoBase, KryoPool, ScalaKryoInstantiator}
 import net.bytebuddy.dynamic.DynamicType.Builder
@@ -11,19 +11,14 @@ import org.objenesis.strategy.InstantiatorStrategy
 import scala.collection.mutable
 import scala.reflect.runtime.universe
 import scala.reflect.runtime.universe.TypeTag
-import scala.util.DynamicVariable
+import scala.util.DynamicVariable*/
 
 /**
   * Created by gerardMurphy on 01/05/2017.
   */
-trait ItemStateSnapshot {
-  // Called from implementations of 'ItemStateReferenceResolutionContext.itemFor' - if it needs
-  // to resolve an (item id, type tag) pair, it uses 'itemStateReferenceResolutionContext' to do it.
-  def reconstitute[Item <: Identified: TypeTag](
-      itemStateReferenceResolutionContext: ItemCache): Item
-}
+trait ItemStateSnapshot {}
 
-object ItemStateSnapshot {
+/*object ItemStateSnapshot {
   private val nastyHackAllowingAccessToItemStateReferenceResolutionContext =
     new DynamicVariable[Option[ItemCache]](None)
 
@@ -160,4 +155,4 @@ object ItemStateSnapshot {
       private val payload: Array[Byte] = kryoPool.toBytesWithClass(item)
     }
   }
-}
+}*/

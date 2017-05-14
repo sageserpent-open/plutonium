@@ -5,7 +5,9 @@ import scala.reflect.runtime.universe.{Super => _, This => _, _}
 /**
   * Created by gerardMurphy on 14/05/2017.
   */
-trait ItemCache extends ItemStateReferenceResolutionContext {
+trait ItemCache {
+  def itemsFor[Item <: Identified: TypeTag](id: Item#Id): Stream[Item]
+
   def allItems[Item <: Identified: TypeTag](): Stream[Item]
 
   def render[Item](bitemporal: Bitemporal[Item]): Stream[Item] = {
