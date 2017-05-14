@@ -63,8 +63,7 @@ class WorldEfficientInMemoryImplementation[EventId]
 
   trait ScopeUsingStorage extends com.sageserpent.plutonium.Scope {
     private def itemCache() =
-      new WorldImplementationCodeFactoring.AnotherCodeFactoringThingie
-      with ItemStateReferenceResolutionContext {
+      new ItemCache with ItemStateReferenceResolutionContext {
         override def itemsFor[Item <: Identified: TypeTag](
             id: Item#Id): Stream[Item] = {
           def constructAndCacheItems(
