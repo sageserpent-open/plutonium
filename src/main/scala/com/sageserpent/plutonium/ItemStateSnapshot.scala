@@ -20,13 +20,12 @@ trait ItemStateSnapshot {
   // Called from implementations of 'ItemStateReferenceResolutionContext.itemFor' - if it needs
   // to resolve an (item id, type tag) pair, it uses 'itemStateReferenceResolutionContext' to do it.
   def reconstitute[Item <: Identified: TypeTag](
-      itemStateReferenceResolutionContext: ItemStateReferenceResolutionContext)
-    : Item
+      itemStateReferenceResolutionContext: ItemCache): Item
 }
 
 object ItemStateSnapshot {
   private val nastyHackAllowingAccessToItemStateReferenceResolutionContext =
-    new DynamicVariable[Option[ItemStateReferenceResolutionContext]](None)
+    new DynamicVariable[Option[ItemCache]](None)
 
   private val kryoPool =
     KryoPool.withByteArrayOutputStream(
@@ -151,9 +150,8 @@ object ItemStateSnapshot {
   // References to other items will be represented as an encoding of a pair of (item id, type tag).
   def apply[Item <: Identified: TypeTag](item: Item): ItemStateSnapshot = {
     new ItemStateSnapshot {
-      override def reconstitute[Item <: Identified: universe.TypeTag](
-          itemStateReferenceResolutionContext: ItemStateReferenceResolutionContext)
-        : Item =
+      override def reconstitute[Item <: Identified: TypeTag](
+          itemStateReferenceResolutionContext: ItemCache): Item =
         nastyHackAllowingAccessToItemStateReferenceResolutionContext
           .withValue(Some(itemStateReferenceResolutionContext)) {
             kryoPool.fromBytes(payload).asInstanceOf[Item]
