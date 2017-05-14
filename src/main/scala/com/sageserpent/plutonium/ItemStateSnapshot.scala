@@ -16,6 +16,7 @@ import scala.util.DynamicVariable*/
 /**
   * Created by gerardMurphy on 01/05/2017.
   */
+@deprecated // TODO - remove this, it's only here for the comments to serve as an aide-memoire for future implementation work elsewhere.
 trait ItemStateSnapshot {}
 
 /*object ItemStateSnapshot {

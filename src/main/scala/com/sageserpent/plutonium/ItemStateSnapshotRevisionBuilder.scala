@@ -12,7 +12,6 @@ trait ItemStateSnapshotRevisionBuilder[EventId] {
   def build(): ItemStateSnapshotStorage[EventId]
 
   def recordSnapshot[Item <: Identified: TypeTag](eventId: EventId,
-                                                  id: Item#Id,
-                                                  when: Instant,
-                                                  snapshot: ItemStateSnapshot)
+                                                  item: Item,
+                                                  when: Instant)
 }
