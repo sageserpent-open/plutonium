@@ -17,12 +17,9 @@ class WorldEfficientInMemoryImplementation[EventId]
 
   override def revise(events: Map[EventId, Option[Event]],
                       asOf: Instant): Revision = {
-    // TODO: sort out this noddy implementation - no exception safety etc...
     val resultCapturedBeforeMutation = nextRevision
 
-    val baseTimeline =
-      if (World.initialRevision == nextRevision) emptyTimeline
-      else timelines.last._2
+    val baseTimeline = timelines.lastOption map (_._2) getOrElse emptyTimeline
 
     val newTimeline = baseTimeline.revise(events)
 
@@ -34,61 +31,15 @@ class WorldEfficientInMemoryImplementation[EventId]
   override def forkExperimentalWorld(scope: javaApi.Scope): World[EventId] =
     ??? // TODO - but much later....
 
-  // TODO - should abstract over access to the timelines in the same manner as 'itemStateSnapshotStoragePerRevision'.
-  // TODO - consider use of mutable state object instead of having separate bits and pieces.
   private val timelines: MutableList[(Instant, Timeline[EventId])] =
     MutableList.empty
 
   trait ScopeUsingStorage extends com.sageserpent.plutonium.Scope {
-    private def itemCache(): ItemCache = ???
-    /*      new ItemCache {
-        override def itemsFor[Item <: Identified: TypeTag](
-            id: Item#Id): Stream[Item] = {
-          def constructAndCacheItems(
-              exclusions: Set[TypeTag[_ <: Item]]): Stream[Item] = {
-            for (snapshot <- itemStateSnapshotStorageFor(nextRevision)
-                   .snapshotsFor[Item](id, when, exclusions))
-              yield {
-                val item = snapshot.reconstitute(this)
-                idToItemsMultiMap.addBinding(id, item)
-                item
-              }
-          }
+    private def itemCache(): ItemCache = {
+      val timeline = timelines.get(nextRevision) map (_._2) getOrElse emptyTimeline
 
-          idToItemsMultiMap.get(id) match {
-            case None =>
-              constructAndCacheItems(Set.empty)
-            case Some(items) => {
-              assert(items.nonEmpty)
-              val conflictingItems =
-                IdentifiedItemsScope.yieldOnlyItemsOfSupertypeOf[Item](items)
-              assert(
-                conflictingItems.isEmpty,
-                s"Found conflicting items for id: '$id' with type tag: '${typeTag[
-                  Item].tpe}', these are: '${conflictingItems.toList}'.")
-              val itemsOfDesiredType =
-                IdentifiedItemsScope.yieldOnlyItemsOfType[Item](items).force
-              itemsOfDesiredType ++ constructAndCacheItems(
-                itemsOfDesiredType map (excludedItem =>
-                  typeTagForClass(excludedItem.getClass)) toSet)
-            }
-          }
-        }
-
-        def allItems[Item <: Identified: TypeTag](): Stream[Item] =
-          for {
-            id   <- itemStateSnapshotStorageFor(nextRevision).idsFor[Item]
-            item <- itemsFor(id)
-          } yield item
-
-        class MultiMap
-            extends scala.collection.mutable.HashMap[
-              Identified#Id,
-              scala.collection.mutable.Set[Identified]]
-            with scala.collection.mutable.MultiMap[Identified#Id, Identified] {}
-
-        val idToItemsMultiMap = new MultiMap
-      }*/
+      timeline.itemCacheAt(when)
+    }
 
     override def render[Item](bitemporal: Bitemporal[Item]): Stream[Item] =
       itemCache().render(bitemporal)

@@ -4,17 +4,18 @@ import java.time.Instant
 
 import com.sageserpent.americium.Unbounded
 
+import scala.reflect.runtime.universe
+
 /**
   * Created by gerardMurphy on 11/05/2017.
   */
 trait Timeline[+EventId] {
-  // TODO - somehow the notion of an 'ItemStateStorage' is going to be added to this class, probably as a field.
-  // How should this be reflected in the public API? What does a client want to do? Make a scope, perhaps? Is this
-  // going to turn into a purely functional version of the 'World' API?
   def revise[NewEventId >: EventId](
       events: Map[NewEventId, Option[Event]]): Timeline[NewEventId]
 
   def retainUpTo(when: Unbounded[Instant]): Timeline[EventId]
+
+  def itemCacheAt(when: Unbounded[Instant]): ItemCache
 }
 
 object emptyTimeline extends Timeline[Nothing] {
@@ -22,4 +23,13 @@ object emptyTimeline extends Timeline[Nothing] {
       events: Map[NewEventId, Option[Event]]): Timeline[NewEventId] = ???
 
   override def retainUpTo(when: Unbounded[Instant]): Timeline[Nothing] = this
+
+  override def itemCacheAt(when: Unbounded[Instant]): ItemCache =
+    new ItemCache {
+      override def allItems[Item <: Identified: universe.TypeTag]()
+        : Stream[Item] = Stream.empty
+
+      override def itemsFor[Item <: Identified: universe.TypeTag](
+          id: Item#Id): Stream[Item] = Stream.empty
+    }
 }
