@@ -11,15 +11,11 @@ import scala.reflect.runtime.universe.TypeTag
   * Created by gerardMurphy on 01/05/2017.
   */
 trait ItemStateStorage[+EventId] {
-  type UniqueItemSpecification[Item <: Identified] =
-    (Item#Id, TypeTag[Item])
 
   type RevisionBuilder[EventIdForBuilding >: EventId] <: SimpleRevisionBuilder[
     EventIdForBuilding]
 
   trait SimpleRevisionBuilder[EventIdForBuilding >: EventId] {
-    // Once this has been called, the receiver will throw precondition failures on subsequent use.
-    def build(): ItemStateStorage[EventIdForBuilding]
 
     def recordSnapshot[Item <: Identified: TypeTag](
         eventId: EventIdForBuilding,
@@ -34,22 +30,19 @@ trait ItemStateStorage[+EventId] {
   def newContext(when: Unbounded[Instant]): ReconstitutionContext
 }
 
-trait ItemStateStorageUsingBlobs[+EventId] extends ItemStateStorage[EventId] {
-  type SnapshotBlob = Array[Byte]
-
+class ItemStateStorageUsingBlobs[+EventId] extends ItemStateStorage[EventId] {
   override type RevisionBuilder[EventIdForBuilding >: EventId] <: ExtendedRevisionBuilder[
     EventIdForBuilding]
 
   trait ExtendedRevisionBuilder[EventIdForBuilding >: EventId]
       extends SimpleRevisionBuilder[EventIdForBuilding] {
-    def recordSnapshotBlob[Item <: Identified](
-        uniqueItemSpecification: UniqueItemSpecification[Item],
-        snapshot: SnapshotBlob): Unit
+    self: BlobStorage#RevisionBuilder =>
   }
 
   override type ReconstitutionContext <: ExtendedReconstitutionContext
 
-  trait ExtendedReconstitutionContext extends ItemCache {
+  class ExtendedReconstitutionContext extends ItemCache { self: BlobStorage =>
+
     override def itemsFor[Item <: Identified: TypeTag](
         id: Item#Id): Stream[Item] =
       for {
@@ -64,18 +57,6 @@ trait ItemStateStorageUsingBlobs[+EventId] extends ItemStateStorage[EventId] {
     // This has a precondition that the type tag must pick out precisely one item - zero or multiple is not permitted.
     protected def itemFor[Item <: Identified](
         uniqueItemSpecification: UniqueItemSpecification[Item]): Item
-
-    protected def uniqueItemQueriesFor[Item <: Identified: TypeTag]
-      : Stream[UniqueItemSpecification[RetrievedItem]] forSome {
-        type RetrievedItem <: Item
-      }
-    protected def uniqueItemQueriesFor[Item <: Identified: TypeTag](
-        id: Item#Id): Stream[UniqueItemSpecification[RetrievedItem]] forSome {
-      type RetrievedItem <: Item
-    }
-
-    protected def snapshotBlobFor[Item <: Identified](
-        uniqueItemSpecification: UniqueItemSpecification[Item]): SnapshotBlob
   }
 }
 

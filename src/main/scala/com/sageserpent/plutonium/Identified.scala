@@ -1,5 +1,10 @@
 package com.sageserpent.plutonium
 
+import scala.reflect.runtime.universe
+import scala.reflect.runtime.universe.TypeTag
+
+object Identified {}
+
 abstract class Identified {
   type Id
   val id: Id
