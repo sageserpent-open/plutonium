@@ -34,18 +34,17 @@ trait ItemStateStorage[+EventId] {
   def newContext(when: Unbounded[Instant]): ReconstitutionContext
 }
 
-trait ItemStateStorageViaSnapshots[+EventId]
-    extends ItemStateStorage[EventId] {
-  type Snapshot = Array[Byte]
+trait ItemStateStorageUsingBlobs[+EventId] extends ItemStateStorage[EventId] {
+  type SnapshotBlob = Array[Byte]
 
   override type RevisionBuilder[EventIdForBuilding >: EventId] <: ExtendedRevisionBuilder[
     EventIdForBuilding]
 
   trait ExtendedRevisionBuilder[EventIdForBuilding >: EventId]
       extends SimpleRevisionBuilder[EventIdForBuilding] {
-    def recordSnapshot[Item <: Identified](
+    def recordSnapshotBlob[Item <: Identified](
         uniqueItemSpecification: UniqueItemSpecification[Item],
-        snapshot: Snapshot): Unit
+        snapshot: SnapshotBlob): Unit
   }
 
   override type ReconstitutionContext <: ExtendedReconstitutionContext
@@ -75,8 +74,8 @@ trait ItemStateStorageViaSnapshots[+EventId]
       type RetrievedItem <: Item
     }
 
-    protected def snapshotFor[Item <: Identified](
-        uniqueItemSpecification: UniqueItemSpecification[Item]): Snapshot
+    protected def snapshotBlobFor[Item <: Identified](
+        uniqueItemSpecification: UniqueItemSpecification[Item]): SnapshotBlob
   }
 }
 
