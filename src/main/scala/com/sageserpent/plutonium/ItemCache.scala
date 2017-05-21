@@ -1,5 +1,6 @@
 package com.sageserpent.plutonium
 
+import scala.reflect.runtime.universe
 import scala.reflect.runtime.universe.{Super => _, This => _, _}
 
 /**
@@ -58,4 +59,12 @@ trait ItemCache {
 
   def numberOf[Item <: Identified: TypeTag](id: Item#Id): Int =
     itemsFor(id).size
+}
+
+object emptyItemCache extends ItemCache {
+  override def itemsFor[Item <: Identified: universe.TypeTag](
+      id: Item#Id): Stream[Item] = Stream.empty
+
+  override def allItems[Item <: Identified: universe.TypeTag](): Stream[Item] =
+    Stream.empty
 }

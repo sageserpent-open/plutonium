@@ -4,7 +4,6 @@ import java.time.Instant
 
 import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.World.Revision
-import com.sageserpent.plutonium.WorldImplementationCodeFactoring.IdentifiedItemsScope
 
 import scala.collection.mutable.MutableList
 import scala.reflect.runtime.universe.{Super => _, This => _, _}

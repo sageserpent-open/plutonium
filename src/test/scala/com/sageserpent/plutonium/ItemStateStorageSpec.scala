@@ -15,10 +15,7 @@ object MarkSyntax {
   }
 }
 
-class ItemStateSnapshotStorageSpec
-    extends FlatSpec
-    with Matchers
-    with Checkers {
+class ItemStateStorageSpec extends FlatSpec with Matchers with Checkers {
   import MarkSyntax._
 
   val maximumMark = 9
