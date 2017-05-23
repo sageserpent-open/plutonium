@@ -56,8 +56,12 @@ class ItemStateStorageUsingBlobs[+EventId] extends ItemStateStorage[EventId] {
 
     // This has a precondition that the type tag must pick out precisely one item - zero or multiple is not permitted.
     protected def itemFor[Item <: Identified](
-        uniqueItemSpecification: UniqueItemSpecification[Item]): Item
+        uniqueItemSpecification: UniqueItemSpecification[Item]): Item = ???
   }
+
+  def newContext(when: Unbounded[java.time.Instant]): ReconstitutionContext =
+    ???
+  def openRevision[NewEventId >: EventId](): RevisionBuilder[NewEventId] = ???
 }
 
 object emptyItemStateStorage extends ItemStateStorage[Nothing] {
