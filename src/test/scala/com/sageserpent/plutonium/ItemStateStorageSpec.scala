@@ -1,10 +1,8 @@
 package com.sageserpent.plutonium
 
-import org.scalacheck.{Arbitrary, Gen, Prop}
+import org.scalacheck.{Gen, Prop}
 import org.scalatest.prop.Checkers
 import org.scalatest.{FlatSpec, Matchers}
-
-import scala.reflect.runtime.universe
 
 /**
   * Created by gerardMurphy on 13/05/2017.
@@ -32,8 +30,8 @@ class ItemStateStorageSpec extends FlatSpec with Matchers with Checkers {
 
   def buildGraphFrom(markMap: Map[Int, Set[Int]]): Seq[GraphNodeItem] = {
     val nodes = markMap.keys map (mark =>
-      mark -> (if (mark.isEven) new GraphNodeEvenItem(???)
-               else new GraphNodeOddItem(???))) toMap
+      mark -> (if (mark.isEven) new GraphNodeEvenItem(mark)
+               else new GraphNodeOddItem(mark.toString))) toMap
 
     for ((mark, referencedMarks) <- markMap) {
       nodes(mark).referencedItems ++= referencedMarks map (nodes(_))
@@ -68,14 +66,12 @@ trait GraphNodeItem extends Identified {
   def referencedItems: Set[GraphNodeItem] = _referencedItems
   def referencedItems_=(value: Set[GraphNodeItem]): Unit = {
     _referencedItems = value
+    checkInvariant()
   }
 
   private var _mark: Int = 0
 
-  def mark: Int = _mark
-  def mark_=(value: Int): Unit = {
-    _mark = value
-  }
+  def mark: Int
 
   protected def traverseGraph(accumulated: (Set[GraphNodeItem], String))
     : (Set[GraphNodeItem], String) = {
@@ -92,14 +88,12 @@ class GraphNodeOddItem(override val id: GraphNodeOddItem#Id)
 
   override type Id = String
 
-  override def referencedItems_=(value: Set[GraphNodeItem]): Unit = {
-    require(value forall (_.mark.isEven))
-    super.referencedItems_=(value)
-  }
+  override def mark: Int = id.toInt
 
-  override def mark_=(value: Int): Unit = {
-    require(!value.isEven)
-    super.mark_=(value)
+  override def checkInvariant(): Unit = {
+    super.checkInvariant()
+    require(!mark.isEven)
+    require(referencedItems forall (_.mark.isEven))
   }
 }
 
@@ -109,13 +103,11 @@ class GraphNodeEvenItem(override val id: GraphNodeEvenItem#Id)
 
   override type Id = Int
 
-  override def referencedItems_=(value: Set[GraphNodeItem]): Unit = {
-    require(value forall (!_.mark.isEven))
-    super.referencedItems_=(value)
-  }
+  override def mark: Int = id
 
-  override def mark_=(value: Int): Unit = {
-    require(value.isEven)
-    super.mark_=(value)
+  override def checkInvariant(): Unit = {
+    super.checkInvariant()
+    require(mark.isEven)
+    require(referencedItems forall (!_.mark.isEven))
   }
 }

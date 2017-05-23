@@ -4,7 +4,6 @@ import java.time.Instant
 
 import com.sageserpent.americium.Unbounded
 
-import scala.reflect.runtime.universe
 import scala.reflect.runtime.universe.TypeTag
 
 /**
