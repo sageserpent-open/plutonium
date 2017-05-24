@@ -3,6 +3,9 @@ package com.sageserpent.plutonium
 import org.scalacheck.{Gen, Prop}
 import org.scalatest.prop.Checkers
 import org.scalatest.{FlatSpec, Matchers}
+import com.sageserpent.plutonium.{
+  ItemStateStorage => IncompleteItemStateStorage
+}
 
 /**
   * Created by gerardMurphy on 13/05/2017.
@@ -29,7 +32,8 @@ class ItemStateStorageSpec extends FlatSpec with Matchers with Checkers {
     .withDefaultValue(Set.empty))
 
   def buildGraphFrom(markMap: Map[Int, Set[Int]]): Seq[GraphNodeItem] = {
-    val nodes = markMap.keys map (mark =>
+    val allMarks = (markMap.keys ++ markMap.values.flatten).toSet
+    val nodes = allMarks map (mark =>
       mark -> (if (mark.isEven) new GraphNodeEvenItem(mark)
                else new GraphNodeOddItem(mark.toString))) toMap
 
@@ -40,9 +44,15 @@ class ItemStateStorageSpec extends FlatSpec with Matchers with Checkers {
     nodes.values.toSeq
   }
 
+  class ItemStateStorage extends ItemStateStorageUsingBlobs[Int] {}
+
   "An item" should "be capable of being roundtripped by reconstituting its snapshot" in check(
     Prop.forAllNoShrink(markMapGenerator) { markMap =>
       val graphNodes = buildGraphFrom(markMap)
+
+      println(graphNodes.toList)
+
+      val itemStateStorage = new ItemStateStorage
 
       // PLAN: store all the graph nodes one by one: then reconstitute them all. Suppose I want to reconstitute several items at the same time? Hmmm....
 
@@ -73,13 +83,21 @@ trait GraphNodeItem extends Identified {
 
   def mark: Int
 
-  protected def traverseGraph(accumulated: (Set[GraphNodeItem], String))
-    : (Set[GraphNodeItem], String) = {
-    val (visited, text) =
-      (accumulated /: referencedItems)((accumulated, graphNodeItem) =>
-        graphNodeItem.traverseGraph(accumulated))
-    (visited + this) -> "mark: $mark referred: ($text)"
+  protected def traverseGraph(accumulated: (Set[GraphNodeItem], Seq[String]))
+    : (Set[GraphNodeItem], Seq[String]) = {
+    val (alreadyVisited, prefixOfResult) = accumulated
+    if (!alreadyVisited.contains(this)) {
+      val (visited, texts) =
+        (((alreadyVisited + this) -> Seq.empty[String]) /: referencedItems)(
+          (accumulated, graphNodeItem) =>
+            graphNodeItem.traverseGraph(accumulated))
+      (visited + this) ->
+        (prefixOfResult :+ s"mark: $mark referred: (${texts.mkString(",")})")
+    } else alreadyVisited -> (prefixOfResult :+ s"mark: $mark ALREADY SEEN")
   }
+
+  override def toString =
+    traverseGraph(Set.empty[GraphNodeItem] -> Seq.empty)._2.head
 }
 
 class GraphNodeOddItem(override val id: GraphNodeOddItem#Id)
