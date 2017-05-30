@@ -18,6 +18,9 @@ trait ItemStateStorage[EventId] {
         eventId: EventIdForBuilding,
         item: Item,
         when: Unbounded[Instant]): Unit = ???
+
+    // Once this has been called, the receiver will throw precondition failures on subsequent use.
+    def build(): ItemStateStorage[EventIdForBuilding] = ???
   }
 
   class ReconstitutionContext(blobStorageTimeslice: BlobStorage#Timeslice)

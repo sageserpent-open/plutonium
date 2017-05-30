@@ -1,6 +1,8 @@
 package com.sageserpent.plutonium
 
+import com.sageserpent.americium.NegativeInfinity
 import org.scalacheck.{Gen, Prop}
+import Prop.BooleanOperators
 import org.scalatest.prop.Checkers
 import org.scalatest.{FlatSpec, Matchers}
 import com.sageserpent.plutonium.{
@@ -48,19 +50,33 @@ class ItemStateStorageSpec extends FlatSpec with Matchers with Checkers {
     val blobStorage: BlobStorage = ???
   }
 
+  // TODO - 'allItems' versus 'itemsFor'.
+
   "An item" should "be capable of being roundtripped by reconstituting its snapshot" in check(
     Prop.forAllNoShrink(markMapGenerator) { markMap =>
       val graphNodes = buildGraphFrom(markMap)
 
       println(graphNodes.toList)
 
-      val itemStateStorage = new ItemStateStorage
+      val emptyItemStateStorage = new ItemStateStorage
 
       // PLAN: store all the graph nodes one by one: then reconstitute them all. Suppose I want to reconstitute several items at the same time? Hmmm....
 
+      val revisionBuilder = emptyItemStateStorage.openRevision()
+
       // Well, if I store each of the graph nodes separately in a snapshot store...
 
+      for (graphNode <- graphNodes) {
+        // TODO - vary the event id and time of booking. Consider multiple revisions too...
+        revisionBuilder.recordSnapshot(0, graphNode, NegativeInfinity())
+      }
+
+      val itemStateStorage = revisionBuilder.build()
+
       // ... and I make an reconstitution context using that store ...
+
+      val reconstitutionContext =
+        itemStateStorage.newContext(NegativeInfinity())
 
       // ... then I can reconstitute each graph node using separate reconstitution calls such that ...
 
@@ -68,7 +84,20 @@ class ItemStateStorageSpec extends FlatSpec with Matchers with Checkers {
 
       // ... b) when the nodes reconstituted by separate calls are correlated via their marks, they turn out be the same object from the POV of reference identity.
 
-      Prop.undecided
+      val individuallyReconstitutedGraphNodes = graphNodes.map(_.id match {
+        case oddId: String =>
+          reconstitutionContext.itemsFor[GraphNodeOddItem](oddId)
+        case evenId: Int =>
+          reconstitutionContext.itemsFor[GraphNodeEvenItem](evenId)
+      })
+
+      val nodesHaveTheSameStructure =
+        Prop.all(graphNodes zip individuallyReconstitutedGraphNodes map {
+          case (original, reconstituted) =>
+            (original.toString == reconstituted) :| s"Reconstituted node: $reconstituted should have the same structure as original node: $original."
+        }: _*)
+
+      nodesHaveTheSameStructure
     })
 }
 
