@@ -1,5 +1,7 @@
 package com.sageserpent.plutonium
 
+import java.time.Instant
+
 import com.sageserpent.americium.Unbounded
 
 import scala.reflect.runtime.universe.TypeTag
@@ -11,7 +13,12 @@ trait ItemStateStorage[EventId] {
   val blobStorage: BlobStorage
 
   class RevisionBuilder[EventIdForBuilding >: EventId](
-      blobStorageRevisionBuilder: BlobStorage#RevisionBuilder) {}
+      blobStorageRevisionBuilder: BlobStorage#RevisionBuilder) {
+    def recordSnapshot[Item <: Identified: TypeTag](
+        eventId: EventIdForBuilding,
+        item: Item,
+        when: Unbounded[Instant]): Unit = ???
+  }
 
   class ReconstitutionContext(blobStorageTimeslice: BlobStorage#Timeslice)
       extends ItemCache {
