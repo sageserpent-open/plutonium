@@ -44,7 +44,9 @@ class ItemStateStorageSpec extends FlatSpec with Matchers with Checkers {
     nodes.values.toSeq
   }
 
-  class ItemStateStorage extends ItemStateStorageUsingBlobs[Int] {}
+  class ItemStateStorage extends IncompleteItemStateStorage[Int] {
+    val blobStorage: BlobStorage = ???
+  }
 
   "An item" should "be capable of being roundtripped by reconstituting its snapshot" in check(
     Prop.forAllNoShrink(markMapGenerator) { markMap =>
