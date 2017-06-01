@@ -9,21 +9,26 @@ import scala.reflect.runtime.universe.TypeTag
 /**
   * Created by gerardMurphy on 01/05/2017.
   */
-trait ItemStateStorage[EventId] {
-  val blobStorage: BlobStorage
+trait ItemStateStorage[EventId] { itemStateStorage =>
 
-  class RevisionBuilder[EventIdForBuilding >: EventId](
-      blobStorageRevisionBuilder: BlobStorage#RevisionBuilder) {
-    def recordSnapshot[Item <: Identified: TypeTag](
-        eventId: EventIdForBuilding,
-        item: Item,
-        when: Unbounded[Instant]): Unit = ???
+  import BlobStorage._
+
+  val blobStorage: BlobStorage[EventId]
+
+  class RevisionBuilder[EventId](
+      blobStorageRevisionBuilder: BlobStorage[EventId]#RevisionBuilder) {
+    // TODO - I'm not sure if the client doing incremental event playback will know the type tag for each item
+    // - if it does, let's rework the API to create a sub-builder that will record individual items with their type tags.
+    def recordSnapshotsForEvent(eventId: EventId,
+                                when: Unbounded[Instant],
+                                items: Seq[_ <: Identified]): Unit = ???
 
     // Once this has been called, the receiver will throw precondition failures on subsequent use.
-    def build(): ItemStateStorage[EventIdForBuilding] = ???
+    def build(): itemStateStorage.type = ???
   }
 
-  class ReconstitutionContext(blobStorageTimeslice: BlobStorage#Timeslice)
+  class ReconstitutionContext(
+      blobStorageTimeslice: BlobStorage[EventId]#Timeslice)
       extends ItemCache {
 
     override def itemsFor[Item <: Identified: TypeTag](
@@ -41,8 +46,7 @@ trait ItemStateStorage[EventId] {
 
     // This has a precondition that the type tag must pick out precisely one item - zero or multiple is not permitted.
     protected def itemFor[Item <: Identified](
-        uniqueItemSpecification: BlobStorage#UniqueItemSpecification[Item])
-      : Item = ???
+        uniqueItemSpecification: UniqueItemSpecification[Item]): Item = ???
   }
 
   def newContext(when: Unbounded[java.time.Instant]): ReconstitutionContext =

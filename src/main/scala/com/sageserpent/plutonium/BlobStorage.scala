@@ -9,20 +9,24 @@ import scala.reflect.runtime.universe.TypeTag
 /**
   * Created by gerardMurphy on 21/05/2017.
   */
-trait BlobStorage {
+object BlobStorage {
   type UniqueItemSpecification[Item <: Identified] =
     (Item#Id, TypeTag[Item])
+}
+
+trait BlobStorage[EventId] { blobStorage =>
+
+  import BlobStorage._
 
   type SnapshotBlob = Array[Byte]
 
   trait RevisionBuilder {
-    def recordSnapshotBlob[Item <: Identified](
-        uniqueItemSpecification: UniqueItemSpecification[Item],
-        snapshot: SnapshotBlob,
-        when: Unbounded[Instant]): Unit
+    def recordSnapshotBlobsForEvent(
+        when: Unbounded[Instant],
+        snapshotBlobs: Seq[(UniqueItemSpecification[_], SnapshotBlob)]): Unit
 
     // Once this has been called, the receiver will throw precondition failures on subsequent use.
-    def build(): this.type
+    def build(): blobStorage.type
   }
 
   def timeSlice(when: Unbounded[Instant]): Timeslice

@@ -47,7 +47,7 @@ class ItemStateStorageSpec extends FlatSpec with Matchers with Checkers {
   }
 
   class ItemStateStorage extends IncompleteItemStateStorage[Int] {
-    val blobStorage: BlobStorage = ???
+    val blobStorage: BlobStorage[Int] = ???
   }
 
   // TODO - 'allItems' versus 'itemsFor'.
@@ -66,10 +66,10 @@ class ItemStateStorageSpec extends FlatSpec with Matchers with Checkers {
 
       // Well, if I store each of the graph nodes separately in a snapshot store...
 
-      for (graphNode <- graphNodes) {
-        // TODO - vary the event id and time of booking. Consider multiple revisions too...
-        revisionBuilder.recordSnapshot(0, graphNode, NegativeInfinity())
-      }
+      // TODO - vary the event id and time of booking. Consider multiple revisions too...
+      revisionBuilder.recordSnapshotsForEvent(0,
+                                              NegativeInfinity(),
+                                              graphNodes)
 
       val itemStateStorage = revisionBuilder.build()
 
