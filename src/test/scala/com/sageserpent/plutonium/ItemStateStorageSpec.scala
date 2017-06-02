@@ -33,14 +33,14 @@ class ItemStateStorageSpec extends FlatSpec with Matchers with Checkers {
     markMapletGenerator) map (_.toMap
     .withDefaultValue(Set.empty))
 
-  def buildGraphFrom(markMap: Map[Int, Set[Int]]): Seq[GraphNodeItem] = {
+  def buildGraphFrom(markMap: Map[Int, Set[Int]]): Seq[GraphNode] = {
     val allMarks = (markMap.keys ++ markMap.values.flatten).toSet
     val nodes = allMarks map (mark =>
-      mark -> (if (mark.isEven) new GraphNodeEvenItem(mark)
-               else new GraphNodeOddItem(mark.toString))) toMap
+      mark -> (if (mark.isEven) new EvenGraphNode(mark)
+               else new OddGraphNode(mark.toString))) toMap
 
     for ((mark, referencedMarks) <- markMap) {
-      nodes(mark).referencedItems ++= referencedMarks map (nodes(_))
+      nodes(mark).referencedNodes ++= referencedMarks map (nodes(_))
     }
 
     nodes.values.toSeq
@@ -54,17 +54,13 @@ class ItemStateStorageSpec extends FlatSpec with Matchers with Checkers {
 
   "An item" should "be capable of being roundtripped by reconstituting its snapshot" in check(
     Prop.forAllNoShrink(markMapGenerator) { markMap =>
-      val graphNodes = buildGraphFrom(markMap)
+      val graphNodes: Seq[GraphNode] = buildGraphFrom(markMap)
 
       println(graphNodes.toList)
 
       val emptyItemStateStorage = new ItemStateStorage
 
-      // PLAN: store all the graph nodes one by one: then reconstitute them all. Suppose I want to reconstitute several items at the same time? Hmmm....
-
       val revisionBuilder = emptyItemStateStorage.openRevision()
-
-      // Well, if I store each of the graph nodes separately in a snapshot store...
 
       // TODO - vary the event id and time of booking. Consider multiple revisions too...
       revisionBuilder.recordSnapshotsForEvent(0,
@@ -73,23 +69,17 @@ class ItemStateStorageSpec extends FlatSpec with Matchers with Checkers {
 
       val itemStateStorage = revisionBuilder.build()
 
-      // ... and I make an reconstitution context using that store ...
-
       val reconstitutionContext =
         itemStateStorage.newContext(NegativeInfinity())
 
-      // ... then I can reconstitute each graph node using separate reconstitution calls such that ...
-
-      // ... a) each node fully reproduces its own state and that of the reachable portion of the graph that it participates in and
-
-      // ... b) when the nodes reconstituted by separate calls are correlated via their marks, they turn out be the same object from the POV of reference identity.
-
-      val individuallyReconstitutedGraphNodes = graphNodes.map(_.id match {
+      val individuallyReconstitutedGraphNodes = graphNodes.flatMap(_.id match {
         case oddId: String =>
-          reconstitutionContext.itemsFor[GraphNodeOddItem](oddId)
+          reconstitutionContext.itemsFor[OddGraphNode](oddId)
         case evenId: Int =>
-          reconstitutionContext.itemsFor[GraphNodeEvenItem](evenId)
+          reconstitutionContext.itemsFor[EvenGraphNode](evenId)
       })
+
+      val noNodesAreGainedOrLost = (individuallyReconstitutedGraphNodes.size == graphNodes.size) :| s"Expected to have: ${graphNodes.size} reconstituted nodes, but got: ${individuallyReconstitutedGraphNodes.size}."
 
       val nodesHaveTheSameStructure =
         Prop.all(graphNodes zip individuallyReconstitutedGraphNodes map {
@@ -97,16 +87,24 @@ class ItemStateStorageSpec extends FlatSpec with Matchers with Checkers {
             (original.toString == reconstituted) :| s"Reconstituted node: $reconstituted should have the same structure as original node: $original."
         }: _*)
 
-      nodesHaveTheSameStructure
+      val nodesReachableFromReconstitutedNodesGroupedByMark = individuallyReconstitutedGraphNodes flatMap (_.reachableNodes()) groupBy (_.mark)
+
+      val nodesShareIdentityAcrossDistinctReconstitutionCalls =
+        Prop.all((nodesReachableFromReconstitutedNodesGroupedByMark map {
+          case (mark, nodes) =>
+            (1 == nodes.distinct.size) :| s"All of: $nodes for mark: $mark should reference the same node instance - hash codes are: ${nodes map (_.hashCode())}."
+        }).toSeq: _*)
+
+      noNodesAreGainedOrLost && nodesHaveTheSameStructure && nodesShareIdentityAcrossDistinctReconstitutionCalls
     })
 }
 
-trait GraphNodeItem extends Identified {
-  private var _referencedItems = Set.empty[GraphNodeItem]
+trait GraphNode extends Identified {
+  private var _referencedNodes = Set.empty[GraphNode]
 
-  def referencedItems: Set[GraphNodeItem] = _referencedItems
-  def referencedItems_=(value: Set[GraphNodeItem]): Unit = {
-    _referencedItems = value
+  def referencedNodes: Set[GraphNode] = _referencedNodes
+  def referencedNodes_=(value: Set[GraphNode]): Unit = {
+    _referencedNodes = value
     checkInvariant()
   }
 
@@ -114,12 +112,12 @@ trait GraphNodeItem extends Identified {
 
   def mark: Int
 
-  protected def traverseGraph(accumulated: (Set[GraphNodeItem], Seq[String]))
-    : (Set[GraphNodeItem], Seq[String]) = {
+  protected def traverseGraph(accumulated: (Set[GraphNode], Seq[String]))
+    : (Set[GraphNode], Seq[String]) = {
     val (alreadyVisited, prefixOfResult) = accumulated
     if (!alreadyVisited.contains(this)) {
       val (visited, texts) =
-        (((alreadyVisited + this) -> Seq.empty[String]) /: referencedItems)(
+        (((alreadyVisited + this) -> Seq.empty[String]) /: referencedNodes)(
           (accumulated, graphNodeItem) =>
             graphNodeItem.traverseGraph(accumulated))
       (visited + this) ->
@@ -128,11 +126,12 @@ trait GraphNodeItem extends Identified {
   }
 
   override def toString =
-    traverseGraph(Set.empty[GraphNodeItem] -> Seq.empty)._2.head
+    traverseGraph(Set.empty[GraphNode] -> Seq.empty)._2.head
+
+  def reachableNodes() = traverseGraph(Set.empty[GraphNode] -> Seq.empty)._1
 }
 
-class GraphNodeOddItem(override val id: GraphNodeOddItem#Id)
-    extends GraphNodeItem {
+class OddGraphNode(override val id: OddGraphNode#Id) extends GraphNode {
   import MarkSyntax._
 
   override type Id = String
@@ -142,12 +141,11 @@ class GraphNodeOddItem(override val id: GraphNodeOddItem#Id)
   override def checkInvariant(): Unit = {
     super.checkInvariant()
     require(!mark.isEven)
-    require(referencedItems forall (_.mark.isEven))
+    require(referencedNodes forall (_.mark.isEven))
   }
 }
 
-class GraphNodeEvenItem(override val id: GraphNodeEvenItem#Id)
-    extends GraphNodeItem {
+class EvenGraphNode(override val id: EvenGraphNode#Id) extends GraphNode {
   import MarkSyntax._
 
   override type Id = Int
@@ -157,6 +155,6 @@ class GraphNodeEvenItem(override val id: GraphNodeEvenItem#Id)
   override def checkInvariant(): Unit = {
     super.checkInvariant()
     require(mark.isEven)
-    require(referencedItems forall (!_.mark.isEven))
+    require(referencedNodes forall (!_.mark.isEven))
   }
 }
