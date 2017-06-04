@@ -99,7 +99,7 @@ trait WorldStateSharingBehaviours
         shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
           random,
           obsoleteRecordingsGroupedById)
-        shuffledRecordingAndEventPairs = intersperseObsoleteRecordings(
+        shuffledRecordingAndEventPairs = intersperseObsoleteEvents(
           random,
           shuffledRecordings,
           shuffledObsoleteRecordings)
@@ -214,7 +214,7 @@ trait WorldStateSharingBehaviours
         shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
           random,
           obsoleteRecordingsGroupedById)
-        shuffledRecordingAndEventPairs = intersperseObsoleteRecordings(
+        shuffledRecordingAndEventPairs = intersperseObsoleteEvents(
           random,
           shuffledRecordings,
           shuffledObsoleteRecordings)

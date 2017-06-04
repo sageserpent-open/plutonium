@@ -1977,7 +1977,7 @@ trait WorldBehaviours
           shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
             random,
             obsoleteRecordingsGroupedById)
-          shuffledRecordingAndEventPairs = intersperseObsoleteRecordings(
+          shuffledRecordingAndEventPairs = intersperseObsoleteEvents(
             random,
             shuffledRecordings,
             shuffledObsoleteRecordings)
@@ -2047,7 +2047,7 @@ trait WorldBehaviours
           shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
             random,
             obsoleteRecordingsGroupedById)
-          shuffledRecordingAndEventPairs = intersperseObsoleteRecordings(
+          shuffledRecordingAndEventPairs = intersperseObsoleteEvents(
             random,
             shuffledRecordings,
             shuffledObsoleteRecordings)
@@ -2178,7 +2178,7 @@ trait WorldBehaviours
         shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
           random,
           obsoleteRecordingsGroupedById)
-        shuffledRecordingAndEventPairs = intersperseObsoleteRecordings(
+        shuffledRecordingAndEventPairs = intersperseObsoleteEvents(
           random,
           shuffledRecordings,
           shuffledObsoleteRecordings)
@@ -2250,7 +2250,7 @@ trait WorldBehaviours
         shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
           random,
           obsoleteRecordingsGroupedById)
-        shuffledRecordingAndEventPairs = intersperseObsoleteRecordings(
+        shuffledRecordingAndEventPairs = intersperseObsoleteEvents(
           random,
           shuffledRecordings,
           shuffledObsoleteRecordings)
@@ -2411,7 +2411,7 @@ trait WorldBehaviours
         shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
           random,
           obsoleteRecordingsGroupedById)
-        shuffledRecordingAndEventPairs = intersperseObsoleteRecordings(
+        shuffledRecordingAndEventPairs = intersperseObsoleteEvents(
           random,
           shuffledRecordings,
           shuffledObsoleteRecordings)
@@ -2492,7 +2492,7 @@ trait WorldBehaviours
         shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
           random,
           obsoleteRecordingsGroupedById)
-        shuffledRecordingAndEventPairs = intersperseObsoleteRecordings(
+        shuffledRecordingAndEventPairs = intersperseObsoleteEvents(
           random,
           shuffledRecordings,
           shuffledObsoleteRecordings)
