@@ -28,25 +28,9 @@ object WorldSpecSupport {
   val changeError = new RuntimeException("Error in making a change.")
 }
 
-trait WorldSpecSupport extends Assertions {
+trait WorldSpecSupport extends Assertions with SharedGenerators {
 
   import WorldSpecSupport._
-
-  val seedGenerator = Arbitrary.arbitrary[Long]
-
-  val instantGenerator = Arbitrary.arbitrary[Long] map Instant.ofEpochMilli
-
-  val unboundedInstantGenerator = Gen.frequency(
-    1  -> Gen.oneOf(NegativeInfinity[Instant], PositiveInfinity[Instant]),
-    10 -> (instantGenerator map Finite.apply))
-
-  val changeWhenGenerator: Gen[Unbounded[Instant]] = Gen.frequency(
-    1  -> Gen.oneOf(Seq(NegativeInfinity[Instant])),
-    10 -> (instantGenerator map (Finite(_))))
-
-  val stringIdGenerator = Gen.chooseNum(50, 100) map ("Name: " + _.toString)
-
-  val integerIdGenerator = Gen.chooseNum(-20, 20)
 
   val fooHistoryIdGenerator = stringIdGenerator
 
