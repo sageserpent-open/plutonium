@@ -19,6 +19,7 @@ import org.scalatest.prop.GeneratorDrivenPropertyChecks
 
 import scala.math.Ordering.ordered
 import scala.reflect.runtime.universe._
+import com.sageserpent.americium.seqEnrichment._
 
 /**
   * Created by gerardMurphy on 06/06/2017.
@@ -53,7 +54,7 @@ class BlobStorageSpec
         uniqueItemSpecification: UniqueItemSpecification[_ <: Identified],
         snapshots: Seq[(Unbounded[Instant], SnapshotBlob)],
         queryTimes: Seq[Unbounded[Instant]]) {
-      require(queryTimes.init zip snapshots.tail.map(_._1) forall {
+      require(queryTimes zip snapshots.tail.map(_._1) forall {
         case (queryTime, snapshotTime) => queryTime < snapshotTime
       })
     }
@@ -69,12 +70,7 @@ class BlobStorageSpec
 
         def interleave(firstSequence: List[Long],
                        secondSequence: List[Long]): List[Long] =
-          (firstSequence map (Some.apply)) zipAll (secondSequence map (Some.apply), None, None) flatMap {
-            case (Some(first), Some(second)) => List(first, second)
-            case (Some(first), None)         => List(first)
-            case (None, Some(second))        => List(second)
-            case (None, None)                => List.empty
-          }
+          List(firstSequence, secondSequence).zipN.toList.flatten
 
         val snapshotDeltaGenerator = Gen.posNum[Long]
 
