@@ -99,6 +99,8 @@ Also, start with an in-memory implementation that holds on to all events, lifecy
 Do not try to merge the cacheing for the 'ItemStateReferenceResolutionContext' implementation with what's been done for the 'IdentifiedItemsScope' - they are really
 two different things. We can reuse the helpers in the companion object of 'IdentifiedItemsScope', though.
 
+Rejig expectations - do fast queries, but full recalculation via the existing patch recorder (albeit adapted to make item state snaphots).
+
 The plan for reconstituting items in a query is based on prior serialization of items recording only the top-level item using the usual serialized representation.
 
 Any references from the top-level item to other items are converted to a placeholder case class instance that captures the item's class (not the static type tag) and id.
