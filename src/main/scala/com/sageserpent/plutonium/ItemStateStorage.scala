@@ -15,7 +15,7 @@ trait ItemStateStorage[EventId] { itemStateStorage =>
 
   val blobStorage: BlobStorage[EventId]
 
-  class RevisionBuilder[EventId](
+  class RevisionBuilder(
       blobStorageRevisionBuilder: BlobStorage[EventId]#RevisionBuilder) {
     // TODO - I'm not sure if the client doing incremental event playback will know the type tag for each item
     // - if it does, let's rework the API to create a sub-builder that will record individual items with their type tags.
@@ -33,6 +33,8 @@ trait ItemStateStorage[EventId] { itemStateStorage =>
     // Once this has been called, the receiver will throw precondition failures on subsequent use.
     def build(): itemStateStorage.type = ???
   }
+
+  def openRevision[NewEventId >: EventId](): RevisionBuilder = ???
 
   class ReconstitutionContext(
       blobStorageTimeslice: BlobStorage[EventId]#Timeslice)
@@ -58,5 +60,4 @@ trait ItemStateStorage[EventId] { itemStateStorage =>
 
   def newContext(when: Unbounded[java.time.Instant]): ReconstitutionContext =
     ???
-  def openRevision[NewEventId >: EventId](): RevisionBuilder[NewEventId] = ???
 }

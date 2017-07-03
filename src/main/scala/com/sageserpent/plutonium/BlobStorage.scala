@@ -23,19 +23,19 @@ trait BlobStorage[EventId] { blobStorage =>
   trait RevisionBuilder {
     // TODO - what does it mean if there are no snapshots? A no-op? Analogous to 'ItemStateStorage', we could use an optional value to encode both snapshots and annihilations...
     // NOTE: the unique item specification must be exact and consistent for all of an item's snapshots. This implies that snapshots from a previous revision may have to be rewritten
-    // if an items greatest lower bound type changes.
+    // if an item's greatest lower bound type changes.
     def recordSnapshotBlobsForEvent(
         eventId: EventId,
         when: Unbounded[Instant],
-        snapshotBlobs: Seq[(UniqueItemSpecification[_], SnapshotBlob)]): Unit
+        snapshotBlobs: Seq[(UniqueItemSpecification[_ <: Identified], SnapshotBlob)]): Unit
 
-    def annulEvent(eventId: EventId) = ???
+    def annulEvent(eventId: EventId)
 
     // Once this has been called, the receiver will throw precondition failures on subsequent use.
     def build(): blobStorage.type
   }
 
-  def timeSlice(when: Unbounded[Instant]): Timeslice
+  def openRevision[NewEventId >: EventId](): RevisionBuilder
 
   trait Timeslice {
     def uniqueItemQueriesFor[Item <: Identified: TypeTag]
@@ -50,4 +50,12 @@ trait BlobStorage[EventId] { blobStorage =>
     def snapshotBlobFor[Item <: Identified](
         uniqueItemSpecification: UniqueItemSpecification[Item]): SnapshotBlob
   }
+
+  def timeSlice(when: Unbounded[Instant]): Timeslice
+}
+
+class BlobStorageInMemory[EventId] extends BlobStorage[EventId]{
+  override def timeSlice(when: Unbounded[Instant]): Timeslice = ???
+
+  override def openRevision[NewEventId >: EventId](): RevisionBuilder = ???
 }

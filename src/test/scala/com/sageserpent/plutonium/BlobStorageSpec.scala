@@ -9,6 +9,7 @@ import com.sageserpent.americium.{
   PositiveInfinity,
   Unbounded
 }
+import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.plutonium.BlobStorage.{
   SnapshotBlob,
   UniqueItemSpecification
@@ -20,6 +21,9 @@ import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import scala.math.Ordering.ordered
 import scala.reflect.runtime.universe._
 import com.sageserpent.americium.seqEnrichment._
+
+import scala.collection.immutable
+import scala.util.Random
 
 /**
   * Created by gerardMurphy on 06/06/2017.
@@ -37,7 +41,11 @@ class BlobStorageSpec
     with SharedGenerators
     with GeneratorDrivenPropertyChecks
     with NoShrinking {
+  type EventId = Int
+
   "querying for a unique item's blob snapshot no earlier than when it was booked" should "yield that snapshot" in {
+    val eventIdsGenerator: Gen[Stream[EventId]] =
+      Gen.infiniteStream(Gen.chooseNum(1, 100))
 
     val uniqueItemSpecificationGenerator =
       Gen.oneOf(
@@ -139,9 +147,39 @@ class BlobStorageSpec
             Gen.sequence[Seq[TimeSeries], TimeSeries](
               uniqueItemSpecifications map (timeSeriesGeneratorFor(_))))
 
-    forAll(lotsOfTimeSeriesGenerator, seedGenerator) {
-      (lotsOfTimeSeries, seed) =>
-        println(lotsOfTimeSeries)
+    forAll(lotsOfTimeSeriesGenerator, seedGenerator, eventIdsGenerator) {
+      (lotsOfTimeSeries, seed, eventIds) =>
+        val randomBehaviour = new Random(seed)
+
+        val snapshotBookingsForManyItemsAndTimes
+          : Seq[(Unbounded[Instant],
+                 Stream[(UniqueItemSpecification[_ <: Identified],
+                         SnapshotBlob)])] =
+          (randomBehaviour.pickAlternatelyFrom(lotsOfTimeSeries map (timeSeries =>
+            timeSeries.snapshots map (timeSeries.uniqueItemSpecification -> _))) groupBy {
+            case (_, (when, _)) => when
+          } mapValues (_.map {
+            case (specification, (_, blob)) => specification -> blob
+          }) mapValues (randomBehaviour.splitIntoNonEmptyPieces)).toSeq flatMap {
+            case (when, chunkedBookings) => chunkedBookings map (when -> _)
+          }
+
+        val chunkedShuffledSnapshotBookings =
+          randomBehaviour.splitIntoNonEmptyPieces(randomBehaviour.shuffle(snapshotBookingsForManyItemsAndTimes))
+
+        val revisions = chunkedShuffledSnapshotBookings zip eventIds
+
+        val blobStorage: BlobStorageInMemory[EventId] =
+          (new BlobStorageInMemory[EventId] /: revisions) {
+            case (blobStorage, (chunk, eventId)) =>
+              val builder = blobStorage.openRevision()
+              for ((when, snapshotBlobs) <- chunk) {
+                builder.recordSnapshotBlobsForEvent(eventId,
+                                                    when,
+                                                    snapshotBlobs)
+              }
+              builder.build()
+          }
     }
   }
 }
