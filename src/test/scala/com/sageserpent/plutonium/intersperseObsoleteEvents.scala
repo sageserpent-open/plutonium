@@ -9,15 +9,17 @@ import com.sageserpent.americium.randomEnrichment._
   * Created by Gerard on 02/06/2017.
   */
 object intersperseObsoleteEvents {
+  type EventId = Int
+
   def apply[EventRelatedThing](
       random: Random,
       eventRelatedThings: Seq[EventRelatedThing],
       obsoleteEventRelatedThings: Seq[EventRelatedThing])
-    : Stream[(Option[EventRelatedThing], Int)] = {
+    : Stream[(Option[EventRelatedThing], EventId)] = {
     case class UnfoldState(eventRelatedThings: Seq[EventRelatedThing],
                            obsoleteEventRelatedThings: Seq[EventRelatedThing],
-                           eventId: Int,
-                           eventsToBeCorrected: Set[Int])
+                           eventId: EventId,
+                           eventsToBeCorrected: Set[EventId])
     val onePastMaximumEventId = eventRelatedThings.size
 
     def yieldEitherARecordingOrAnObsoleteRecording(unfoldState: UnfoldState) =
