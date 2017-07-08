@@ -3,26 +3,16 @@ package com.sageserpent.plutonium
 import java.time.Instant
 
 import com.sageserpent.americium.Unbounded._
-import com.sageserpent.americium.{
-  Finite,
-  NegativeInfinity,
-  PositiveInfinity,
-  Unbounded
-}
 import com.sageserpent.americium.randomEnrichment._
-import com.sageserpent.plutonium.BlobStorage.{
-  SnapshotBlob,
-  UniqueItemSpecification
-}
+import com.sageserpent.americium.seqEnrichment._
+import com.sageserpent.americium.{Finite, NegativeInfinity, PositiveInfinity, Unbounded}
+import com.sageserpent.plutonium.BlobStorage.{SnapshotBlob, UniqueItemSpecification}
 import org.scalacheck.{Arbitrary, Gen, ShrinkLowPriority => NoShrinking}
-import org.scalatest.FlatSpec
+import org.scalatest.{FlatSpec, Matchers}
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 
 import scala.math.Ordering.ordered
 import scala.reflect.runtime.universe._
-import com.sageserpent.americium.seqEnrichment._
-
-import scala.collection.immutable
 import scala.util.Random
 
 /**
@@ -38,6 +28,7 @@ trait IdentifiedByAString extends Identified {
 
 class BlobStorageSpec
     extends FlatSpec
+    with Matchers
     with SharedGenerators
     with GeneratorDrivenPropertyChecks
     with NoShrinking {
@@ -52,9 +43,11 @@ class BlobStorageSpec
           UniqueItemSpecification[_ <: Identified]])
       )
 
-    val blobGenerator: Gen[SnapshotBlob] = Gen.containerOf[Array, Byte](Arbitrary.arbByte.arbitrary)
+    val blobGenerator: Gen[SnapshotBlob] =
+      Gen.containerOf[Array, Byte](Arbitrary.arbByte.arbitrary)
 
-    val blobsGenerator: Gen[List[SnapshotBlob]] = Gen.nonEmptyListOf(blobGenerator)
+    val blobsGenerator: Gen[List[SnapshotBlob]] =
+      Gen.nonEmptyListOf(blobGenerator)
 
     case class TimeSeries(
         uniqueItemSpecification: UniqueItemSpecification[_ <: Identified],
@@ -147,22 +140,26 @@ class BlobStorageSpec
             Gen.sequence[Seq[TimeSeries], TimeSeries](
               uniqueItemSpecifications map (timeSeriesGeneratorFor(_))))
 
-    val obsoleteBookingsGenerator: Gen[List[(Unbounded[Instant], List[(UniqueItemSpecification[_ <: Identified], SnapshotBlob)])]] = Gen.nonEmptyListOf(for {
-      snapshotBlobsForItems <- Gen.listOf(for {
-        snapshotBlob <- blobGenerator
-        uniqueItemSpecification <- uniqueItemSpecificationGenerator
-      } yield uniqueItemSpecification -> snapshotBlob)
-      time <- unboundedInstantGenerator
-    } yield time -> snapshotBlobsForItems)
+    val obsoleteBookingsGenerator: Gen[
+      List[(Unbounded[Instant],
+            List[(UniqueItemSpecification[_ <: Identified], SnapshotBlob)])]] =
+      Gen.nonEmptyListOf(for {
+        snapshotBlobsForItems <- Gen.listOf(for {
+          snapshotBlob            <- blobGenerator
+          uniqueItemSpecification <- uniqueItemSpecificationGenerator
+        } yield uniqueItemSpecification -> snapshotBlob)
+        time <- unboundedInstantGenerator
+      } yield time -> snapshotBlobsForItems)
 
     forAll(seedGenerator, lotsOfTimeSeriesGenerator, obsoleteBookingsGenerator) {
       (seed, lotsOfTimeSeries, obsoleteBookings) =>
+        println("----------------------")
+
         val randomBehaviour = new Random(seed)
 
-        val snapshotBookingsForManyItemsAndTimes
-          : Seq[(Unbounded[Instant],
-                 Seq[(UniqueItemSpecification[_ <: Identified],
-                         SnapshotBlob)])] =
+        val snapshotBookingsForManyItemsAndTimes: Seq[
+          (Unbounded[Instant],
+           Seq[(UniqueItemSpecification[_ <: Identified], SnapshotBlob)])] =
           (randomBehaviour.pickAlternatelyFrom(lotsOfTimeSeries map (timeSeries =>
             timeSeries.snapshots map (timeSeries.uniqueItemSpecification -> _))) groupBy {
             case (_, (when, _)) => when
@@ -176,13 +173,13 @@ class BlobStorageSpec
           randomBehaviour.splitIntoNonEmptyPieces(
             randomBehaviour.shuffle(snapshotBookingsForManyItemsAndTimes))
 
-        val chunkedObsoleteBookings = randomBehaviour.splitIntoNonEmptyPieces(obsoleteBookings)
+        val chunkedObsoleteBookings =
+          randomBehaviour.splitIntoNonEmptyPieces(obsoleteBookings)
 
         val revisions =
-          intersperseObsoleteEvents(
-            randomBehaviour,
-            chunkedShuffledSnapshotBookings,
-            chunkedObsoleteBookings)
+          intersperseObsoleteEvents(randomBehaviour,
+                                    chunkedShuffledSnapshotBookings,
+                                    chunkedObsoleteBookings)
 
         val blobStorage: BlobStorageInMemory[EventId] =
           (new BlobStorageInMemory[EventId] /: revisions) {
@@ -200,7 +197,18 @@ class BlobStorageSpec
               builder.build()
           }
 
-      // TODO - where are the expectations?
+        for {
+          TimeSeries(uniqueItemSpecification, snapshots, queryTimes) <- lotsOfTimeSeries
+          (snapshotBlob: SnapshotBlob, snapshotTime, queryTime) <- snapshots zip queryTimes map {case ((snapshotTime, snapshotBlob), queryTime) => (snapshotBlob, snapshotTime, queryTime)}
+        } {
+          println(uniqueItemSpecification, snapshotBlob, queryTime)
+
+          val timeSlice = blobStorage.timeSlice(queryTime)
+
+          val retrievedSnapshotBlob: SnapshotBlob = timeSlice.snapshotBlobFor[Identified](uniqueItemSpecification.asInstanceOf[UniqueItemSpecification[Identified]])
+
+          retrievedSnapshotBlob shouldBe snapshotBlob
+        }
     }
   }
 }
