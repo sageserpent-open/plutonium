@@ -52,8 +52,9 @@ class BlobStorageSpec
           UniqueItemSpecification[_ <: Identified]])
       )
 
-    val blobsGenerator: Gen[List[SnapshotBlob]] = Gen.nonEmptyListOf(
-      Gen.containerOf[Array, Byte](Arbitrary.arbByte.arbitrary))
+    val blobGenerator: Gen[SnapshotBlob] = Gen.containerOf[Array, Byte](Arbitrary.arbByte.arbitrary)
+
+    val blobsGenerator: Gen[List[SnapshotBlob]] = Gen.nonEmptyListOf(blobGenerator)
 
     case class TimeSeries(
         uniqueItemSpecification: UniqueItemSpecification[_ <: Identified],
@@ -71,7 +72,7 @@ class BlobStorageSpec
       else {
         val numberOfDeltas = numberRequired - 1
         val half           = numberOfDeltas / 2
-        val offCut         = numberOfDeltas - half
+        val halfPlusOffCut = numberOfDeltas - half
 
         def interleave(firstSequence: List[Long],
                        secondSequence: List[Long]): List[Long] =
@@ -87,13 +88,15 @@ class BlobStorageSpec
           snapshotDeltas <- if (startingWithSnapshot)
             Gen.listOfN(half, snapshotDeltaGenerator)
           else
-            Gen.listOfN(offCut, snapshotDeltaGenerator)
+            Gen.listOfN(halfPlusOffCut, snapshotDeltaGenerator)
           queryDeltas <- if (startingWithSnapshot)
-            Gen.listOfN(offCut, queryDeltaGenerator)
-          else Gen.listOfN(half, queryDeltaGenerator)
+            Gen.listOfN(halfPlusOffCut, queryDeltaGenerator)
+          else
+            Gen.listOfN(half, queryDeltaGenerator)
           deltas = if (startingWithSnapshot)
             interleave(queryDeltas, snapshotDeltas)
-          else interleave(snapshotDeltas, queryDeltas)
+          else
+            interleave(snapshotDeltas, queryDeltas)
         } yield
           deltas
             .scanLeft(earliest)(_ plusMillis _)
@@ -144,13 +147,21 @@ class BlobStorageSpec
             Gen.sequence[Seq[TimeSeries], TimeSeries](
               uniqueItemSpecifications map (timeSeriesGeneratorFor(_))))
 
-    forAll(lotsOfTimeSeriesGenerator, seedGenerator) {
-      (lotsOfTimeSeries, seed) =>
+    val obsoleteBookingsGenerator: Gen[List[(Unbounded[Instant], List[(UniqueItemSpecification[_ <: Identified], SnapshotBlob)])]] = Gen.nonEmptyListOf(for {
+      snapshotBlobsForItems <- Gen.listOf(for {
+        snapshotBlob <- blobGenerator
+        uniqueItemSpecification <- uniqueItemSpecificationGenerator
+      } yield uniqueItemSpecification -> snapshotBlob)
+      time <- unboundedInstantGenerator
+    } yield time -> snapshotBlobsForItems)
+
+    forAll(seedGenerator, lotsOfTimeSeriesGenerator, obsoleteBookingsGenerator) {
+      (seed, lotsOfTimeSeries, obsoleteBookings) =>
         val randomBehaviour = new Random(seed)
 
         val snapshotBookingsForManyItemsAndTimes
           : Seq[(Unbounded[Instant],
-                 Stream[(UniqueItemSpecification[_ <: Identified],
+                 Seq[(UniqueItemSpecification[_ <: Identified],
                          SnapshotBlob)])] =
           (randomBehaviour.pickAlternatelyFrom(lotsOfTimeSeries map (timeSeries =>
             timeSeries.snapshots map (timeSeries.uniqueItemSpecification -> _))) groupBy {
@@ -165,10 +176,13 @@ class BlobStorageSpec
           randomBehaviour.splitIntoNonEmptyPieces(
             randomBehaviour.shuffle(snapshotBookingsForManyItemsAndTimes))
 
+        val chunkedObsoleteBookings = randomBehaviour.splitIntoNonEmptyPieces(obsoleteBookings)
+
         val revisions =
-          intersperseObsoleteEvents(randomBehaviour,
-                                    chunkedShuffledSnapshotBookings,
-                                    chunkedShuffledSnapshotBookings)  // TODO - come up with some obsolete bookings....
+          intersperseObsoleteEvents(
+            randomBehaviour,
+            chunkedShuffledSnapshotBookings,
+            chunkedObsoleteBookings)
 
         val blobStorage: BlobStorageInMemory[EventId] =
           (new BlobStorageInMemory[EventId] /: revisions) {
@@ -186,7 +200,7 @@ class BlobStorageSpec
               builder.build()
           }
 
-        // TODO - where are the expectations?
+      // TODO - where are the expectations?
     }
   }
 }
