@@ -10,8 +10,11 @@ import com.sageserpent.plutonium.BlobStorage.{SnapshotBlob, UniqueItemSpecificat
 import org.scalacheck.{Arbitrary, Gen, ShrinkLowPriority => NoShrinking}
 import org.scalatest.{FlatSpec, Matchers}
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
+import org.scalatest.LoneElement._
 
+import scala.collection.immutable
 import scala.math.Ordering.ordered
+import scala.reflect.runtime.universe
 import scala.reflect.runtime.universe._
 import scala.util.Random
 
@@ -153,8 +156,6 @@ class BlobStorageSpec
 
     forAll(seedGenerator, lotsOfTimeSeriesGenerator, obsoleteBookingsGenerator) {
       (seed, lotsOfTimeSeries, obsoleteBookings) =>
-        println("----------------------")
-
         val randomBehaviour = new Random(seed)
 
         val snapshotBookingsForManyItemsAndTimes: Seq[
@@ -201,13 +202,28 @@ class BlobStorageSpec
           TimeSeries(uniqueItemSpecification, snapshots, queryTimes) <- lotsOfTimeSeries
           (snapshotBlob: SnapshotBlob, snapshotTime, queryTime) <- snapshots zip queryTimes map {case ((snapshotTime, snapshotBlob), queryTime) => (snapshotBlob, snapshotTime, queryTime)}
         } {
-          println(uniqueItemSpecification, snapshotBlob, queryTime)
-
           val timeSlice = blobStorage.timeSlice(queryTime)
 
-          val retrievedSnapshotBlob: SnapshotBlob = timeSlice.snapshotBlobFor[Identified](uniqueItemSpecification.asInstanceOf[UniqueItemSpecification[Identified]])
+          def checkExpectations[PreciseType <: Identified](uniqueItemSpecification: UniqueItemSpecification[PreciseType]) = {
+            val id = uniqueItemSpecification._1
+            implicit val capturedTypeTag = uniqueItemSpecification._2
 
-          retrievedSnapshotBlob shouldBe snapshotBlob
+            val allRetrievedUniqueItemSpecifications = timeSlice.uniqueItemQueriesFor[PreciseType]
+
+            allRetrievedUniqueItemSpecifications should contain(uniqueItemSpecification)
+
+            val retrievedUniqueItemSpecifications = timeSlice.uniqueItemQueriesFor[PreciseType](id)
+
+            retrievedUniqueItemSpecifications.loneElement shouldBe uniqueItemSpecification
+
+            val retrievedSnapshotBlob: SnapshotBlob = timeSlice.snapshotBlobFor(retrievedUniqueItemSpecifications.head)
+
+            retrievedSnapshotBlob shouldBe snapshotBlob
+          }
+
+          checkExpectations(uniqueItemSpecification)
+
+          checkExpectations((uniqueItemSpecification._1 -> typeTag[Identified]).asInstanceOf[UniqueItemSpecification[Identified]])
         }
     }
   }
