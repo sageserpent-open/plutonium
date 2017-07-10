@@ -5,8 +5,16 @@ import java.time.Instant
 import com.sageserpent.americium.Unbounded._
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.seqEnrichment._
-import com.sageserpent.americium.{Finite, NegativeInfinity, PositiveInfinity, Unbounded}
-import com.sageserpent.plutonium.BlobStorage.{SnapshotBlob, UniqueItemSpecification}
+import com.sageserpent.americium.{
+  Finite,
+  NegativeInfinity,
+  PositiveInfinity,
+  Unbounded
+}
+import com.sageserpent.plutonium.BlobStorage.{
+  SnapshotBlob,
+  UniqueItemSpecification
+}
 import org.scalacheck.{Arbitrary, Gen, ShrinkLowPriority => NoShrinking}
 import org.scalatest.{FlatSpec, Matchers}
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
@@ -37,7 +45,6 @@ class BlobStorageSpec
     with NoShrinking {
   type EventId = Int
 
-  "querying for a unique item's blob snapshot no earlier than when it was booked" should "yield that snapshot" in {
     val uniqueItemSpecificationGenerator =
       Gen.oneOf(
         integerIdGenerator map (_ -> typeTag[IdentifiedByAnInteger]) map (_.asInstanceOf[
@@ -143,43 +150,38 @@ class BlobStorageSpec
             Gen.sequence[Seq[TimeSeries], TimeSeries](
               uniqueItemSpecifications map (timeSeriesGeneratorFor(_))))
 
-    val obsoleteBookingsGenerator: Gen[
-      List[(Unbounded[Instant],
-            List[(UniqueItemSpecification[_ <: Identified], SnapshotBlob)])]] =
-      Gen.nonEmptyListOf(for {
-        snapshotBlobsForItems <- Gen.listOf(for {
-          snapshotBlob            <- blobGenerator
-          uniqueItemSpecification <- uniqueItemSpecificationGenerator
-        } yield uniqueItemSpecification -> snapshotBlob)
-        time <- unboundedInstantGenerator
-      } yield time -> snapshotBlobsForItems)
+  def chunkedShuffledSnapshotBookings(randomBehaviour: Random, lotsOfTimeSeries: Seq[TimeSeries]): Stream[Seq[(Unbounded[Instant], Seq[(UniqueItemSpecification[_ <: Identified], SnapshotBlob)])]] = {
+    val snapshotBookingsForManyItemsAndTimes: Seq[
+      (Unbounded[Instant],
+        Seq[(UniqueItemSpecification[_ <: Identified], SnapshotBlob)])] =
+      (randomBehaviour.pickAlternatelyFrom(
+        lotsOfTimeSeries map (timeSeries =>
+          timeSeries.snapshots map (timeSeries.uniqueItemSpecification -> _))) groupBy {
+        case (_, (when, _)) => when
+      } mapValues (_.map {
+        case (specification, (_, blob)) => specification -> blob
+      }) mapValues randomBehaviour.splitIntoNonEmptyPieces).toSeq flatMap {
+        case (when, chunkedBookings) => chunkedBookings map (when -> _)
+      }
 
-    forAll(seedGenerator, lotsOfTimeSeriesGenerator, obsoleteBookingsGenerator) {
-      (seed, lotsOfTimeSeries, obsoleteBookings) =>
+    randomBehaviour.splitIntoNonEmptyPieces(
+      randomBehaviour.shuffle(snapshotBookingsForManyItemsAndTimes))
+  }
+
+  "querying for a unique item's blob snapshot no earlier than when it was booked" should "yield that snapshot" in {
+    forAll(seedGenerator, lotsOfTimeSeriesGenerator, lotsOfTimeSeriesGenerator) {
+      (seed, lotsOfFinalTimeSeries, lotsOfObsoleteTimeSeries) =>
         val randomBehaviour = new Random(seed)
 
-        val snapshotBookingsForManyItemsAndTimes: Seq[
-          (Unbounded[Instant],
-           Seq[(UniqueItemSpecification[_ <: Identified], SnapshotBlob)])] =
-          (randomBehaviour.pickAlternatelyFrom(lotsOfTimeSeries map (timeSeries =>
-            timeSeries.snapshots map (timeSeries.uniqueItemSpecification -> _))) groupBy {
-            case (_, (when, _)) => when
-          } mapValues (_.map {
-            case (specification, (_, blob)) => specification -> blob
-          }) mapValues randomBehaviour.splitIntoNonEmptyPieces).toSeq flatMap {
-            case (when, chunkedBookings) => chunkedBookings map (when -> _)
-          }
 
-        val chunkedShuffledSnapshotBookings =
-          randomBehaviour.splitIntoNonEmptyPieces(
-            randomBehaviour.shuffle(snapshotBookingsForManyItemsAndTimes))
 
-        val chunkedObsoleteBookings =
-          randomBehaviour.splitIntoNonEmptyPieces(obsoleteBookings)
+        val chunkedFinalBookings = chunkedShuffledSnapshotBookings(randomBehaviour, lotsOfFinalTimeSeries)
+
+        val chunkedObsoleteBookings = chunkedShuffledSnapshotBookings(randomBehaviour, lotsOfObsoleteTimeSeries)
 
         val revisions =
           intersperseObsoleteEvents(randomBehaviour,
-                                    chunkedShuffledSnapshotBookings,
+                                    chunkedFinalBookings,
                                     chunkedObsoleteBookings)
 
         val blobStorage: BlobStorageInMemory[EventId] =
@@ -199,31 +201,41 @@ class BlobStorageSpec
           }
 
         for {
-          TimeSeries(uniqueItemSpecification, snapshots, queryTimes) <- lotsOfTimeSeries
-          (snapshotBlob: SnapshotBlob, snapshotTime, queryTime) <- snapshots zip queryTimes map {case ((snapshotTime, snapshotBlob), queryTime) => (snapshotBlob, snapshotTime, queryTime)}
+          TimeSeries(uniqueItemSpecification, snapshots, queryTimes) <- lotsOfFinalTimeSeries
+          (snapshotBlob: SnapshotBlob, snapshotTime, queryTime) <- snapshots zip queryTimes map {
+            case ((snapshotTime, snapshotBlob), queryTime) =>
+              (snapshotBlob, snapshotTime, queryTime)
+          }
         } {
           val timeSlice = blobStorage.timeSlice(queryTime)
 
-          def checkExpectations[PreciseType <: Identified](uniqueItemSpecification: UniqueItemSpecification[PreciseType]) = {
-            val id = uniqueItemSpecification._1
+          def checkExpectations[PreciseType <: Identified](
+              uniqueItemSpecification: UniqueItemSpecification[PreciseType]) = {
+            val id                       = uniqueItemSpecification._1
             implicit val capturedTypeTag = uniqueItemSpecification._2
 
-            val allRetrievedUniqueItemSpecifications = timeSlice.uniqueItemQueriesFor[PreciseType]
+            val allRetrievedUniqueItemSpecifications =
+              timeSlice.uniqueItemQueriesFor[PreciseType]
 
-            allRetrievedUniqueItemSpecifications should contain(uniqueItemSpecification)
+            allRetrievedUniqueItemSpecifications should contain(
+              uniqueItemSpecification)
 
-            val retrievedUniqueItemSpecifications = timeSlice.uniqueItemQueriesFor[PreciseType](id)
+            val retrievedUniqueItemSpecifications =
+              timeSlice.uniqueItemQueriesFor[PreciseType](id)
 
             retrievedUniqueItemSpecifications.loneElement shouldBe uniqueItemSpecification
 
-            val retrievedSnapshotBlob: SnapshotBlob = timeSlice.snapshotBlobFor(retrievedUniqueItemSpecifications.head)
+            val retrievedSnapshotBlob: SnapshotBlob =
+              timeSlice.snapshotBlobFor(retrievedUniqueItemSpecifications.head)
 
             retrievedSnapshotBlob shouldBe snapshotBlob
           }
 
           checkExpectations(uniqueItemSpecification)
 
-          checkExpectations((uniqueItemSpecification._1 -> typeTag[Identified]).asInstanceOf[UniqueItemSpecification[Identified]])
+          checkExpectations(
+            (uniqueItemSpecification._1 -> typeTag[Identified])
+              .asInstanceOf[UniqueItemSpecification[Identified]])
         }
     }
   }
