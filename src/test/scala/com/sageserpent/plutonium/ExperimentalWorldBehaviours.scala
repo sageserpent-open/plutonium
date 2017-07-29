@@ -12,9 +12,6 @@ import org.scalacheck.Prop.BooleanOperators
 import com.sageserpent.americium.randomEnrichment._
 import resource.ManagedResource
 
-/**
-  * Created by Gerard on 13/02/2016.
-  */
 trait ExperimentalWorldBehaviours
     extends FlatSpec
     with Matchers

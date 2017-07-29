@@ -3,9 +3,6 @@ package com.sageserpent.plutonium
 import scala.reflect.runtime.universe
 import scala.reflect.runtime.universe.{Super => _, This => _, _}
 
-/**
-  * Created by gerardMurphy on 14/05/2017.
-  */
 trait ItemCache {
   def itemsFor[Item <: Identified: TypeTag](id: Item#Id): Stream[Item]
 

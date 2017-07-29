@@ -6,9 +6,6 @@ import com.sageserpent.plutonium.{Identified, Bitemporal => ScalaBitemporal}
 
 import scala.reflect.runtime.universe._
 
-/**
-  * Created by Gerard on 03/05/2016.
-  */
 trait Scope {
   // The greatest lower bound of all revisions coming after 'asOf', this may refer to one past the maximum revision actually defined for a world.
 

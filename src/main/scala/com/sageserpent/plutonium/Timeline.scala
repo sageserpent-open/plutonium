@@ -4,9 +4,6 @@ import java.time.Instant
 
 import com.sageserpent.americium.Unbounded
 
-/**
-  * Created by gerardMurphy on 11/05/2017.
-  */
 trait Timeline[+EventId] {
   def revise[NewEventId >: EventId](
       events: Map[NewEventId, Option[Event]]): Timeline[NewEventId]

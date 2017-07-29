@@ -6,9 +6,6 @@ import com.sageserpent.plutonium.{
   typeTagForClass
 }
 
-/**
-  * Created by Gerard on 02/05/2016.
-  */
 object Bitemporal {
   def withId[Item <: Identified](id: Item#Id,
                                  clazz: Class[Item]): ScalaBitemporal[Item] =

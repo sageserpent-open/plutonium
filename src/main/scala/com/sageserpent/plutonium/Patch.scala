@@ -6,9 +6,6 @@ import com.sageserpent.plutonium.Patch.MethodPieces
 
 import scalaz.{-\/, \/, \/-}
 
-/**
-  * Created by Gerard on 23/01/2016.
-  */
 object Patch {
   type WrappedArgument =
     \/[AnyRef, Recorder#ItemReconstitutionData[_ <: Identified]]

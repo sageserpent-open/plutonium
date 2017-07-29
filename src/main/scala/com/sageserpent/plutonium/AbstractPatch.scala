@@ -2,9 +2,6 @@ package com.sageserpent.plutonium
 
 import java.lang.reflect.Method
 
-/**
-  * Created by Gerard on 10/01/2016.
-  */
 object AbstractPatch {
   def patchesAreRelated(lhs: AbstractPatch, rhs: AbstractPatch): Boolean = {
     val bothReferToTheSameItem = lhs.targetId == rhs.targetId && (lhs.targetTypeTag.tpe <:< rhs.targetTypeTag.tpe || rhs.targetTypeTag.tpe <:< lhs.targetTypeTag.tpe)

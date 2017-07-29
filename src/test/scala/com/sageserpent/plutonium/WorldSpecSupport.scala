@@ -1,8 +1,5 @@
 package com.sageserpent.plutonium
 
-/**
-  * Created by Gerard on 21/09/2015.
-  */
 import java.time.Instant
 import java.util.UUID
 

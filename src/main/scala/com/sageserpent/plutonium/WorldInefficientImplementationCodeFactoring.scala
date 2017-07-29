@@ -5,9 +5,6 @@ import java.time.Instant
 import com.sageserpent.americium.{PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.World.Revision
 
-/**
-  * Created by gerardMurphy on 20/04/2017.
-  */
 abstract class WorldInefficientImplementationCodeFactoring[EventId]
     extends WorldImplementationCodeFactoring[EventId] {
 

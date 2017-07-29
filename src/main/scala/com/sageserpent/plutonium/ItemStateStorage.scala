@@ -6,9 +6,6 @@ import com.sageserpent.americium.Unbounded
 
 import scala.reflect.runtime.universe.TypeTag
 
-/**
-  * Created by gerardMurphy on 01/05/2017.
-  */
 trait ItemStateStorage[EventId] { itemStateStorage =>
 
   import BlobStorage._

@@ -10,9 +10,6 @@ import scala.collection.generic.IsSeqLike
 import scala.collection.mutable.MutableList
 import scala.collection.{SeqLike, SeqView, mutable}
 
-/**
-  * Created by Gerard on 25/05/2016.
-  */
 object MutableState {
 
   import World._
@@ -33,7 +30,8 @@ object MutableState {
     type A = Revision
     override val conversion: SeqView[Revision, Seq[_]] => SeqLike[
       this.A,
-      SeqView[Revision, Seq[_]]] = identity
+      SeqView[Revision, Seq[_]]] =
+      identity
   }
 
   def numberOfEventCorrectionsPriorToCutoff(
@@ -150,10 +148,10 @@ class WorldReferenceImplementation[EventId](
           eventIdInclusion: EventIdInclusion): Seq[AbstractEventData] = {
         val cutoffWhenForBaseWorld = cutoffWhen min cutoffWhenAfterWhichHistoriesDiverge
         if (cutoffRevision > numberOfRevisionsInCommon) {
-          val (eventIds, eventDatums) = eventIdsAndTheirDatums(
-            cutoffRevision,
-            cutoffWhen,
-            eventIdInclusion)
+          val (eventIds, eventDatums) =
+            eventIdsAndTheirDatums(cutoffRevision,
+                                   cutoffWhen,
+                                   eventIdInclusion)
           val eventIdsToBeExcluded = eventIds.toSet
           eventDatums ++ baseMutableState.pertinentEventDatums(
             numberOfRevisionsInCommon,

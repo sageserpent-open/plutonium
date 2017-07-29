@@ -2,9 +2,6 @@ package com.sageserpent
 
 import scalaz.ApplicativePlus
 
-/**
-  * Created by Gerard on 30/07/2015.
-  */
 package object plutonium {
 
   implicit val applicativePlus: ApplicativePlus[Bitemporal] =

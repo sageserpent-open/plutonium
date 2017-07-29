@@ -10,9 +10,6 @@ import com.sageserpent.americium.{Finite, PositiveInfinity, Unbounded}
 
 import scala.reflect.runtime.universe._
 
-/**
-  * Created by Gerard on 09/07/2015.
-  */
 // NOTE: if 'when' is 'NegativeInfinity', the event is taken to be 'at the beginning of time' - this is a way of introducing
 // timeless events, although it permits following events to modify the outcome, which may be quite handy. For now, there is
 // no such corresponding use for 'PositiveInfinity' - that results in a precondition failure.

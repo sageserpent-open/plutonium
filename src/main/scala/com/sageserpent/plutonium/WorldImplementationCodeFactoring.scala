@@ -28,9 +28,6 @@ import scala.collection.mutable
 import scala.reflect.runtime.universe.{Super => _, This => _, _}
 import scala.reflect.runtime.{universe, _}
 
-/**
-  * Created by Gerard on 19/07/2015.
-  */
 object WorldImplementationCodeFactoring {
   type EventOrderingTiebreakerIndex = Int
 

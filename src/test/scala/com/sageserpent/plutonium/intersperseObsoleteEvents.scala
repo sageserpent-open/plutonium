@@ -5,9 +5,6 @@ import scala.util.Random
 import scalaz.std.stream
 import com.sageserpent.americium.randomEnrichment._
 
-/**
-  * Created by Gerard on 02/06/2017.
-  */
 object intersperseObsoleteEvents {
   type EventId = Int
 

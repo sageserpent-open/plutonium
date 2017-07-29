@@ -15,9 +15,6 @@ import scala.collection.{Map, mutable}
 import scala.reflect.runtime._
 import scala.reflect.runtime.universe._
 
-/**
-  * Created by Gerard on 10/01/2016.
-  */
 object PatchRecorderImplementation {
   private type SequenceIndex = Long
   val initialSequenceIndex: SequenceIndex = 0L

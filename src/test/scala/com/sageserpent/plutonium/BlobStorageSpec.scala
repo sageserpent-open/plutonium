@@ -25,9 +25,6 @@ import scala.reflect.runtime.universe
 import scala.reflect.runtime.universe._
 import scala.util.Random
 
-/**
-  * Created by gerardMurphy on 06/06/2017.
-  */
 trait IdentifiedByAnInteger extends Identified {
   override type Id = Int
 }
@@ -152,17 +149,16 @@ class BlobStorageSpec
     type Something
   }](randomBehaviour: Random,
      lotsOfTimeSeries: Seq[TimeSeries],
-     forceUseOfAnOverlappingType: Boolean = false): Stream[
-    Seq[(Unbounded[Instant],
-         Stream[(UniqueItemSpecification[_ <: Identified], SnapshotBlob)])]] = {
+     forceUseOfAnOverlappingType: Boolean = false): Stream[Seq[
+    (Unbounded[Instant],
+     Stream[(UniqueItemSpecification[_ <: Identified], SnapshotBlob)])]] = {
     val forceUseOfAnOverlappingTypeDecisions = {
       val numberOfTimeSeries = lotsOfTimeSeries.size
       val numberOfNonDefaultDecisions =
         randomBehaviour.chooseAnyNumberFromOneTo(numberOfTimeSeries)
-      randomBehaviour.shuffle(
-        Seq
-          .fill(numberOfNonDefaultDecisions)(forceUseOfAnOverlappingType) ++ Seq
-          .fill(numberOfTimeSeries - numberOfNonDefaultDecisions)(false))
+      randomBehaviour.shuffle(Seq
+        .fill(numberOfNonDefaultDecisions)(forceUseOfAnOverlappingType) ++ Seq
+        .fill(numberOfTimeSeries - numberOfNonDefaultDecisions)(false))
     }
     val snapshotBookingsForManyItemsAndTimes: Seq[
       (Unbounded[Instant],

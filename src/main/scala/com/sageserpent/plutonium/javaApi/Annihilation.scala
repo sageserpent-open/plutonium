@@ -8,9 +8,6 @@ import com.sageserpent.plutonium.{
   typeTagForClass
 }
 
-/**
-  * Created by Gerard on 02/05/2016.
-  */
 object Annihilation {
   def apply[Item <: Identified](definiteWhen: Instant,
                                 id: Item#Id,

@@ -4,9 +4,6 @@ import scala.reflect.api.{TypeCreator, Universe}
 import scala.reflect.runtime._
 import scala.reflect.runtime.universe._
 
-/**
-  * Created by Gerard on 22/04/2016.
-  */
 private[plutonium] object typeTagForClass {
   def apply[T](clazz: Class[T]): TypeTag[T] = {
     val classSymbol = currentMirror.classSymbol(clazz)

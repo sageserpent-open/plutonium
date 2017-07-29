@@ -23,9 +23,6 @@ import rx.lang.scala.Observable
 import scala.Ordering.Implicits._
 import scala.reflect.runtime.universe._
 
-/**
-  * Created by Gerard on 27/05/2016.
-  */
 object WorldRedisBasedImplementation {
   val redisNamespaceComponentSeparator = ":"
 

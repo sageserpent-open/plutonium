@@ -14,9 +14,6 @@ import scalaz.scalacheck._
 import scalaz.{ApplicativePlus, Equal}
 import scalaz.syntax.applicativePlus._
 
-/**
-  * Created by Gerard on 29/07/2015.
-  */
 trait BitemporalBehaviours
     extends FlatSpec
     with Checkers

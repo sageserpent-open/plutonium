@@ -10,9 +10,6 @@ import com.sageserpent.americium.{
 }
 import org.scalacheck.{Arbitrary, Gen}
 
-/**
-  * Created by gerardMurphy on 11/06/2017.
-  */
 trait SharedGenerators {
   val seedGenerator = Arbitrary.arbitrary[Long]
 

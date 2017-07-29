@@ -1,8 +1,5 @@
 package com.sageserpent.plutonium
 
-/**
-  * Created by Gerard on 19/07/2015.
-  */
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 
@@ -819,9 +816,9 @@ trait WorldBehaviours
                       Bitemporal.withId[History](
                         referencedHistoryId.asInstanceOf[History#Id])
                     val indirectAccessBitemporalQuery
-                      : Bitemporal[History] = Bitemporal.withId[
-                      ReferringHistory](referringHistoryId.asInstanceOf[
-                      ReferringHistory#Id]) map (_.referencedHistories(
+                      : Bitemporal[History] = Bitemporal
+                      .withId[ReferringHistory](referringHistoryId.asInstanceOf[
+                        ReferringHistory#Id]) map (_.referencedHistories(
                       referencedHistoryId))
                     val agglomeratedBitemporalQuery
                       : Bitemporal[(History, History)] =
@@ -2324,8 +2321,8 @@ trait WorldBehaviours
             allEventIds,
             random.chooseAnyNumberFromZeroToOneLessThan(allEventIds.length)) ++
           (1 + maximumEventId to 10 + maximumEventId)
-        annulmentsGalore = random.splitIntoNonEmptyPieces(random.shuffle(
-          eventIdsThatMayBeSpuriousAndDuplicated) map ((None: Option[
+        annulmentsGalore = random.splitIntoNonEmptyPieces(random
+          .shuffle(eventIdsThatMayBeSpuriousAndDuplicated) map ((None: Option[
           (Unbounded[Instant], Event)]) -> _))
         historyLength    = bigShuffledHistoryOverLotsOfThings.length
         annulmentsLength = annulmentsGalore.length
@@ -2387,8 +2384,9 @@ trait WorldBehaviours
               val scopeForSecondHistory =
                 world.scopeFor(queryWhen, world.nextRevision)
 
-              val secondHistory = historyFrom(world, recordingsGroupedById)(
-                scopeForSecondHistory)
+              val secondHistory =
+                historyFrom(world, recordingsGroupedById)(
+                  scopeForSecondHistory)
 
               (historyAfterAnnulments.isEmpty :| s"${historyAfterAnnulments}.isEmpty") &&
               ((firstHistory == secondHistory) :| s"firstHistory === ${secondHistory}")
@@ -2696,8 +2694,9 @@ trait WorldBehaviours
               val scopeForSecondHistory =
                 world.scopeFor(queryWhen, world.nextRevision)
 
-              val secondHistory = historyFrom(world, recordingsGroupedById)(
-                scopeForSecondHistory)
+              val secondHistory =
+                historyFrom(world, recordingsGroupedById)(
+                  scopeForSecondHistory)
 
               (historyAfterAnnulments.isEmpty :| s"${historyAfterAnnulments}.isEmpty") &&
               ((firstHistory == secondHistory) :| s"firstHistory === ${secondHistory}")

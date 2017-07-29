@@ -10,9 +10,6 @@ import com.sageserpent.plutonium.{
   typeTagForClass
 }
 
-/**
-  * Created by Gerard on 02/05/2016.
-  */
 object Change {
   def forOneItem[Item <: Identified](when: Unbounded[Instant],
                                      id: Item#Id,

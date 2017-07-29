@@ -11,9 +11,6 @@ import com.sageserpent.plutonium.BlobStorage.{
 import scala.reflect.runtime.universe
 import scala.reflect.runtime.universe.TypeTag
 
-/**
-  * Created by gerardMurphy on 21/05/2017.
-  */
 object BlobStorage {
   type UniqueItemSpecification[Item <: Identified] =
     (Item#Id, TypeTag[Item])
@@ -68,15 +65,14 @@ class BlobStorageInMemory[EventId] extends BlobStorage[EventId] { nastyHack =>
         type RetrievedItem <: Item
       } = ???
 
-    override def uniqueItemQueriesFor[Item <: Identified: TypeTag](
-        id: Item#Id)
+    override def uniqueItemQueriesFor[Item <: Identified: TypeTag](id: Item#Id)
       : (Stream[(RetrievedItem#Id, TypeTag[RetrievedItem])]) forSome {
         type RetrievedItem <: Item
       } = ???
 
     override def snapshotBlobFor[Item <: Identified](
-        uniqueItemSpecification: (Item#Id, TypeTag[Item]))
-      : SnapshotBlob = Array.emptyByteArray
+        uniqueItemSpecification: (Item#Id, TypeTag[Item])): SnapshotBlob =
+      Array.emptyByteArray
   }
 
   override def openRevision[NewEventId >: EventId](): RevisionBuilder =

@@ -1,8 +1,5 @@
 package com.sageserpent.plutonium
 
-/**
-  * Created by Gerard on 09/07/2015.
-  */
 import scala.reflect.runtime.universe._
 import scalaz.ApplicativePlus
 

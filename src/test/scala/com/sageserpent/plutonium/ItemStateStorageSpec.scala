@@ -9,9 +9,6 @@ import com.sageserpent.plutonium.{
   ItemStateStorage => IncompleteItemStateStorage
 }
 
-/**
-  * Created by gerardMurphy on 13/05/2017.
-  */
 object MarkSyntax {
   implicit class MarkEnrichment(mark: Int) {
     def isEven = 0 == mark % 2

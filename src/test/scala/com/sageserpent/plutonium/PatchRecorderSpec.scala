@@ -16,9 +16,6 @@ import resource.{ManagedResource, makeManagedResource}
 import scala.reflect.runtime.universe._
 import scala.util.Random
 
-/**
-  * Created by Gerard on 10/01/2016.
-  */
 class PatchRecorderSpec
     extends FlatSpec
     with Matchers

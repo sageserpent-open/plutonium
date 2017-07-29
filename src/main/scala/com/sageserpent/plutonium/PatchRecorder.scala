@@ -8,9 +8,6 @@ import scalaz.std.option.optionSyntax._
 
 import scala.reflect.runtime.universe._
 
-/**
-  * Created by Gerard on 09/01/2016.
-  */
 trait BestPatchSelection {
   def apply(relatedPatches: Seq[AbstractPatch]): AbstractPatch
 }
