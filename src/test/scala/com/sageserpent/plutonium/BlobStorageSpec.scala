@@ -221,7 +221,7 @@ class BlobStorageSpec
                                     chunkedObsoleteBookings)
 
         val blobStorage: BlobStorageInMemory[EventId] =
-          (new BlobStorageInMemory[EventId] /: revisions) {
+          (BlobStorageInMemory[EventId]() /: revisions) {
             case (blobStorage, (Some(chunk), eventId)) =>
               val builder = blobStorage.openRevision()
               for ((when, snapshotBlobs) <- chunk) {
@@ -297,7 +297,7 @@ class BlobStorageSpec
 
         assertThrows[RuntimeException] {
           val blobStorage: BlobStorageInMemory[EventId] =
-            (new BlobStorageInMemory[EventId] /: revisions) {
+            (BlobStorageInMemory[EventId]() /: revisions) {
               case (blobStorage, (Some(chunk), eventId)) =>
                 val builder = blobStorage.openRevision()
                 for ((when, snapshotBlobs) <- chunk) {

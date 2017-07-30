@@ -4,6 +4,7 @@ import java.time.Instant
 
 import com.sageserpent.americium.Unbounded
 
+import scala.reflect.runtime.universe
 import scala.reflect.runtime.universe.TypeTag
 
 object BlobStorage {
@@ -37,16 +38,21 @@ trait BlobStorage[EventId] { blobStorage =>
 
   trait Timeslice {
     def uniqueItemQueriesFor[Item <: Identified: TypeTag]
-      : Stream[UniqueItemSpecification[RetrievedItem]] forSome {
-        type RetrievedItem <: Item
-      }
+      : Stream[UniqueItemSpecification[_ <: Item]]
     def uniqueItemQueriesFor[Item <: Identified: TypeTag](
-        id: Item#Id): Stream[UniqueItemSpecification[RetrievedItem]] forSome {
-      type RetrievedItem <: Item
-    }
+        id: Item#Id): Stream[UniqueItemSpecification[_ <: Item]]
 
-    def snapshotBlobFor[Item <: Identified](
+    def snapshotBlobFor[Item <: Identified: TypeTag](
         uniqueItemSpecification: UniqueItemSpecification[Item]): SnapshotBlob
+  }
+
+  trait TimesliceContracts extends Timeslice {
+    abstract override def snapshotBlobFor[Item <: Identified: TypeTag](
+        uniqueItemSpecification: UniqueItemSpecification[Item])
+      : SnapshotBlob = {
+      require(uniqueItemQueriesFor(uniqueItemSpecification._1).nonEmpty)
+      super.snapshotBlobFor(uniqueItemSpecification)
+    }
   }
 
   def timeSlice(when: Unbounded[Instant]): Timeslice
