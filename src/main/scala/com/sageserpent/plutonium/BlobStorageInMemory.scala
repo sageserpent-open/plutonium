@@ -7,56 +7,75 @@ import com.sageserpent.plutonium.BlobStorage.{
   SnapshotBlob,
   UniqueItemSpecification
 }
+import com.sageserpent.plutonium.BlobStorageInMemory.Revision
 
+import scala.collection.immutable.SortedMap
 import scala.collection.mutable
 import scala.reflect.runtime.universe._
 
 object BlobStorageInMemory {
   type Revision = Int
 
-  trait Lifecycle {
-    def isValid: Boolean
-    def whenCreated: Unbounded[Instant]
-    def whenAnnihilated
-      : Option[Instant] // The absence of a creation time means that lifecycle goes on forever - that *includes* 'PositiveInfinity'.
+  trait Lifecycle[EventId] {
+    def isValid(validRevisionFor: EventId => Revision): Boolean
+    def whenCreated(validRevisionFor: EventId => Revision): Unbounded[Instant]
+    def whenAnnihilated(validRevisionFor: EventId => Revision): Option[Instant] // The absence of a creation time means that lifecycle goes on forever - that *includes* 'PositiveInfinity'.
     def snapshotBlobFor(when: Unbounded[Instant],
-                        revision: Revision): SnapshotBlob
+                        validRevisionFor: EventId => Revision): SnapshotBlob
+
+    def addSnapshotBlob(eventId: EventId,
+                        when: Unbounded[Instant],
+                        snapshotBlob: SnapshotBlob): Lifecycle[EventId]
   }
 
-  trait LifecycleContracts extends Lifecycle {
-    abstract override def whenCreated: Unbounded[Instant] = {
-      require(isValid)
-      super.whenCreated
+  trait LifecycleContracts[EventId] extends Lifecycle[EventId] {
+    abstract override def whenCreated(
+        validRevisionFor: EventId => Revision): Unbounded[Instant] = {
+      require(isValid(validRevisionFor))
+      super.whenCreated(validRevisionFor)
     }
 
-    abstract override def whenAnnihilated: Option[Instant] = {
-      require(isValid)
-      super.whenAnnihilated
+    abstract override def whenAnnihilated(
+        validRevisionFor: EventId => Revision): Option[Instant] = {
+      require(isValid(validRevisionFor))
+      super.whenAnnihilated(validRevisionFor)
     }
 
-    abstract override def snapshotBlobFor(when: Unbounded[Instant],
-                                          revision: Revision): SnapshotBlob = {
-      require(isValid)
-      require(whenCreated <= when)
-      require(whenAnnihilated map (Finite(_) < when) getOrElse true)
-      super.snapshotBlobFor(when, revision)
+    abstract override def snapshotBlobFor(
+        when: Unbounded[Instant],
+        validRevisionFor: EventId => Revision): SnapshotBlob = {
+      require(isValid(validRevisionFor))
+      require(whenCreated(validRevisionFor) <= when)
+      require(
+        whenAnnihilated(validRevisionFor) map (Finite(_) < when) getOrElse true)
+      super.snapshotBlobFor(when, validRevisionFor)
+    }
+
+    abstract override def addSnapshotBlob(
+        eventId: EventId,
+        when: Unbounded[Instant],
+        snapshotBlob: SnapshotBlob): Lifecycle[EventId] = {
+      // TODO - contract here?
+      super.addSnapshotBlob(eventId, when, snapshotBlob)
     }
   }
 
   def apply[EventId]() =
     new BlobStorageInMemory[EventId](
       revision = 0,
-      eventVersions = Map.empty[EventId, BlobStorageInMemory.Revision],
-      lifecycles = Map.empty[UniqueItemSpecification[_ <: Identified],
-                             BlobStorageInMemory.Lifecycle]
+      eventRevisions = Map.empty[EventId, Revision],
+      lifecycles =
+        Map.empty[UniqueItemSpecification[_ <: Identified], Lifecycle[EventId]]
     )
 }
 
-class BlobStorageInMemory[EventId] private (
+// More importantly, what about filtering out annulled snapshots - what I've done here is broken.
+
+case class BlobStorageInMemory[EventId] private (
     val revision: BlobStorageInMemory.Revision,
-    val eventVersions: Map[EventId, BlobStorageInMemory.Revision],
+    val eventRevisions: Map[EventId, BlobStorageInMemory.Revision],
     val lifecycles: Map[UniqueItemSpecification[_ <: Identified],
-                        BlobStorageInMemory.Lifecycle])
+                        BlobStorageInMemory.Lifecycle[EventId]])
     extends BlobStorage[EventId] {
   thisBlobStorage =>
 
@@ -83,7 +102,8 @@ class BlobStorageInMemory[EventId] private (
       override def snapshotBlobFor[Item <: Identified: TypeTag](
           uniqueItemSpecification: UniqueItemSpecification[Item])
         : SnapshotBlob =
-        lifecycles(uniqueItemSpecification).snapshotBlobFor(when, revision)
+        lifecycles(uniqueItemSpecification)
+          .snapshotBlobFor(when, eventRevisions.apply)
     }
 
     new TimesliceImplementation with TimesliceContracts
@@ -103,16 +123,95 @@ class BlobStorageInMemory[EventId] private (
         events += (eventId -> None)
       }
 
-      override def build(): BlobStorageInMemory.this.type = {
-        thisBlobStorage
-      }
-
       override def recordSnapshotBlobsForEvent(
           eventId: EventId,
           when: Unbounded[Instant],
           snapshotBlobs: Seq[(UniqueItemSpecification[_ <: Identified],
                               SnapshotBlob)]): Unit = {
         events += eventId -> Some(when -> snapshotBlobs)
+      }
+
+      override def build(): BlobStorage[EventId] = {
+        val newRevision = 1 + thisBlobStorage.revision
+        val newEventRevisions =
+          (thisBlobStorage.eventRevisions /: events) {
+            case (eventRevisions, (eventId, _)) =>
+              eventRevisions + (eventId -> newRevision)
+          }
+
+        case class LifecycleImplementation(
+            // TODO - this implementation is horrible, what with all the 'toSeq' calls.
+            snapshotBlobs: SortedMap[Unbounded[Instant],
+                                     (SnapshotBlob, EventId, Revision)] =
+              SortedMap.empty)
+            extends BlobStorageInMemory.Lifecycle[EventId] {
+          override def isValid(revision: EventId => Revision): Boolean =
+            snapshotBlobs.nonEmpty
+
+          override def whenCreated(
+              validRevisionFor: EventId => Revision): Unbounded[Instant] =
+            snapshotBlobs.iterator
+              .collect {
+                case (when, (_, eventId, blobRevision))
+                    if blobRevision == validRevisionFor(eventId) =>
+                  when
+              }
+              .next()
+
+          override def whenAnnihilated(
+              validRevisionFor: EventId => Revision): Option[Instant] =
+            snapshotBlobs.toSeq.reverseIterator
+              .collect {
+                case (Finite(when), (_, eventId, blobRevision))
+                    if blobRevision == validRevisionFor(eventId) =>
+                  when
+              }
+              .find(_ => true)
+
+          override def snapshotBlobFor(
+              when: Unbounded[Instant],
+              validRevisionFor: EventId => Revision): SnapshotBlob = {
+            snapshotBlobs
+              .to(when)
+              .toSeq
+              .reverseIterator
+              .collect {
+                case (Finite(_), (snapshot, eventId, blobRevision))
+                    if blobRevision == validRevisionFor(eventId) =>
+                  snapshot
+              }
+              .next()
+          }
+
+          override def addSnapshotBlob(eventId: EventId,
+                                       when: Unbounded[Instant],
+                                       snapshotBlob: SnapshotBlob)
+            : BlobStorageInMemory.Lifecycle[EventId] = {
+            copy(
+              snapshotBlobs = snapshotBlobs
+                .updated(when, (snapshotBlob, eventId, newRevision)))
+          }
+        }
+
+        val newLifecycles = (thisBlobStorage.lifecycles /: events) {
+          case (lifecycles, (eventId, None)) =>
+            lifecycles
+          case (lifecycles, (eventId, Some((when, snapshots)))) =>
+            (lifecycles /: snapshots) {
+              case (lifecycles, (uniqueItemSpecification, snapshot)) =>
+                val lifecycle = lifecycles.getOrElse(
+                  uniqueItemSpecification,
+                  new LifecycleImplementation
+                  with BlobStorageInMemory.LifecycleContracts[EventId])
+                lifecycles.updated(
+                  uniqueItemSpecification,
+                  lifecycle.addSnapshotBlob(eventId, when, snapshot))
+            }
+        }
+
+        thisBlobStorage.copy(revision = newRevision,
+                             eventRevisions = newEventRevisions,
+                             lifecycles = newLifecycles)
       }
     }
 }

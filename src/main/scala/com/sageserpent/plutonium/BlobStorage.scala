@@ -31,7 +31,7 @@ trait BlobStorage[EventId] { blobStorage =>
     def annulEvent(eventId: EventId)
 
     // Once this has been called, the receiver will throw precondition failures on subsequent use.
-    def build(): blobStorage.type
+    def build(): BlobStorage[EventId]
   }
 
   def openRevision[NewEventId >: EventId](): RevisionBuilder
