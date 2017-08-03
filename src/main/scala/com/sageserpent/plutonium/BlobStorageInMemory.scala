@@ -142,12 +142,10 @@ case class BlobStorageInMemory[EventId] private (
               .to(when)
               .toSeq
               .reverseIterator
-              .filter {
+              .exists(PartialFunction.cond(_) {
                 case (_, (_, eventId, blobRevision)) =>
                   blobRevision == validRevisionFor(eventId)
-                case _ => false
-              }
-              .hasNext
+              })
 
           override def snapshotBlobFor(
               when: Unbounded[Instant],
@@ -156,12 +154,12 @@ case class BlobStorageInMemory[EventId] private (
               .to(when)
               .toSeq
               .reverseIterator
-              .collect {
-                case (_, (snapshot, eventId, blobRevision))
-                    if blobRevision == validRevisionFor(eventId) =>
-                  snapshot
-              }
-              .next()
+              .find(PartialFunction.cond(_) {
+                case (_, (_, eventId, blobRevision)) =>
+                  blobRevision == validRevisionFor(eventId)
+              })
+              .map { case (_, (snapshot, _, _)) => snapshot }
+              .get
           }
 
           override def addSnapshotBlob(eventId: EventId,
