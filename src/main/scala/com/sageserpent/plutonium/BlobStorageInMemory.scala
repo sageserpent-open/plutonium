@@ -17,9 +17,8 @@ object BlobStorageInMemory {
   type Revision = Int
 
   trait Lifecycle[EventId] {
-    def isValid(validRevisionFor: EventId => Revision): Boolean
-    def whenCreated(validRevisionFor: EventId => Revision): Unbounded[Instant]
-    def whenAnnihilated(validRevisionFor: EventId => Revision): Option[Instant] // The absence of a creation time means that lifecycle goes on forever - that *includes* 'PositiveInfinity'.
+    def isValid(when: Unbounded[Instant],
+                validRevisionFor: EventId => Revision): Boolean
     def snapshotBlobFor(when: Unbounded[Instant],
                         validRevisionFor: EventId => Revision): SnapshotBlob
 
@@ -29,25 +28,10 @@ object BlobStorageInMemory {
   }
 
   trait LifecycleContracts[EventId] extends Lifecycle[EventId] {
-    abstract override def whenCreated(
-        validRevisionFor: EventId => Revision): Unbounded[Instant] = {
-      require(isValid(validRevisionFor))
-      super.whenCreated(validRevisionFor)
-    }
-
-    abstract override def whenAnnihilated(
-        validRevisionFor: EventId => Revision): Option[Instant] = {
-      require(isValid(validRevisionFor))
-      super.whenAnnihilated(validRevisionFor)
-    }
-
     abstract override def snapshotBlobFor(
         when: Unbounded[Instant],
         validRevisionFor: EventId => Revision): SnapshotBlob = {
-      require(isValid(validRevisionFor))
-      require(whenCreated(validRevisionFor) <= when)
-      require(
-        whenAnnihilated(validRevisionFor) map (Finite(_) < when) getOrElse true)
+      require(isValid(when, validRevisionFor))
       super.snapshotBlobFor(when, validRevisionFor)
     }
 
@@ -87,10 +71,7 @@ case class BlobStorageInMemory[EventId] private (
           .filter {
             case ((_, itemTypeTag), lifecycle) =>
               itemTypeTag.tpe <:< typeTag[Item].tpe && lifecycle
-                .isValid(eventRevisions.apply) && lifecycle.whenCreated(
-                eventRevisions.apply) <= when && lifecycle
-                .whenAnnihilated(eventRevisions.apply)
-                .fold(true)(Finite(_) > when)
+                .isValid(when, eventRevisions.apply)
           }
           .keys
           .toStream
@@ -103,10 +84,7 @@ case class BlobStorageInMemory[EventId] private (
             case ((itemId, itemTypeTag), lifecycle) =>
               itemId == id &&
                 itemTypeTag.tpe <:< typeTag[Item].tpe && lifecycle
-                .isValid(eventRevisions.apply) && lifecycle.whenCreated(
-                eventRevisions.apply) <= when && lifecycle
-                .whenAnnihilated(eventRevisions.apply)
-                .fold(true)(Finite(_) > when)
+                .isValid(when, eventRevisions.apply)
           }
           .keys
           .toStream
@@ -153,37 +131,23 @@ case class BlobStorageInMemory[EventId] private (
           }
 
         case class LifecycleImplementation(
-            // TODO - this implementation is horrible, what with all the 'toSeq' calls.
+            // TODO - this implementation is horrible, what with all the 'toSeq' and 'reverseIterator' calls.
             snapshotBlobs: SortedMap[Unbounded[Instant],
                                      (SnapshotBlob, EventId, Revision)] =
               SortedMap.empty)
             extends BlobStorageInMemory.Lifecycle[EventId] {
-          override def isValid(validRevisionFor: EventId => Revision): Boolean =
-            snapshotBlobs.iterator.filter {
-              case (_, (_, eventId, blobRevision)) =>
-                blobRevision == validRevisionFor(eventId)
-              case _ => false
-            }.hasNext
-
-          override def whenCreated(
-              validRevisionFor: EventId => Revision): Unbounded[Instant] =
-            snapshotBlobs.iterator
-              .collect {
-                case (when, (_, eventId, blobRevision))
-                    if blobRevision == validRevisionFor(eventId) =>
-                  when
+          override def isValid(when: Unbounded[Instant],
+                               validRevisionFor: EventId => Revision): Boolean =
+            snapshotBlobs
+              .to(when)
+              .toSeq
+              .reverseIterator
+              .filter {
+                case (_, (_, eventId, blobRevision)) =>
+                  blobRevision == validRevisionFor(eventId)
+                case _ => false
               }
-              .next()
-
-          override def whenAnnihilated(
-              validRevisionFor: EventId => Revision): Option[Instant] =
-            snapshotBlobs.toSeq.reverseIterator
-              .collect {
-                case (Finite(when), (_, eventId, blobRevision))
-                    if blobRevision == validRevisionFor(eventId) =>
-                  when
-              }
-              .find(_ => true)
+              .hasNext
 
           override def snapshotBlobFor(
               when: Unbounded[Instant],
