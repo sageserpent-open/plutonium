@@ -20,6 +20,7 @@ import org.scalatest.LoneElement._
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{FlatSpec, Matchers}
 
+import scala.collection.immutable
 import scala.math.Ordering.ordered
 import scala.reflect.runtime.universe
 import scala.reflect.runtime.universe._
@@ -245,24 +246,30 @@ class BlobStorageSpec
         } {
           val timeSlice = blobStorage.timeSlice(queryTime)
 
-          def checkExpectations[PreciseType <: Identified](
+          def checkExpectations[PreciseType <: Identified: TypeTag](
               uniqueItemSpecification: UniqueItemSpecification[PreciseType]) = {
-            val id                       = uniqueItemSpecification._1
-            implicit val capturedTypeTag = uniqueItemSpecification._2
+            val id              = uniqueItemSpecification._1
+            val explicitTypeTag = uniqueItemSpecification._2
 
             val allRetrievedUniqueItemSpecifications =
-              timeSlice.uniqueItemQueriesFor[PreciseType]
+              timeSlice.uniqueItemQueriesFor[PreciseType](explicitTypeTag)
 
-            allRetrievedUniqueItemSpecifications should contain(
-              uniqueItemSpecification)
+            allRetrievedUniqueItemSpecifications map (_._1) should contain(id)
 
             val retrievedUniqueItemSpecifications =
-              timeSlice.uniqueItemQueriesFor[PreciseType](id)
+              timeSlice.uniqueItemQueriesFor[PreciseType](id)(explicitTypeTag)
 
-            retrievedUniqueItemSpecifications.loneElement shouldBe uniqueItemSpecification
+            retrievedUniqueItemSpecifications.loneElement._1 shouldBe id
+
+            assert(
+              retrievedUniqueItemSpecifications.loneElement._2.tpe <:< explicitTypeTag.tpe)
+
+            val theRetrievedUniqueItemSpecification
+              : UniqueItemSpecification[_ <: PreciseType] =
+              retrievedUniqueItemSpecifications.head
 
             val retrievedSnapshotBlob: SnapshotBlob =
-              timeSlice.snapshotBlobFor(retrievedUniqueItemSpecifications.head)
+              timeSlice.snapshotBlobFor(theRetrievedUniqueItemSpecification)
 
             retrievedSnapshotBlob shouldBe snapshotBlob
           }

@@ -83,23 +83,36 @@ case class BlobStorageInMemory[EventId] private (
     trait TimesliceImplementation extends Timeslice {
       override def uniqueItemQueriesFor[Item <: Identified: TypeTag]
         : Stream[UniqueItemSpecification[_ <: Item]] =
-        lifecycles.keys
-          .filter(_._2.tpe <:< typeTag[Item].tpe)
+        lifecycles
+          .filter {
+            case ((_, itemTypeTag), lifecycle) =>
+              itemTypeTag.tpe <:< typeTag[Item].tpe && lifecycle
+                .isValid(eventRevisions.apply) && lifecycle.whenCreated(
+                eventRevisions.apply) <= when && lifecycle
+                .whenAnnihilated(eventRevisions.apply)
+                .fold(true)(Finite(_) > when)
+          }
+          .keys
           .toStream
           .asInstanceOf[Stream[UniqueItemSpecification[_ <: Item]]]
 
       override def uniqueItemQueriesFor[Item <: Identified: TypeTag](
           id: Item#Id): Stream[UniqueItemSpecification[_ <: Item]] =
-        lifecycles.keys
+        lifecycles
           .filter {
-            case (itemId, itemTypeTag) =>
+            case ((itemId, itemTypeTag), lifecycle) =>
               itemId == id &&
-                itemTypeTag.tpe <:< typeTag[Item].tpe
+                itemTypeTag.tpe <:< typeTag[Item].tpe && lifecycle
+                .isValid(eventRevisions.apply) && lifecycle.whenCreated(
+                eventRevisions.apply) <= when && lifecycle
+                .whenAnnihilated(eventRevisions.apply)
+                .fold(true)(Finite(_) > when)
           }
+          .keys
           .toStream
           .asInstanceOf[Stream[UniqueItemSpecification[_ <: Item]]]
 
-      override def snapshotBlobFor[Item <: Identified: TypeTag](
+      override def snapshotBlobFor[Item <: Identified](
           uniqueItemSpecification: UniqueItemSpecification[Item])
         : SnapshotBlob =
         lifecycles(uniqueItemSpecification)
@@ -145,8 +158,12 @@ case class BlobStorageInMemory[EventId] private (
                                      (SnapshotBlob, EventId, Revision)] =
               SortedMap.empty)
             extends BlobStorageInMemory.Lifecycle[EventId] {
-          override def isValid(revision: EventId => Revision): Boolean =
-            snapshotBlobs.nonEmpty
+          override def isValid(validRevisionFor: EventId => Revision): Boolean =
+            snapshotBlobs.iterator.filter {
+              case (_, (_, eventId, blobRevision)) =>
+                blobRevision == validRevisionFor(eventId)
+              case _ => false
+            }.hasNext
 
           override def whenCreated(
               validRevisionFor: EventId => Revision): Unbounded[Instant] =
@@ -176,7 +193,7 @@ case class BlobStorageInMemory[EventId] private (
               .toSeq
               .reverseIterator
               .collect {
-                case (Finite(_), (snapshot, eventId, blobRevision))
+                case (_, (snapshot, eventId, blobRevision))
                     if blobRevision == validRevisionFor(eventId) =>
                   snapshot
               }

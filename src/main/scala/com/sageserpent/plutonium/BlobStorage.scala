@@ -42,15 +42,17 @@ trait BlobStorage[EventId] { blobStorage =>
     def uniqueItemQueriesFor[Item <: Identified: TypeTag](
         id: Item#Id): Stream[UniqueItemSpecification[_ <: Item]]
 
-    def snapshotBlobFor[Item <: Identified: TypeTag](
+    def snapshotBlobFor[Item <: Identified](
         uniqueItemSpecification: UniqueItemSpecification[Item]): SnapshotBlob
   }
 
   trait TimesliceContracts extends Timeslice {
-    abstract override def snapshotBlobFor[Item <: Identified: TypeTag](
+    abstract override def snapshotBlobFor[Item <: Identified](
         uniqueItemSpecification: UniqueItemSpecification[Item])
       : SnapshotBlob = {
-      require(uniqueItemQueriesFor(uniqueItemSpecification._1).nonEmpty)
+      require(
+        uniqueItemQueriesFor(uniqueItemSpecification._1)(
+          uniqueItemSpecification._2).nonEmpty)
       super.snapshotBlobFor(uniqueItemSpecification)
     }
   }
