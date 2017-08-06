@@ -13,7 +13,7 @@ import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.seqEnrichment._
 import com.sageserpent.plutonium.World._
 import org.scalacheck.{Arbitrary, Gen}
-import org.scalatest.Matchers
+import org.scalatest.Assertions
 import resource._
 
 import scala.collection.JavaConversions._
@@ -28,7 +28,9 @@ object WorldSpecSupport {
   val changeError = new RuntimeException("Error in making a change.")
 }
 
-trait WorldSpecSupport extends Matchers {
+
+trait WorldSpecSupport extends Assertions {
+
   import WorldSpecSupport._
 
   val seedGenerator = Arbitrary.arbitrary[Long]
@@ -91,8 +93,8 @@ trait WorldSpecSupport extends Matchers {
                  assertThrows[UnsupportedOperationException](
                    fooHistory.property2)
 
-                 fooHistory.property1 = data
-               }
+      fooHistory.property1 = data
+      }
              )
          } else {
            eventConstructorReferringToOneItem[BadFooHistory](makeAChange)(when)
@@ -107,10 +109,10 @@ trait WorldSpecSupport extends Matchers {
                  assertThrows[UnsupportedOperationException](
                    fooHistory.property2)
 
-                 fooHistory.property1 = data
+      fooHistory.property1 = data
                }
              )
-       })
+    })
 
   def dataSampleGenerator2(faulty: Boolean) =
     for { data <- Arbitrary.arbitrary[Boolean] } yield
@@ -128,9 +130,9 @@ trait WorldSpecSupport extends Matchers {
                assertThrows[UnsupportedOperationException](fooHistory.property1)
                assertThrows[UnsupportedOperationException](fooHistory.property2)
 
-               fooHistory.property2 = data
+      fooHistory.property2 = data
 
-               if (faulty) throw changeError // Modelling an admissible postcondition failure.
+      if (faulty) throw changeError // Modelling an admissible postcondition failure.
              }
          ))
 
@@ -144,7 +146,7 @@ trait WorldSpecSupport extends Matchers {
            .apply(
              barHistoryId,
              (barHistory: BarHistory) => {
-               if (faulty) throw changeError // Modelling a precondition failure.
+      if (faulty) throw changeError // Modelling a precondition failure.
 
                // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
                val _ = barHistory.id
@@ -152,7 +154,7 @@ trait WorldSpecSupport extends Matchers {
                assertThrows[UnsupportedOperationException](barHistory.property1)
 
                barHistory.property1 = data
-             }
+      }
          ))
 
   def dataSampleGenerator4(faulty: Boolean) =
@@ -173,16 +175,16 @@ trait WorldSpecSupport extends Matchers {
                assertThrows[UnsupportedOperationException](barHistory.datums)
                assertThrows[UnsupportedOperationException](barHistory.property1)
 
-               barHistory.method1(data1, data2)
+      barHistory.method1(data1, data2)
 
-               if (faulty) barHistory.forceInvariantBreakage() // Modelling breakage of the bitemporal invariant.
+      if (faulty) barHistory.forceInvariantBreakage() // Modelling breakage of the bitemporal invariant.
              }
          ))
 
   def dataSampleGenerator5(faulty: Boolean) =
     for {
       data1 <- Arbitrary.arbitrary[Int]
-      data2 <- Arbitrary.arbitrary[String]
+                                                   data2 <- Arbitrary.arbitrary[String]
       data3 <- Arbitrary.arbitrary[Boolean]
     } yield
       ((data1, data2, data3),
@@ -198,66 +200,56 @@ trait WorldSpecSupport extends Matchers {
                assertThrows[UnsupportedOperationException](barHistory.datums)
                assertThrows[UnsupportedOperationException](barHistory.property1)
 
-               barHistory.method2(data1, data2, data3)
+      barHistory.method2(data1, data2, data3)
 
-               if (faulty) throw changeError // Modelling an admissible postcondition failure.
+      if (faulty) throw changeError // Modelling an admissible postcondition failure.
              }
          ))
 
-  def integerDataSampleGenerator(faulty: Boolean) =
-    for { data <- Arbitrary.arbitrary[Int] } yield
-      (data,
-       (when: americium.Unbounded[Instant],
-        makeAChange: Boolean,
-        integerHistoryId: IntegerHistory#Id) =>
-         eventConstructorReferringToOneItem[IntegerHistory](makeAChange)(when)
-           .apply(integerHistoryId, (integerHistory: IntegerHistory) => {
-             if (faulty) throw changeError // Modelling a precondition failure.
-             integerHistory.integerProperty = data
-           }))
+  def integerDataSampleGenerator(faulty: Boolean) = for {data <- Arbitrary.arbitrary[Int]}
+    yield (data, (when: americium.Unbounded[Instant], makeAChange: Boolean, integerHistoryId: IntegerHistory#Id) => eventConstructorReferringToOneItem[IntegerHistory](makeAChange)(when).apply(integerHistoryId, (integerHistory: IntegerHistory) => {
+      // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
+      val _ = integerHistory.id
+      assertThrows[UnsupportedOperationException](integerHistory.datums)
+      assertThrows[UnsupportedOperationException](integerHistory.integerProperty)
 
-  def moreSpecificFooDataSampleGenerator(faulty: Boolean) =
-    for { data <- Arbitrary.arbitrary[String] } yield
-      (data,
-       (when: americium.Unbounded[Instant],
-        makeAChange: Boolean,
-        fooHistoryId: MoreSpecificFooHistory#Id) =>
-         eventConstructorReferringToOneItem[MoreSpecificFooHistory](
-           makeAChange)(when)
-           .apply(fooHistoryId, (fooHistory: MoreSpecificFooHistory) => {
-             if (faulty) throw changeError // Modelling a precondition failure.
-             fooHistory.property1 = data
-           }))
+      if (faulty) throw changeError // Modelling a precondition failure.
+      integerHistory.integerProperty = data
+    }))
 
-  def referringToItemDataSampleGenerator(faulty: Boolean) =
-    for { idToReferToAnotherItem <- Gen.oneOf(ReferringHistory.specialFooIds) } yield
-      (idToReferToAnotherItem,
-       (when: americium.Unbounded[Instant],
-        makeAChange: Boolean,
-        referringHistoryId: ReferringHistory#Id) =>
-         eventConstructorReferringToTwoItems[ReferringHistory, FooHistory](
-           makeAChange)(when).apply(
-           referringHistoryId,
-           idToReferToAnotherItem,
-           (referringHistory: ReferringHistory, referencedItem: FooHistory) => {
-             if (faulty) throw changeError // Modelling a precondition failure.
-             referringHistory.referTo(referencedItem)
+  def moreSpecificFooDataSampleGenerator(faulty: Boolean) = for {data <- Arbitrary.arbitrary[String]}
+    yield (data, (when: americium.Unbounded[Instant], makeAChange: Boolean, fooHistoryId: MoreSpecificFooHistory#Id) => eventConstructorReferringToOneItem[MoreSpecificFooHistory](makeAChange)(when).apply(fooHistoryId, (fooHistory: MoreSpecificFooHistory) => {
+      // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
+      val _ = fooHistory.id
+      assertThrows[UnsupportedOperationException](fooHistory.datums)
+      assertThrows[UnsupportedOperationException](fooHistory.property1)
+      assertThrows[UnsupportedOperationException](fooHistory.property2)
+
+      if (faulty) throw changeError // Modelling a precondition failure.
+      fooHistory.property1 = data
+    }))
+
+  def referringToItemDataSampleGenerator(faulty: Boolean) = for {idToReferToAnotherItem <- Gen.oneOf(ReferringHistory.specialFooIds)}
+    yield (idToReferToAnotherItem, (when: americium.Unbounded[Instant], makeAChange: Boolean, referringHistoryId: ReferringHistory#Id) => eventConstructorReferringToTwoItems[ReferringHistory, FooHistory](makeAChange)(when).apply(referringHistoryId, idToReferToAnotherItem, (referringHistory: ReferringHistory, referencedItem: FooHistory) => {
+      val _ = referringHistory.id
+      assertThrows[UnsupportedOperationException](referringHistory.datums)
+      assertThrows[UnsupportedOperationException](referringHistory.referencedDatums)
+      assertThrows[UnsupportedOperationException](referringHistory.referencedHistories)
+
+      if (faulty) throw changeError // Modelling a precondition failure.
+      referringHistory.referTo(referencedItem)
            }
        ))
 
-  def forgettingItemDataSampleGenerator(faulty: Boolean) =
-    for { idToReferToAnotherItem <- Gen.oneOf(ReferringHistory.specialFooIds) } yield
-      (idToReferToAnotherItem,
-       (when: americium.Unbounded[Instant],
-        makeAChange: Boolean,
-        referringHistoryId: ReferringHistory#Id) =>
-         eventConstructorReferringToTwoItems[ReferringHistory, FooHistory](
-           makeAChange)(when).apply(
-           referringHistoryId,
-           idToReferToAnotherItem,
-           (referringHistory: ReferringHistory, referencedItem: FooHistory) => {
-             if (faulty) throw changeError // Modelling a precondition failure.
-             referringHistory.forget(referencedItem)
+  def forgettingItemDataSampleGenerator(faulty: Boolean) = for {idToReferToAnotherItem <- Gen.oneOf(ReferringHistory.specialFooIds)}
+    yield (idToReferToAnotherItem, (when: americium.Unbounded[Instant], makeAChange: Boolean, referringHistoryId: ReferringHistory#Id) => eventConstructorReferringToTwoItems[ReferringHistory, FooHistory](makeAChange)(when).apply(referringHistoryId, idToReferToAnotherItem, (referringHistory: ReferringHistory, referencedItem: FooHistory) => {
+      val _ = referringHistory.id
+      assertThrows[UnsupportedOperationException](referringHistory.datums)
+      assertThrows[UnsupportedOperationException](referringHistory.referencedDatums)
+      assertThrows[UnsupportedOperationException](referringHistory.referencedHistories)
+
+      if (faulty) throw changeError // Modelling a precondition failure.
+      referringHistory.forget(referencedItem)
            }
        ))
 
@@ -297,13 +289,13 @@ trait WorldSpecSupport extends Matchers {
        if (headsItIs)
          Change.forOneItem(_: Unbounded[Instant])(historyId,
                                                   (item: AHistory) => {
-                                                    // A useless event: nothing changes!
-                                                  })
+      // A useless event: nothing changes!
+    })
        else
          Measurement.forOneItem(_: Unbounded[Instant])(historyId,
                                                        (item: AHistory) => {
-                                                         // A useless event: nothing is measured!
-                                                       }))
+      // A useless event: nothing is measured!
+    }))
   }
 
   trait RecordingsForAnId {
@@ -342,12 +334,12 @@ trait WorldSpecSupport extends Matchers {
 
   class RecordingsForAPhoenixId(
       override val historyId: Any,
-      override val historiesFrom: Scope => Seq[History],
-      annihilationFor: Instant => Annihilation[_ <: Identified],
-      ineffectiveEventFor: Unbounded[Instant] => Event,
+                                override val historiesFrom: Scope => Seq[History],
+                                annihilationFor: Instant => Annihilation[_ <: Identified],
+                                ineffectiveEventFor: Unbounded[Instant] => Event,
       dataSamplesGroupedForLifespans: Stream[
         Traversable[(Int, Any, (Unbounded[Instant], Boolean) => Event)]],
-      sampleWhensGroupedForLifespans: Stream[List[Unbounded[Instant]]],
+                                sampleWhensGroupedForLifespans: Stream[List[Unbounded[Instant]]],
       forbidMeasurements: Boolean)
       extends RecordingsForAnId {
     require(
@@ -359,13 +351,13 @@ trait WorldSpecSupport extends Matchers {
     require(
       dataSamplesGroupedForLifespans.init zip sampleWhensGroupedForLifespans.init forall {
         case (dataSamples, eventWhens) =>
-          eventWhens.size == 1 + dataSamples.size
-      })
+      eventWhens.size == 1 + dataSamples.size
+    })
     require(
       dataSamplesGroupedForLifespans.last -> sampleWhensGroupedForLifespans.last match {
         case (dataSamples, eventWhens) =>
-          eventWhens.size <= 1 + dataSamples.size && eventWhens.size >= dataSamples.size
-      })
+      eventWhens.size <= 1 + dataSamples.size && eventWhens.size >= dataSamples.size
+    })
 
     private def decisionsToMakeAChange(numberOfDataSamples: Int) = {
       val random = new Random(numberOfDataSamples)
@@ -386,9 +378,9 @@ trait WorldSpecSupport extends Matchers {
             (if (makeAChange) "Change: " else "Measurement: ") ++ dataSample.toString
         }
         eventWhens zip (if (numberOfChanges < eventWhens.size)
-                          data :+ "Annihilation"
-                        else
-                          data)
+          data :+ "Annihilation"
+        else
+          data)
       }) flatten
 
       s"Id: $historyId, body:-\n${String.join(",\n", body map (_.toString))}"
@@ -408,8 +400,8 @@ trait WorldSpecSupport extends Matchers {
                         changes :+ annihilationFor(eventWhens.last match {
                           case Finite(definiteWhen) => definiteWhen
                         })
-                      else
-                        changes)
+      else
+        changes)
     }).toList flatten
 
     private val lastLifespanIsLimited = sampleWhensGroupedForLifespans.last.size > dataSamplesGroupedForLifespans.last.size
@@ -497,11 +489,11 @@ trait WorldSpecSupport extends Matchers {
         Some(
           RecordingsNoLaterThan(
             historyId = historyId,
-            historiesFrom = historiesFrom,
+          historiesFrom = historiesFrom,
             datums = dataSampleAndWhenPairsForALifespanPickedFromRuns takeWhile {
               case (_, eventWhen) => eventWhen <= when
             },
-            ineffectiveEventFor = ineffectiveEventFor,
+          ineffectiveEventFor = ineffectiveEventFor,
             whenAnnihilated = whenAnnihilated
           ))
       }
@@ -544,8 +536,8 @@ trait WorldSpecSupport extends Matchers {
          List[(Int, Any, (Unbounded[Instant], Boolean) => Event)],
          Instant => Annihilation[_ <: Identified],
          Unbounded[Instant] => Event)],
-      forbidAnnihilations: Boolean = false,
-      forbidMeasurements: Boolean = false) = {
+                                      forbidAnnihilations: Boolean = false,
+                                      forbidMeasurements: Boolean = false) = {
     val unconstrainedParametersGenerator = for {
       (historyId,
        historiesFrom,
@@ -553,41 +545,42 @@ trait WorldSpecSupport extends Matchers {
        annihilationFor,
        ineffectiveEventFor) <- dataSamplesForAnIdGenerator
       seed                  <- seedGenerator
-      random = new Random(seed)
+                                                random = new Random(seed)
       dataSamplesGroupedForLifespans = if (forbidAnnihilations)
         Stream(dataSamples)
       else random.splitIntoNonEmptyPieces(dataSamples)
       finalLifespanIsOngoing <- if (forbidAnnihilations) Gen.const(true)
       else Arbitrary.arbitrary[Boolean]
-      numberOfEventsForLifespans = {
+                                                numberOfEventsForLifespans = {
         def numberOfEventsForLimitedLifespans(
             dataSamplesGroupedForLimitedLifespans: Stream[Traversable[
               (Int, Any, (Unbounded[Instant], Boolean) => Event)]]) = {
-          // Add an extra when for the annihilation at the end of the lifespan...
-          dataSamplesGroupedForLimitedLifespans map (1 + _.size)
-        }
-        if (finalLifespanIsOngoing) {
+                                                    // Add an extra when for the annihilation at the end of the lifespan...
+                                                    dataSamplesGroupedForLimitedLifespans map (1 + _.size)
+                                                  }
+
+                                                  if (finalLifespanIsOngoing) {
           val (
             dataSamplesGroupedForLimitedLifespans,
             Stream(dataSamplesGroupForEternalLife)) = dataSamplesGroupedForLifespans splitAt (dataSamplesGroupedForLifespans.size - 1)
           numberOfEventsForLimitedLifespans(
             dataSamplesGroupedForLimitedLifespans) :+ dataSamplesGroupForEternalLife.size
         } else
-          numberOfEventsForLimitedLifespans(dataSamplesGroupedForLifespans)
-      }
-      numberOfEventsOverall = numberOfEventsForLifespans.sum
-      sampleWhens <- Gen.listOfN(numberOfEventsOverall, changeWhenGenerator) map (_ sorted)
+                                                    numberOfEventsForLimitedLifespans(dataSamplesGroupedForLifespans)
+                                                }
+                                                numberOfEventsOverall = numberOfEventsForLifespans.sum
+                                                sampleWhens <- Gen.listOfN(numberOfEventsOverall, changeWhenGenerator) map (_ sorted)
       sampleWhensGroupedForLifespans = stream.unfold(
         numberOfEventsForLifespans -> sampleWhens) {
         case (numberOfEvents #:: remainingNumberOfEventsForLifespans,
               sampleWhens) =>
-          val (sampleWhenGroup, remainingSampleWhens) = sampleWhens splitAt numberOfEvents
+                                                    val (sampleWhenGroup, remainingSampleWhens) = sampleWhens splitAt numberOfEvents
           Some(sampleWhenGroup,
                remainingNumberOfEventsForLifespans -> remainingSampleWhens)
-        case (Stream.Empty, _) => None
-      }
-      noAnnihilationsToWorryAbout = finalLifespanIsOngoing && 1 == sampleWhensGroupedForLifespans.size
-      firstAnnihilationHasBeenAlignedWithADefiniteWhen = noAnnihilationsToWorryAbout ||
+                                                  case (Stream.Empty, _) => None
+                                                }
+                                                noAnnihilationsToWorryAbout = finalLifespanIsOngoing && 1 == sampleWhensGroupedForLifespans.size
+                                                firstAnnihilationHasBeenAlignedWithADefiniteWhen = noAnnihilationsToWorryAbout ||
         PartialFunction.cond(sampleWhensGroupedForLifespans.head.last) {
           case Finite(_) => true
         }
@@ -619,7 +612,7 @@ trait WorldSpecSupport extends Matchers {
     def idsAreNotRepeated(recordingsForVariousIds: List[RecordingsForAnId]) = {
       recordingsForVariousIds groupBy (_.historyId) forall {
         case (_, repeatedIdGroup) => 1 == repeatedIdGroup.size
-      }
+    }
     }
     Gen.nonEmptyListOf(recordingsForAnIdGenerator) retryUntil idsAreNotRepeated
   }
@@ -716,7 +709,7 @@ trait WorldSpecSupport extends Matchers {
       pieceOfHistory <- bigShuffledHistoryOverLotsOfThings
       _ = require(
         pieceOfHistory.map(_._2).toSeq.distinct.size == pieceOfHistory.size)
-      events = pieceOfHistory map {
+         events = pieceOfHistory map {
         case (recording, eventId) =>
           eventId -> (for ((_, change) <- recording) yield change)
       } toSeq
@@ -730,36 +723,37 @@ trait WorldSpecSupport extends Matchers {
     : Stream[(Option[(Unbounded[Instant], Event)], Int)] = {
     case class UnfoldState(
         recordings: immutable.Iterable[(Unbounded[Instant], Event)],
-        obsoleteRecordings: immutable.Iterable[(Unbounded[Instant], Event)],
-        eventId: Int,
-        eventsToBeCorrected: Set[Int])
+                           obsoleteRecordings: immutable.Iterable[(Unbounded[Instant], Event)],
+                           eventId: Int,
+                           eventsToBeCorrected: Set[Int])
     val onePastMaximumEventId = recordings.size
+
     def yieldEitherARecordingOrAnObsoleteRecording(unfoldState: UnfoldState) =
       unfoldState match {
         case unfoldState @ UnfoldState(recordings,
                                        obsoleteRecordings,
                                        eventId,
                                        eventsToBeCorrected) =>
-          if (recordings.isEmpty) {
-            if (eventsToBeCorrected.nonEmpty) {
-              // Issue annulments correcting any outstanding obsolete events.
-              val obsoleteEventId = random.chooseOneOf(eventsToBeCorrected)
+        if (recordings.isEmpty) {
+          if (eventsToBeCorrected.nonEmpty) {
+            // Issue annulments correcting any outstanding obsolete events.
+            val obsoleteEventId = random.chooseOneOf(eventsToBeCorrected)
               Some(
                 (None, obsoleteEventId) -> unfoldState.copy(
                   eventsToBeCorrected = eventsToBeCorrected - obsoleteEventId))
-            } else None // All done.
-          } else if (obsoleteRecordings.nonEmpty && random.nextBoolean()) {
+          } else None // All done.
+        } else if (obsoleteRecordings.nonEmpty && random.nextBoolean()) {
             val (obsoleteRecordingHeadPart, remainingObsoleteRecordings) =
               obsoleteRecordings.splitAt(1)
-            val obsoleteRecording = obsoleteRecordingHeadPart.head
-            if (eventsToBeCorrected.nonEmpty && random.nextBoolean()) {
-              // Correct an obsolete event with another obsolete event.
+          val obsoleteRecording = obsoleteRecordingHeadPart.head
+          if (eventsToBeCorrected.nonEmpty && random.nextBoolean()) {
+            // Correct an obsolete event with another obsolete event.
               Some(
                 (Some(obsoleteRecording),
                  random.chooseOneOf(eventsToBeCorrected)) -> unfoldState.copy(
                   obsoleteRecordings = remainingObsoleteRecordings))
-            } else {
-              // Take some event id that denotes a subsequent non-obsolete recording and make an obsolete revision of it.
+          } else {
+            // Take some event id that denotes a subsequent non-obsolete recording and make an obsolete revision of it.
               val anticipatedEventId = eventId + random
                 .chooseAnyNumberFromZeroToOneLessThan(
                   onePastMaximumEventId - eventId)
@@ -767,25 +761,26 @@ trait WorldSpecSupport extends Matchers {
                 .copy(
                   obsoleteRecordings = remainingObsoleteRecordings,
                   eventsToBeCorrected = eventsToBeCorrected + anticipatedEventId))
-            }
-          } else if (eventsToBeCorrected.nonEmpty && random.nextBoolean()) {
-            // Just annul an obsolete event for the sake of it, even though the non-obsolete correction is still yet to follow.
-            val obsoleteEventId = random.chooseOneOf(eventsToBeCorrected)
+          }
+        } else if (eventsToBeCorrected.nonEmpty && random.nextBoolean()) {
+          // Just annul an obsolete event for the sake of it, even though the non-obsolete correction is still yet to follow.
+          val obsoleteEventId = random.chooseOneOf(eventsToBeCorrected)
             Some(
               (None, obsoleteEventId) -> unfoldState.copy(
                 eventsToBeCorrected = eventsToBeCorrected - obsoleteEventId))
-          } else {
-            // Issue the definitive non-obsolete recording for the event; this will not be subsequently corrected.
+        } else {
+          // Issue the definitive non-obsolete recording for the event; this will not be subsequently corrected.
             val (recordingHeadPart, remainingRecordings) =
               recordings.splitAt(1)
-            val recording = recordingHeadPart.head
+          val recording = recordingHeadPart.head
             Some(
               (Some(recording), eventId) -> unfoldState.copy(
                 recordings = remainingRecordings,
                 eventId = 1 + eventId,
                 eventsToBeCorrected = eventsToBeCorrected - eventId))
-          }
-      }
+        }
+    }
+
     stream.unfold(UnfoldState(recordings, obsoleteRecordings, 0, Set.empty))(
       yieldEitherARecordingOrAnObsoleteRecording)
   }
@@ -848,7 +843,7 @@ trait WorldSpecSupport extends Matchers {
               .toSet).nonEmpty
         } else recordingsWithPotentialSharingOfIdsAcrossTheTwoDisjointHands
     } yield leftHand ++ rightHand
-  }
+    }
 
   def recordingsGroupedByIdGenerator(forbidAnnihilations: Boolean,
                                      forbidMeasurements: Boolean = false) =

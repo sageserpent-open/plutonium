@@ -64,8 +64,8 @@ object WorldImplementationCodeFactoring {
   def eventTimelineFrom(
       eventDatums: Seq[AbstractEventData]): Seq[SerializableEvent] =
     (eventDatums collect {
-      case eventData: EventData => eventData
-    }).sorted.map(_.serializableEvent)
+    case eventData: EventData => eventData
+  }).sorted.map(_.serializableEvent)
 
   def serializableEventFrom(event: Event): SerializableEvent = {
     val patchesPickedUpFromAnEventBeingApplied =
@@ -119,8 +119,8 @@ object WorldImplementationCodeFactoring {
           when,
           (patchRecorder: PatchRecorder) =>
             for (patch <- patchesPickedUpFromAnEventBeingApplied) {
-              patchRecorder.recordPatchFromChange(when, patch)
-          })
+          patchRecorder.recordPatchFromChange(when, patch)
+        })
 
       case Measurement(when, reading) =>
         reading(recorderFactory)
@@ -128,8 +128,8 @@ object WorldImplementationCodeFactoring {
           when,
           (patchRecorder: PatchRecorder) =>
             for (patch <- patchesPickedUpFromAnEventBeingApplied) {
-              patchRecorder.recordPatchFromMeasurement(when, patch)
-          })
+          patchRecorder.recordPatchFromMeasurement(when, patch)
+        })
 
       case annihilation: Annihilation[_] =>
         SerializableEvent(
@@ -141,10 +141,10 @@ object WorldImplementationCodeFactoring {
                     id) =>
                 implicit val typeTag =
                   workaroundForUseOfExistentialTypeInAnnihilation.capturedTypeTag
-                patchRecorder.recordAnnihilation(when, id)
-          }
-        )
+            patchRecorder.recordAnnihilation(when, id)
     }
+        )
+  }
   }
 
   object IdentifiedItemsScope {
@@ -165,8 +165,8 @@ object WorldImplementationCodeFactoring {
         currentMirror.runtimeClass(reflectedType).asInstanceOf[Class[Raw]]
 
       items filter { item =>
-        val itemClazz = item.getClass
-        itemClazz.isAssignableFrom(clazzOfRaw) && itemClazz != clazzOfRaw
+          val itemClazz = item.getClass
+          itemClazz.isAssignableFrom(clazzOfRaw) && itemClazz != clazzOfRaw
       }
     }
 
@@ -181,8 +181,8 @@ object WorldImplementationCodeFactoring {
 
     def alwaysAllowsReadAccessTo(method: MethodDescription) =
       nonMutableMembersThatCanAlwaysBeReadFrom.exists(exclusionMethod => {
-        firstMethodIsOverrideCompatibleWithSecond(method, exclusionMethod)
-      })
+      firstMethodIsOverrideCompatibleWithSecond(method, exclusionMethod)
+    })
 
     val nonMutableMembersThatCanAlwaysBeReadFrom = (classOf[Identified].getMethods ++ classOf[
       AnyRef].getMethods) map (new MethodDescription.ForLoadedMethod(_))
@@ -444,11 +444,10 @@ object WorldImplementationCodeFactoring {
       firstMethod: MethodDescription,
       secondMethod: MethodDescription): Boolean = {
     secondMethod.getName == firstMethod.getName &&
-    secondMethod.getReceiverType.asErasure
-      .isAssignableFrom(firstMethod.getReceiverType.asErasure) &&
-    secondMethod.getReturnType.asErasure
-      .isAssignableFrom(firstMethod.getReturnType.asErasure) &&
-    secondMethod.getParameters.size == firstMethod.getParameters.size &&
+      secondMethod.getReceiverType.asErasure.isAssignableFrom(firstMethod.getReceiverType.asErasure) &&
+    (secondMethod.getReturnType.asErasure.isAssignableFrom(firstMethod.getReturnType.asErasure) ||
+      secondMethod.getReturnType.asErasure.isAssignableFrom(firstMethod.getReturnType.asErasure.asBoxed)) &&
+      secondMethod.getParameters.size == firstMethod.getParameters.size &&
     secondMethod.getParameters.toSeq
       .map(_.getType) == firstMethod.getParameters.toSeq
       .map(_.getType) // What about contravariance? Hmmm...
@@ -477,10 +476,10 @@ object WorldImplementationCodeFactoring {
              eventTimeline: Seq[SerializableEvent]) = {
       this()
       for (_ <- makeManagedResource {
-             itemsAreLocked = false
+        itemsAreLocked = false
            } { _ =>
              itemsAreLocked = true
-           }(List.empty)) {
+      }(List.empty)) {
         val patchRecorder = new PatchRecorderImplementation(_when)
         with PatchRecorderContracts with BestPatchSelectionImplementation
         with BestPatchSelectionContracts {
@@ -488,10 +487,10 @@ object WorldImplementationCodeFactoring {
             identifiedItemsScopeThis
           override val itemsAreLockedResource: ManagedResource[Unit] =
             makeManagedResource {
-              itemsAreLocked = true
+            itemsAreLocked = true
             } { _ =>
               itemsAreLocked = false
-            }(List.empty)
+          }(List.empty)
         }
 
         for (event <- eventTimeline) {
@@ -524,7 +523,7 @@ object WorldImplementationCodeFactoring {
 
               def itemsAreLocked: Boolean =
                 identifiedItemsScopeThis.itemsAreLocked
-            }
+          }
 
           override val acquiredStateClazz = classOf[AcquiredState]
 
@@ -651,9 +650,9 @@ object WorldImplementationCodeFactoring {
         case ApBitemporalResult(preceedingContext,
                                 stage: (Bitemporal[(_) => Raw])) =>
           for {
-            preceedingContext <- render(preceedingContext)
+          preceedingContext <- render(preceedingContext)
             stage             <- render(stage)
-          } yield stage(preceedingContext)
+        } yield stage(preceedingContext)
         case PlusBitemporalResult(lhs, rhs) => render(lhs) ++ render(rhs)
         case PointBitemporalResult(raw)     => Stream(raw)
         case NoneBitemporalResult()         => Stream.empty
@@ -688,7 +687,7 @@ abstract class WorldImplementationCodeFactoring[EventId]
       case World.initialRevision => NegativeInfinity[Instant]()
       case _ =>
         if (nextRevision <= revisionAsOfs.size)
-          Finite(revisionAsOfs(nextRevision - 1))
+        Finite(revisionAsOfs(nextRevision - 1))
         else
           throw new RuntimeException(
             s"Scope based the revision prior to: $nextRevision can't be constructed - there are only ${revisionAsOfs.size} revisions of the world.")
@@ -758,13 +757,13 @@ abstract class WorldInefficientImplementationCodeFactoring[EventId]
       : Map[EventId, AbstractEventData] = {
       events.zipWithIndex map {
         case ((eventId, event), tiebreakerIndex) =>
-          eventId -> (event match {
+        eventId -> (event match {
             case Some(event) =>
               EventData(serializableEventFrom(event),
                         nextRevisionPriorToUpdate,
                         tiebreakerIndex)
-            case None => AnnulledEventData(nextRevisionPriorToUpdate)
-          })
+          case None => AnnulledEventData(nextRevisionPriorToUpdate)
+        })
       }
     }
 
@@ -793,7 +792,7 @@ abstract class WorldInefficientImplementationCodeFactoring[EventId]
 
   protected def transactNewRevision(
       asOf: Instant,
-      newEventDatumsFor: Revision => Map[EventId, AbstractEventData],
+                                    newEventDatumsFor: Revision => Map[EventId, AbstractEventData],
       buildAndValidateEventTimelineForProposedNewRevision: (
           Map[EventId, AbstractEventData],
           Revision,
