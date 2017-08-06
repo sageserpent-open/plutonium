@@ -60,6 +60,9 @@ class BlobStorageSpec
       uniqueItemSpecification: UniqueItemSpecification[_ <: Identified],
       snapshots: Seq[(Unbounded[Instant], SnapshotBlob)],
       queryTimes: Seq[Unbounded[Instant]]) {
+    require(queryTimes zip snapshots.init.map(_._1) forall {
+      case (queryTime, snapshotTime) => queryTime >= snapshotTime
+    })
     require(queryTimes zip snapshots.tail.map(_._1) forall {
       case (queryTime, snapshotTime) => queryTime < snapshotTime
     })
@@ -107,9 +110,12 @@ class BlobStorageSpec
   def ascendingUnboundedInstants(
       numberRequired: Int): Gen[List[Unbounded[Instant]]] = {
     require(2 <= numberRequired)
+    require(0 == numberRequired % 2)
     for {
-      leftPaddingAmount  <- Gen.chooseNum(0, 2)
-      rightPaddingAmount <- Gen.chooseNum(0, 2 - leftPaddingAmount)
+      leftPaddingAmount <- Gen.chooseNum(0, 2)
+      rightPaddingAmount <- Gen.chooseNum(
+        0,
+        0 max (2 min (numberRequired - leftPaddingAmount)))
       middleAmount                  = numberRequired - (leftPaddingAmount + rightPaddingAmount)
       firstFiniteInstantIsASnapshot = 0 == leftPaddingAmount % 2
       finiteInstants <- ascendingFiniteInstants(middleAmount,
@@ -146,11 +152,10 @@ class BlobStorageSpec
           Gen.sequence[Seq[TimeSeries], TimeSeries](
             uniqueItemSpecifications map (timeSeriesGeneratorFor(_))))
 
-  def chunkedShuffledSnapshotBookings[_ <: Identified forSome {
-    type Something
-  }](randomBehaviour: Random,
-     lotsOfTimeSeries: Seq[TimeSeries],
-     forceUseOfAnOverlappingType: Boolean = false): Stream[
+  def chunkedShuffledSnapshotBookings[_ <: Identified](
+      randomBehaviour: Random,
+      lotsOfTimeSeries: Seq[TimeSeries],
+      forceUseOfAnOverlappingType: Boolean = false): Stream[
     Seq[(Unbounded[Instant],
          Stream[(UniqueItemSpecification[_ <: Identified], SnapshotBlob)])]] = {
     val forceUseOfAnOverlappingTypeDecisions = {
@@ -162,10 +167,8 @@ class BlobStorageSpec
           .fill(numberOfNonDefaultDecisions)(forceUseOfAnOverlappingType) ++ Seq
           .fill(numberOfTimeSeries - numberOfNonDefaultDecisions)(false))
     }
-    val snapshotBookingsForManyItemsAndTimes: Seq[
-      (Unbounded[Instant],
-       Stream[(UniqueItemSpecification[_ <: Identified], SnapshotBlob)])] =
-      (randomBehaviour.pickAlternatelyFrom(
+    val interleavedSnapshotSequencesForManyItems =
+      randomBehaviour.pickAlternatelyFrom(
         lotsOfTimeSeries zip forceUseOfAnOverlappingTypeDecisions map {
           case (timeSeries, forceUseOfAnOverlappingType) =>
             val numberOfSnapshots = timeSeries.snapshots.size
@@ -181,20 +184,24 @@ class BlobStorageSpec
               case (snapshot, decision) =>
                 def wildcardCaptureWorkaround[Something <: Identified](
                     uniqueItemSpecification: UniqueItemSpecification[
-                      Something]) = {
+                      Something]) =
                   if (decision)
                     uniqueItemSpecification
                       .copy(_2 = typeTag[Identified])
                       .asInstanceOf[UniqueItemSpecification[Something]]
                   else uniqueItemSpecification
-                }
 
                 wildcardCaptureWorkaround(timeSeries.uniqueItemSpecification) -> snapshot
             }
-        }) groupBy {
+        })
+    val snapshotBookingsForManyItemsAndTimes: Seq[
+      (Unbounded[Instant],
+       Stream[(UniqueItemSpecification[_ <: Identified], SnapshotBlob)])] =
+      (interleavedSnapshotSequencesForManyItems groupBy {
         case (_, (when, _)) => when
       } mapValues (_.map {
-        case (specification, (_, blob)) => specification -> blob
+        case (uniqueItemSpecification, (_, blob)) =>
+          uniqueItemSpecification -> blob
       }) mapValues randomBehaviour.splitIntoNonEmptyPieces).toSeq flatMap {
         case (when, chunkedBookings) => chunkedBookings map (when -> _)
       }

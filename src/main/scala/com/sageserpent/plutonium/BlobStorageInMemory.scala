@@ -34,14 +34,6 @@ object BlobStorageInMemory {
       require(isValid(when, validRevisionFor))
       super.snapshotBlobFor(when, validRevisionFor)
     }
-
-    abstract override def addSnapshotBlob(
-        eventId: EventId,
-        when: Unbounded[Instant],
-        snapshotBlob: SnapshotBlob): Lifecycle[EventId] = {
-      // TODO - contract here?
-      super.addSnapshotBlob(eventId, when, snapshotBlob)
-    }
   }
 
   def apply[EventId]() =
@@ -108,7 +100,7 @@ case class BlobStorageInMemory[EventId] private (
            (Unbounded[Instant],
             Seq[(UniqueItemSpecification[_ <: Identified], SnapshotBlob)])])
 
-      val events = mutable.Set.empty[Event]
+      val events = mutable.Set.empty[Event] // PARDON? A set - read on ....
 
       override def annulEvent(eventId: EventId): Unit = {
         events += (eventId -> None)
@@ -119,7 +111,7 @@ case class BlobStorageInMemory[EventId] private (
           when: Unbounded[Instant],
           snapshotBlobs: Seq[(UniqueItemSpecification[_ <: Identified],
                               SnapshotBlob)]): Unit = {
-        events += eventId -> Some(when -> snapshotBlobs)
+        events += eventId -> Some(when -> snapshotBlobs) // ....what about this, then? Suppose a client makes multiple bookings under the same event id within the same revision?
       }
 
       override def build(): BlobStorage[EventId] = {
@@ -165,11 +157,11 @@ case class BlobStorageInMemory[EventId] private (
           override def addSnapshotBlob(eventId: EventId,
                                        when: Unbounded[Instant],
                                        snapshotBlob: SnapshotBlob)
-            : BlobStorageInMemory.Lifecycle[EventId] = {
-            copy(
+            : BlobStorageInMemory.Lifecycle[EventId] =
+            new LifecycleImplementation(
               snapshotBlobs = snapshotBlobs
                 .updated(when, (snapshotBlob, eventId, newRevision)))
-          }
+            with BlobStorageInMemory.LifecycleContracts[EventId]
         }
 
         val newLifecycles = (thisBlobStorage.lifecycles /: events) {
