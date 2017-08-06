@@ -99,7 +99,7 @@ trait WorldStateSharingBehaviours
         shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
           random,
           obsoleteRecordingsGroupedById)
-        shuffledRecordingAndEventPairs = intersperseObsoleteRecordings(
+        shuffledRecordingAndEventPairs = intersperseObsoleteEvents(
           random,
           shuffledRecordings,
           shuffledObsoleteRecordings)
@@ -144,8 +144,7 @@ trait WorldStateSharingBehaviours
                   _) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
                   queryWhen))
                 Seq(history) = historiesFrom(scope)
-              } yield
-                (historyId, history.datums, pertinentRecordings.map(_._1))
+              } yield (historyId, history.datums, pertinentRecordings.map(_._1))
 
               checks.nonEmpty ==>
                 Prop.all(checks.map {
@@ -214,7 +213,7 @@ trait WorldStateSharingBehaviours
         shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
           random,
           obsoleteRecordingsGroupedById)
-        shuffledRecordingAndEventPairs = intersperseObsoleteRecordings(
+        shuffledRecordingAndEventPairs = intersperseObsoleteEvents(
           random,
           shuffledRecordings,
           shuffledObsoleteRecordings)
