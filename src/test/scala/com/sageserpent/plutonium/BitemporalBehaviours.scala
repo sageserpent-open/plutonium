@@ -87,8 +87,7 @@ trait BitemporalBehaviours
                 def intFrom(item: IntegerHistory) = item.datums.hashCode()
                 val generatorsThatAlwaysWork = Seq(
                   5 -> (Arbitrary
-                    .arbitrary[Int] map (ApplicativePlus[Bitemporal].point(
-                    _))),
+                    .arbitrary[Int] map (ApplicativePlus[Bitemporal].point(_))),
                   10 -> (Gen.oneOf(ids) map (Bitemporal
                     .zeroOrOneOf[IntegerHistory](_) map (_.integerProperty))),
                   10 -> (Gen.oneOf(ids) map (Bitemporal.withId[IntegerHistory](
@@ -168,37 +167,38 @@ trait BitemporalBehaviours
          bigShuffledHistoryOverLotsOfThings,
          asOfs,
          queryWhen)
-      check(Prop.forAllNoShrink(testCaseGenerator) {
-        case (worldResource,
-              recordingsGroupedById,
-              bigShuffledHistoryOverLotsOfThings,
-              asOfs,
-              queryWhen) =>
-          worldResource acquireAndGet {
-            world =>
-              recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
-                                  asOfs,
-                                  world)
+      check(
+        Prop.forAllNoShrink(testCaseGenerator) {
+          case (worldResource,
+                recordingsGroupedById,
+                bigShuffledHistoryOverLotsOfThings,
+                asOfs,
+                queryWhen) =>
+            worldResource acquireAndGet {
+              world =>
+                recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
+                                    asOfs,
+                                    world)
 
-              val scope = world.scopeFor(queryWhen, world.nextRevision)
+                val scope = world.scopeFor(queryWhen, world.nextRevision)
 
-              val idsInExistence =
-                (recordingsGroupedById flatMap (_.thePartNoLaterThan(
-                  queryWhen)) map (_.historyId)) groupBy identity map {
-                  case (id, group) => id -> group.size
-                } toSet
+                val idsInExistence =
+                  (recordingsGroupedById flatMap (_.thePartNoLaterThan(
+                    queryWhen)) map (_.historyId)) groupBy identity map {
+                    case (id, group) => id -> group.size
+                  } toSet
 
-              val itemsFromWildcardQuery =
-                scope.render(Bitemporal.wildcard[History]) toList
+                val itemsFromWildcardQuery =
+                  scope.render(Bitemporal.wildcard[History]) toList
 
-              val idsFromWildcardQuery =
-                itemsFromWildcardQuery map (_.id) groupBy identity map {
-                  case (id, group) => id -> group.size
-                } toSet
+                val idsFromWildcardQuery =
+                  itemsFromWildcardQuery map (_.id) groupBy identity map {
+                    case (id, group) => id -> group.size
+                  } toSet
 
-              (idsInExistence == idsFromWildcardQuery) :| s"${idsInExistence} == idsFromWildcardQuery"
-          }
-      })
+                (idsInExistence == idsFromWildcardQuery) :| s"${idsInExistence} == idsFromWildcardQuery"
+            }
+        })
     }
   }
 
@@ -803,7 +803,7 @@ class BitemporalSpecUsingWorldReferenceImplementation
 
   "A bitemporal query using an id (using the world reference implementation)" should behave like bitemporalQueryUsingAndIdBehaviour
 
-  "the bitemporal 'numberOf' (using the world reference implementation)" should behave like bitemporalNumberOfBehaviour
+  "The bitemporal 'numberOf' (using the world reference implementation)" should behave like bitemporalNumberOfBehaviour
 
   "The bitemporal 'none' (using the world reference implementation)" should behave like bitemporalNoneBehaviour
 
@@ -821,7 +821,7 @@ class BitemporalSpecUsingWorldRedisBasedImplementation
 
   "A bitemporal query using an id (using the world Redis-based implementation)" should behave like bitemporalQueryUsingAndIdBehaviour
 
-  "the bitemporal 'numberOf' (using the world Redis-based implementation)" should behave like bitemporalNumberOfBehaviour
+  "The bitemporal 'numberOf' (using the world Redis-based implementation)" should behave like bitemporalNumberOfBehaviour
 
   "The bitemporal 'none' (using the world Redis-based implementation)" should behave like bitemporalNoneBehaviour
 

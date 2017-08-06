@@ -13,6 +13,7 @@ import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.seqEnrichment._
 import com.sageserpent.plutonium.World._
 import org.scalacheck.{Arbitrary, Gen}
+import org.scalatest.Matchers
 import resource._
 
 import scala.collection.JavaConversions._
@@ -27,7 +28,7 @@ object WorldSpecSupport {
   val changeError = new RuntimeException("Error in making a change.")
 }
 
-trait WorldSpecSupport {
+trait WorldSpecSupport extends Matchers {
   import WorldSpecSupport._
 
   val seedGenerator = Arbitrary.arbitrary[Long]
@@ -65,10 +66,9 @@ trait WorldSpecSupport {
   private def eventConstructorReferringToTwoItems[
       AHistory <: History: TypeTag,
       AnotherHistory <: History: TypeTag](makeAChange: Boolean)(
-      when: Unbounded[Instant])
-    : (AHistory#Id,
-       AnotherHistory#Id,
-       (AHistory, AnotherHistory) => Unit) => Event =
+      when: Unbounded[Instant]): (AHistory#Id,
+                                  AnotherHistory#Id,
+                                  (AHistory, AnotherHistory) => Unit) => Event =
     if (makeAChange) Change.forTwoItems(when)(_, _, _)
     else Measurement.forTwoItems(when)(_, _, _)
 
@@ -83,16 +83,14 @@ trait WorldSpecSupport {
              .apply(
                fooHistoryId,
                (fooHistory: FooHistory) => {
-                 try {
-                   fooHistory.id
-                   fooHistory.datums
-                   fooHistory.property1
-                   fooHistory.property2
-                   // Neither changes nor measurements are allowed to read from the items they work on.
-                   assert(false)
-                 } catch {
-                   case _: RuntimeException =>
-                 }
+                 // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
+                 val _ = fooHistory.id
+                 assertThrows[UnsupportedOperationException](fooHistory.datums)
+                 assertThrows[UnsupportedOperationException](
+                   fooHistory.property1)
+                 assertThrows[UnsupportedOperationException](
+                   fooHistory.property2)
+
                  fooHistory.property1 = data
                }
              )
@@ -101,16 +99,14 @@ trait WorldSpecSupport {
              .apply(
                fooHistoryId,
                (fooHistory: BadFooHistory) => {
-                 try {
-                   fooHistory.id
-                   fooHistory.datums
-                   fooHistory.property1
-                   fooHistory.property2
-                   // Neither changes nor measurements are allowed to read from the items they work on.
-                   assert(false)
-                 } catch {
-                   case _: RuntimeException =>
-                 }
+                 // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
+                 val _ = fooHistory.id
+                 assertThrows[UnsupportedOperationException](fooHistory.datums)
+                 assertThrows[UnsupportedOperationException](
+                   fooHistory.property1)
+                 assertThrows[UnsupportedOperationException](
+                   fooHistory.property2)
+
                  fooHistory.property1 = data
                }
              )
@@ -126,17 +122,14 @@ trait WorldSpecSupport {
            .apply(
              fooHistoryId,
              (fooHistory: FooHistory) => {
-               try {
-                 fooHistory.id
-                 fooHistory.datums
-                 fooHistory.property1
-                 fooHistory.property2
-                 // Neither changes nor measurements are allowed to read from the items they work on.
-                 assert(false)
-               } catch {
-                 case _: RuntimeException =>
-               }
+               // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
+               val _ = fooHistory.id
+               assertThrows[UnsupportedOperationException](fooHistory.datums)
+               assertThrows[UnsupportedOperationException](fooHistory.property1)
+               assertThrows[UnsupportedOperationException](fooHistory.property2)
+
                fooHistory.property2 = data
+
                if (faulty) throw changeError // Modelling an admissible postcondition failure.
              }
          ))
@@ -152,15 +145,12 @@ trait WorldSpecSupport {
              barHistoryId,
              (barHistory: BarHistory) => {
                if (faulty) throw changeError // Modelling a precondition failure.
-               try {
-                 barHistory.id
-                 barHistory.datums
-                 barHistory.property1
-                 // Neither changes nor measurements are allowed to read from the items they work on.
-                 assert(false)
-               } catch {
-                 case _: RuntimeException =>
-               }
+
+               // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
+               val _ = barHistory.id
+               assertThrows[UnsupportedOperationException](barHistory.datums)
+               assertThrows[UnsupportedOperationException](barHistory.property1)
+
                barHistory.property1 = data
              }
          ))
@@ -178,16 +168,13 @@ trait WorldSpecSupport {
            .apply(
              barHistoryId,
              (barHistory: BarHistory) => {
-               try {
-                 barHistory.id
-                 barHistory.datums
-                 barHistory.property1
-                 // Neither changes nor measurements are allowed to read from the items they work on.
-                 assert(false)
-               } catch {
-                 case _: RuntimeException =>
-               }
+               // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
+               val _ = barHistory.id
+               assertThrows[UnsupportedOperationException](barHistory.datums)
+               assertThrows[UnsupportedOperationException](barHistory.property1)
+
                barHistory.method1(data1, data2)
+
                if (faulty) barHistory.forceInvariantBreakage() // Modelling breakage of the bitemporal invariant.
              }
          ))
@@ -206,16 +193,13 @@ trait WorldSpecSupport {
            .apply(
              barHistoryId,
              (barHistory: BarHistory) => {
-               try {
-                 barHistory.id
-                 barHistory.datums
-                 barHistory.property1
-                 // Neither changes nor measurements are allowed to read from the items they work on.
-                 assert(false)
-               } catch {
-                 case _: RuntimeException =>
-               }
+               // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
+               val _ = barHistory.id
+               assertThrows[UnsupportedOperationException](barHistory.datums)
+               assertThrows[UnsupportedOperationException](barHistory.property1)
+
                barHistory.method2(data1, data2, data3)
+
                if (faulty) throw changeError // Modelling an admissible postcondition failure.
              }
          ))
@@ -255,8 +239,7 @@ trait WorldSpecSupport {
            makeAChange)(when).apply(
            referringHistoryId,
            idToReferToAnotherItem,
-           (referringHistory: ReferringHistory,
-            referencedItem: FooHistory) => {
+           (referringHistory: ReferringHistory, referencedItem: FooHistory) => {
              if (faulty) throw changeError // Modelling a precondition failure.
              referringHistory.referTo(referencedItem)
            }
@@ -272,8 +255,7 @@ trait WorldSpecSupport {
            makeAChange)(when).apply(
            referringHistoryId,
            idToReferToAnotherItem,
-           (referringHistory: ReferringHistory,
-            referencedItem: FooHistory) => {
+           (referringHistory: ReferringHistory, referencedItem: FooHistory) => {
              if (faulty) throw changeError // Modelling a precondition failure.
              referringHistory.forget(referencedItem)
            }
@@ -310,9 +292,7 @@ trait WorldSpecSupport {
            changeFor: ((Unbounded[Instant], Boolean,
            AHistory#Id) => Event))) <- dataSamples
        } yield
-         (index,
-          data,
-          changeFor(_: Unbounded[Instant], _: Boolean, historyId)),
+         (index, data, changeFor(_: Unbounded[Instant], _: Boolean, historyId)),
        Annihilation(_: Instant, historyId),
        if (headsItIs)
          Change.forOneItem(_: Unbounded[Instant])(historyId,
@@ -684,18 +664,20 @@ trait WorldSpecSupport {
       yield
         recordingsForAnId.historiesFrom(scope) flatMap (_.datums) map (recordingsForAnId.historyId -> _)) flatten
 
-  def recordEventsInWorld(
-      bigShuffledHistoryOverLotsOfThings: Stream[
-        Traversable[(Option[(Unbounded[Instant], Event)], Int)]],
-      asOfs: List[Instant],
-      world: World[Int]) = {
+  def recordEventsInWorld(bigShuffledHistoryOverLotsOfThings: Stream[
+                            Traversable[(Option[(Unbounded[Instant], Event)],
+                                         intersperseObsoleteEvents.EventId)]],
+                          asOfs: List[Instant],
+                          world: World[Int]) = {
     revisionActions(bigShuffledHistoryOverLotsOfThings, asOfs, world) map (_.apply) force // Actually a piece of imperative code that looks functional - 'world' is being mutated as a side-effect; but the revisions are harvested functionally.
   }
 
   def liftRecordings(
       bigShuffledHistoryOverLotsOfThings: Stream[
-        Traversable[((Unbounded[Instant], Event), Revision)]])
-    : Stream[Traversable[(Some[(Unbounded[Instant], Event)], Revision)]] = {
+        Traversable[((Unbounded[Instant], Event),
+                     intersperseObsoleteEvents.EventId)]])
+    : Stream[Traversable[(Some[(Unbounded[Instant], Event)],
+                          intersperseObsoleteEvents.EventId)]] = {
     bigShuffledHistoryOverLotsOfThings map (_ map {
       case (recording, eventId) => Some(recording) -> eventId
     })
@@ -703,7 +685,8 @@ trait WorldSpecSupport {
 
   def recordEventsInWorldWithoutGivingUpOnFailure(
       bigShuffledHistoryOverLotsOfThings: Stream[
-        Traversable[(Option[(Unbounded[Instant], Event)], Int)]],
+        Traversable[(Option[(Unbounded[Instant], Event)],
+                     intersperseObsoleteEvents.EventId)]],
       asOfs: List[Instant],
       world: World[Int]) = {
     for (revisionAction <- revisionActions(bigShuffledHistoryOverLotsOfThings,
@@ -715,22 +698,24 @@ trait WorldSpecSupport {
     }
   }
 
-  def revisionActions(
-      bigShuffledHistoryOverLotsOfThings: Stream[
-        Traversable[(Option[(Unbounded[Instant], Event)], Int)]],
-      asOfs: List[Instant],
-      world: World[Int]): Stream[() => Revision] = {
+  def revisionActions(bigShuffledHistoryOverLotsOfThings: Stream[
+                        Traversable[(Option[(Unbounded[Instant], Event)],
+                                     intersperseObsoleteEvents.EventId)]],
+                      asOfs: List[Instant],
+                      world: World[Int]): Stream[() => Revision] = {
     assert(bigShuffledHistoryOverLotsOfThings.length == asOfs.length)
     revisionActions(bigShuffledHistoryOverLotsOfThings, asOfs.iterator, world)
   }
 
-  def revisionActions(
-      bigShuffledHistoryOverLotsOfThings: Stream[
-        Traversable[(Option[(Unbounded[Instant], Event)], Revision)]],
-      asOfsIterator: Iterator[Instant],
-      world: World[Int]): Stream[() => Revision] = {
+  def revisionActions(bigShuffledHistoryOverLotsOfThings: Stream[
+                        Traversable[(Option[(Unbounded[Instant], Event)],
+                                     intersperseObsoleteEvents.EventId)]],
+                      asOfsIterator: Iterator[Instant],
+                      world: World[Int]): Stream[() => Revision] = {
     for {
       pieceOfHistory <- bigShuffledHistoryOverLotsOfThings
+      _ = require(
+        pieceOfHistory.map(_._2).toSeq.distinct.size == pieceOfHistory.size)
       events = pieceOfHistory map {
         case (recording, eventId) =>
           eventId -> (for ((_, change) <- recording) yield change)
@@ -778,11 +763,10 @@ trait WorldSpecSupport {
               val anticipatedEventId = eventId + random
                 .chooseAnyNumberFromZeroToOneLessThan(
                   onePastMaximumEventId - eventId)
-              Some(
-                (Some(obsoleteRecording), anticipatedEventId) -> unfoldState
-                  .copy(
-                    obsoleteRecordings = remainingObsoleteRecordings,
-                    eventsToBeCorrected = eventsToBeCorrected + anticipatedEventId))
+              Some((Some(obsoleteRecording), anticipatedEventId) -> unfoldState
+                .copy(
+                  obsoleteRecordings = remainingObsoleteRecordings,
+                  eventsToBeCorrected = eventsToBeCorrected + anticipatedEventId))
             }
           } else if (eventsToBeCorrected.nonEmpty && random.nextBoolean()) {
             // Just annul an obsolete event for the sake of it, even though the non-obsolete correction is still yet to follow.
@@ -868,9 +852,9 @@ trait WorldSpecSupport {
 
   def recordingsGroupedByIdGenerator(forbidAnnihilations: Boolean,
                                      forbidMeasurements: Boolean = false) =
-    mixedRecordingsGroupedByIdGenerator(
-      forbidAnnihilations = forbidAnnihilations,
-      forbidMeasurements = forbidMeasurements)
+    mixedRecordingsGroupedByIdGenerator(forbidAnnihilations =
+                                          forbidAnnihilations,
+                                        forbidMeasurements = forbidMeasurements)
 
   // These recordings don't allow the possibility of the same id being shared by bitemporals of related (but different)
   // types when these are plugged into tests that use them to correct one world history into another. Note that we don't
