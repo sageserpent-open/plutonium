@@ -99,12 +99,10 @@ trait WorldStateSharingBehaviours
         shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
           random,
           obsoleteRecordingsGroupedById)
-        shuffledRecordingAndEventPairs = intersperseObsoleteEvents(
+        bigShuffledHistoryOverLotsOfThings = intersperseObsoleteEvents(
           random,
           shuffledRecordings,
           shuffledObsoleteRecordings)
-        bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(
-          shuffledRecordingAndEventPairs)
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
                              instantGenerator) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
@@ -213,12 +211,10 @@ trait WorldStateSharingBehaviours
         shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
           random,
           obsoleteRecordingsGroupedById)
-        shuffledRecordingAndEventPairs = intersperseObsoleteEvents(
+        bigShuffledHistoryOverLotsOfThings = intersperseObsoleteEvents(
           random,
           shuffledRecordings,
           shuffledObsoleteRecordings)
-        bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(
-          shuffledRecordingAndEventPairs)
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
                              instantGenerator) map (_.sorted)
       } yield

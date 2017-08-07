@@ -1970,12 +1970,10 @@ trait WorldBehaviours
           shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
             random,
             obsoleteRecordingsGroupedById)
-          shuffledRecordingAndEventPairs = intersperseObsoleteEvents(
+          bigShuffledHistoryOverLotsOfThings = intersperseObsoleteEvents(
             random,
             shuffledRecordings,
             shuffledObsoleteRecordings)
-          bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(
-            shuffledRecordingAndEventPairs)
           asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
                                instantGenerator) map (_.sorted)
         } yield
@@ -2040,12 +2038,10 @@ trait WorldBehaviours
           shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
             random,
             obsoleteRecordingsGroupedById)
-          shuffledRecordingAndEventPairs = intersperseObsoleteEvents(
+          bigShuffledHistoryOverLotsOfThings = intersperseObsoleteEvents(
             random,
             shuffledRecordings,
             shuffledObsoleteRecordings)
-          bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(
-            shuffledRecordingAndEventPairs)
           asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
                                instantGenerator) map (_.sorted)
           whenInconsistentEventsOccur <- unboundedInstantGenerator
@@ -2171,12 +2167,10 @@ trait WorldBehaviours
         shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
           random,
           obsoleteRecordingsGroupedById)
-        shuffledRecordingAndEventPairs = intersperseObsoleteEvents(
+        bigShuffledHistoryOverLotsOfThings = intersperseObsoleteEvents(
           random,
           shuffledRecordings,
           shuffledObsoleteRecordings)
-        bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(
-          shuffledRecordingAndEventPairs)
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
                              instantGenerator) map (_.sorted)
       } yield
@@ -2243,12 +2237,10 @@ trait WorldBehaviours
         shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
           random,
           obsoleteRecordingsGroupedById)
-        shuffledRecordingAndEventPairs = intersperseObsoleteEvents(
+        bigShuffledHistoryOverLotsOfThings = intersperseObsoleteEvents(
           random,
           shuffledRecordings,
           shuffledObsoleteRecordings)
-        bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(
-          shuffledRecordingAndEventPairs)
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
                              instantGenerator) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
@@ -2305,10 +2297,12 @@ trait WorldBehaviours
           forbidAnnihilations = true)
         seed <- seedGenerator
         random = new Random(seed)
-        bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(
-          shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+        bigShuffledHistoryOverLotsOfThings = intersperseObsoleteEvents
+          .chunkKeepingEventIdsUniquePerChunk(
             random,
-            recordingsGroupedById).zipWithIndex)
+            shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+              random,
+              recordingsGroupedById).zipWithIndex)
         allEventIds    = bigShuffledHistoryOverLotsOfThings flatMap (_ map (_._2))
         maximumEventId = allEventIds.max
         eventIdsThatMayBeSpuriousAndDuplicated = allEventIds ++
@@ -2316,10 +2310,12 @@ trait WorldBehaviours
             allEventIds,
             random.chooseAnyNumberFromZeroToOneLessThan(allEventIds.length)) ++
           (1 + maximumEventId to 10 + maximumEventId)
-        annulmentsGalore = random.splitIntoNonEmptyPieces(
-          random
-            .shuffle(eventIdsThatMayBeSpuriousAndDuplicated) map ((None: Option[
-            (Unbounded[Instant], Event)]) -> _))
+        annulmentsGalore = intersperseObsoleteEvents
+          .chunkKeepingEventIdsUniquePerChunk(
+            random,
+            random
+              .shuffle(eventIdsThatMayBeSpuriousAndDuplicated) map ((None: Option[
+              (Unbounded[Instant], Event)]) -> _))
         historyLength    = bigShuffledHistoryOverLotsOfThings.length
         annulmentsLength = annulmentsGalore.length
         asOfs <- Gen.listOfN(2 * historyLength + annulmentsLength,
@@ -2404,12 +2400,10 @@ trait WorldBehaviours
         shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
           random,
           obsoleteRecordingsGroupedById)
-        shuffledRecordingAndEventPairs = intersperseObsoleteEvents(
+        bigShuffledHistoryOverLotsOfThings = intersperseObsoleteEvents(
           random,
           shuffledRecordings,
           shuffledObsoleteRecordings)
-        bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(
-          shuffledRecordingAndEventPairs)
         shuffledFollowingRecordingAndEventPairs = (shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
           random,
           followingRecordingsGroupedById).zipWithIndex).toList
@@ -2484,12 +2478,10 @@ trait WorldBehaviours
         shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
           random,
           obsoleteRecordingsGroupedById)
-        shuffledRecordingAndEventPairs = intersperseObsoleteEvents(
+        bigShuffledHistoryOverLotsOfThings = intersperseObsoleteEvents(
           random,
           shuffledRecordings,
           shuffledObsoleteRecordings)
-        bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(
-          shuffledRecordingAndEventPairs)
       } yield (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings)
 
       val testCaseGenerator = for {

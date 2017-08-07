@@ -8,16 +8,16 @@ import scalaz.std.stream
 object intersperseObsoleteEvents {
   type EventId = Int
 
-  def apply[EventRelatedThing](
-      random: Random,
-      eventRelatedThings: Seq[EventRelatedThing],
-      obsoleteEventRelatedThings: Seq[EventRelatedThing])
+  def mixUpEnsuringObsoleteThingsAreEventuallySucceededByFinalThings[
+      EventRelatedThing](random: Random,
+                         finalEventRelatedThings: Seq[EventRelatedThing],
+                         obsoleteEventRelatedThings: Seq[EventRelatedThing])
     : Stream[(Option[EventRelatedThing], EventId)] = {
     case class UnfoldState(eventRelatedThings: Seq[EventRelatedThing],
                            obsoleteEventRelatedThings: Seq[EventRelatedThing],
                            eventId: EventId,
                            eventsToBeCorrected: Set[EventId])
-    val onePastMaximumEventId = eventRelatedThings.size
+    val onePastMaximumEventId = finalEventRelatedThings.size
 
     def yieldEitherARecordingOrAnObsoleteRecording(unfoldState: UnfoldState) =
       unfoldState match {
@@ -75,9 +75,37 @@ object intersperseObsoleteEvents {
       }
 
     stream.unfold(
-      UnfoldState(eventRelatedThings,
+      UnfoldState(finalEventRelatedThings,
                   obsoleteEventRelatedThings,
                   0,
                   Set.empty))(yieldEitherARecordingOrAnObsoleteRecording)
+  }
+
+  def chunkKeepingEventIdsUniquePerChunk[EventRelatedThing](
+      random: Random,
+      eventIdPieces: Stream[(EventRelatedThing, EventId)])
+    : Stream[Stream[(EventRelatedThing, EventId)]] = {
+    val trialSplit: Stream[Stream[(EventRelatedThing, EventId)]] =
+      random.splitIntoNonEmptyPieces(eventIdPieces)
+
+    trialSplit flatMap (chunk =>
+      if (chunk.groupBy(_._2).exists {
+            case (_, groupForAnEventId) => 1 < groupForAnEventId.size
+          })
+        chunkKeepingEventIdsUniquePerChunk(random, chunk)
+      else Stream(chunk))
+  }
+
+  def apply[EventRelatedThing](
+      random: Random,
+      eventRelatedThings: Seq[EventRelatedThing],
+      obsoleteEventRelatedThings: Seq[EventRelatedThing])
+    : Stream[Stream[(Option[EventRelatedThing], EventId)]] = {
+    chunkKeepingEventIdsUniquePerChunk(
+      random,
+      mixUpEnsuringObsoleteThingsAreEventuallySucceededByFinalThings(
+        random,
+        eventRelatedThings,
+        obsoleteEventRelatedThings).force)
   }
 }
