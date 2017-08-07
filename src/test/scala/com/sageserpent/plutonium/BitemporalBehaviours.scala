@@ -1,18 +1,15 @@
 package com.sageserpent.plutonium
 
-import com.sageserpent.americium.randomEnrichment._
-import org.scalacheck.{Arbitrary, Gen, Prop}
-import Prop.BooleanOperators
+import org.scalacheck.Prop.BooleanOperators
+import org.scalacheck.{Arbitrary, Gen, Prop, Properties}
 import org.scalatest.FlatSpec
 import org.scalatest.prop.Checkers
-import org.scalacheck.Properties
-import resource.ManagedResource
 
 import scala.reflect.runtime.universe._
 import scala.util.Random
 import scalaz.scalacheck._
-import scalaz.{ApplicativePlus, Equal}
 import scalaz.syntax.applicativePlus._
+import scalaz.{ApplicativePlus, Equal}
 
 trait BitemporalBehaviours
     extends FlatSpec
@@ -36,12 +33,10 @@ trait BitemporalBehaviours
         shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
           random,
           obsoleteRecordingsGroupedById)
-        shuffledRecordingAndEventPairs = intersperseObsoleteEvents(
+        bigShuffledHistoryOverLotsOfThings = intersperseObsoleteEvents(
           random,
           shuffledRecordings,
           shuffledObsoleteRecordings)
-        bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(
-          shuffledRecordingAndEventPairs)
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
                              instantGenerator) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
@@ -84,8 +79,7 @@ trait BitemporalBehaviours
                 def intFrom(item: IntegerHistory) = item.datums.hashCode()
                 val generatorsThatAlwaysWork = Seq(
                   5 -> (Arbitrary
-                    .arbitrary[Int] map (ApplicativePlus[Bitemporal].point(
-                    _))),
+                    .arbitrary[Int] map (ApplicativePlus[Bitemporal].point(_))),
                   10 -> (Gen.oneOf(ids) map (Bitemporal
                     .zeroOrOneOf[IntegerHistory](_) map (_.integerProperty))),
                   10 -> (Gen.oneOf(ids) map (Bitemporal.withId[IntegerHistory](
@@ -150,12 +144,10 @@ trait BitemporalBehaviours
         shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
           random,
           obsoleteRecordingsGroupedById)
-        shuffledRecordingAndEventPairs = intersperseObsoleteEvents(
+        bigShuffledHistoryOverLotsOfThings = intersperseObsoleteEvents(
           random,
           shuffledRecordings,
           shuffledObsoleteRecordings)
-        bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(
-          shuffledRecordingAndEventPairs)
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
                              instantGenerator) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
@@ -165,7 +157,8 @@ trait BitemporalBehaviours
          bigShuffledHistoryOverLotsOfThings,
          asOfs,
          queryWhen)
-      check(Prop.forAllNoShrink(testCaseGenerator) {
+      check(
+        Prop.forAllNoShrink(testCaseGenerator) {
         case (worldResource,
               recordingsGroupedById,
               bigShuffledHistoryOverLotsOfThings,
@@ -214,12 +207,10 @@ trait BitemporalBehaviours
         shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
           random,
           obsoleteRecordingsGroupedById)
-        shuffledRecordingAndEventPairs = intersperseObsoleteEvents(
+        bigShuffledHistoryOverLotsOfThings = intersperseObsoleteEvents(
           random,
           shuffledRecordings,
           shuffledObsoleteRecordings)
-        bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(
-          shuffledRecordingAndEventPairs)
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
                              instantGenerator) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
@@ -286,12 +277,10 @@ trait BitemporalBehaviours
         shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
           random,
           obsoleteRecordingsGroupedById)
-        shuffledRecordingAndEventPairs = intersperseObsoleteEvents(
+        bigShuffledHistoryOverLotsOfThings = intersperseObsoleteEvents(
           random,
           shuffledRecordings,
           shuffledObsoleteRecordings)
-        bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(
-          shuffledRecordingAndEventPairs)
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
                              instantGenerator) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
@@ -356,12 +345,10 @@ trait BitemporalBehaviours
         shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
           random,
           obsoleteRecordingsGroupedById)
-        shuffledRecordingAndEventPairs = intersperseObsoleteEvents(
+        bigShuffledHistoryOverLotsOfThings = intersperseObsoleteEvents(
           random,
           shuffledRecordings,
           shuffledObsoleteRecordings)
-        bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(
-          shuffledRecordingAndEventPairs)
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
                              instantGenerator) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
@@ -435,12 +422,10 @@ trait BitemporalBehaviours
         shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
           random,
           obsoleteRecordingsGroupedById)
-        shuffledRecordingAndEventPairs = intersperseObsoleteEvents(
+        bigShuffledHistoryOverLotsOfThings = intersperseObsoleteEvents(
           random,
           shuffledRecordings,
           shuffledObsoleteRecordings)
-        bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(
-          shuffledRecordingAndEventPairs)
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
                              instantGenerator) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
@@ -522,12 +507,10 @@ trait BitemporalBehaviours
         shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
           random,
           obsoleteRecordingsGroupedById)
-        shuffledRecordingAndEventPairs = intersperseObsoleteEvents(
+        bigShuffledHistoryOverLotsOfThings = intersperseObsoleteEvents(
           random,
           shuffledRecordings,
           shuffledObsoleteRecordings)
-        bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(
-          shuffledRecordingAndEventPairs)
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
                              instantGenerator) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
@@ -592,12 +575,10 @@ trait BitemporalBehaviours
         shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
           random,
           obsoleteRecordingsGroupedById)
-        shuffledRecordingAndEventPairs = intersperseObsoleteEvents(
+        bigShuffledHistoryOverLotsOfThings = intersperseObsoleteEvents(
           random,
           shuffledRecordings,
           shuffledObsoleteRecordings)
-        bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(
-          shuffledRecordingAndEventPairs)
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
                              instantGenerator) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
@@ -643,12 +624,10 @@ trait BitemporalBehaviours
         shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
           random,
           obsoleteRecordingsGroupedById)
-        shuffledRecordingAndEventPairs = intersperseObsoleteEvents(
+        bigShuffledHistoryOverLotsOfThings = intersperseObsoleteEvents(
           random,
           shuffledRecordings,
           shuffledObsoleteRecordings)
-        bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(
-          shuffledRecordingAndEventPairs)
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
                              instantGenerator) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
@@ -724,12 +703,10 @@ trait BitemporalBehaviours
         shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
           random,
           obsoleteRecordingsGroupedById)
-        shuffledRecordingAndEventPairs = intersperseObsoleteEvents(
+        bigShuffledHistoryOverLotsOfThings = intersperseObsoleteEvents(
           random,
           shuffledRecordings,
           shuffledObsoleteRecordings)
-        bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(
-          shuffledRecordingAndEventPairs)
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
                              instantGenerator) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
@@ -800,7 +777,7 @@ class BitemporalSpecUsingWorldReferenceImplementation
 
   "A bitemporal query using an id (using the world reference implementation)" should behave like bitemporalQueryUsingAndIdBehaviour
 
-  "the bitemporal 'numberOf' (using the world reference implementation)" should behave like bitemporalNumberOfBehaviour
+  "The bitemporal 'numberOf' (using the world reference implementation)" should behave like bitemporalNumberOfBehaviour
 
   "The bitemporal 'none' (using the world reference implementation)" should behave like bitemporalNoneBehaviour
 
@@ -818,7 +795,7 @@ class BitemporalSpecUsingWorldRedisBasedImplementation
 
   "A bitemporal query using an id (using the world Redis-based implementation)" should behave like bitemporalQueryUsingAndIdBehaviour
 
-  "the bitemporal 'numberOf' (using the world Redis-based implementation)" should behave like bitemporalNumberOfBehaviour
+  "The bitemporal 'numberOf' (using the world Redis-based implementation)" should behave like bitemporalNumberOfBehaviour
 
   "The bitemporal 'none' (using the world Redis-based implementation)" should behave like bitemporalNoneBehaviour
 

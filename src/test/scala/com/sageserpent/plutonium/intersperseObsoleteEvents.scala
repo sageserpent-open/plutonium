@@ -1,23 +1,23 @@
 package com.sageserpent.plutonium
 
-import scala.collection.immutable
+import com.sageserpent.americium.randomEnrichment._
+
 import scala.util.Random
 import scalaz.std.stream
-import com.sageserpent.americium.randomEnrichment._
 
 object intersperseObsoleteEvents {
   type EventId = Int
 
-  def apply[EventRelatedThing](
-      random: Random,
-      eventRelatedThings: Seq[EventRelatedThing],
-      obsoleteEventRelatedThings: Seq[EventRelatedThing])
+  def mixUpEnsuringObsoleteThingsAreEventuallySucceededByFinalThings[
+      EventRelatedThing](random: Random,
+                         finalEventRelatedThings: Seq[EventRelatedThing],
+                         obsoleteEventRelatedThings: Seq[EventRelatedThing])
     : Stream[(Option[EventRelatedThing], EventId)] = {
     case class UnfoldState(eventRelatedThings: Seq[EventRelatedThing],
                            obsoleteEventRelatedThings: Seq[EventRelatedThing],
                            eventId: EventId,
                            eventsToBeCorrected: Set[EventId])
-    val onePastMaximumEventId = eventRelatedThings.size
+    val onePastMaximumEventId = finalEventRelatedThings.size
 
     def yieldEitherARecordingOrAnObsoleteRecording(unfoldState: UnfoldState) =
       unfoldState match {
@@ -36,7 +36,7 @@ object intersperseObsoleteEvents {
           } else if (obsoleteEventRelatedThings.nonEmpty && random
                        .nextBoolean()) {
             val Seq(obsoleteEventRelatedThing,
-                    remainingObsoleteEventRelatedThings @ _ *) =
+                    remainingObsoleteEventRelatedThings @ _*) =
               obsoleteEventRelatedThings
             if (eventsToBeCorrected.nonEmpty && random.nextBoolean()) {
               // Correct an obsolete event with another obsolete event.
@@ -50,12 +50,11 @@ object intersperseObsoleteEvents {
               val anticipatedEventId = eventId + random
                 .chooseAnyNumberFromZeroToOneLessThan(
                   onePastMaximumEventId - eventId)
-              Some(
-                (Some(obsoleteEventRelatedThing), anticipatedEventId) -> unfoldState
-                  .copy(
-                    obsoleteEventRelatedThings =
-                      remainingObsoleteEventRelatedThings,
-                    eventsToBeCorrected = eventsToBeCorrected + anticipatedEventId))
+              Some((Some(obsoleteEventRelatedThing), anticipatedEventId) -> unfoldState
+                .copy(
+                  obsoleteEventRelatedThings =
+                    remainingObsoleteEventRelatedThings,
+                  eventsToBeCorrected = eventsToBeCorrected + anticipatedEventId))
             }
           } else if (eventsToBeCorrected.nonEmpty && random.nextBoolean()) {
             // Just annul an obsolete event for the sake of it, even though the non-obsolete correction is still yet to follow.
@@ -65,7 +64,7 @@ object intersperseObsoleteEvents {
                 eventsToBeCorrected = eventsToBeCorrected - obsoleteEventId))
           } else {
             // Issue the definitive non-obsolete event; this will not be subsequently corrected.
-            val Seq(eventRelatedThing, remainingEventRelatedThings @ _ *) =
+            val Seq(eventRelatedThing, remainingEventRelatedThings @ _*) =
               eventRelatedThings
             Some(
               (Some(eventRelatedThing), eventId) -> unfoldState.copy(
@@ -76,9 +75,37 @@ object intersperseObsoleteEvents {
       }
 
     stream.unfold(
-      UnfoldState(eventRelatedThings,
+      UnfoldState(finalEventRelatedThings,
                   obsoleteEventRelatedThings,
                   0,
                   Set.empty))(yieldEitherARecordingOrAnObsoleteRecording)
+  }
+
+  def chunkKeepingEventIdsUniquePerChunk[EventRelatedThing](
+      random: Random,
+      eventIdPieces: Stream[(EventRelatedThing, EventId)])
+    : Stream[Stream[(EventRelatedThing, EventId)]] = {
+    val trialSplit: Stream[Stream[(EventRelatedThing, EventId)]] =
+      random.splitIntoNonEmptyPieces(eventIdPieces)
+
+    trialSplit flatMap (chunk =>
+      if (chunk.groupBy(_._2).exists {
+            case (_, groupForAnEventId) => 1 < groupForAnEventId.size
+          })
+        chunkKeepingEventIdsUniquePerChunk(random, chunk)
+      else Stream(chunk))
+  }
+
+  def apply[EventRelatedThing](
+      random: Random,
+      eventRelatedThings: Seq[EventRelatedThing],
+      obsoleteEventRelatedThings: Seq[EventRelatedThing])
+    : Stream[Stream[(Option[EventRelatedThing], EventId)]] = {
+    chunkKeepingEventIdsUniquePerChunk(
+      random,
+      mixUpEnsuringObsoleteThingsAreEventuallySucceededByFinalThings(
+        random,
+        eventRelatedThings,
+        obsoleteEventRelatedThings).force)
   }
 }

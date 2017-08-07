@@ -208,8 +208,7 @@ object WorldImplementationCodeFactoring {
 
     private def createProxyClass(clazz: Class[_]): Class[_] = {
       val builder = byteBuddy
-        .subclass(clazz,
-                  ConstructorStrategy.Default.IMITATE_SUPER_CLASS_PUBLIC)
+        .subclass(clazz, ConstructorStrategy.Default.IMITATE_SUPER_CLASS_PUBLIC)
         .implement(additionalInterfaces.toSeq)
         .method(matchGetClass)
         .intercept(FixedValue.value(clazz))
@@ -351,8 +350,7 @@ object WorldImplementationCodeFactoring {
   }
 
   object QueryCallbackStuff {
-    val additionalInterfaces: Array[Class[_]] = Array(
-      classOf[AnnihilationHook])
+    val additionalInterfaces: Array[Class[_]] = Array(classOf[AnnihilationHook])
     val cachedProxyConstructors =
       mutable.Map
         .empty[universe.Type, (universe.MethodMirror, Class[_ <: Identified])]

@@ -224,9 +224,11 @@ class BlobStorageSpec
                                           lotsOfObsoleteTimeSeries)
 
         val revisions =
-          intersperseObsoleteEvents(randomBehaviour,
-                                    chunkedFinalBookings,
-                                    chunkedObsoleteBookings)
+          intersperseObsoleteEvents
+            .mixUpEnsuringObsoleteThingsAreEventuallySucceededByFinalThings(
+              randomBehaviour,
+              chunkedFinalBookings,
+              chunkedObsoleteBookings)
 
         val blobStorage: BlobStorage[EventId] =
           ((BlobStorageInMemory[EventId](): BlobStorage[EventId]) /: revisions) {
@@ -305,9 +307,11 @@ class BlobStorageSpec
                                           lotsOfObsoleteTimeSeries)
 
         val revisions =
-          intersperseObsoleteEvents(randomBehaviour,
-                                    chunkedFinalBookings,
-                                    chunkedObsoleteBookings)
+          intersperseObsoleteEvents
+            .mixUpEnsuringObsoleteThingsAreEventuallySucceededByFinalThings(
+              randomBehaviour,
+              chunkedFinalBookings,
+              chunkedObsoleteBookings)
 
         assertThrows[RuntimeException] {
           val blobStorage: BlobStorage[EventId] =
