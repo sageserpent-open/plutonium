@@ -24,7 +24,8 @@ object BlobStorageInMemory {
 
     def addSnapshotBlob(eventId: EventId,
                         when: Unbounded[Instant],
-                        snapshotBlob: SnapshotBlob): Lifecycle[EventId]
+                        snapshotBlob: SnapshotBlob,
+                        revision: Revision): Lifecycle[EventId]
   }
 
   trait LifecycleContracts[EventId] extends Lifecycle[EventId] {
@@ -36,6 +37,51 @@ object BlobStorageInMemory {
     }
   }
 
+  case class LifecycleImplementation[EventId](
+      // TODO - this implementation is horrible, what with all the 'toSeq' and 'reverseIterator' calls.
+      snapshotBlobs: SortedMap[Unbounded[Instant],
+                               (SnapshotBlob, EventId, Revision)] =
+        SortedMap.empty[Unbounded[Instant], (SnapshotBlob, EventId, Revision)])
+      extends BlobStorageInMemory.Lifecycle[EventId] {
+    override def isValid(when: Unbounded[Instant],
+                         validRevisionFor: EventId => Revision): Boolean =
+      snapshotBlobs
+        .to(when)
+        .toSeq
+        .reverseIterator
+        .exists(PartialFunction.cond(_) {
+          case (_, (_, eventId, blobRevision)) =>
+            blobRevision == validRevisionFor(eventId)
+        })
+
+    override def snapshotBlobFor(
+        when: Unbounded[Instant],
+        validRevisionFor: EventId => Revision): SnapshotBlob = {
+      snapshotBlobs
+        .to(when)
+        .toSeq
+        .reverseIterator
+        .find(PartialFunction.cond(_) {
+          case (_, (_, eventId, blobRevision)) =>
+            blobRevision == validRevisionFor(eventId)
+        })
+        .map { case (_, (snapshot, _, _)) => snapshot }
+        .get
+    }
+
+    override def addSnapshotBlob(
+        eventId: EventId,
+        when: Unbounded[Instant],
+        snapshotBlob: SnapshotBlob,
+        revision: Revision): BlobStorageInMemory.Lifecycle[EventId] = {
+      require(!snapshotBlobs.contains(when))
+      new LifecycleImplementation(
+        snapshotBlobs = snapshotBlobs
+          .updated(when, (snapshotBlob, eventId, revision)))
+      with BlobStorageInMemory.LifecycleContracts[EventId]
+    }
+  }
+
   def apply[EventId]() =
     new BlobStorageInMemory[EventId](
       revision = 0,
@@ -44,8 +90,6 @@ object BlobStorageInMemory {
         Map.empty[UniqueItemSpecification[_ <: Identified], Lifecycle[EventId]]
     )
 }
-
-// More importantly, what about filtering out annulled snapshots - what I've done here is broken.
 
 case class BlobStorageInMemory[EventId] private (
     val revision: BlobStorageInMemory.Revision,
@@ -112,71 +156,34 @@ case class BlobStorageInMemory[EventId] private (
           snapshotBlobs: Seq[(UniqueItemSpecification[_ <: Identified],
                               SnapshotBlob)]): Unit = {
         events += eventId -> Some(when -> snapshotBlobs) // ....what about this, then? Suppose a client makes multiple bookings under the same event id within the same revision?
+        // Yes, and for that matter, suppose multiple bookings are made at the same time?
       }
 
       override def build(): BlobStorage[EventId] = {
         val newRevision = 1 + thisBlobStorage.revision
+
+        // TODO - use ++= ....
         val newEventRevisions =
           (thisBlobStorage.eventRevisions /: events) {
             case (eventRevisions, (eventId, _)) =>
               eventRevisions + (eventId -> newRevision)
           }
-
-        case class LifecycleImplementation(
-            // TODO - this implementation is horrible, what with all the 'toSeq' and 'reverseIterator' calls.
-            snapshotBlobs: SortedMap[Unbounded[Instant],
-                                     (SnapshotBlob, EventId, Revision)] =
-              SortedMap.empty)
-            extends BlobStorageInMemory.Lifecycle[EventId] {
-          override def isValid(when: Unbounded[Instant],
-                               validRevisionFor: EventId => Revision): Boolean =
-            snapshotBlobs
-              .to(when)
-              .toSeq
-              .reverseIterator
-              .exists(PartialFunction.cond(_) {
-                case (_, (_, eventId, blobRevision)) =>
-                  blobRevision == validRevisionFor(eventId)
-              })
-
-          override def snapshotBlobFor(
-              when: Unbounded[Instant],
-              validRevisionFor: EventId => Revision): SnapshotBlob = {
-            snapshotBlobs
-              .to(when)
-              .toSeq
-              .reverseIterator
-              .find(PartialFunction.cond(_) {
-                case (_, (_, eventId, blobRevision)) =>
-                  blobRevision == validRevisionFor(eventId)
-              })
-              .map { case (_, (snapshot, _, _)) => snapshot }
-              .get
-          }
-
-          override def addSnapshotBlob(eventId: EventId,
-                                       when: Unbounded[Instant],
-                                       snapshotBlob: SnapshotBlob)
-            : BlobStorageInMemory.Lifecycle[EventId] =
-            new LifecycleImplementation(
-              snapshotBlobs = snapshotBlobs
-                .updated(when, (snapshotBlob, eventId, newRevision)))
-            with BlobStorageInMemory.LifecycleContracts[EventId]
-        }
-
         val newLifecycles = (thisBlobStorage.lifecycles /: events) {
           case (lifecycles, (eventId, None)) =>
             lifecycles
           case (lifecycles, (eventId, Some((when, snapshots)))) =>
+            // TODO: try to add in bulk...
             (lifecycles /: snapshots) {
               case (lifecycles, (uniqueItemSpecification, snapshot)) =>
                 val lifecycle = lifecycles.getOrElse(
                   uniqueItemSpecification,
-                  new LifecycleImplementation
+                  new BlobStorageInMemory.LifecycleImplementation[EventId]
                   with BlobStorageInMemory.LifecycleContracts[EventId])
-                lifecycles.updated(
-                  uniqueItemSpecification,
-                  lifecycle.addSnapshotBlob(eventId, when, snapshot))
+                lifecycles.updated(uniqueItemSpecification,
+                                   lifecycle.addSnapshotBlob(eventId,
+                                                             when,
+                                                             snapshot,
+                                                             newRevision))
             }
         }
 
