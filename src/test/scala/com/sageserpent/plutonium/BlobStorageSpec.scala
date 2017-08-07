@@ -152,12 +152,13 @@ class BlobStorageSpec
           Gen.sequence[Seq[TimeSeries], TimeSeries](
             uniqueItemSpecifications map (timeSeriesGeneratorFor(_))))
 
-  def chunkedShuffledSnapshotBookings[_ <: Identified](
+  // TODO - how much of this is necessary?
+  def shuffledSnapshotBookings[_ <: Identified](
       randomBehaviour: Random,
       lotsOfTimeSeries: Seq[TimeSeries],
-      forceUseOfAnOverlappingType: Boolean = false): Stream[
-    Seq[(Unbounded[Instant],
-         Stream[(UniqueItemSpecification[_ <: Identified], SnapshotBlob)])]] = {
+      forceUseOfAnOverlappingType: Boolean = false): Seq[
+    (Unbounded[Instant],
+     Stream[(UniqueItemSpecification[_ <: Identified], SnapshotBlob)])] = {
     val forceUseOfAnOverlappingTypeDecisions = {
       val numberOfTimeSeries = lotsOfTimeSeries.size
       val numberOfNonDefaultDecisions =
@@ -206,45 +207,47 @@ class BlobStorageSpec
         case (when, chunkedBookings) => chunkedBookings map (when -> _)
       }
 
-    randomBehaviour.splitIntoNonEmptyPieces(
-      randomBehaviour.shuffle(snapshotBookingsForManyItemsAndTimes))
+    randomBehaviour.shuffle(snapshotBookingsForManyItemsAndTimes)
   }
+
+  private type ScalaFmtWorkaround = Stream[
+    (Option[(Unbounded[Instant],
+             Stream[(UniqueItemSpecification[_ <: Identified], SnapshotBlob)])],
+     EventId)]
+
+  def blobStorageFrom(revisions: Stream[ScalaFmtWorkaround]) =
+    ((BlobStorageInMemory[EventId](): BlobStorage[EventId]) /: revisions) {
+      case (blobStorage, bookingsForRevision) =>
+        val builder = blobStorage.openRevision()
+        for ((booking, eventId) <- bookingsForRevision) {
+          booking match {
+            case Some((when, snapshotBlobs)) =>
+              builder.recordSnapshotBlobsForEvent(eventId, when, snapshotBlobs)
+            case None =>
+              builder.annulEvent(eventId)
+              builder.build()
+          }
+        }
+        builder.build()
+    }
 
   "querying for a unique item's blob snapshot no earlier than when it was booked" should "yield that snapshot" in {
     forAll(seedGenerator, lotsOfTimeSeriesGenerator, lotsOfTimeSeriesGenerator) {
       (seed, lotsOfFinalTimeSeries, lotsOfObsoleteTimeSeries) =>
         val randomBehaviour = new Random(seed)
 
-        val chunkedFinalBookings =
-          chunkedShuffledSnapshotBookings(randomBehaviour,
-                                          lotsOfFinalTimeSeries)
+        val finalBookings =
+          shuffledSnapshotBookings(randomBehaviour, lotsOfFinalTimeSeries)
 
-        val chunkedObsoleteBookings =
-          chunkedShuffledSnapshotBookings(randomBehaviour,
-                                          lotsOfObsoleteTimeSeries)
+        val obsoleteBookings =
+          shuffledSnapshotBookings(randomBehaviour, lotsOfObsoleteTimeSeries)
 
         val revisions =
-          intersperseObsoleteEvents
-            .mixUpEnsuringObsoleteThingsAreEventuallySucceededByFinalThings(
-              randomBehaviour,
-              chunkedFinalBookings,
-              chunkedObsoleteBookings)
+          intersperseObsoleteEvents(randomBehaviour,
+                                    finalBookings,
+                                    obsoleteBookings)
 
-        val blobStorage: BlobStorage[EventId] =
-          ((BlobStorageInMemory[EventId](): BlobStorage[EventId]) /: revisions) {
-            case (blobStorage, (Some(chunk), eventId)) =>
-              val builder = blobStorage.openRevision()
-              for ((when, snapshotBlobs) <- chunk) {
-                builder.recordSnapshotBlobsForEvent(eventId,
-                                                    when,
-                                                    snapshotBlobs)
-              }
-              builder.build()
-            case (blobStorage, (None, eventId)) =>
-              val builder = blobStorage.openRevision()
-              builder.annulEvent(eventId)
-              builder.build()
-          }
+        val blobStorage: BlobStorage[EventId] = blobStorageFrom(revisions)
 
         for {
           TimeSeries(uniqueItemSpecification, snapshots, queryTimes) <- lotsOfFinalTimeSeries
@@ -297,38 +300,21 @@ class BlobStorageSpec
       (seed, lotsOfFinalTimeSeries, lotsOfObsoleteTimeSeries) =>
         val randomBehaviour = new Random(seed)
 
-        val chunkedFinalBookings =
-          chunkedShuffledSnapshotBookings(randomBehaviour,
-                                          lotsOfFinalTimeSeries,
-                                          forceUseOfAnOverlappingType = true)
+        val finalBookings =
+          shuffledSnapshotBookings(randomBehaviour,
+                                   lotsOfFinalTimeSeries,
+                                   forceUseOfAnOverlappingType = true)
 
-        val chunkedObsoleteBookings =
-          chunkedShuffledSnapshotBookings(randomBehaviour,
-                                          lotsOfObsoleteTimeSeries)
+        val obsoleteBookings =
+          shuffledSnapshotBookings(randomBehaviour, lotsOfObsoleteTimeSeries)
 
         val revisions =
-          intersperseObsoleteEvents
-            .mixUpEnsuringObsoleteThingsAreEventuallySucceededByFinalThings(
-              randomBehaviour,
-              chunkedFinalBookings,
-              chunkedObsoleteBookings)
+          intersperseObsoleteEvents(randomBehaviour,
+                                    finalBookings,
+                                    obsoleteBookings)
 
         assertThrows[RuntimeException] {
-          val blobStorage: BlobStorage[EventId] =
-            ((BlobStorageInMemory[EventId](): BlobStorage[EventId]) /: revisions) {
-              case (blobStorage, (Some(chunk), eventId)) =>
-                val builder = blobStorage.openRevision()
-                for ((when, snapshotBlobs) <- chunk) {
-                  builder.recordSnapshotBlobsForEvent(eventId,
-                                                      when,
-                                                      snapshotBlobs)
-                }
-                builder.build()
-              case (blobStorage, (None, eventId)) =>
-                val builder = blobStorage.openRevision()
-                builder.annulEvent(eventId)
-                builder.build()
-            }
+          val blobStorage: BlobStorage[EventId] = blobStorageFrom(revisions)
         }
     }
   }
