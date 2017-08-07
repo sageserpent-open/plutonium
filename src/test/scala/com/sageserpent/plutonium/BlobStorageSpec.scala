@@ -232,7 +232,10 @@ class BlobStorageSpec
     }
 
   "querying for a unique item's blob snapshot no earlier than when it was booked" should "yield that snapshot" in {
-    forAll(seedGenerator, lotsOfTimeSeriesGenerator, lotsOfTimeSeriesGenerator) {
+    forAll(seedGenerator,
+           lotsOfTimeSeriesGenerator,
+           Gen.frequency(10 -> lotsOfTimeSeriesGenerator,
+                         1  -> Gen.const(Seq.empty))) {
       (seed, lotsOfFinalTimeSeries, lotsOfObsoleteTimeSeries) =>
         val randomBehaviour = new Random(seed)
 
