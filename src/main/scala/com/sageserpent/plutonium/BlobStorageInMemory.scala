@@ -2,15 +2,15 @@ package com.sageserpent.plutonium
 
 import java.time.Instant
 
-import com.sageserpent.americium.{Finite, Unbounded}
+import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.BlobStorage.{
   SnapshotBlob,
   UniqueItemSpecification
 }
-import com.sageserpent.plutonium.BlobStorageInMemory.Revision
 
-import scala.collection.immutable.SortedMap
-import scala.collection.mutable
+import scala.collection.Searching._
+import scala.collection.generic.IsSeqLike
+import scala.collection.{SeqLike, SeqView, mutable}
 import scala.reflect.runtime.universe._
 
 object BlobStorageInMemory {
@@ -37,19 +37,48 @@ object BlobStorageInMemory {
     }
   }
 
+  implicit val isSeqLike = new IsSeqLike[SeqView[Unbounded[Instant], Seq[_]]] {
+    type A = Unbounded[Instant]
+    override val conversion: SeqView[Unbounded[Instant], Seq[_]] => SeqLike[
+      this.A,
+      SeqView[Unbounded[Instant], Seq[_]]] =
+      identity
+  }
+
+  def indexToSearchDownFromOrInsertAt[EventId](
+      when: Unbounded[Instant],
+      snapshotBlobTimes: Seq[Unbounded[Instant]]) = {
+
+    snapshotBlobTimes.search(when) match {
+      case Found(foundIndex) =>
+        snapshotBlobTimes
+          .view(1 + foundIndex, snapshotBlobTimes.size)
+          .indexWhere(when < _) match {
+          case -1    => snapshotBlobTimes.size
+          case index => 1 + foundIndex + index
+        }
+      case InsertionPoint(insertionPoint) =>
+        insertionPoint
+    }
+  }
+
   case class LifecycleImplementation[EventId](
-      // TODO - this implementation is horrible, what with all the 'toSeq' and 'reverseIterator' calls.
-      snapshotBlobs: SortedMap[Unbounded[Instant],
-                               (SnapshotBlob, EventId, Revision)] =
-        SortedMap.empty[Unbounded[Instant], (SnapshotBlob, EventId, Revision)])
+      snapshotBlobs: Vector[(Unbounded[Instant],
+                             (SnapshotBlob, EventId, Revision))] =
+        Vector.empty[(Unbounded[Instant], (SnapshotBlob, EventId, Revision))])
       extends BlobStorageInMemory.Lifecycle[EventId] {
+    val snapshotBlobTimes = snapshotBlobs.view.map(_._1)
+
+    require(
+      snapshotBlobTimes.isEmpty || (snapshotBlobTimes zip snapshotBlobTimes.tail forall {
+        case (first, second) => first <= second
+      }))
+
     override def isValid(when: Unbounded[Instant],
                          validRevisionFor: EventId => Revision): Boolean =
-      snapshotBlobs
-        .to(when)
-        .toSeq
-        .reverseIterator
-        .exists(PartialFunction.cond(_) {
+      -1 != snapshotBlobs
+        .view(0, indexToSearchDownFromOrInsertAt(when, snapshotBlobTimes))
+        .lastIndexWhere(PartialFunction.cond(_) {
           case (_, (_, eventId, blobRevision)) =>
             blobRevision == validRevisionFor(eventId)
         })
@@ -57,16 +86,16 @@ object BlobStorageInMemory {
     override def snapshotBlobFor(
         when: Unbounded[Instant],
         validRevisionFor: EventId => Revision): SnapshotBlob = {
-      snapshotBlobs
-        .to(when)
-        .toSeq
-        .reverseIterator
-        .find(PartialFunction.cond(_) {
+      val index = snapshotBlobs
+        .view(0, indexToSearchDownFromOrInsertAt(when, snapshotBlobTimes))
+        .lastIndexWhere(PartialFunction.cond(_) {
           case (_, (_, eventId, blobRevision)) =>
             blobRevision == validRevisionFor(eventId)
         })
-        .map { case (_, (snapshot, _, _)) => snapshot }
-        .get
+
+      assert(-1 != index)
+
+      snapshotBlobs(index) match { case (_, (snapshot, _, _)) => snapshot }
     }
 
     override def addSnapshotBlob(
@@ -75,10 +104,13 @@ object BlobStorageInMemory {
         snapshotBlob: SnapshotBlob,
         revision: Revision): BlobStorageInMemory.Lifecycle[EventId] = {
       require(!snapshotBlobs.contains(when))
+      val insertionPoint =
+        indexToSearchDownFromOrInsertAt(when, snapshotBlobTimes)
       new LifecycleImplementation(
         snapshotBlobs = snapshotBlobs
-          .updated(when, (snapshotBlob, eventId, revision)))
-      with BlobStorageInMemory.LifecycleContracts[EventId]
+          .patch(insertionPoint,
+                 Seq((when, (snapshotBlob, eventId, revision))),
+                 0)) with BlobStorageInMemory.LifecycleContracts[EventId]
     }
   }
 
