@@ -170,7 +170,7 @@ class BlobStorageSpec
             .buildRandomSequenceOfDistinctCandidatesChosenFrom(snapshots)
             .map {
               case (when, snapshotBlob) =>
-                when -> snapshotBlob.reverse
+                when -> snapshotBlob.sorted // An easy way to mutate the blob that usually makes it obvious that it's the intended duplicate when debugging.
             }
       }
 
