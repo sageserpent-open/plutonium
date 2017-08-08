@@ -157,12 +157,13 @@ class BlobStorageSpec
       randomBehaviour: Random,
       lotsOfTimeSeries: Seq[TimeSeries],
       possiblyDuplicatingTimeSeries: Seq[TimeSeries],
-      forceUseOfAnOverlappingType: Boolean = false): Seq[
-    (Unbounded[Instant],
-     Stream[(UniqueItemSpecification[_ <: Identified], SnapshotBlob)])] = {
+      forceUseOfAnOverlappingType: Boolean = false)
+    : Seq[(Unbounded[Instant],
+           Seq[(UniqueItemSpecification[_ <: Identified], SnapshotBlob)])] = {
     // But the duplicating time series first, as these are the ones that we want the
     // sut to disregard on account of them being booked in first at the same time.
-    val lotsOfTimeSeriesWithSomeDuplicates = possiblyDuplicatingTimeSeries ++ lotsOfTimeSeries
+    val lotsOfTimeSeriesWithSomeDuplicates =
+      /*possiblyDuplicatingTimeSeries ++ */ lotsOfTimeSeries
 
     val forceUseOfAnOverlappingTypeDecisions = {
       val numberOfTimeSeries = lotsOfTimeSeriesWithSomeDuplicates.size
@@ -174,36 +175,33 @@ class BlobStorageSpec
           .fill(numberOfTimeSeries - numberOfNonDefaultDecisions)(false))
     }
 
-    val interleavedSnapshotSequencesForManyItems =
-      randomBehaviour.pickAlternatelyFrom(
-        lotsOfTimeSeriesWithSomeDuplicates zip forceUseOfAnOverlappingTypeDecisions map {
-          case (timeSeries, forceUseOfAnOverlappingType) =>
-            val numberOfSnapshots = timeSeries.snapshots.size
-            val decisionsToForceOverlappingType = {
-              val numberOfNonDefaultDecisions =
-                randomBehaviour.chooseAnyNumberFromOneTo(numberOfSnapshots)
-              randomBehaviour.shuffle(
-                Seq.fill(numberOfNonDefaultDecisions)(
-                  forceUseOfAnOverlappingType) ++ Seq.fill(
-                  numberOfSnapshots - numberOfNonDefaultDecisions)(false))
-            }
-            timeSeries.snapshots zip decisionsToForceOverlappingType map {
-              case (snapshot, decision) =>
-                def wildcardCaptureWorkaround[Something <: Identified](
-                    uniqueItemSpecification: UniqueItemSpecification[
-                      Something]) =
-                  if (decision)
-                    uniqueItemSpecification
-                      .copy(_2 = typeTag[Identified])
-                      .asInstanceOf[UniqueItemSpecification[Something]]
-                  else uniqueItemSpecification
+    val snapshotSequencesForManyItems =
+      (lotsOfTimeSeriesWithSomeDuplicates zip forceUseOfAnOverlappingTypeDecisions map {
+        case (timeSeries, forceUseOfAnOverlappingType) =>
+          val numberOfSnapshots = timeSeries.snapshots.size
+          val decisionsToForceOverlappingType = {
+            val numberOfNonDefaultDecisions =
+              randomBehaviour.chooseAnyNumberFromOneTo(numberOfSnapshots)
+            randomBehaviour.shuffle(Seq.fill(numberOfNonDefaultDecisions)(
+              forceUseOfAnOverlappingType) ++ Seq.fill(
+              numberOfSnapshots - numberOfNonDefaultDecisions)(false))
+          }
+          timeSeries.snapshots zip decisionsToForceOverlappingType map {
+            case (snapshot, decision) =>
+              def wildcardCaptureWorkaround[Something <: Identified](
+                  uniqueItemSpecification: UniqueItemSpecification[Something]) =
+                if (decision)
+                  uniqueItemSpecification
+                    .copy(_2 = typeTag[Identified])
+                    .asInstanceOf[UniqueItemSpecification[Something]]
+                else uniqueItemSpecification
 
-                wildcardCaptureWorkaround(timeSeries.uniqueItemSpecification) -> snapshot
-            }
-        })
+              wildcardCaptureWorkaround(timeSeries.uniqueItemSpecification) -> snapshot
+          }
+      }).flatten
 
     val snapshotBookingsForManyItemsAndTimesGroupedByTime =
-      (interleavedSnapshotSequencesForManyItems groupBy {
+      (snapshotSequencesForManyItems groupBy {
         case (_, (when, _)) => when
       } mapValues (_.map {
         case (uniqueItemSpecification, (_, blob)) =>
@@ -217,12 +215,12 @@ class BlobStorageSpec
       .flatten
   }
 
-  private type ScalaFmtWorkaround = Stream[
+  private type ScalaFmtWorkaround = Seq[
     (Option[(Unbounded[Instant],
-             Stream[(UniqueItemSpecification[_ <: Identified], SnapshotBlob)])],
+             Seq[(UniqueItemSpecification[_ <: Identified], SnapshotBlob)])],
      EventId)]
 
-  def blobStorageFrom(revisions: Stream[ScalaFmtWorkaround]) =
+  def blobStorageFrom(revisions: Seq[ScalaFmtWorkaround]) =
     ((BlobStorageInMemory[EventId](): BlobStorage[EventId]) /: revisions) {
       case (blobStorage, bookingsForRevision) =>
         val builder = blobStorage.openRevision()
