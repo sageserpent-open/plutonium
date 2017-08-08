@@ -24,8 +24,8 @@ trait BlobStorage[EventId] { blobStorage =>
     def recordSnapshotBlobsForEvent(
         eventId: EventId,
         when: Unbounded[Instant],
-        snapshotBlobs: Seq[(UniqueItemSpecification[_ <: Identified],
-                            SnapshotBlob)]): Unit
+        snapshotBlobs: Map[UniqueItemSpecification[_ <: Identified],
+                           SnapshotBlob]): Unit
 
     def annulEvent(eventId: EventId)
 

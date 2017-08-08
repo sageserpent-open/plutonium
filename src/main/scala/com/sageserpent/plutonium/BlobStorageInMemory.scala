@@ -172,9 +172,8 @@ case class BlobStorageInMemory[EventId] private (
     new RevisionBuilder {
       type Event =
         (EventId,
-         Option[
-           (Unbounded[Instant],
-            Seq[(UniqueItemSpecification[_ <: Identified], SnapshotBlob)])])
+         Option[(Unbounded[Instant],
+                 Map[UniqueItemSpecification[_ <: Identified], SnapshotBlob])])
 
       val events = mutable.Set.empty[Event] // PARDON? A set - read on ....
 
@@ -185,8 +184,8 @@ case class BlobStorageInMemory[EventId] private (
       override def recordSnapshotBlobsForEvent(
           eventId: EventId,
           when: Unbounded[Instant],
-          snapshotBlobs: Seq[(UniqueItemSpecification[_ <: Identified],
-                              SnapshotBlob)]): Unit = {
+          snapshotBlobs: Map[UniqueItemSpecification[_ <: Identified],
+                             SnapshotBlob]): Unit = {
         events += eventId -> Some(when -> snapshotBlobs) // ....what about this, then? Suppose a client makes multiple bookings under the same event id within the same revision?
         // Yes, and for that matter, suppose multiple bookings are made at the same time?
       }

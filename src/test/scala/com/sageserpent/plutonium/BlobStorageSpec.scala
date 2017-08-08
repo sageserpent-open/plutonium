@@ -152,18 +152,34 @@ class BlobStorageSpec
           Gen.sequence[Seq[TimeSeries], TimeSeries](
             uniqueItemSpecifications map (timeSeriesGeneratorFor(_))))
 
-  // TODO - how much of this is necessary?
-  def shuffledSnapshotBookings[_ <: Identified](
-      randomBehaviour: Random,
-      lotsOfTimeSeries: Seq[TimeSeries],
-      possiblyDuplicatingTimeSeries: Seq[TimeSeries],
-      forceUseOfAnOverlappingType: Boolean = false)
+  def shuffledSnapshotBookings(randomBehaviour: Random,
+                               lotsOfTimeSeries: Seq[TimeSeries],
+                               forceUseOfAnOverlappingType: Boolean = false)
     : Seq[(Unbounded[Instant],
            Seq[(UniqueItemSpecification[_ <: Identified], SnapshotBlob)])] = {
-    // But the duplicating time series first, as these are the ones that we want the
+    val lotsOfTimeSeriesWithoutTheQueryTimeCruft = lotsOfTimeSeries map {
+      case TimeSeries(uniqueItemSpecification, snapshots, _) =>
+        uniqueItemSpecification -> snapshots
+    }
+    val timeSeriesWhoseSnapshotsWillCollide = randomBehaviour
+      .buildRandomSequenceOfDistinctCandidatesChosenFrom(
+        lotsOfTimeSeriesWithoutTheQueryTimeCruft)
+      .map {
+        case (uniqueItemSpecification, snapshots) =>
+          uniqueItemSpecification -> randomBehaviour
+            .buildRandomSequenceOfDistinctCandidatesChosenFrom(snapshots)
+            .map {
+              case (when, snapshotBlob) =>
+                when -> snapshotBlob.reverse
+            }
+      }
+
+    // Put the duplicating time series first, as these are the ones that we want the
     // sut to disregard on account of them being booked in first at the same time.
-    val lotsOfTimeSeriesWithSomeDuplicates =
-      /*possiblyDuplicatingTimeSeries ++ */ lotsOfTimeSeries
+    val lotsOfTimeSeriesWithSomeDuplicates
+      : Seq[(UniqueItemSpecification[_ <: Identified],
+             Seq[(Unbounded[Instant], Array[Byte])])] =
+      timeSeriesWhoseSnapshotsWillCollide ++ lotsOfTimeSeriesWithoutTheQueryTimeCruft
 
     val forceUseOfAnOverlappingTypeDecisions = {
       val numberOfTimeSeries = lotsOfTimeSeriesWithSomeDuplicates.size
@@ -176,9 +192,10 @@ class BlobStorageSpec
     }
 
     val snapshotSequencesForManyItems =
-      (lotsOfTimeSeriesWithSomeDuplicates zip forceUseOfAnOverlappingTypeDecisions map {
-        case (timeSeries, forceUseOfAnOverlappingType) =>
-          val numberOfSnapshots = timeSeries.snapshots.size
+      lotsOfTimeSeriesWithSomeDuplicates zip forceUseOfAnOverlappingTypeDecisions flatMap {
+        case ((uniqueItemSpecification, snapshots),
+              forceUseOfAnOverlappingType) =>
+          val numberOfSnapshots = snapshots.size
           val decisionsToForceOverlappingType = {
             val numberOfNonDefaultDecisions =
               randomBehaviour.chooseAnyNumberFromOneTo(numberOfSnapshots)
@@ -186,7 +203,7 @@ class BlobStorageSpec
               forceUseOfAnOverlappingType) ++ Seq.fill(
               numberOfSnapshots - numberOfNonDefaultDecisions)(false))
           }
-          timeSeries.snapshots zip decisionsToForceOverlappingType map {
+          snapshots zip decisionsToForceOverlappingType map {
             case (snapshot, decision) =>
               def wildcardCaptureWorkaround[Something <: Identified](
                   uniqueItemSpecification: UniqueItemSpecification[Something]) =
@@ -196,9 +213,9 @@ class BlobStorageSpec
                     .asInstanceOf[UniqueItemSpecification[Something]]
                 else uniqueItemSpecification
 
-              wildcardCaptureWorkaround(timeSeries.uniqueItemSpecification) -> snapshot
+              wildcardCaptureWorkaround(uniqueItemSpecification) -> snapshot
           }
-      }).flatten
+      }
 
     val snapshotBookingsForManyItemsAndTimesGroupedByTime =
       (snapshotSequencesForManyItems groupBy {
@@ -210,15 +227,15 @@ class BlobStorageSpec
         case (when, chunkedBookings) => chunkedBookings map (when -> _)
       }
 
-    randomBehaviour
-      .shuffle(snapshotBookingsForManyItemsAndTimesGroupedByTime)
-      .flatten
+    randomBehaviour.pickAlternatelyFrom(
+      snapshotBookingsForManyItemsAndTimesGroupedByTime)
   }
 
-  private type ScalaFmtWorkaround = Seq[
-    (Option[(Unbounded[Instant],
-             Seq[(UniqueItemSpecification[_ <: Identified], SnapshotBlob)])],
-     EventId)]
+  private type ScalaFmtWorkaround =
+    Seq[
+      (Option[(Unbounded[Instant],
+               Seq[(UniqueItemSpecification[_ <: Identified], SnapshotBlob)])],
+       EventId)]
 
   def blobStorageFrom(revisions: Seq[ScalaFmtWorkaround]) =
     ((BlobStorageInMemory[EventId](): BlobStorage[EventId]) /: revisions) {
@@ -227,7 +244,9 @@ class BlobStorageSpec
         for ((booking, eventId) <- bookingsForRevision) {
           booking match {
             case Some((when, snapshotBlobs)) =>
-              builder.recordSnapshotBlobsForEvent(eventId, when, snapshotBlobs)
+              builder.recordSnapshotBlobsForEvent(eventId,
+                                                  when,
+                                                  snapshotBlobs.toMap)
             case None =>
               builder.annulEvent(eventId)
               builder.build()
@@ -237,33 +256,26 @@ class BlobStorageSpec
     }
 
   "querying for a unique item's blob snapshot no earlier than when it was booked" should "yield that snapshot" in {
-    forAll(
-      seedGenerator,
-      lotsOfTimeSeriesGenerator,
-      Gen.frequency(10 -> lotsOfTimeSeriesGenerator, 1 -> Gen.const(Seq.empty)),
-      lotsOfTimeSeriesGenerator) {
-      (seed,
-       lotsOfFinalTimeSeries,
-       lotsOfObsoleteTimeSeries,
-       possiblyDuplicatingTimeSeries) =>
+    forAll(seedGenerator,
+           lotsOfTimeSeriesGenerator,
+           Gen.frequency(10 -> lotsOfTimeSeriesGenerator,
+                         1  -> Gen.const(Seq.empty))) {
+      (seed, lotsOfFinalTimeSeries, lotsOfObsoleteTimeSeries) =>
         val randomBehaviour = new Random(seed)
 
         val finalBookings =
-          shuffledSnapshotBookings(randomBehaviour,
-                                   lotsOfFinalTimeSeries,
-                                   possiblyDuplicatingTimeSeries)
+          shuffledSnapshotBookings(randomBehaviour, lotsOfFinalTimeSeries)
 
         val obsoleteBookings =
-          shuffledSnapshotBookings(randomBehaviour,
-                                   lotsOfObsoleteTimeSeries,
-                                   possiblyDuplicatingTimeSeries)
+          shuffledSnapshotBookings(randomBehaviour, lotsOfObsoleteTimeSeries)
 
         val revisions =
           intersperseObsoleteEvents(randomBehaviour,
                                     finalBookings,
                                     obsoleteBookings)
 
-        val blobStorage: BlobStorage[EventId] = blobStorageFrom(revisions)
+        val blobStorage: BlobStorage[EventId] =
+          blobStorageFrom(revisions)
 
         for {
           TimeSeries(uniqueItemSpecification, snapshots, queryTimes) <- lotsOfFinalTimeSeries
@@ -312,26 +324,17 @@ class BlobStorageSpec
   }
 
   "booking snapshots for the same item id but with overlapping runtime types" should "violate a precondition" in {
-    forAll(seedGenerator,
-           lotsOfTimeSeriesGenerator,
-           lotsOfTimeSeriesGenerator,
-           lotsOfTimeSeriesGenerator) {
-      (seed,
-       lotsOfFinalTimeSeries,
-       lotsOfObsoleteTimeSeries,
-       possiblyDuplicatingTimeSeries) =>
+    forAll(seedGenerator, lotsOfTimeSeriesGenerator, lotsOfTimeSeriesGenerator) {
+      (seed, lotsOfFinalTimeSeries, lotsOfObsoleteTimeSeries) =>
         val randomBehaviour = new Random(seed)
 
         val finalBookings =
           shuffledSnapshotBookings(randomBehaviour,
                                    lotsOfFinalTimeSeries,
-                                   possiblyDuplicatingTimeSeries,
                                    forceUseOfAnOverlappingType = true)
 
         val obsoleteBookings =
-          shuffledSnapshotBookings(randomBehaviour,
-                                   lotsOfObsoleteTimeSeries,
-                                   possiblyDuplicatingTimeSeries)
+          shuffledSnapshotBookings(randomBehaviour, lotsOfObsoleteTimeSeries)
 
         val revisions =
           intersperseObsoleteEvents(randomBehaviour,
