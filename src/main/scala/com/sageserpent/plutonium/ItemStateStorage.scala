@@ -31,7 +31,7 @@ trait ItemStateStorage[EventId] { itemStateStorage =>
     def build(): itemStateStorage.type = ???
   }
 
-  def openRevision[NewEventId >: EventId](): RevisionBuilder = ???
+  def openRevision(): RevisionBuilder = ???
 
   class ReconstitutionContext(
       blobStorageTimeslice: BlobStorage[EventId]#Timeslice)
@@ -40,8 +40,7 @@ trait ItemStateStorage[EventId] { itemStateStorage =>
     override def itemsFor[Item <: Identified: TypeTag](
         id: Item#Id): Stream[Item] =
       for {
-        uniqueItemSpecification <- blobStorageTimeslice.uniqueItemQueriesFor(
-          id)
+        uniqueItemSpecification <- blobStorageTimeslice.uniqueItemQueriesFor(id)
       } yield itemFor(uniqueItemSpecification)
 
     override def allItems[Item <: Identified: TypeTag](): Stream[Item] =

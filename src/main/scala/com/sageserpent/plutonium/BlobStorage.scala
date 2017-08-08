@@ -54,7 +54,7 @@ trait BlobStorage[EventId] { blobStorage =>
     }
   }
 
-  def openRevision[NewEventId >: EventId](): RevisionBuilder
+  def openRevision(): RevisionBuilder
 
   trait Timeslice {
     def uniqueItemQueriesFor[Item <: Identified: TypeTag]

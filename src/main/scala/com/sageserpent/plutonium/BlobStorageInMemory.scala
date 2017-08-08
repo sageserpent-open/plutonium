@@ -168,7 +168,7 @@ case class BlobStorageInMemory[EventId] private (
     new TimesliceImplementation with TimesliceContracts
   }
 
-  override def openRevision[NewEventId >: EventId](): RevisionBuilder = {
+  override def openRevision(): RevisionBuilder = {
     trait RevisionBuilderImplementation extends RevisionBuilder {
       type Event =
         (EventId,
