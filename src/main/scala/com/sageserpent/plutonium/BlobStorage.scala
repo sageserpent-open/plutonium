@@ -4,6 +4,7 @@ import java.time.Instant
 
 import com.sageserpent.americium.Unbounded
 
+import scala.collection.mutable
 import scala.reflect.runtime.universe.TypeTag
 
 object BlobStorage {
@@ -31,6 +32,26 @@ trait BlobStorage[EventId] { blobStorage =>
 
     // Once this has been called, the receiver will throw precondition failures on subsequent use.
     def build(): BlobStorage[EventId]
+  }
+
+  trait RevisionBuilderContracts extends RevisionBuilder {
+    val eventIds = mutable.Set.empty[EventId]
+
+    abstract override def recordSnapshotBlobsForEvent(
+        eventId: EventId,
+        when: Unbounded[Instant],
+        snapshotBlobs: Map[UniqueItemSpecification[_ <: Identified],
+                           SnapshotBlob]): Unit = {
+      require(!eventIds.contains(eventId))
+      eventIds += eventId
+      super.recordSnapshotBlobsForEvent(eventId, when, snapshotBlobs)
+    }
+
+    abstract override def annulEvent(eventId: EventId): Unit = {
+      require(!eventIds.contains(eventId))
+      eventIds += eventId
+      super.annulEvent(eventId)
+    }
   }
 
   def openRevision[NewEventId >: EventId](): RevisionBuilder

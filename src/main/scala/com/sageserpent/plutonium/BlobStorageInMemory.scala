@@ -168,14 +168,14 @@ case class BlobStorageInMemory[EventId] private (
     new TimesliceImplementation with TimesliceContracts
   }
 
-  override def openRevision[NewEventId >: EventId](): RevisionBuilder =
-    new RevisionBuilder {
+  override def openRevision[NewEventId >: EventId](): RevisionBuilder = {
+    trait RevisionBuilderImplementation extends RevisionBuilder {
       type Event =
         (EventId,
          Option[(Unbounded[Instant],
                  Map[UniqueItemSpecification[_ <: Identified], SnapshotBlob])])
 
-      val events = mutable.MutableList.empty[Event] // PARDON? read on ....
+      val events = mutable.MutableList.empty[Event]
 
       override def annulEvent(eventId: EventId): Unit = {
         events += (eventId -> None)
@@ -186,7 +186,7 @@ case class BlobStorageInMemory[EventId] private (
           when: Unbounded[Instant],
           snapshotBlobs: Map[UniqueItemSpecification[_ <: Identified],
                              SnapshotBlob]): Unit = {
-        events += eventId -> Some(when -> snapshotBlobs) // ....what about this, then? Suppose a client makes multiple bookings under the same event id within the same revision?
+        events += eventId -> Some(when -> snapshotBlobs)
       }
 
       override def build(): BlobStorage[EventId] = {
@@ -197,28 +197,32 @@ case class BlobStorageInMemory[EventId] private (
           case (eventId, _) =>
             eventId -> newRevision
         })
-        val newLifecycles = (thisBlobStorage.lifecycles /: events) {
-          case (lifecycles, (eventId, None)) =>
-            lifecycles
-          case (lifecycles, (eventId, Some((when, snapshots)))) =>
-            val updatedLifecycles = snapshots map {
-              case (uniqueItemSpecification, snapshot) =>
-                val lifecycle = lifecycles.getOrElse(
-                  uniqueItemSpecification,
-                  new BlobStorageInMemory.LifecycleImplementation[EventId]
-                  with BlobStorageInMemory.LifecycleContracts[EventId])
-                uniqueItemSpecification -> lifecycle.addSnapshotBlob(
-                  eventId,
-                  when,
-                  snapshot,
-                  newRevision)
-            }
-            lifecycles ++ updatedLifecycles
-        }
+        val newLifecycles =
+          (thisBlobStorage.lifecycles /: events) {
+            case (lifecycles, (eventId, None)) =>
+              lifecycles
+            case (lifecycles, (eventId, Some((when, snapshots)))) =>
+              val updatedLifecycles = snapshots map {
+                case (uniqueItemSpecification, snapshot) =>
+                  val lifecycle = lifecycles.getOrElse(
+                    uniqueItemSpecification,
+                    new BlobStorageInMemory.LifecycleImplementation[EventId]
+                    with BlobStorageInMemory.LifecycleContracts[EventId])
+                  uniqueItemSpecification -> lifecycle.addSnapshotBlob(
+                    eventId,
+                    when,
+                    snapshot,
+                    newRevision)
+              }
+              lifecycles ++ updatedLifecycles
+          }
 
         thisBlobStorage.copy(revision = newRevision,
                              eventRevisions = newEventRevisions,
                              lifecycles = newLifecycles)
       }
     }
+
+    new RevisionBuilderImplementation with RevisionBuilderContracts
+  }
 }
