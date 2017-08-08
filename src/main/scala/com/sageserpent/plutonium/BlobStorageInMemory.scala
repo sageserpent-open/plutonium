@@ -192,12 +192,11 @@ case class BlobStorageInMemory[EventId] private (
       override def build(): BlobStorage[EventId] = {
         val newRevision = 1 + thisBlobStorage.revision
 
-        // TODO - use ++= ....
-        val newEventRevisions =
-          (thisBlobStorage.eventRevisions /: events) {
-            case (eventRevisions, (eventId, _)) =>
-              eventRevisions + (eventId -> newRevision)
-          }
+        val newEventRevisions
+          : Map[EventId, Int] = thisBlobStorage.eventRevisions ++ (events map {
+          case (eventId, _) =>
+            eventId -> newRevision
+        })
         val newLifecycles = (thisBlobStorage.lifecycles /: events) {
           case (lifecycles, (eventId, None)) =>
             lifecycles
