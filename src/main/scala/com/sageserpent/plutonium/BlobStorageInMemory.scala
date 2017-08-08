@@ -201,19 +201,19 @@ case class BlobStorageInMemory[EventId] private (
           case (lifecycles, (eventId, None)) =>
             lifecycles
           case (lifecycles, (eventId, Some((when, snapshots)))) =>
-            // TODO: try to add in bulk...
-            (lifecycles /: snapshots) {
-              case (lifecycles, (uniqueItemSpecification, snapshot)) =>
+            val updatedLifecycles = snapshots map {
+              case (uniqueItemSpecification, snapshot) =>
                 val lifecycle = lifecycles.getOrElse(
                   uniqueItemSpecification,
                   new BlobStorageInMemory.LifecycleImplementation[EventId]
                   with BlobStorageInMemory.LifecycleContracts[EventId])
-                lifecycles.updated(uniqueItemSpecification,
-                                   lifecycle.addSnapshotBlob(eventId,
-                                                             when,
-                                                             snapshot,
-                                                             newRevision))
+                uniqueItemSpecification -> lifecycle.addSnapshotBlob(
+                  eventId,
+                  when,
+                  snapshot,
+                  newRevision)
             }
+            lifecycles ++ updatedLifecycles
         }
 
         thisBlobStorage.copy(revision = newRevision,
