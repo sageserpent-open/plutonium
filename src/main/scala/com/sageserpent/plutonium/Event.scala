@@ -4,10 +4,18 @@ import java.time.Instant
 
 import com.esotericsoftware.kryo.serializers.JavaSerializer
 import com.esotericsoftware.kryo.serializers.FieldSerializer.Bind
-
 import com.sageserpent.americium
 import com.sageserpent.americium.{Finite, PositiveInfinity, Unbounded}
+import com.sageserpent.plutonium.WorldImplementationCodeFactoring.{
+  ProxyFactory,
+  RecordingCallbackStuff
+}
 
+import net.bytebuddy.dynamic.DynamicType.Builder
+import net.bytebuddy.implementation.MethodDelegation
+
+import scala.collection.mutable
+import scala.reflect.runtime.universe
 import scala.reflect.runtime.universe._
 
 /**
@@ -21,18 +29,67 @@ sealed abstract class Event {
   require(when < PositiveInfinity())
 }
 
-case class Change(val when: Unbounded[Instant],
-                  update: RecorderFactory => Unit)
-    extends Event {}
+object capturePatches {
+  def apply(update: RecorderFactory => Unit): Seq[AbstractPatch] = {
+    val capturedPatches =
+      mutable.MutableList.empty[AbstractPatch]
+
+    class LocalRecorderFactory extends RecorderFactory {
+      override def apply[Raw <: Identified: TypeTag](id: Raw#Id): Raw = {
+        import RecordingCallbackStuff._
+
+        val proxyFactory = new ProxyFactory[AcquiredState] {
+          val isForRecordingOnly = true
+
+          override val stateToBeAcquiredByProxy = new AcquiredState {
+            def itemReconstitutionData: Recorder#ItemReconstitutionData[Raw] =
+              id -> typeTag[Raw]
+
+            def capturePatch(patch: AbstractPatch) {
+              capturedPatches += patch
+            }
+          }
+
+          override val acquiredStateClazz = classOf[AcquiredState]
+
+          override val additionalInterfaces: Array[Class[_]] =
+            RecordingCallbackStuff.additionalInterfaces
+          override val cachedProxyConstructors
+            : mutable.Map[Type, (universe.MethodMirror, Class[_])] =
+            RecordingCallbackStuff.cachedProxyConstructors
+
+          override protected def configureInterceptions(
+              builder: Builder[_]): Builder[_] =
+            builder
+              .method(matchForbiddenReadAccess)
+              .intercept(MethodDelegation.to(forbiddenReadAccess))
+              .method(matchItemReconstitutionData)
+              .intercept(MethodDelegation.to(itemReconstitutionData))
+              .method(matchMutation)
+              .intercept(MethodDelegation.to(mutation))
+        }
+
+        proxyFactory.constructFrom[Raw](id)
+      }
+    }
+
+    update(new LocalRecorderFactory)
+
+    capturedPatches
+  }
+}
+
+case class Change(when: Unbounded[Instant], patches: Seq[AbstractPatch])
+    extends Event
 
 object Change {
   def forOneItem[Raw <: Identified: TypeTag](
       when: Unbounded[Instant])(id: Raw#Id, update: Raw => Unit): Change = {
     val typeTag = implicitly[TypeTag[Raw]]
-    Change(when, (recorderFactory: RecorderFactory) => {
+    Change(when, capturePatches((recorderFactory: RecorderFactory) => {
       val recorder = recorderFactory(id)(typeTag)
       update(recorder)
-    })
+    }))
   }
 
   def forOneItem[Raw <: Identified: TypeTag](
@@ -51,11 +108,11 @@ object Change {
     val typeTag2 = implicitly[TypeTag[Raw2]]
     Change(
       when,
-      (recorderFactory: RecorderFactory) => {
+      capturePatches((recorderFactory: RecorderFactory) => {
         val recorder1 = recorderFactory(id1)(typeTag1)
         val recorder2 = recorderFactory(id2)(typeTag2)
         update(recorder1, recorder2)
-      }
+      })
     )
   }
 
@@ -72,28 +129,26 @@ object Change {
     forTwoItems(americium.NegativeInfinity[Instant]())(id1, id2, update)
 }
 
-case class Measurement(val when: Unbounded[Instant],
-                       reading: RecorderFactory => Unit)
-    extends Event {}
+case class Measurement(when: Unbounded[Instant], patches: Seq[AbstractPatch])
+    extends Event
 
 object Measurement {
   def forOneItem[Raw <: Identified: TypeTag](when: Unbounded[Instant])(
       id: Raw#Id,
       measurement: Raw => Unit): Measurement = {
     val typeTag = implicitly[TypeTag[Raw]]
-    Measurement(when, (recorderFactory: RecorderFactory) => {
+    Measurement(when, capturePatches((recorderFactory: RecorderFactory) => {
       val recorder = recorderFactory(id)(typeTag)
       measurement(recorder)
-    })
+    }))
   }
 
   def forOneItem[Raw <: Identified: TypeTag](
       when: Instant)(id: Raw#Id, update: Raw => Unit): Measurement =
     forOneItem(Finite(when))(id, update)
 
-  def forOneItem[Raw <: Identified: TypeTag](
-      id: Raw#Id,
-      update: Raw => Unit): Measurement =
+  def forOneItem[Raw <: Identified: TypeTag](id: Raw#Id,
+                                             update: Raw => Unit): Measurement =
     forOneItem(americium.NegativeInfinity[Instant]())(id, update)
 
   def forTwoItems[Raw1 <: Identified: TypeTag, Raw2 <: Identified: TypeTag](
@@ -104,11 +159,11 @@ object Measurement {
     val typeTag2 = implicitly[TypeTag[Raw2]]
     Measurement(
       when,
-      (recorderFactory: RecorderFactory) => {
+      capturePatches((recorderFactory: RecorderFactory) => {
         val recorder1 = recorderFactory(id1)(typeTag1)
         val recorder2 = recorderFactory(id2)(typeTag2)
         update(recorder1, recorder2)
-      }
+      })
     )
   }
 
