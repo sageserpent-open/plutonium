@@ -1,6 +1,6 @@
 package com.sageserpent.plutonium
 
-import java.lang.reflect.Method
+import java.lang.reflect.{InvocationTargetException, Method}
 
 import com.sageserpent.plutonium.Patch.MethodPieces
 
@@ -64,8 +64,13 @@ class Patch(
   def apply(identifiedItemAccess: IdentifiedItemAccess): Unit = {
     val targetBeingPatched =
       identifiedItemAccess.reconstitute(targetReconstitutionData)
-    method.invoke(targetBeingPatched,
-                  wrappedArguments map unwrap(identifiedItemAccess): _*)
+    try {
+      method.invoke(targetBeingPatched,
+                    wrappedArguments map unwrap(identifiedItemAccess): _*)
+    } catch {
+      case exception: InvocationTargetException =>
+        throw exception.getTargetException
+    }
   }
 
   def checkInvariant(identifiedItemAccess: IdentifiedItemAccess): Unit = {

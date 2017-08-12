@@ -79,7 +79,7 @@ trait WorldSpecSupport extends Assertions {
        (when: americium.Unbounded[Instant],
         makeAChange: Boolean,
         fooHistoryId: FooHistory#Id) =>
-         if (!faulty) {
+         if (!faulty)
            eventConstructorReferringToOneItem[FooHistory](makeAChange)(when)
              .apply(
                fooHistoryId,
@@ -95,7 +95,7 @@ trait WorldSpecSupport extends Assertions {
                  fooHistory.property1 = data
                }
              )
-         } else {
+         else
            eventConstructorReferringToOneItem[BadFooHistory](makeAChange)(when)
              .apply(
                fooHistoryId,
@@ -110,8 +110,7 @@ trait WorldSpecSupport extends Assertions {
 
                  fooHistory.property1 = data
                }
-             )
-       })
+           ))
 
   def dataSampleGenerator2(faulty: Boolean) =
     for { data <- Arbitrary.arbitrary[Boolean] } yield
@@ -119,21 +118,38 @@ trait WorldSpecSupport extends Assertions {
        (when: Unbounded[Instant],
         makeAChange: Boolean,
         fooHistoryId: FooHistory#Id) =>
-         eventConstructorReferringToOneItem[FooHistory](makeAChange)(when)
-           .apply(
-             fooHistoryId,
-             (fooHistory: FooHistory) => {
-               // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
-               val _ = fooHistory.id
-               assertThrows[UnsupportedOperationException](fooHistory.datums)
-               assertThrows[UnsupportedOperationException](fooHistory.property1)
-               assertThrows[UnsupportedOperationException](fooHistory.property2)
+         if (!faulty)
+           eventConstructorReferringToOneItem[FooHistory](makeAChange)(when)
+             .apply(
+               fooHistoryId,
+               (fooHistory: FooHistory) => {
+                 // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
+                 val _ = fooHistory.id
+                 assertThrows[UnsupportedOperationException](fooHistory.datums)
+                 assertThrows[UnsupportedOperationException](
+                   fooHistory.property1)
+                 assertThrows[UnsupportedOperationException](
+                   fooHistory.property2)
 
-               fooHistory.property2 = data
+                 fooHistory.property2 = data
+               }
+             )
+         else
+           eventConstructorReferringToOneItem[BadFooHistory](makeAChange)(when)
+             .apply(
+               fooHistoryId,
+               (fooHistory: BadFooHistory) => {
+                 // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
+                 val _ = fooHistory.id
+                 assertThrows[UnsupportedOperationException](fooHistory.datums)
+                 assertThrows[UnsupportedOperationException](
+                   fooHistory.property1)
+                 assertThrows[UnsupportedOperationException](
+                   fooHistory.property2)
 
-               if (faulty) throw changeError // Modelling an admissible postcondition failure.
-             }
-         ))
+                 fooHistory.property2 = data
+               }
+           ))
 
   def dataSampleGenerator3(faulty: Boolean) =
     for { data <- Arbitrary.arbitrary[Double] } yield
@@ -145,7 +161,7 @@ trait WorldSpecSupport extends Assertions {
            .apply(
              barHistoryId,
              (barHistory: BarHistory) => {
-               if (faulty) throw changeError // Modelling a precondition failure.
+               if (faulty) barHistory.forceInvariantBreakage() // Modelling breakage of the bitemporal invariant.
 
                // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
                val _ = barHistory.id
@@ -201,7 +217,7 @@ trait WorldSpecSupport extends Assertions {
 
                barHistory.method2(data1, data2, data3)
 
-               if (faulty) throw changeError // Modelling an admissible postcondition failure.
+               if (faulty) barHistory.forceInvariantBreakage() // Modelling breakage of the bitemporal invariant.
              }
          ))
 
@@ -222,7 +238,8 @@ trait WorldSpecSupport extends Assertions {
                assertThrows[UnsupportedOperationException](
                  integerHistory.integerProperty)
 
-               if (faulty) throw changeError // Modelling a precondition failure.
+               if (faulty) integerHistory.forceInvariantBreakage() // Modelling breakage of the bitemporal invariant.
+
                integerHistory.integerProperty = data
              }
          ))
@@ -243,8 +260,9 @@ trait WorldSpecSupport extends Assertions {
              assertThrows[UnsupportedOperationException](fooHistory.property1)
              assertThrows[UnsupportedOperationException](fooHistory.property2)
 
-             if (faulty) throw changeError // Modelling a precondition failure.
              fooHistory.property1 = data
+
+             if (faulty) fooHistory.forceInvariantBreakage() // Modelling breakage of the bitemporal invariant.
            }
        ))
 
@@ -260,6 +278,9 @@ trait WorldSpecSupport extends Assertions {
            idToReferToAnotherItem,
            (referringHistory: ReferringHistory, referencedItem: FooHistory) => {
              val _ = referringHistory.id
+
+             if (faulty) referringHistory.forceInvariantBreakage() // Modelling breakage of the bitemporal invariant.
+
              assertThrows[UnsupportedOperationException](
                referringHistory.datums)
              assertThrows[UnsupportedOperationException](
@@ -267,7 +288,6 @@ trait WorldSpecSupport extends Assertions {
              assertThrows[UnsupportedOperationException](
                referringHistory.referencedHistories)
 
-             if (faulty) throw changeError // Modelling a precondition failure.
              referringHistory.referTo(referencedItem)
            }
        ))
@@ -291,7 +311,8 @@ trait WorldSpecSupport extends Assertions {
              assertThrows[UnsupportedOperationException](
                referringHistory.referencedHistories)
 
-             if (faulty) throw changeError // Modelling a precondition failure.
+             if (faulty) referencedItem.forceInvariantBreakage() // Modelling breakage of a non-local bitemporal invariant via a related item.
+
              referringHistory.forget(referencedItem)
            }
        ))
