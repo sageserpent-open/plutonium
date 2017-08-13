@@ -23,7 +23,7 @@ abstract class WorldInefficientImplementationCodeFactoring[EventId]
   override def scopeFor(when: Unbounded[Instant], asOf: Instant): Scope =
     new ScopeBasedOnAsOf(when, asOf) with SelfPopulatedScope
 
-  protected def eventTimeline(nextRevision: Revision): Seq[SerializableEvent]
+  protected def eventTimeline(nextRevision: Revision): Seq[Event]
 
   def revise(events: Map[EventId, Option[Event]], asOf: Instant): Revision = {
     def newEventDatumsFor(nextRevisionPriorToUpdate: Revision)
@@ -32,9 +32,7 @@ abstract class WorldInefficientImplementationCodeFactoring[EventId]
         case ((eventId, event), tiebreakerIndex) =>
           eventId -> (event match {
             case Some(event) =>
-              EventData(serializableEventFrom(event),
-                        nextRevisionPriorToUpdate,
-                        tiebreakerIndex)
+              EventData(event, nextRevisionPriorToUpdate, tiebreakerIndex)
             case None => AnnulledEventData(nextRevisionPriorToUpdate)
           })
       }
@@ -74,9 +72,8 @@ abstract class WorldInefficientImplementationCodeFactoring[EventId]
           Revision,
           Seq[AbstractEventData]) => Unit): Revision
 
-  protected def checkRevisionPrecondition(
-      asOf: Instant,
-      revisionAsOfs: Seq[Instant]): Unit = {
+  protected def checkRevisionPrecondition(asOf: Instant,
+                                          revisionAsOfs: Seq[Instant]): Unit = {
     if (revisionAsOfs.nonEmpty && revisionAsOfs.last.isAfter(asOf))
       throw new IllegalArgumentException(
         s"'asOf': ${asOf} should be no earlier than that of the last revision: ${revisionAsOfs.last}")

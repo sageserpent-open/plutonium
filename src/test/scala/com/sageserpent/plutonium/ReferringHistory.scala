@@ -7,6 +7,15 @@ object ReferringHistory {
 class ReferringHistory(override val id: ReferringHistory#Id) extends History {
   type Id = String
 
+  override def checkInvariant(): Unit = {
+    super.checkInvariant()
+
+    _referencedHistories.foreach {
+      case (_, referred) if !referred.isGhost => referred.checkInvariant()
+      case _                                  =>
+    }
+  }
+
   def referTo(referred: History): Unit = {
     _referencedHistories += (referred.id -> referred)
   }

@@ -28,9 +28,9 @@ object MutableState {
 
   implicit val isSeqLike = new IsSeqLike[SeqView[Revision, Seq[_]]] {
     type A = Revision
-    override val conversion: SeqView[Revision, Seq[_]] => SeqLike[
-      this.A,
-      SeqView[Revision, Seq[_]]] =
+    override val conversion
+      : SeqView[Revision, Seq[_]] => SeqLike[this.A,
+                                             SeqView[Revision, Seq[_]]] =
       identity
   }
 
@@ -119,8 +119,7 @@ class MutableState[EventId] {
   }
 }
 
-class WorldReferenceImplementation[EventId](
-    mutableState: MutableState[EventId])
+class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
     extends WorldInefficientImplementationCodeFactoring[EventId] {
 
   import World._
@@ -171,8 +170,7 @@ class WorldReferenceImplementation[EventId](
 
   override def revisionAsOfs: Array[Instant] = mutableState.revisionAsOfs
 
-  override protected def eventTimeline(
-      cutoffRevision: Revision): Seq[SerializableEvent] = {
+  override protected def eventTimeline(cutoffRevision: Revision): Seq[Event] = {
     val idOfThreadThatMostlyRecentlyStartedARevisionBeforehand =
       mutableState.synchronized {
         mutableState.readerThreadsThatHaveNotBeenBouncedByARevision += Thread.currentThread.getId

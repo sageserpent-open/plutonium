@@ -9,11 +9,7 @@ import com.esotericsoftware.kryo.serializers.JavaSerializer
 import com.esotericsoftware.kryo.{Kryo, Serializer}
 import com.lambdaworks.redis.RedisClient
 import com.lambdaworks.redis.api.rx.RedisReactiveCommands
-import com.lambdaworks.redis.codec.{
-  ByteArrayCodec,
-  RedisCodec,
-  Utf8StringCodec
-}
+import com.lambdaworks.redis.codec.{ByteArrayCodec, RedisCodec, Utf8StringCodec}
 import com.sageserpent.americium.{PositiveInfinity, Unbounded}
 import com.twitter.chill.{KryoPool, ScalaKryoInstantiator}
 import io.netty.handler.codec.EncoderException
@@ -144,8 +140,7 @@ class WorldRedisBasedImplementation[EventId](redisClient: RedisClient,
       override protected def pertinentEventDatumsObservable(
           cutoffRevision: Revision,
           cutoffWhen: Unbounded[Instant],
-          eventIdInclusion: EventIdInclusion)
-        : Observable[AbstractEventData] = {
+          eventIdInclusion: EventIdInclusion): Observable[AbstractEventData] = {
         val cutoffWhenForBaseWorld = cutoffWhen min cutoffWhenAfterWhichHistoriesDiverge
         if (cutoffRevision > numberOfRevisionsInCommon) for {
           (eventIds, eventDatums) <- eventIdsAndTheirDatumsObservable(
@@ -177,8 +172,7 @@ class WorldRedisBasedImplementation[EventId](redisClient: RedisClient,
       .asInstanceOf[Observable[Instant]]
       .toArray
 
-  override protected def eventTimeline(
-      cutoffRevision: Revision): Seq[SerializableEvent] =
+  override protected def eventTimeline(cutoffRevision: Revision): Seq[Event] =
     try {
       val eventDatumsObservable = for {
         _           <- toScalaObservable(redisApi.watch(asOfsKey))
@@ -266,8 +260,7 @@ class WorldRedisBasedImplementation[EventId](redisClient: RedisClient,
         nextRevisionPriorToUpdate <- nextRevisionObservable
         newEventDatums: Map[EventId, AbstractEventData] = newEventDatumsFor(
           nextRevisionPriorToUpdate)
-        (pertinentEventDatumsExcludingTheNewRevision: Seq[AbstractEventData],
-         _) <- pertinentEventDatumsObservable(
+        (pertinentEventDatumsExcludingTheNewRevision: Seq[AbstractEventData], _) <- pertinentEventDatumsObservable(
           nextRevisionPriorToUpdate,
           newEventDatums.keys.toSeq).toList zip
           (for (revisionAsOfs <- revisionAsOfsObservable)
