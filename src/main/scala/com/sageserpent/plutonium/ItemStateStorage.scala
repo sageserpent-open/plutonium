@@ -28,7 +28,7 @@ trait ItemStateStorage[EventId] { itemStateStorage =>
       blobStorageRevisionBuilder.annulEvent(eventId)
 
     // Once this has been called, the receiver will throw precondition failures on subsequent use.
-    def build(): itemStateStorage.type = ???
+    def build(): ItemStateStorage[EventId] = ???
   }
 
   def openRevision(): RevisionBuilder = ???

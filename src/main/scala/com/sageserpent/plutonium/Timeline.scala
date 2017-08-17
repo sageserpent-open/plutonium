@@ -4,7 +4,9 @@ import java.time.Instant
 
 import com.sageserpent.americium.Unbounded
 
-trait Timeline[+EventId] {
+import scala.collection.immutable.Map
+
+trait Timeline[EventId] {
   def revise[NewEventId >: EventId](
       events: Map[NewEventId, Option[Event]]): Timeline[NewEventId]
 
@@ -14,12 +16,34 @@ trait Timeline[+EventId] {
 }
 
 // TODO - given that we have 'emptyItemCache', I'm not sure if we need this too - let's see how it pans out...
-object emptyTimeline extends Timeline[Nothing] {
-  override def revise[NewEventId](
-      events: Map[NewEventId, Option[Event]]): Timeline[NewEventId] = ???
+object emptyTimeline extends TimelineImplementation[Nothing]
 
-  override def retainUpTo(when: Unbounded[Instant]): Timeline[Nothing] = this
+class TimelineImplementation[EventId](
+    events: Map[EventId, Event] = Map.empty,
+    itemStateStorage: ItemStateStorage[EventId] =
+      new ItemStateStorage[EventId] {
+        override val blobStorage: BlobStorage[EventId] =
+          BlobStorageInMemory.apply[EventId]
+      })
+    extends Timeline[EventId] {
+  override def revise[NewEventId >: EventId](
+      events: Map[NewEventId, Option[Event]]) = {
+    // TODO: use a modified patch recorder to build this up...
+    val itemStateStorage =
+      this.itemStateStorage.asInstanceOf[ItemStateStorage[NewEventId]]
 
-  override def itemCacheAt(when: Unbounded[Instant]): ItemCache =
-    emptyItemCache
+    new TimelineImplementation(
+      events = (this.events
+        .asInstanceOf[Map[NewEventId, Event]] /: events) {
+        case (events, (eventId, Some(event))) => events + (eventId -> event)
+        case (events, (eventId, None))        => events - eventId
+      },
+      itemStateStorage
+    )
+  }
+
+  override def retainUpTo(when: Unbounded[Instant]) =
+    ??? // TODO - support experimental worlds.
+
+  override def itemCacheAt(when: Unbounded[Instant]) = ???
 }
