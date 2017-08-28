@@ -546,7 +546,7 @@ trait WorldBehaviours
       })
     }
 
-    it should "allow a raw value to be rendered from a bitemporal if the 'when' limit of the scope includes a relevant event." in {
+    it should "allow an item to be rendered from a bitemporal if the 'when' limit of the scope includes a relevant event that defines said item." in {
       val testCaseGenerator = for {
         worldResource <- worldResourceGenerator
         recordingsGroupedById <- recordingsGroupedByIdGenerator(

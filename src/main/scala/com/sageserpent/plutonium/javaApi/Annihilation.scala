@@ -12,8 +12,8 @@ import com.sageserpent.plutonium.{
   * Created by Gerard on 02/05/2016.
   */
 object Annihilation {
-  def apply[Raw <: Identified](definiteWhen: Instant,
-                               id: Raw#Id,
-                               clazz: Class[Raw]): ScalaAnnihilation[Raw] =
+  def apply[Item <: Identified](definiteWhen: Instant,
+                                id: Item#Id,
+                                clazz: Class[Item]): ScalaAnnihilation[Item] =
     ScalaAnnihilation(definiteWhen, id)(typeTagForClass(clazz))
 }

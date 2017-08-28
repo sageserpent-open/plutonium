@@ -16,10 +16,10 @@ trait Scope {
   // at in the 'World' instance.
 
   // Why a stream for the result type? - 2 reasons that overlap - we may have no instance in force for the scope, or we might have several that share the same id, albeit with
-  // different runtime subtypes of 'Raw'. What's more, if 'bitemporal' was cooked using 'Bitemporal.wildcard', we'll have every single instance of a runtime subtype of 'Raw'.
+  // different runtime subtypes of 'Item'. What's more, if 'bitemporal' was cooked using 'Bitemporal.wildcard', we'll have every single instance of a runtime subtype of 'Item'.
   // As an invariant (here - or on the API when recording event groups?) - it seems reasonable to forbid the possibility of two instances to share the same id if one has a runtime
   // type that is a subtype of another (obviously excluding the trivial case of the types being equal). Of course, as far as this method is concerned, ids are irrelevant and the
-  // raw values might have been computed on the fly without an id.
+  // values might have been computed on the fly without an id.
 
   // TODO: should there be an invariant that all identifiable items yielded from queries always have the same address for the same id and runtime type? If so,
   // then what about non-identifiable bitemporals computed on the fly? Seems like this invariant is a sop to an imperative programming background where equality
@@ -29,9 +29,9 @@ trait Scope {
   val nextRevision: Int
   val asOf: Unbounded[Instant]
 
-  def numberOf[Raw <: Identified: TypeTag](id: Raw#Id): Int
+  def numberOf[Item <: Identified: TypeTag](id: Item#Id): Int
 
-  def render[Raw](bitemporal: ScalaBitemporal[Raw]): Stream[Raw]
-  def renderAsIterable[Raw](
-      bitemporal: ScalaBitemporal[Raw]): java.lang.Iterable[Raw]
+  def render[Item](bitemporal: ScalaBitemporal[Item]): Stream[Item]
+  def renderAsIterable[Item](
+      bitemporal: ScalaBitemporal[Item]): java.lang.Iterable[Item]
 }

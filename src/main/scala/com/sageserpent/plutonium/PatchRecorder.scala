@@ -39,8 +39,8 @@ trait PatchRecorder {
   def recordPatchFromMeasurement(when: Unbounded[Instant],
                                  patch: AbstractPatch): Unit
 
-  def recordAnnihilation[Raw <: Identified: TypeTag](when: Instant,
-                                                     id: Raw#Id): Unit
+  def recordAnnihilation[Item <: Identified: TypeTag](when: Instant,
+                                                      id: Item#Id): Unit
 
   def noteThatThereAreNoFollowingRecordings(): Unit
 }
@@ -72,9 +72,9 @@ trait PatchRecorderContracts extends PatchRecorder {
     result
   }
 
-  abstract override def recordAnnihilation[Raw <: Identified: TypeTag](
+  abstract override def recordAnnihilation[Item <: Identified: TypeTag](
       when: Instant,
-      id: Raw#Id): Unit = {
+      id: Item#Id): Unit = {
     require(
       whenEventPertainedToByLastRecordingTookPlace
         .cata(some = Finite(when) >= _, none = true))

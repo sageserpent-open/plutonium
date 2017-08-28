@@ -10,18 +10,20 @@ import com.sageserpent.plutonium.{
   * Created by Gerard on 02/05/2016.
   */
 object Bitemporal {
-  def withId[Raw <: Identified](id: Raw#Id,
-                                clazz: Class[Raw]): ScalaBitemporal[Raw] =
+  def withId[Item <: Identified](id: Item#Id,
+                                 clazz: Class[Item]): ScalaBitemporal[Item] =
     ScalaBitemporal.withId(id)(typeTagForClass(clazz))
 
-  def zeroOrOneOf[Raw <: Identified](id: Raw#Id,
-                                     clazz: Class[Raw]): ScalaBitemporal[Raw] =
+  def zeroOrOneOf[Item <: Identified](
+      id: Item#Id,
+      clazz: Class[Item]): ScalaBitemporal[Item] =
     ScalaBitemporal.zeroOrOneOf(id)(typeTagForClass(clazz))
 
-  def singleOneOf[Raw <: Identified](id: Raw#Id,
-                                     clazz: Class[Raw]): ScalaBitemporal[Raw] =
+  def singleOneOf[Item <: Identified](
+      id: Item#Id,
+      clazz: Class[Item]): ScalaBitemporal[Item] =
     ScalaBitemporal.singleOneOf(id)(typeTagForClass(clazz))
 
-  def wildcard[Raw <: Identified](clazz: Class[Raw]): ScalaBitemporal[Raw] =
+  def wildcard[Item <: Identified](clazz: Class[Item]): ScalaBitemporal[Item] =
     ScalaBitemporal.wildcard()(typeTagForClass(clazz))
 }
