@@ -193,6 +193,56 @@ trait BitemporalBehaviours
             }
         })
     }
+
+    it should "yield unique items" in {
+      val testCaseGenerator = for {
+        worldResource <- worldResourceGenerator
+        recordingsGroupedById <- recordingsGroupedByIdGenerator(
+          forbidAnnihilations = false)
+        obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
+        seed                          <- seedGenerator
+        random = new Random(seed)
+        shuffledRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          random,
+          recordingsGroupedById)
+        shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          random,
+          obsoleteRecordingsGroupedById)
+        bigShuffledHistoryOverLotsOfThings = intersperseObsoleteEvents(
+          random,
+          shuffledRecordings,
+          shuffledObsoleteRecordings)
+        asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
+                             instantGenerator) map (_.sorted)
+        queryWhen <- unboundedInstantGenerator
+      } yield
+        (worldResource, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
+      check(Prop.forAllNoShrink(testCaseGenerator) {
+        case (worldResource,
+              bigShuffledHistoryOverLotsOfThings,
+              asOfs,
+              queryWhen) =>
+          worldResource acquireAndGet {
+            world =>
+              recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
+                                  asOfs,
+                                  world)
+
+              val scope = world.scopeFor(queryWhen, world.nextRevision)
+
+              val itemsFromWildcardQuery =
+                scope.render(Bitemporal.wildcard[History])
+
+              Prop.all(
+                itemsFromWildcardQuery
+                  .groupBy(identity)
+                  .map {
+                    case (item, group) =>
+                      (1 == group.size) :| s"More than occurrence of item: ${item}} with id: ${item.id}."
+                } toSeq: _*)
+          }
+      })
+    }
   }
 
   def bitemporalQueryUsingAnIdBehaviour = {
@@ -334,6 +384,76 @@ trait BitemporalBehaviours
       })
     }
 
+    it should "yield unique items" in {
+      val testCaseGenerator = for {
+        worldResource <- worldResourceGenerator
+        recordingsGroupedById <- recordingsGroupedByIdGenerator(
+          forbidAnnihilations = false)
+        obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
+        seed                          <- seedGenerator
+        random = new Random(seed)
+        shuffledRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          random,
+          recordingsGroupedById)
+        shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          random,
+          obsoleteRecordingsGroupedById)
+        bigShuffledHistoryOverLotsOfThings = intersperseObsoleteEvents(
+          random,
+          shuffledRecordings,
+          shuffledObsoleteRecordings)
+        asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
+                             instantGenerator) map (_.sorted)
+        queryWhen <- unboundedInstantGenerator
+      } yield
+        (worldResource,
+         recordingsGroupedById,
+         bigShuffledHistoryOverLotsOfThings,
+         asOfs,
+         queryWhen)
+
+      check(Prop.forAllNoShrink(testCaseGenerator) {
+        case (worldResource,
+              recordingsGroupedById,
+              bigShuffledHistoryOverLotsOfThings,
+              asOfs,
+              queryWhen) =>
+          worldResource acquireAndGet {
+            world =>
+              recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
+                                  asOfs,
+                                  world)
+
+              val scope = world.scopeFor(queryWhen, world.nextRevision)
+
+              def holdsFor[AHistory <: History: TypeTag]: Prop = {
+                // The filtering of idsInExistence here is hokey - disjoint history types can (actually, they do) share the same id type, so we'll
+                // end up with idsInExistence that may be irrelevant to the flavour of 'AHistory' we are checking against. This doesn't matter, though,
+                // because the queries we are checking allow the possibility that there are no items of the specific type to match them.
+                val idsInExistence =
+                  (recordingsGroupedById flatMap (_.thePartNoLaterThan(
+                    queryWhen)) map (_.historyId) filter (_.isInstanceOf[
+                    AHistory#Id]) map (_.asInstanceOf[AHistory#Id])).toSet
+
+                if (idsInExistence.nonEmpty)
+                  Prop.all(idsInExistence.toSeq flatMap (id => {
+                    val itemsFromSpecificQuery =
+                      scope.render(Bitemporal.withId[AHistory](id))
+                    itemsFromSpecificQuery.groupBy(identity).map {
+                      case (item, group) =>
+                        (1 == group.size) :| s"More than occurrence of item: ${item} with id: ${item.id}."
+                    }
+                  }): _*)
+                else Prop.undecided
+              }
+
+              holdsFor[History] && holdsFor[BarHistory] &&
+              holdsFor[FooHistory] && holdsFor[IntegerHistory] &&
+              holdsFor[MoreSpecificFooHistory]
+          }
+      })
+    }
+
     it should "yield the same identity of item for a given id replicated in a query" in {
       val testCaseGenerator = for {
         worldResource <- worldResourceGenerator
@@ -463,11 +583,13 @@ trait BitemporalBehaviours
                 if (ids.nonEmpty) {
                   Prop.all(ids.toSeq map (id => {
                     val itemsFromGenericQueryById =
-                      scope.render(Bitemporal.withId[History](id)).toSet
+                      scope
+                        .render(Bitemporal.withId[History](id))
+                        .groupBy(identity)
                     (if (2 > itemsFromGenericQueryById.size) {
                        val itemsFromZeroOrOneOfQuery = scope
                          .render(Bitemporal.zeroOrOneOf[History](id))
-                         .toSet
+                         .groupBy(identity)
                        (itemsFromGenericQueryById == itemsFromZeroOrOneOfQuery) :| s"${itemsFromGenericQueryById} == itemsFromZeroOrOneOfQuery"
                      } else {
                        intercept[RuntimeException](
@@ -476,7 +598,7 @@ trait BitemporalBehaviours
                      }) && (if (1 == itemsFromGenericQueryById.size) {
                               val itemsFromSingleOneOfQuery = scope
                                 .render(Bitemporal.singleOneOf[History](id))
-                                .toSet
+                                .groupBy(identity)
                               (itemsFromGenericQueryById == itemsFromSingleOneOfQuery) :| s"${itemsFromGenericQueryById} == itemsFromSingleOneOfQuery"
                             } else {
                               intercept[RuntimeException](scope.render(
