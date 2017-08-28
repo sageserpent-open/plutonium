@@ -60,12 +60,12 @@ abstract class PatchRecorderImplementation(
     refineRelevantItemStatesAndYieldTarget(patch).addPatch(when, patch)
   }
 
-  def annihilateItemFor_[SubclassOfRaw <: Item, Item <: Identified](
+  def annihilateItemFor_[SubclassOfItem <: Item, Item <: Identified](
       id: Item#Id,
-      typeTag: universe.TypeTag[SubclassOfRaw],
+      typeTag: universe.TypeTag[SubclassOfItem],
       when: Instant): Unit = {
-    identifiedItemsScope.annihilateItemFor[SubclassOfRaw](
-      id.asInstanceOf[SubclassOfRaw#Id],
+    identifiedItemsScope.annihilateItemFor[SubclassOfItem](
+      id.asInstanceOf[SubclassOfItem#Id],
       when)(typeTag)
   }
 
@@ -209,8 +209,8 @@ abstract class PatchRecorderImplementation(
     }
 
     def refineType(
-        typeTag: _root_.scala.reflect.runtime.universe.TypeTag[
-          _ <: Identified]): Unit = {
+        typeTag: _root_.scala.reflect.runtime.universe.TypeTag[_ <: Identified])
+      : Unit = {
       if (typeTag.tpe <:< this._lowerBoundTypeTag.tpe) {
         this._lowerBoundTypeTag = typeTag
       } else if (this._upperBoundTypeTag.tpe <:< typeTag.tpe) {
@@ -226,8 +226,7 @@ abstract class PatchRecorderImplementation(
         exemplarMethodToCandidatePatchesMap.find {
           case (exemplarMethod, _) =>
             WorldImplementationCodeFactoring
-              .firstMethodIsOverrideCompatibleWithSecond(method,
-                                                         exemplarMethod) ||
+              .firstMethodIsOverrideCompatibleWithSecond(method, exemplarMethod) ||
               WorldImplementationCodeFactoring
                 .firstMethodIsOverrideCompatibleWithSecond(exemplarMethod,
                                                            method)
@@ -310,18 +309,17 @@ abstract class PatchRecorderImplementation(
       override def reconstitute[Item <: Identified](
           itemReconstitutionData: Recorder#ItemReconstitutionData[Item])
         : Item = {
-        val id = itemReconstitutionData._1
-        val itemState = reconstitutionDataToItemStateMap(
-          itemReconstitutionData)
+        val id        = itemReconstitutionData._1
+        val itemState = reconstitutionDataToItemStateMap(itemReconstitutionData)
 
         itemFor_(id, itemState.lowerBoundTypeTag).asInstanceOf[Item]
       }
 
-      def itemFor_[SubclassOfRaw <: Item, Item <: Identified](
+      def itemFor_[SubclassOfItem <: Item, Item <: Identified](
           id: Item#Id,
-          typeTag: universe.TypeTag[SubclassOfRaw]): SubclassOfRaw = {
+          typeTag: universe.TypeTag[SubclassOfItem]): SubclassOfItem = {
         PatchRecorderImplementation.this.identifiedItemsScope
-          .itemFor[SubclassOfRaw](id.asInstanceOf[SubclassOfRaw#Id])(typeTag)
+          .itemFor[SubclassOfItem](id.asInstanceOf[SubclassOfItem#Id])(typeTag)
       }
     }
 
@@ -352,8 +350,8 @@ abstract class PatchRecorderImplementation(
 
   private def refineRelevantItemStatesAndYieldTarget(
       patch: AbstractPatch): ItemState = {
-    def refinedItemStateFor(
-        reconstitutionData: Recorder#ItemReconstitutionData[_ <: Identified]) = {
+    def refinedItemStateFor(reconstitutionData: Recorder#ItemReconstitutionData[
+      _ <: Identified]) = {
       val itemState = itemStateFor(reconstitutionData)
       itemState.refineType(reconstitutionData._2)
       patchToItemStatesMap.getOrElseUpdate(patch, mutable.Map.empty) += reconstitutionData -> itemState

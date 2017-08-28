@@ -10,9 +10,6 @@ object World {
   type Revision = Int
   val initialRevision
     : Revision = 0 // NOTE: this is the revision defined when the world is first revised.
-  // For now, this implies that if we want to book in events that have always been
-  // known (think of reference data), this should be done by the subclass constructor
-  // of 'World', and has no revision, nor any appearance on the version timeline.
 }
 
 trait World[EventId] extends javaApi.World[EventId] {
@@ -62,7 +59,7 @@ trait WorldContracts[EventId] extends World[EventId] {
     } finally checkInvariant
   }
 
-  // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
+  // This produces a 'read-only' scope - objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
   abstract override def scopeFor(when: Unbounded[Instant],
                                  nextRevision: Revision): Scope = {
     require(nextRevision <= this.nextRevision)
@@ -75,7 +72,7 @@ trait WorldContracts[EventId] extends World[EventId] {
     result
   }
 
-  // This produces a 'read-only' scope - raw objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
+  // This produces a 'read-only' scope - objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
   abstract override def scopeFor(when: Unbounded[Instant],
                                  asOf: Instant): Scope = {
     val result = super.scopeFor(when, asOf)

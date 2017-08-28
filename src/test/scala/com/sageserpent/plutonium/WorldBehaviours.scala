@@ -254,9 +254,9 @@ trait WorldBehaviours
             if (checks.nonEmpty) {
               Prop.all(checks.map {
                 case (historyId,
-                    historiesFrom,
-                    baselineScope,
-                    scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne) =>
+                      historiesFrom,
+                      baselineScope,
+                      scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne) =>
                   (historiesFrom(
                     scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne).isEmpty) :| s"For ${historyId}, neither scope should yield a history."
               }: _*)
@@ -432,7 +432,7 @@ trait WorldBehaviours
             if (checks.nonEmpty) {
               Prop.all(checks.map {
                 case (baselineScope,
-                    scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne) =>
+                      scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne) =>
                   (baselineScope.nextRevision === scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne.nextRevision) :| s"${baselineScope.nextRevision} === ${scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne}.nextRevision"
               }: _*)
             } else Prop.undecided
@@ -543,7 +543,7 @@ trait WorldBehaviours
       })
     }
 
-    it should "allow a raw value to be rendered from a bitemporal if the 'when' limit of the scope includes a relevant event." in {
+    it should "allow an item to be rendered from a bitemporal if the 'when' limit of the scope includes a relevant event that defines said item." in {
       val testCaseGenerator = for {
         worldResource <- worldResourceGenerator
         recordingsGroupedById <- recordingsGroupedByIdGenerator(
@@ -815,7 +815,7 @@ trait WorldBehaviours
                     val indirectAccessBitemporalQuery
                       : Bitemporal[History] = Bitemporal
                       .withId[ReferringHistory](referringHistoryId.asInstanceOf[
-                      ReferringHistory#Id]) map (_.referencedHistories(
+                        ReferringHistory#Id]) map (_.referencedHistories(
                       referencedHistoryId))
                     val agglomeratedBitemporalQuery
                       : Bitemporal[(History, History)] =
@@ -1263,12 +1263,12 @@ trait WorldBehaviours
                   -1 - index -> Some(
                     Change.forTwoItems[ReferringHistory, History](
                       referencingEventWhen)(theReferrerId,
-                      referencedHistoryId,
-                      (referringHistory: ReferringHistory,
-                       referencedItem: History) => {
+                                            referencedHistoryId,
+                                            (referringHistory: ReferringHistory,
+                                             referencedItem: History) => {
                                               referringHistory.referTo(
                                                 referencedItem)
-                      }))),
+                                            }))),
                 world.revisionAsOfs.last
               )
             }
@@ -1597,8 +1597,8 @@ trait WorldBehaviours
               val checksViaNextRevision = for {
                 (
                   asOf,
-                 (nextRevisionAfterDuplicates,
-                  nextRevisionAfterFirstDuplicate)) <- asOfAndNextRevisionPairs
+                  (nextRevisionAfterDuplicates,
+                   nextRevisionAfterFirstDuplicate)) <- asOfAndNextRevisionPairs
                 nextRevision                         <- nextRevisionAfterFirstDuplicate to nextRevisionAfterDuplicates
                 scopeViaNextRevision = world.scopeFor(queryWhen, nextRevision)
               } yield (asOf, nextRevision, scopeViaNextRevision)
@@ -1696,10 +1696,10 @@ trait WorldBehaviours
             if (checksViaAsOf.nonEmpty) {
               Prop.all(checksViaAsOf map {
                 case (earlierAsOfCorrespondingToRevision,
-                    laterAsOfSharingTheSameRevisionAsTheEarlierOne,
-                    nextRevision,
-                    scopeViaEarlierAsOfCorrespondingToRevision,
-                    scopeViaLaterAsOfSharingTheSameRevisionAsTheEarlierOne) =>
+                      laterAsOfSharingTheSameRevisionAsTheEarlierOne,
+                      nextRevision,
+                      scopeViaEarlierAsOfCorrespondingToRevision,
+                      scopeViaLaterAsOfSharingTheSameRevisionAsTheEarlierOne) =>
                   (Finite(earlierAsOfCorrespondingToRevision) === scopeViaEarlierAsOfCorrespondingToRevision.asOf) :| s"Finite(${earlierAsOfCorrespondingToRevision}) === scopeViaEarlierAsOfCorrespondingToRevision.asOf" &&
                     (Finite(laterAsOfSharingTheSameRevisionAsTheEarlierOne) === scopeViaLaterAsOfSharingTheSameRevisionAsTheEarlierOne.asOf) :| s"Finite(${laterAsOfSharingTheSameRevisionAsTheEarlierOne}) === scopeViaLaterAsOfSharingTheSameRevisionAsTheEarlierOne.asOf" &&
                     (nextRevision === scopeViaEarlierAsOfCorrespondingToRevision.nextRevision) :| s"${nextRevision} === scopeViaEarlierAsOfCorrespondingToRevision.nextRevision" &&
@@ -2297,9 +2297,9 @@ trait WorldBehaviours
         bigShuffledHistoryOverLotsOfThings = intersperseObsoleteEvents
           .chunkKeepingEventIdsUniquePerChunk(
             random,
-          shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
-            random,
-            recordingsGroupedById).zipWithIndex)
+            shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+              random,
+              recordingsGroupedById).zipWithIndex)
         allEventIds    = bigShuffledHistoryOverLotsOfThings flatMap (_ map (_._2))
         maximumEventId = allEventIds.max
         eventIdsThatMayBeSpuriousAndDuplicated = allEventIds ++
@@ -2312,7 +2312,7 @@ trait WorldBehaviours
             random,
             random
               .shuffle(eventIdsThatMayBeSpuriousAndDuplicated) map ((None: Option[
-          (Unbounded[Instant], Event)]) -> _))
+              (Unbounded[Instant], Event)]) -> _))
         historyLength    = bigShuffledHistoryOverLotsOfThings.length
         annulmentsLength = annulmentsGalore.length
         asOfs <- Gen.listOfN(2 * historyLength + annulmentsLength,

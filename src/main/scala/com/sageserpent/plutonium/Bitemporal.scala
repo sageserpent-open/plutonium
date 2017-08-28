@@ -14,16 +14,16 @@ sealed trait Bitemporal[Item] {
     PlusBitemporalResult(lhs = this, rhs = another)
 }
 
-case class ApBitemporalResult[ContextRaw, Item](
-    preceedingContext: Bitemporal[ContextRaw],
-    stage: Bitemporal[ContextRaw => Item])
+case class ApBitemporalResult[ContextItem, Item](
+    preceedingContext: Bitemporal[ContextItem],
+    stage: Bitemporal[ContextItem => Item])
     extends Bitemporal[Item]
 
 case class PlusBitemporalResult[Item](lhs: Bitemporal[Item],
                                       rhs: Bitemporal[Item])
     extends Bitemporal[Item]
 
-case class PointBitemporalResult[Item](raw: Item) extends Bitemporal[Item]
+case class PointBitemporalResult[Item](item: Item) extends Bitemporal[Item]
 
 case class NoneBitemporalResult[Item]() extends Bitemporal[Item]
 
@@ -50,10 +50,10 @@ case class WildcardBitemporalResult[Item <: Identified: TypeTag]()
   val capturedTypeTag = typeTag[Item]
 }
 
-// This companion object can produce a bitemporal instance that refers to zero, one or many raw instances depending
-// how many of those raw instances match the id or wildcard.
+// This companion object can produce a bitemporal instance that refers to zero, one or many items depending
+// how many of those items match the id or wildcard.
 object Bitemporal {
-  def apply[Item](raw: Item) = PointBitemporalResult(raw)
+  def apply[Item](item: Item) = PointBitemporalResult(item)
 
   def withId[Item <: Identified: TypeTag](id: Item#Id): Bitemporal[Item] =
     IdentifiedItemsBitemporalResult(id)

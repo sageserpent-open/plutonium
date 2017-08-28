@@ -55,45 +55,46 @@ object WorldImplementationCodeFactoring {
 
   def eventTimelineFrom(eventDatums: Seq[AbstractEventData]): Seq[Event] =
     (eventDatums collect {
-    case eventData: EventData => eventData
-  }).sorted.map(_.serializableEvent)
+      case eventData: EventData => eventData
+    }).sorted.map(_.serializableEvent)
 
   object IdentifiedItemsScope {
     def hasItemOfSupertypeOf[Item <: Identified: TypeTag](
         items: scala.collection.mutable.Set[Identified]) = {
       val reflectedType = typeTag[Item].tpe
-      val clazzOfRaw    = currentMirror.runtimeClass(reflectedType)
+      val clazzOfItem   = currentMirror.runtimeClass(reflectedType)
       items.exists { item =>
         val itemClazz = item.getClass
-        itemClazz.isAssignableFrom(clazzOfRaw) && itemClazz != clazzOfRaw
+        itemClazz.isAssignableFrom(clazzOfItem) && itemClazz != clazzOfItem
       }
     }
 
     def yieldOnlyItemsOfSupertypeOf[Item <: Identified: TypeTag](
         items: Traversable[Identified]) = {
       val reflectedType = typeTag[Item].tpe
-      val clazzOfRaw =
+      val clazzOfItem =
         currentMirror.runtimeClass(reflectedType).asInstanceOf[Class[Item]]
 
       items filter { item =>
-          val itemClazz = item.getClass
-          itemClazz.isAssignableFrom(clazzOfRaw) && itemClazz != clazzOfRaw
+        val itemClazz = item.getClass
+        itemClazz.isAssignableFrom(clazzOfItem) && itemClazz != clazzOfItem
       }
     }
 
     def yieldOnlyItemsOfType[Item <: Identified: TypeTag](
         items: Traversable[Identified]) = {
       val reflectedType = typeTag[Item].tpe
-      val clazzOfRaw =
+      val clazzOfItem =
         currentMirror.runtimeClass(reflectedType).asInstanceOf[Class[Item]]
 
-      items.toStream filter (clazzOfRaw.isInstance(_)) map (clazzOfRaw.cast(_))
+      items.toStream filter (clazzOfItem.isInstance(_)) map (clazzOfItem.cast(
+        _))
     }
 
     def alwaysAllowsReadAccessTo(method: MethodDescription) =
       nonMutableMembersThatCanAlwaysBeReadFrom.exists(exclusionMethod => {
-      firstMethodIsOverrideCompatibleWithSecond(method, exclusionMethod)
-    })
+        firstMethodIsOverrideCompatibleWithSecond(method, exclusionMethod)
+      })
 
     val nonMutableMembersThatCanAlwaysBeReadFrom = (classOf[Identified].getMethods ++ classOf[
       AnyRef].getMethods) map (new MethodDescription.ForLoadedMethod(_))
@@ -167,7 +168,7 @@ object WorldImplementationCodeFactoring {
     }
 
     def constructFrom[Item <: Identified: TypeTag](id: Item#Id) = {
-      // NOTE: this returns items that are proxies to raw values, rather than the raw values themselves. Depending on the
+      // NOTE: this returns items that are proxies to 'Item' rather than direct instances of 'Item' itself. Depending on the
       // context (using a scope created by a client from a world, as opposed to while building up that scope from patches),
       // the items may forbid certain operations on them - e.g. for rendering from a client's scope, the items should be
       // read-only.
@@ -189,13 +190,13 @@ object WorldImplementationCodeFactoring {
 
     def constructorAndClassFor[Item <: Identified: TypeTag]()
       : (universe.MethodMirror, Class[_ <: Identified]) = {
-      val typeOfRaw = typeOf[Item]
-      val (constructor, clazz) = cachedProxyConstructors.get(typeOfRaw) match {
+      val typeOfItem = typeOf[Item]
+      val (constructor, clazz) = cachedProxyConstructors.get(typeOfItem) match {
         case Some(cachedProxyConstructorData) => cachedProxyConstructorData
         case None =>
-          val (constructor, clazz) = constructorFor(typeOfRaw)
-          cachedProxyConstructors += (typeOfRaw -> (constructor, clazz))
-          constructor                           -> clazz
+          val (constructor, clazz) = constructorFor(typeOfItem)
+          cachedProxyConstructors += (typeOfItem -> (constructor, clazz))
+          constructor                            -> clazz
       }
       (constructor, clazz)
     }
@@ -364,16 +365,16 @@ object WorldImplementationCodeFactoring {
       firstMethod: MethodDescription,
       secondMethod: MethodDescription): Boolean =
     secondMethod.getName == firstMethod.getName &&
-    secondMethod.getReceiverType.asErasure
-      .isAssignableFrom(firstMethod.getReceiverType.asErasure) &&
-    (secondMethod.getReturnType.asErasure
-      .isAssignableFrom(firstMethod.getReturnType.asErasure) ||
-    secondMethod.getReturnType.asErasure
-      .isAssignableFrom(firstMethod.getReturnType.asErasure.asBoxed)) &&
+      secondMethod.getReceiverType.asErasure
+        .isAssignableFrom(firstMethod.getReceiverType.asErasure) &&
+      (secondMethod.getReturnType.asErasure
+        .isAssignableFrom(firstMethod.getReturnType.asErasure) ||
+        secondMethod.getReturnType.asErasure
+          .isAssignableFrom(firstMethod.getReturnType.asErasure.asBoxed)) &&
       secondMethod.getParameters.size == firstMethod.getParameters.size &&
-    secondMethod.getParameters.toSeq
-      .map(_.getType) == firstMethod.getParameters.toSeq
-      .map(_.getType) // What about contravariance? Hmmm...
+      secondMethod.getParameters.toSeq
+        .map(_.getType) == firstMethod.getParameters.toSeq
+        .map(_.getType) // What about contravariance? Hmmm...
 
   def firstMethodIsOverrideCompatibleWithSecond(
       firstMethod: Method,
@@ -398,10 +399,10 @@ object WorldImplementationCodeFactoring {
              eventTimeline: Seq[Event]) = {
       this()
       for (_ <- makeManagedResource {
-        itemsAreLocked = false
+             itemsAreLocked = false
            } { _ =>
              itemsAreLocked = true
-      }(List.empty)) {
+           }(List.empty)) {
         val patchRecorder = new PatchRecorderImplementation(_when)
         with PatchRecorderContracts with BestPatchSelectionImplementation
         with BestPatchSelectionContracts {
@@ -409,17 +410,17 @@ object WorldImplementationCodeFactoring {
             identifiedItemsScopeThis
           override val itemsAreLockedResource: ManagedResource[Unit] =
             makeManagedResource {
-            itemsAreLocked = true
+              itemsAreLocked = true
             } { _ =>
               itemsAreLocked = false
-          }(List.empty)
+            }(List.empty)
         }
 
         for (event <- eventTimeline) event match {
           case Change(when, patches) =>
             for (patch <- patches) {
               patchRecorder.recordPatchFromChange(when, patch)
-        }
+            }
 
           case Measurement(when, patches) =>
             for (patch <- patches) {
@@ -458,7 +459,7 @@ object WorldImplementationCodeFactoring {
 
               def itemsAreLocked: Boolean =
                 identifiedItemsScopeThis.itemsAreLocked
-          }
+            }
 
           override val acquiredStateClazz = classOf[AcquiredState]
 
@@ -511,7 +512,7 @@ object WorldImplementationCodeFactoring {
     }
 
     def annihilateItemFor[Item <: Identified: TypeTag](id: Item#Id,
-                                                      when: Instant): Unit = {
+                                                       when: Instant): Unit = {
       idToItemsMultiMap.get(id) match {
         case Some(items) =>
           assert(items.nonEmpty)
@@ -559,7 +560,7 @@ object WorldImplementationCodeFactoring {
 
       override def allItems[Item <: Identified: TypeTag](): Stream[Item] =
         identifiedItemsScope.allItems()
-      }
+    }
 
     override def render[Item](bitemporal: Bitemporal[Item]): Stream[Item] =
       itemCache.render(bitemporal)
@@ -578,7 +579,7 @@ abstract class WorldImplementationCodeFactoring[EventId]
       case World.initialRevision => NegativeInfinity[Instant]()
       case _ =>
         if (nextRevision <= revisionAsOfs.size)
-        Finite(revisionAsOfs(nextRevision - 1))
+          Finite(revisionAsOfs(nextRevision - 1))
         else
           throw new RuntimeException(
             s"Scope based the revision prior to: $nextRevision can't be constructed - there are only ${revisionAsOfs.size} revisions of the world.")
