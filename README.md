@@ -610,6 +610,8 @@ Let's show Plutonium in action - this is a demo that books in some events in the
 				final double uncoveredValue = StreamSupport
 						.stream(scope.renderAsIterable(packageItemsBitemporal)
 										.spliterator(), false)
+						.filter(((java.util.function.Predicate<PackageItem>)
+                            PackageItem::hasBeenDelivered).negate())
 						.map(PackageItem::getValuePaid)
 						.reduce(0.0, (lhs, rhs) -> lhs + rhs);
 
