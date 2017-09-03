@@ -1,3 +1,5 @@
 language: scala
 scala:
    - 2.12.1
+script:
+   travis wait 30 sbt ++$TRAVIS_SCALA_VERSION test
