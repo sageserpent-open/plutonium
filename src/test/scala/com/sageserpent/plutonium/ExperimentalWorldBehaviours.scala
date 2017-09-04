@@ -22,7 +22,7 @@ trait ExperimentalWorldBehaviours
     with WorldSpecSupport { this: WorldResource =>
 
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
-    PropertyCheckConfig(maxSize = 20, minSuccessful = 200)
+    PropertyCheckConfig(maxSize = 20, minSuccessful = 20)
 
   def experimentalWorldBehaviour = {
     def scopeAndExperimentalWorldFor(baseWorld: World[Int],
@@ -547,8 +547,7 @@ trait ExperimentalWorldBehaviours
                   _) <- followingRecordingsGroupedById flatMap (_.thePartNoLaterThan(
                   queryWhen))
                 Seq(history) = historiesFrom(scopeFromExperimentalWorld)
-              } yield
-                (historyId, history.datums, pertinentRecordings.map(_._1))
+              } yield (historyId, history.datums, pertinentRecordings.map(_._1))
 
               if (checks.nonEmpty) {
                 Prop.all(checks.map {
@@ -640,8 +639,7 @@ trait ExperimentalWorldBehaviours
                   _) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
                   queryWhen))
                 Seq(history) = historiesFrom(scopeFromBaseWorld)
-              } yield
-                (historyId, history.datums, pertinentRecordings.map(_._1))
+              } yield (historyId, history.datums, pertinentRecordings.map(_._1))
 
               if (checks.nonEmpty) {
                 Prop.all(checks.map {
