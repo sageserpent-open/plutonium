@@ -34,9 +34,6 @@ trait WorldBehaviours
       "If I am not supposed to exist, why is something asking for my id?")
   }
 
-  implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
-    PropertyCheckConfig(maxSize = 30)
-
   def worldWithNoHistoryBehaviour = {
     it should "not contain any identifiables" in {
       val scopeGenerator = for {
@@ -2603,9 +2600,7 @@ trait WorldBehaviours
                   Prop.all(checks: _*)
                 } else Prop.undecided
             }
-        },
-        minSuccessful(5),
-        maxSize(50)
+        }
       )
     }
 
@@ -2694,6 +2689,9 @@ trait WorldBehaviours
 class WorldSpecUsingWorldReferenceImplementation
     extends WorldBehaviours
     with WorldReferenceImplementationResource {
+  implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
+    PropertyCheckConfig(maxSize = 30)
+
   "A world with no history (using the world reference implementation)" should behave like worldWithNoHistoryBehaviour
 
   "A world with history added in order of increasing event time (using the world reference implementation)" should behave like worldWithHistoryAddedInOrderOfIncreasingEventTimeBehaviour
@@ -2742,6 +2740,9 @@ class WorldSpecUsingWorldRedisBasedImplementation
     extends WorldBehaviours
     with WorldRedisBasedImplementationResource {
   val redisServerPort = 6454
+
+  implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
+    PropertyCheckConfig(maxSize = 8)
 
   "A world with no history (using the world Redis-based implementation)" should behave like worldWithNoHistoryBehaviour
 

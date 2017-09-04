@@ -20,10 +20,6 @@ trait ExperimentalWorldBehaviours
     with Matchers
     with Checkers
     with WorldSpecSupport { this: WorldResource =>
-
-  implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
-    PropertyCheckConfig(maxSize = 20, minSuccessful = 20)
-
   def experimentalWorldBehaviour = {
     def scopeAndExperimentalWorldFor(baseWorld: World[Int],
                                      forkWhen: Unbounded[Instant],
@@ -661,6 +657,9 @@ trait ExperimentalWorldBehaviours
 class ExperimentalWorldSpecUsingWorldReferenceImplementation
     extends ExperimentalWorldBehaviours
     with WorldReferenceImplementationResource {
+  implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
+    PropertyCheckConfig(maxSize = 20)
+
   "An experimental world (using the world reference implementation)" should behave like experimentalWorldBehaviour
 }
 
@@ -668,6 +667,9 @@ class ExperimentalWorldSpecUsingWorldRedisBasedImplementation
     extends ExperimentalWorldBehaviours
     with WorldRedisBasedImplementationResource {
   val redisServerPort = 6452
+
+  implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
+    PropertyCheckConfig(maxSize = 10)
 
   "An experimental world (using the world Redis-based implementation)" should behave like experimentalWorldBehaviour
 }
