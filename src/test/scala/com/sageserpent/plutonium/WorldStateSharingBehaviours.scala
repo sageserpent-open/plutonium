@@ -25,9 +25,6 @@ trait WorldStateSharingBehaviours
     with Matchers
     with Checkers
     with WorldSpecSupport {
-  implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
-    PropertyCheckConfig(maxSize = 40, minSuccessful = 200)
-
   val worldSharingCommonStateFactoryResourceGenerator: Gen[
     ManagedResource[() => World[Int]]]
 
@@ -464,6 +461,9 @@ class Item(val id: Item#Id) extends Identified {
 
 class WorldStateSharingSpecUsingWorldReferenceImplementation
     extends WorldStateSharingBehaviours {
+  implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
+    PropertyCheckConfig(maxSize = 40, minSuccessful = 200)
+
   val worldSharingCommonStateFactoryResourceGenerator
     : Gen[ManagedResource[() => World[Int]]] =
     Gen.const(
@@ -481,6 +481,9 @@ class WorldStateSharingSpecUsingWorldRedisBasedImplementation
     extends WorldStateSharingBehaviours
     with RedisServerFixture {
   val redisServerPort: Int = 6451
+
+  implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
+    PropertyCheckConfig(maxSize = 10, minSuccessful = 200)
 
   val worldSharingCommonStateFactoryResourceGenerator
     : Gen[ManagedResource[() => World[Int]]] =
