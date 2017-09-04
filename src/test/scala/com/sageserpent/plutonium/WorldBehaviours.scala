@@ -2604,7 +2604,7 @@ trait WorldBehaviours
                 } else Prop.undecided
             }
         },
-        minSuccessful(10),
+        minSuccessful(5),
         maxSize(50)
       )
     }
