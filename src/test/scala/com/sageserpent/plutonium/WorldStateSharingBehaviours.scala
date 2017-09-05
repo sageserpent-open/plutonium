@@ -462,7 +462,7 @@ class Item(val id: Item#Id) extends Identified {
 class WorldStateSharingSpecUsingWorldReferenceImplementation
     extends WorldStateSharingBehaviours {
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
-    PropertyCheckConfig(maxSize = 40, minSuccessful = 200)
+    PropertyCheckConfig(maxSize = 30, minSuccessful = 200)
 
   val worldSharingCommonStateFactoryResourceGenerator
     : Gen[ManagedResource[() => World[Int]]] =
@@ -483,7 +483,7 @@ class WorldStateSharingSpecUsingWorldRedisBasedImplementation
   val redisServerPort: Int = 6451
 
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
-    PropertyCheckConfig(maxSize = 7, minSuccessful = 200)
+    PropertyCheckConfig(maxSize = 5, minSuccessful = 200)
 
   val worldSharingCommonStateFactoryResourceGenerator
     : Gen[ManagedResource[() => World[Int]]] =
