@@ -483,7 +483,7 @@ class WorldStateSharingSpecUsingWorldRedisBasedImplementation
   val redisServerPort: Int = 6451
 
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
-    PropertyCheckConfig(maxSize = 10, minSuccessful = 200)
+    PropertyCheckConfig(maxSize = 7, minSuccessful = 200)
 
   val worldSharingCommonStateFactoryResourceGenerator
     : Gen[ManagedResource[() => World[Int]]] =
