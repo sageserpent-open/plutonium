@@ -28,6 +28,10 @@ trait WorldStateSharingBehaviours
   val worldSharingCommonStateFactoryResourceGenerator: Gen[
     ManagedResource[() => World[Int]]]
 
+  val testParameters: Test.Parameters
+
+  val numberOfConcurrentQueriesPerRevision: Revision
+
   def multipleInstancesRepresentingTheSameWorldBehaviour = {
     they should "yield the same results to scope queries regardless of which instance is used to define a revision" in {
       class DemultiplexingWorld(worldFactory: () => World[Int], seed: Long)
@@ -110,49 +114,53 @@ trait WorldStateSharingBehaviours
          asOfs,
          queryWhen,
          seed)
-      check(Prop.forAllNoShrink(testCaseGenerator) {
-        case (worldSharingCommonStateFactoryResource,
-              recordingsGroupedById,
-              bigShuffledHistoryOverLotsOfThings,
-              asOfs,
-              queryWhen,
-              seed) =>
-          worldSharingCommonStateFactoryResource acquireAndGet {
-            worldFactory =>
-              val demultiplexingWorld =
-                new DemultiplexingWorld(worldFactory, seed)
+      check(
+        Prop.forAllNoShrink(testCaseGenerator) {
+          case (worldSharingCommonStateFactoryResource,
+                recordingsGroupedById,
+                bigShuffledHistoryOverLotsOfThings,
+                asOfs,
+                queryWhen,
+                seed) =>
+            worldSharingCommonStateFactoryResource acquireAndGet {
+              worldFactory =>
+                val demultiplexingWorld =
+                  new DemultiplexingWorld(worldFactory, seed)
 
-              recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
-                                  asOfs,
-                                  demultiplexingWorld)
+                recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
+                                    asOfs,
+                                    demultiplexingWorld)
 
-              val scope =
-                demultiplexingWorld.scopeFor(queryWhen,
-                                             demultiplexingWorld.nextRevision)
+                val scope =
+                  demultiplexingWorld.scopeFor(queryWhen,
+                                               demultiplexingWorld.nextRevision)
 
-              val checks = for {
-                RecordingsNoLaterThan(
-                  historyId,
-                  historiesFrom,
-                  pertinentRecordings,
-                  _,
-                  _) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
-                  queryWhen))
-                Seq(history) = historiesFrom(scope)
-              } yield (historyId, history.datums, pertinentRecordings.map(_._1))
+                val checks = for {
+                  RecordingsNoLaterThan(
+                    historyId,
+                    historiesFrom,
+                    pertinentRecordings,
+                    _,
+                    _) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
+                    queryWhen))
+                  Seq(history) = historiesFrom(scope)
+                } yield
+                  (historyId, history.datums, pertinentRecordings.map(_._1))
 
-              checks.nonEmpty ==>
-                Prop.all(checks.map {
-                  case (historyId, actualHistory, expectedHistory) =>
-                    ((actualHistory.length == expectedHistory.length) :| s"${actualHistory.length} == expectedHistory.length") &&
-                      Prop.all(
-                        (actualHistory zip expectedHistory zipWithIndex) map {
-                          case ((actual, expected), step) =>
-                            (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}"
-                        }: _*)
-                }: _*)
-          }
-      })
+                checks.nonEmpty ==>
+                  Prop.all(checks.map {
+                    case (historyId, actualHistory, expectedHistory) =>
+                      ((actualHistory.length == expectedHistory.length) :| s"${actualHistory.length} == expectedHistory.length") &&
+                        Prop.all(
+                          (actualHistory zip expectedHistory zipWithIndex) map {
+                            case ((actual, expected), step) =>
+                              (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}"
+                          }: _*)
+                  }: _*)
+            }
+        },
+        testParameters
+      )
     }
 
     class DemultiplexingWorld(worldFactory: () => World[Int])
@@ -253,7 +261,7 @@ trait WorldStateSharingBehaviours
                 }
             }
         },
-        Test.Parameters.defaultVerbose
+        testParameters
       )
     }
 
@@ -294,7 +302,7 @@ trait WorldStateSharingBehaviours
                 val finalAsOf = asOfs.last
 
                 val queries = for {
-                  _ <- 1 to 100 * numberOfRevisions
+                  _ <- 1 to numberOfConcurrentQueriesPerRevision * numberOfRevisions
                 } yield
                   () => {
                     try {
@@ -352,7 +360,7 @@ trait WorldStateSharingBehaviours
                 checks.reduce(_ ++ _)
             }
         },
-        Test.Parameters.defaultVerbose
+        testParameters
       )
     }
 
@@ -421,7 +429,7 @@ trait WorldStateSharingBehaviours
                           Prop.undecided)
                     }
                   }
-                val revisionChecks = (revisionCommands.toParArray map (_.apply))
+                val revisionChecks = revisionCommands.toParArray map (_.apply)
                 val revisionRange  = World.initialRevision until demultiplexingWorld.nextRevision
                 val queryChecks = for {
                   (previousNextRevision, nextRevision) <- revisionRange zip revisionRange.tail
@@ -447,7 +455,7 @@ trait WorldStateSharingBehaviours
                   .getOrElse(Prop.proved)
             }
         },
-        Test.Parameters.defaultVerbose
+        testParameters
       )
     }
   }
@@ -461,8 +469,10 @@ class Item(val id: Item#Id) extends Identified {
 
 class WorldStateSharingSpecUsingWorldReferenceImplementation
     extends WorldStateSharingBehaviours {
-  implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
-    PropertyCheckConfig(maxSize = 30, minSuccessful = 200)
+  val testParameters: Test.Parameters =
+    Test.Parameters.defaultVerbose.withMaxSize(50)
+
+  val numberOfConcurrentQueriesPerRevision: Revision = 100
 
   val worldSharingCommonStateFactoryResourceGenerator
     : Gen[ManagedResource[() => World[Int]]] =
@@ -482,8 +492,10 @@ class WorldStateSharingSpecUsingWorldRedisBasedImplementation
     with RedisServerFixture {
   val redisServerPort: Int = 6451
 
-  implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
-    PropertyCheckConfig(maxSize = 5, minSuccessful = 200)
+  val testParameters: Test.Parameters =
+    Test.Parameters.defaultVerbose.withMaxSize(50)
+
+  val numberOfConcurrentQueriesPerRevision: Revision = 20
 
   val worldSharingCommonStateFactoryResourceGenerator
     : Gen[ManagedResource[() => World[Int]]] =
