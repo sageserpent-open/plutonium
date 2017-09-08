@@ -155,7 +155,7 @@ trait WorldBehaviours
               }
             } yield (historyId, history.datums, pertinentRecordings.map(_._1))
 
-            if (checks.nonEmpty) {
+            if (checks.nonEmpty)
               Prop.all(checks.map {
                 case (historyId, actualHistory, expectedHistory) =>
                   ((actualHistory.length == expectedHistory.length) :| s"For ${historyId}, ${actualHistory.length} == expectedHistory.length") &&
@@ -165,7 +165,7 @@ trait WorldBehaviours
                           (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}"
                       }: _*)
               }: _*)
-            } else Prop.undecided
+            else Prop.undecided
           }
       })
     }
@@ -200,67 +200,70 @@ trait WorldBehaviours
               asOfs,
               queryWhen,
               random) =>
-          worldResource acquireAndGet { world =>
-            val revisions = recordEventsInWorld(
-              liftRecordings(bigShuffledHistoryOverLotsOfThings),
-              asOfs,
-              world)
+          worldResource acquireAndGet {
+            world =>
+              val revisions = recordEventsInWorld(
+                liftRecordings(bigShuffledHistoryOverLotsOfThings),
+                asOfs,
+                world)
 
-            val asOfComingAfterTheLastRevision = asOfs.last.plusSeconds(10L)
+              val asOfComingAfterTheLastRevision = asOfs.last.plusSeconds(10L)
 
-            val asOfPairs = asOfs
-              .scanRight((asOfComingAfterTheLastRevision,
-                          asOfComingAfterTheLastRevision)) {
-                case (asOf, (laterAsOf, _)) => (asOf, laterAsOf)
-              } init
+              val asOfPairs = asOfs
+                .scanRight((asOfComingAfterTheLastRevision,
+                            asOfComingAfterTheLastRevision)) {
+                  case (asOf, (laterAsOf, _)) => (asOf, laterAsOf)
+                } init
 
-            val asOfsAndSharedRevisionTriples = (for {
-              ((earlierAsOfCorrespondingToRevision,
-                laterAsOfComingNoLaterThanAnySucceedingRevision),
-               revision) <- asOfPairs zip revisions
-              laterAsOfSharingTheSameRevisionAsTheEarlierOne = earlierAsOfCorrespondingToRevision plusSeconds random
-                .chooseAnyNumberFromZeroToOneLessThan(
-                  earlierAsOfCorrespondingToRevision.until(
-                    laterAsOfComingNoLaterThanAnySucceedingRevision,
-                    ChronoUnit.SECONDS))
-            } yield
-              (earlierAsOfCorrespondingToRevision,
-               laterAsOfSharingTheSameRevisionAsTheEarlierOne,
-               revision)) filter (PartialFunction.cond(_) {
-              case (earlierAsOfCorrespondingToRevision,
-                    laterAsOfSharingTheSameRevisionAsTheEarlierOne,
-                    _) =>
-                earlierAsOfCorrespondingToRevision isBefore laterAsOfSharingTheSameRevisionAsTheEarlierOne
-            })
+              val asOfsAndSharedRevisionTriples = (for {
+                ((earlierAsOfCorrespondingToRevision,
+                  laterAsOfComingNoLaterThanAnySucceedingRevision),
+                 revision) <- asOfPairs zip revisions
+                laterAsOfSharingTheSameRevisionAsTheEarlierOne = earlierAsOfCorrespondingToRevision plusSeconds random
+                  .chooseAnyNumberFromZeroToOneLessThan(
+                    earlierAsOfCorrespondingToRevision.until(
+                      laterAsOfComingNoLaterThanAnySucceedingRevision,
+                      ChronoUnit.SECONDS))
+              } yield
+                (earlierAsOfCorrespondingToRevision,
+                 laterAsOfSharingTheSameRevisionAsTheEarlierOne,
+                 revision)) filter (PartialFunction.cond(_) {
+                case (earlierAsOfCorrespondingToRevision,
+                      laterAsOfSharingTheSameRevisionAsTheEarlierOne,
+                      _) =>
+                  earlierAsOfCorrespondingToRevision isBefore laterAsOfSharingTheSameRevisionAsTheEarlierOne
+              })
 
-            val checks = for {
-              (earlierAsOfCorrespondingToRevision,
-               laterAsOfSharingTheSameRevisionAsTheEarlierOne,
-               revision) <- asOfsAndSharedRevisionTriples
-              baselineScope = world
-                .scopeFor(queryWhen, earlierAsOfCorrespondingToRevision)
-              scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne = world
-                .scopeFor(queryWhen,
-                          laterAsOfSharingTheSameRevisionAsTheEarlierOne)
-              NonExistentRecordings(historyId, historiesFrom, _) <- recordingsGroupedById flatMap (_.doesNotExistAt(
-                queryWhen))
-              if (historiesFrom(baselineScope).isEmpty) // It might not be, because we may be at an 'asOf' before the annihilation was introduced.
-            } yield
-              (historyId,
-               historiesFrom,
-               baselineScope,
-               scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne)
+              val checks =
+                for {
+                  (earlierAsOfCorrespondingToRevision,
+                   laterAsOfSharingTheSameRevisionAsTheEarlierOne,
+                   revision) <- asOfsAndSharedRevisionTriples
+                  baselineScope = world
+                    .scopeFor(queryWhen, earlierAsOfCorrespondingToRevision)
+                  scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne = world
+                    .scopeFor(queryWhen,
+                              laterAsOfSharingTheSameRevisionAsTheEarlierOne)
+                  NonExistentRecordings(historyId, historiesFrom, _) <- recordingsGroupedById flatMap (_.doesNotExistAt(
+                    queryWhen))
+                  if (historiesFrom(baselineScope).isEmpty) // It might not be, because we may be at an 'asOf' before the annihilation was introduced.
+                } yield
+                  (historyId,
+                   historiesFrom,
+                   baselineScope,
+                   scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne)
 
-            if (checks.nonEmpty) {
-              Prop.all(checks.map {
-                case (historyId,
+              if (checks.nonEmpty)
+                Prop.all(checks.map {
+                  case (
+                      historyId,
                       historiesFrom,
                       baselineScope,
                       scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne) =>
-                  (historiesFrom(
-                    scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne).isEmpty) :| s"For ${historyId}, neither scope should yield a history."
-              }: _*)
-            } else Prop.undecided
+                    (historiesFrom(
+                      scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne).isEmpty) :| s"For ${historyId}, neither scope should yield a history."
+                }: _*)
+              else Prop.undecided
           }
       })
     }
@@ -347,12 +350,12 @@ trait WorldBehaviours
                     .zip(historyUnderTest.datums)
                     .zipWithIndex map (historyId -> _)) flatten
 
-              if (checks.nonEmpty) {
+              if (checks.nonEmpty)
                 Prop.all(checks.map {
                   case (historyId, ((actual, expected), step)) =>
                     (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}"
                 }: _*)
-              } else Prop.undecided
+              else Prop.undecided
           }
       })
     }
@@ -429,13 +432,13 @@ trait WorldBehaviours
               (baselineScope,
                scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne)
 
-            if (checks.nonEmpty) {
+            if (checks.nonEmpty)
               Prop.all(checks.map {
                 case (baselineScope,
                       scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne) =>
                   (baselineScope.nextRevision === scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne.nextRevision) :| s"${baselineScope.nextRevision} === ${scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne}.nextRevision"
               }: _*)
-            } else Prop.undecided
+            else Prop.undecided
           }
       })
     }
@@ -528,7 +531,7 @@ trait WorldBehaviours
                 Seq(history) = historiesFrom(scope)
               } yield (historyId, history.datums, pertinentRecordings.map(_._1))
 
-              if (checks.nonEmpty) {
+              if (checks.nonEmpty)
                 Prop.all(checks.map {
                   case (historyId, actualHistory, expectedHistory) =>
                     ((actualHistory.length == expectedHistory.length) :| s"For ${historyId}, the number of datums: ${actualHistory.length} was expected to be to: ${expectedHistory.length}") &&
@@ -538,7 +541,7 @@ trait WorldBehaviours
                             (actual == expected) :| s"For ${historyId}, @step ${step}, the datum: ${actual}, was expected to be: ${expected}"
                         }: _*)
                 }: _*)
-              } else Prop.undecided
+              else Prop.undecided
           }
       })
     }
@@ -583,7 +586,7 @@ trait WorldBehaviours
                   queryWhen))
               } yield (historiesFrom, historyId)
 
-              if (checks.nonEmpty) {
+              if (checks.nonEmpty)
                 Prop.all(checks.map {
                   case (historiesFrom, historyId) => {
                     (historiesFrom(scope) match {
@@ -591,7 +594,7 @@ trait WorldBehaviours
                     }) :| s"Could not find a history for id: ${historyId}."
                   }
                 }: _*)
-              } else Prop.undecided
+              else Prop.undecided
           }
       })
     }
@@ -647,7 +650,7 @@ trait WorldBehaviours
                   queryWhen))
               } yield (historiesFrom, historyId)
 
-              if (checks.nonEmpty) {
+              if (checks.nonEmpty)
                 Prop.all(checks.map {
                   case (historiesFrom, historyId) => {
                     (historiesFrom(scope) match {
@@ -655,7 +658,7 @@ trait WorldBehaviours
                     }) :| s"Could not find a history for id: ${historyId}."
                   }
                 }: _*)
-              } else Prop.undecided
+              else Prop.undecided
           }
       })
     }
@@ -725,7 +728,7 @@ trait WorldBehaviours
                  referringHistory.referencedDatums(referencedHistoryId),
                  pertinentRecordings.map(_._1))
 
-              if (checks.nonEmpty) {
+              if (checks.nonEmpty)
                 Prop.all(checks.map {
                   case (referringHistoryId,
                         referencedHistoryId,
@@ -738,10 +741,11 @@ trait WorldBehaviours
                             (actual == expected) :| s"For referring history id: ${referringHistoryId}, referenced history id: ${referencedHistoryId}, @step ${step}, the datum: ${actual}, was expected to be: ${expected}"
                         }: _*)
                 }: _*)
-              } else Prop.undecided
+              else Prop.undecided
             }
         },
-        minSuccessful(12)
+        minSuccessful(12),
+        maxSize(5)
       )
     }
 
@@ -806,7 +810,7 @@ trait WorldBehaviours
                   .isGhost
               } yield (referringHistoryId, referencedHistoryId)
 
-              if (checks.nonEmpty) {
+              if (checks.nonEmpty)
                 Prop.all(checks.map {
                   case (referringHistoryId, referencedHistoryId) =>
                     val directAccessBitemporalQuery: Bitemporal[History] =
@@ -826,10 +830,11 @@ trait WorldBehaviours
                       scope.render(agglomeratedBitemporalQuery)
                     (directlyAccessedReferencedHistory eq indirectlyAccessedReferencedHistory) :| s"Expected item: '$indirectlyAccessedReferencedHistory' accessed indirectly via referring item of id: '$referringHistoryId' to have the same object identity as '$directlyAccessedReferencedHistory' accessed directly via id: '$referencedHistoryId'."
                 }: _*)
-              } else Prop.undecided
+              else Prop.undecided
             }
         },
-        minSuccessful(12)
+        minSuccessful(12),
+        maxSize(5)
       )
     }
 
@@ -874,12 +879,12 @@ trait WorldBehaviours
                 histories = historiesFrom(scope)
               } yield (historyId, histories)
 
-              if (checks.nonEmpty) {
+              if (checks.nonEmpty)
                 Prop.all(checks.map {
                   case (historyId, histories) =>
                     histories.isEmpty :| s"For ${historyId}, ${histories}.isEmpty"
                 }: _*)
-              } else Prop.undecided
+              else Prop.undecided
           }
       })
     }
@@ -942,12 +947,12 @@ trait WorldBehaviours
                     histories = historiesFrom(scope)
                   } yield (historyId, histories)
 
-                  if (checks.nonEmpty) {
+                  if (checks.nonEmpty)
                     Prop.all(checks.map {
                       case (historyId, histories) =>
                         histories.isEmpty :| s"For ${historyId}, ${histories}.isEmpty"
                     }: _*)
-                  } else Prop.undecided
+                  else Prop.undecided
               }
           })
     }
@@ -975,52 +980,56 @@ trait WorldBehaviours
          bigShuffledHistoryOverLotsOfThings,
          asOfs,
          queryWhen)
-      check(Prop.forAllNoShrink(testCaseGenerator) {
-        case (worldResource,
-              referencedHistoryRecordingsGroupedById,
-              referringHistoryRecordingsGroupedById,
-              bigShuffledHistoryOverLotsOfThings,
-              asOfs,
-              queryWhen) =>
-          worldResource acquireAndGet {
-            world =>
-              recordEventsInWorld(
-                liftRecordings(bigShuffledHistoryOverLotsOfThings),
+      check(
+        Prop.forAllNoShrink(testCaseGenerator) {
+          case (worldResource,
+                referencedHistoryRecordingsGroupedById,
+                referringHistoryRecordingsGroupedById,
+                bigShuffledHistoryOverLotsOfThings,
                 asOfs,
-                world)
+                queryWhen) =>
+            worldResource acquireAndGet {
+              world =>
+                recordEventsInWorld(
+                  liftRecordings(bigShuffledHistoryOverLotsOfThings),
+                  asOfs,
+                  world)
 
-              val scope = world.scopeFor(queryWhen, world.nextRevision)
+                val scope = world.scopeFor(queryWhen, world.nextRevision)
 
-              val checks: List[(Any, History)] =
-                for {
-                  RecordingsNoLaterThan(
-                    referringHistoryId,
-                    referringHistoriesFrom,
-                    _,
-                    _,
-                    _) <- referringHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(
-                    queryWhen))
-                  NonExistentRecordings(
-                    referencedHistoryId,
-                    referencedHistoriesFrom,
-                    _) <- referencedHistoryRecordingsGroupedById flatMap (_.doesNotExistAt(
-                    queryWhen))
-                  Seq(referringHistory: ReferringHistory) = referringHistoriesFrom(
-                    scope) if referringHistory.referencedDatums.contains(
-                    referencedHistoryId) && !referringHistory
-                    .referencedHistories(referencedHistoryId)
-                    .isGhost
-                  Seq(referencedHistory) = referencedHistoriesFrom(scope)
-                } yield (referencedHistoryId, referencedHistory)
+                val checks: List[(Any, History)] =
+                  for {
+                    RecordingsNoLaterThan(
+                      referringHistoryId,
+                      referringHistoriesFrom,
+                      _,
+                      _,
+                      _) <- referringHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(
+                      queryWhen))
+                    NonExistentRecordings(
+                      referencedHistoryId,
+                      referencedHistoriesFrom,
+                      _) <- referencedHistoryRecordingsGroupedById flatMap (_.doesNotExistAt(
+                      queryWhen))
+                    Seq(referringHistory: ReferringHistory) = referringHistoriesFrom(
+                      scope) if referringHistory.referencedDatums.contains(
+                      referencedHistoryId) && !referringHistory
+                      .referencedHistories(referencedHistoryId)
+                      .isGhost
+                    Seq(referencedHistory) = referencedHistoriesFrom(scope)
+                  } yield (referencedHistoryId, referencedHistory)
 
-              // WON'T FIX: this test doesn't guarantee the generation of at least one useful test case where 'checks' is non-empty - but inspection shows that it does.
-              // Cutting over to marking the property as undecided when 'checks' is empty causes ScalaCheck to exhaust - after trying various configuration tweaks, I'm giving up for now.
-              Prop.all(checks.map {
-                case (historyId, actualHistory) =>
-                  (actualHistory.datums.isEmpty :| s"For ${historyId}, the datums: ${actualHistory.datums} was supposed to be empty")
-              }: _*)
-          }
-      })
+                if (checks.nonEmpty)
+                  Prop.all(checks.map {
+                    case (historyId, actualHistory) =>
+                      (actualHistory.datums.isEmpty :| s"For ${historyId}, the datums: ${actualHistory.datums} was supposed to be empty")
+                  }: _*)
+                else Prop.undecided
+            }
+        },
+        minSuccessful(12),
+        maxSize(5)
+      )
     }
 
     it should "detect the application of measurements that would attempt to define a future item whose existence would overlap with and conflict with an existing item that is subsequently annihilated." in {
@@ -1273,7 +1282,7 @@ trait WorldBehaviours
               )
             }
 
-            if (checks.nonEmpty) {
+            if (checks.nonEmpty)
               Prop.all(checks.map {
                 case (referencedHistoryId, laterQueryWhenAtAnnihilation) => {
                   val scope = world.scopeFor(laterQueryWhenAtAnnihilation,
@@ -1291,7 +1300,7 @@ trait WorldBehaviours
                   itIsAGhost :| s"Expected referenced item of id: '$referencedHistoryId' referred to by item of id: '${referringHistory.id}' to be a ghost at time: $laterQueryWhenAtAnnihilation - the event causing referral was at: $referencingEventWhen."
                 }
               }: _*)
-            } else Prop.undecided
+            else Prop.undecided
           }
       })
     }
@@ -1603,14 +1612,14 @@ trait WorldBehaviours
                 scopeViaNextRevision = world.scopeFor(queryWhen, nextRevision)
               } yield (asOf, nextRevision, scopeViaNextRevision)
 
-              if (checksViaNextRevision.nonEmpty) {
+              if (checksViaNextRevision.nonEmpty)
                 Prop.all(checksViaNextRevision map {
                   case (asOf, nextRevision, scopeViaNextRevision) =>
                     (asOf === scopeViaNextRevision.asOf) :| s"${asOf} === scopeViaNextRevision.asOf" &&
                       (nextRevision === scopeViaNextRevision.nextRevision) :| s"${nextRevision} === scopeViaNextRevision.nextRevision" &&
                       (queryWhen === scopeViaNextRevision.when) :| s"${queryWhen} === scopeViaNextRevision.when"
                 }: _*)
-              } else Prop.undecided
+              else Prop.undecided
           }
 
         // TODO - perturb the 'asOf' values so as not to go the next revision and see how that plays with the two ways of constructing a scope.
@@ -1693,7 +1702,7 @@ trait WorldBehaviours
                scopeViaEarlierAsOfCorrespondingToRevision,
                scopeViaLaterAsOfSharingTheSameRevisionAsTheEarlierOne)
 
-            if (checksViaAsOf.nonEmpty) {
+            if (checksViaAsOf.nonEmpty)
               Prop.all(checksViaAsOf map {
                 case (earlierAsOfCorrespondingToRevision,
                       laterAsOfSharingTheSameRevisionAsTheEarlierOne,
@@ -1707,7 +1716,7 @@ trait WorldBehaviours
                     (queryWhen == scopeViaEarlierAsOfCorrespondingToRevision.when) :| s"${queryWhen} == scopeViaEarlierAsOfCorrespondingToRevision.when" &&
                     (queryWhen == scopeViaLaterAsOfSharingTheSameRevisionAsTheEarlierOne.when) :| s"${queryWhen} == scopeViaLaterAsOfSharingTheSameRevisionAsTheEarlierOne.when"
               }: _*)
-            } else Prop.undecided
+            else Prop.undecided
           }
       })
     }
@@ -1776,9 +1785,9 @@ trait WorldBehaviours
                   recordingsGroupedById)(scopeViaAsOf))
               }
 
-              if (results.nonEmpty) {
+              if (results.nonEmpty)
                 Prop.all(results: _*)
-              } else Prop.undecided
+              else Prop.undecided
           }
       })
     }
@@ -2005,7 +2014,7 @@ trait WorldBehaviours
                 } yield
                   (historyId, history.datums, pertinentRecordings.map(_._1))
 
-                if (checks.nonEmpty) {
+                if (checks.nonEmpty)
                   Prop.all(checks.map {
                     case (historyId, actualHistory, expectedHistory) =>
                       ((actualHistory.length == expectedHistory.length) :| s"For ${historyId}, ${actualHistory.length} == expectedHistory.length") &&
@@ -2015,7 +2024,7 @@ trait WorldBehaviours
                               (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}"
                           }: _*)
                   }: _*)
-                } else Prop.undecided
+                else Prop.undecided
             }
         })
       }
@@ -2126,7 +2135,7 @@ trait WorldBehaviours
                 } yield
                   (historyId, history.datums, pertinentRecordings.map(_._1))
 
-                if (checks.nonEmpty) {
+                if (checks.nonEmpty)
                   Prop.all(checks.map {
                     case (historyId, actualHistory, expectedHistory) =>
                       ((actualHistory.length == expectedHistory.length) :| s"For ${historyId}, ${actualHistory.length} == expectedHistory.length") &&
@@ -2136,7 +2145,7 @@ trait WorldBehaviours
                               (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}"
                           }: _*)
                   }: _*)
-                } else Prop.undecided
+                else Prop.undecided
             }
         })
       }
@@ -2272,7 +2281,7 @@ trait WorldBehaviours
                 Seq(history) = historiesFrom(scope)
               } yield (historyId, history.datums, pertinentRecordings.map(_._1))
 
-              if (checks.nonEmpty) {
+              if (checks.nonEmpty)
                 Prop.all(checks.map {
                   case (historyId, actualHistory, expectedHistory) =>
                     ((actualHistory.length == expectedHistory.length) :| s"${actualHistory.length} == expectedHistory.length") &&
@@ -2282,7 +2291,7 @@ trait WorldBehaviours
                             (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}"
                         }: _*)
                 }: _*)
-              } else Prop.undecided
+              else Prop.undecided
           }
       })
     }
@@ -2447,7 +2456,7 @@ trait WorldBehaviours
                 Seq(history) = historiesFrom(scope)
               } yield (historyId, history.datums, pertinentRecordings.map(_._1))
 
-              if (checks.nonEmpty) {
+              if (checks.nonEmpty)
                 Prop.all(checks.map {
                   case (historyId, actualHistory, expectedHistory) =>
                     ((actualHistory.length == expectedHistory.length) :| s"${actualHistory.length} == expectedHistory.length") &&
@@ -2457,7 +2466,7 @@ trait WorldBehaviours
                             (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}"
                         }: _*)
                 }: _*)
-              } else Prop.undecided
+              else Prop.undecided
           }
       })
     }
@@ -2596,9 +2605,9 @@ trait WorldBehaviours
                   }: _*)
                 }).force
 
-                if (checks.nonEmpty) {
+                if (checks.nonEmpty)
                   Prop.all(checks: _*)
-                } else Prop.undecided
+                else Prop.undecided
             }
         }
       )
