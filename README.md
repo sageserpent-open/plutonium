@@ -1,4 +1,4 @@
-# Plutonium
+# Plutonium [![Build Status](https://travis-ci.org/sageserpent-open/open-plutonium.svg?branch=master)](https://travis-ci.org/sageserpent-open/open-plutonium)
 
 ## Pardon? ##
 No, you are not about to be invited to purchase some fissile material of any isotopic constitution whatsover.
