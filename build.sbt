@@ -8,7 +8,7 @@ lazy val settings = Seq(
   scalacOptions += "-Xexperimental",
   libraryDependencies += "org.scalaz"              %% "scalaz-core"                 % "7.3.0-M10",
   libraryDependencies += "net.bytebuddy"           % "byte-buddy"                   % "1.5.8",
-  libraryDependencies += "com.sageserpent"         %% "americium"                   % "0.1.3",
+  libraryDependencies += "com.sageserpent"         %% "americium"                   % "0.1.4",
   libraryDependencies += "com.jsuereth"            %% "scala-arm"                   % "2.0",
   libraryDependencies += "org.scala-lang"          % "scala-reflect"                % "2.12.1",
   libraryDependencies += "biz.paluch.redis"        % "lettuce"                      % "4.3.0.Final",
@@ -23,6 +23,7 @@ lazy val settings = Seq(
   libraryDependencies += "org.scalaz"              %% "scalaz-scalacheck-binding"   % "7.3.0-M10" % "test",
   libraryDependencies += "com.github.kstyrc"       % "embedded-redis"               % "0.6" % "test",
   libraryDependencies += "junit"                   % "junit"                        % "4.12" % "test",
+  libraryDependencies += "com.novocode"            % "junit-interface"              % "0.11" % "test",
   publishMavenStyle := true,
   publishTo := Some(
     Resolver.file("file",

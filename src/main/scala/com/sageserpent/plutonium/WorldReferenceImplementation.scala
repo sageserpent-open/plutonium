@@ -22,13 +22,6 @@ object MutableState {
   type EventIdToEventCorrectionsMap[EventId] =
     mutable.Map[EventId, EventCorrections]
 
-  def eventCorrectionsPriorToCutoffRevision(
-      eventCorrections: EventCorrections,
-      cutoffRevision: Revision): EventCorrections =
-    eventCorrections take numberOfEventCorrectionsPriorToCutoff(
-      eventCorrections,
-      cutoffRevision)
-
   implicit val isSeqLike = new IsSeqLike[SeqView[Revision, Seq[_]]] {
     type A = Revision
     override val conversion

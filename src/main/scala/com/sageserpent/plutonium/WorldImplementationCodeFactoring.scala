@@ -67,16 +67,6 @@ object WorldImplementationCodeFactoring {
     }).sorted.map(_.serializableEvent)
 
   object IdentifiedItemsScope {
-    def hasItemOfSupertypeOf[Item <: Identified: TypeTag](
-        items: scala.collection.mutable.Set[Identified]) = {
-      val reflectedType = typeTag[Item].tpe
-      val clazzOfItem   = currentMirror.runtimeClass(reflectedType)
-      items.exists { item =>
-        val itemClazz = item.getClass
-        itemClazz.isAssignableFrom(clazzOfItem) && itemClazz != clazzOfItem
-      }
-    }
-
     def yieldOnlyItemsOfSupertypeOf[Item <: Identified: TypeTag](
         items: Traversable[Identified]) = {
       val reflectedType = typeTag[Item].tpe
@@ -85,7 +75,7 @@ object WorldImplementationCodeFactoring {
 
       items filter { item =>
         val itemClazz = item.getClass
-        itemClazz.isAssignableFrom(clazzOfItem) && itemClazz != clazzOfItem
+        itemClazz != clazzOfItem && itemClazz.isAssignableFrom(clazzOfItem)
       }
     }
 
