@@ -334,9 +334,10 @@ trait WorldSpecSupport extends Assertions {
       } map (1 -> _): _*))
 
     for {
-      dataSamples <- dataSamplesGenerator
-      historyId   <- historyIdGenerator
-      headsItIs   <- Gen.oneOf(false, true)
+      dataSamples             <- dataSamplesGenerator
+      historyId               <- historyIdGenerator
+      headsItIs               <- Arbitrary.arbBool.arbitrary
+      anotherRoundOfHeadsItIs <- Arbitrary.arbBool.arbitrary
     } yield
       (historyId,
        (scope: Scope) =>
@@ -351,14 +352,25 @@ trait WorldSpecSupport extends Assertions {
          (index, data, changeFor(_: Unbounded[Instant], _: Boolean, historyId)),
        Annihilation(_: Instant, historyId),
        if (headsItIs)
-         Change.forOneItem(_: Unbounded[Instant])(historyId,
-                                                  (item: AHistory) => {
-                                                    // A useless event: nothing changes!
-                                                  })
-       else
+         if (anotherRoundOfHeadsItIs)
+           Change.forOneItem(_: Unbounded[Instant])(historyId,
+                                                    (item: AHistory) => {
+                                                      // A useless event: nothing changes!
+                                                    })
+         else
+           Change.forOneItem(_: Unbounded[Instant])(historyId,
+                                                    (item: History) => {
+                                                      // A useless event: nothing changes - and the event refers to the item type abstractly to boot.
+                                                    })
+       else if (headsItIs)
          Measurement.forOneItem(_: Unbounded[Instant])(historyId,
                                                        (item: AHistory) => {
                                                          // A useless event: nothing is measured!
+                                                       })
+       else
+         Measurement.forOneItem(_: Unbounded[Instant])(historyId,
+                                                       (item: History) => {
+                                                         // A useless event: nothing changes - and the event refers to the item type abstractly to boot.
                                                        }))
   }
 
