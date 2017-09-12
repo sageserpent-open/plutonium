@@ -869,7 +869,7 @@ trait BitemporalBehaviours
                       integerHistory.integerProperty = integerHistory.integerProperty + 1
                     case fooHistory: FooHistory =>
                       fooHistory.property1 = "Prohibited"
-                    case barHistory: AbstractBarHistory =>
+                    case barHistory: BarHistory =>
                       barHistory.method1("No", 0)
                   }
                 }

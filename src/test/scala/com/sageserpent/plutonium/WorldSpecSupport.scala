@@ -156,12 +156,11 @@ trait WorldSpecSupport extends Assertions {
       (data,
        (when: Unbounded[Instant],
         makeAChange: Boolean,
-        barHistoryId: AbstractBarHistory#Id) =>
-         eventConstructorReferringToOneItem[AbstractBarHistory](makeAChange)(
-           when)
+        barHistoryId: BarHistory#Id) =>
+         eventConstructorReferringToOneItem[BarHistory](makeAChange)(when)
            .apply(
              barHistoryId,
-             (barHistory: AbstractBarHistory) => {
+             (barHistory: BarHistory) => {
                if (faulty) barHistory.forceInvariantBreakage() // Modelling breakage of the bitemporal invariant.
 
                // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
@@ -181,12 +180,11 @@ trait WorldSpecSupport extends Assertions {
       (data1 -> data2,
        (when: americium.Unbounded[Instant],
         makeAChange: Boolean,
-        barHistoryId: AbstractBarHistory#Id) =>
-         eventConstructorReferringToOneItem[AbstractBarHistory](makeAChange)(
-           when)
+        barHistoryId: BarHistory#Id) =>
+         eventConstructorReferringToOneItem[BarHistory](makeAChange)(when)
            .apply(
              barHistoryId,
-             (barHistory: AbstractBarHistory) => {
+             (barHistory: BarHistory) => {
                // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
                assert(barHistory.id == barHistoryId)
                assertThrows[UnsupportedOperationException](barHistory.datums)
@@ -820,11 +818,10 @@ trait WorldSpecSupport extends Assertions {
 
     val mixedDisjointRightHandDataSamplesForAnIdGenerator = Gen.frequency(
       Seq(
-        dataSamplesForAnIdGenerator_[AbstractBarHistory](
-          barHistoryIdGenerator,
-          dataSampleGenerator3(faulty),
-          dataSampleGenerator4(faulty),
-          dataSampleGenerator5(faulty)),
+        dataSamplesForAnIdGenerator_[BarHistory](barHistoryIdGenerator,
+                                                 dataSampleGenerator3(faulty),
+                                                 dataSampleGenerator4(faulty),
+                                                 dataSampleGenerator5(faulty)),
         dataSamplesForAnIdGenerator_[IntegerHistory](
           integerHistoryIdGenerator,
           integerDataSampleGenerator(faulty))
@@ -868,11 +865,10 @@ trait WorldSpecSupport extends Assertions {
   def mixedNonConflictingDataSamplesForAnIdGenerator(faulty: Boolean = false) =
     Gen.frequency(
       Seq(
-        dataSamplesForAnIdGenerator_[AbstractBarHistory](
-          barHistoryIdGenerator,
-          dataSampleGenerator3(faulty),
-          dataSampleGenerator4(faulty),
-          dataSampleGenerator5(faulty)),
+        dataSamplesForAnIdGenerator_[BarHistory](barHistoryIdGenerator,
+                                                 dataSampleGenerator3(faulty),
+                                                 dataSampleGenerator4(faulty),
+                                                 dataSampleGenerator5(faulty)),
         dataSamplesForAnIdGenerator_[IntegerHistory](
           integerHistoryIdGenerator,
           integerDataSampleGenerator(faulty))
