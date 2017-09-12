@@ -177,7 +177,8 @@ object WorldImplementationCodeFactoring {
           constructor                            -> clazz
       }
 
-      if (!isForRecordingOnly && Modifier.isAbstract(clazz.getModifiers)) {
+      if (!isForRecordingOnly && clazz.getMethods.exists(method =>
+            Modifier.isAbstract(method.getModifiers))) {
         throw new UnsupportedOperationException(
           s"Attempt to create an instance of an abstract class '$clazz' for id: '$id'.")
       }
@@ -223,8 +224,8 @@ object WorldImplementationCodeFactoring {
 
     val matchForbiddenReadAccess: ElementMatcher[MethodDescription] =
       methodDescription =>
-        (methodDescription.isAbstract || !IdentifiedItemsScope
-          .alwaysAllowsReadAccessTo(methodDescription)) && !RecordingCallbackStuff
+        !IdentifiedItemsScope
+          .alwaysAllowsReadAccessTo(methodDescription) && !RecordingCallbackStuff
           .isFinalizer(methodDescription)
 
     object mutation {

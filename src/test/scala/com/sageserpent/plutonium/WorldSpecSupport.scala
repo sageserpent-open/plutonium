@@ -85,7 +85,7 @@ trait WorldSpecSupport extends Assertions {
                fooHistoryId,
                (fooHistory: FooHistory) => {
                  // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
-                 val _ = fooHistory.id
+                 assert(fooHistoryId == fooHistory.id)
                  assertThrows[UnsupportedOperationException](fooHistory.datums)
                  assertThrows[UnsupportedOperationException](
                    fooHistory.property1)
@@ -101,7 +101,7 @@ trait WorldSpecSupport extends Assertions {
                fooHistoryId,
                (fooHistory: BadFooHistory) => {
                  // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
-                 val _ = fooHistory.id
+                 assert(fooHistoryId == fooHistory.id)
                  assertThrows[UnsupportedOperationException](fooHistory.datums)
                  assertThrows[UnsupportedOperationException](
                    fooHistory.property1)
@@ -124,7 +124,7 @@ trait WorldSpecSupport extends Assertions {
                fooHistoryId,
                (fooHistory: FooHistory) => {
                  // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
-                 val _ = fooHistory.id
+                 assert(fooHistoryId == fooHistory.id)
                  assertThrows[UnsupportedOperationException](fooHistory.datums)
                  assertThrows[UnsupportedOperationException](
                    fooHistory.property1)
@@ -140,7 +140,7 @@ trait WorldSpecSupport extends Assertions {
                fooHistoryId,
                (fooHistory: BadFooHistory) => {
                  // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
-                 val _ = fooHistory.id
+                 assert(fooHistoryId == fooHistory.id)
                  assertThrows[UnsupportedOperationException](fooHistory.datums)
                  assertThrows[UnsupportedOperationException](
                    fooHistory.property1)
@@ -156,15 +156,16 @@ trait WorldSpecSupport extends Assertions {
       (data,
        (when: Unbounded[Instant],
         makeAChange: Boolean,
-        barHistoryId: BarHistory#Id) =>
-         eventConstructorReferringToOneItem[BarHistory](makeAChange)(when)
+        barHistoryId: AbstractBarHistory#Id) =>
+         eventConstructorReferringToOneItem[AbstractBarHistory](makeAChange)(
+           when)
            .apply(
              barHistoryId,
-             (barHistory: BarHistory) => {
+             (barHistory: AbstractBarHistory) => {
                if (faulty) barHistory.forceInvariantBreakage() // Modelling breakage of the bitemporal invariant.
 
                // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
-               val _ = barHistory.id
+               assert(barHistory.id == barHistoryId)
                assertThrows[UnsupportedOperationException](barHistory.datums)
                assertThrows[UnsupportedOperationException](barHistory.property1)
 
@@ -180,13 +181,14 @@ trait WorldSpecSupport extends Assertions {
       (data1 -> data2,
        (when: americium.Unbounded[Instant],
         makeAChange: Boolean,
-        barHistoryId: BarHistory#Id) =>
-         eventConstructorReferringToOneItem[BarHistory](makeAChange)(when)
+        barHistoryId: AbstractBarHistory#Id) =>
+         eventConstructorReferringToOneItem[AbstractBarHistory](makeAChange)(
+           when)
            .apply(
              barHistoryId,
-             (barHistory: BarHistory) => {
+             (barHistory: AbstractBarHistory) => {
                // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
-               val _ = barHistory.id
+               assert(barHistory.id == barHistoryId)
                assertThrows[UnsupportedOperationException](barHistory.datums)
                assertThrows[UnsupportedOperationException](barHistory.property1)
 
@@ -211,7 +213,7 @@ trait WorldSpecSupport extends Assertions {
              barHistoryId,
              (barHistory: BarHistory) => {
                // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
-               val _ = barHistory.id
+               assert(barHistory.id == barHistoryId)
                assertThrows[UnsupportedOperationException](barHistory.datums)
                assertThrows[UnsupportedOperationException](barHistory.property1)
 
@@ -232,7 +234,7 @@ trait WorldSpecSupport extends Assertions {
              integerHistoryId,
              (integerHistory: IntegerHistory) => {
                // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
-               val _ = integerHistory.id
+               assert(integerHistoryId == integerHistory.id)
                assertThrows[UnsupportedOperationException](
                  integerHistory.datums)
                assertThrows[UnsupportedOperationException](
@@ -255,7 +257,7 @@ trait WorldSpecSupport extends Assertions {
            fooHistoryId,
            (fooHistory: MoreSpecificFooHistory) => {
              // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
-             val _ = fooHistory.id
+             assert(fooHistoryId == fooHistory.id)
              assertThrows[UnsupportedOperationException](fooHistory.datums)
              assertThrows[UnsupportedOperationException](fooHistory.property1)
              assertThrows[UnsupportedOperationException](fooHistory.property2)
@@ -277,7 +279,7 @@ trait WorldSpecSupport extends Assertions {
            referringHistoryId,
            idToReferToAnotherItem,
            (referringHistory: ReferringHistory, referencedItem: FooHistory) => {
-             val _ = referringHistory.id
+             assert(referringHistoryId == referringHistory.id)
 
              if (faulty) referringHistory.forceInvariantBreakage() // Modelling breakage of the bitemporal invariant.
 
@@ -303,7 +305,7 @@ trait WorldSpecSupport extends Assertions {
            referringHistoryId,
            idToReferToAnotherItem,
            (referringHistory: ReferringHistory, referencedItem: FooHistory) => {
-             val _ = referringHistory.id
+             assert(referringHistoryId == referringHistory.id)
              assertThrows[UnsupportedOperationException](
                referringHistory.datums)
              assertThrows[UnsupportedOperationException](
@@ -818,10 +820,11 @@ trait WorldSpecSupport extends Assertions {
 
     val mixedDisjointRightHandDataSamplesForAnIdGenerator = Gen.frequency(
       Seq(
-        dataSamplesForAnIdGenerator_[BarHistory](barHistoryIdGenerator,
-                                                 dataSampleGenerator3(faulty),
-                                                 dataSampleGenerator4(faulty),
-                                                 dataSampleGenerator5(faulty)),
+        dataSamplesForAnIdGenerator_[AbstractBarHistory](
+          barHistoryIdGenerator,
+          dataSampleGenerator3(faulty),
+          dataSampleGenerator4(faulty),
+          dataSampleGenerator5(faulty)),
         dataSamplesForAnIdGenerator_[IntegerHistory](
           integerHistoryIdGenerator,
           integerDataSampleGenerator(faulty))
@@ -865,10 +868,11 @@ trait WorldSpecSupport extends Assertions {
   def mixedNonConflictingDataSamplesForAnIdGenerator(faulty: Boolean = false) =
     Gen.frequency(
       Seq(
-        dataSamplesForAnIdGenerator_[BarHistory](barHistoryIdGenerator,
-                                                 dataSampleGenerator3(faulty),
-                                                 dataSampleGenerator4(faulty),
-                                                 dataSampleGenerator5(faulty)),
+        dataSamplesForAnIdGenerator_[AbstractBarHistory](
+          barHistoryIdGenerator,
+          dataSampleGenerator3(faulty),
+          dataSampleGenerator4(faulty),
+          dataSampleGenerator5(faulty)),
         dataSamplesForAnIdGenerator_[IntegerHistory](
           integerHistoryIdGenerator,
           integerDataSampleGenerator(faulty))

@@ -2699,7 +2699,7 @@ class WorldSpecUsingWorldReferenceImplementation
     extends WorldBehaviours
     with WorldReferenceImplementationResource {
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
-    PropertyCheckConfig(maxSize = 30)
+    PropertyCheckConfig(maxSize = 40)
 
   "A world with no history (using the world reference implementation)" should behave like worldWithNoHistoryBehaviour
 
@@ -2751,7 +2751,7 @@ class WorldSpecUsingWorldRedisBasedImplementation
   val redisServerPort = 6454
 
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
-    PropertyCheckConfig(maxSize = 8)
+    PropertyCheckConfig(maxSize = 15)
 
   "A world with no history (using the world Redis-based implementation)" should behave like worldWithNoHistoryBehaviour
 
