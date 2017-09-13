@@ -214,7 +214,7 @@ object WorldImplementationCodeFactoring {
     }
 
     val matchMutation: ElementMatcher[MethodDescription] = methodDescription =>
-      methodDescription.getReturnType.represents(classOf[Unit]) && !methodDescription.isAbstract
+      methodDescription.getReturnType.represents(classOf[Unit])
 
     val matchItemReconstitutionData: ElementMatcher[MethodDescription] =
       methodDescription =>
@@ -226,7 +226,8 @@ object WorldImplementationCodeFactoring {
       methodDescription =>
         !IdentifiedItemsScope
           .alwaysAllowsReadAccessTo(methodDescription) && !RecordingCallbackStuff
-          .isFinalizer(methodDescription)
+          .isFinalizer(methodDescription) && !methodDescription.getReturnType
+          .represents(classOf[Unit])
 
     object mutation {
       @RuntimeType

@@ -1292,7 +1292,7 @@ trait WorldBehaviours
                   val ghostItem =
                     referringHistory.referencedHistories(referencedHistoryId)
                   val idOfGhost  = ghostItem.id      // It's OK to ask a ghost what its name is.
-                  val itIsAGhost = ghostItem.isGhost // It's OK to to ask a ghost to prove its ghostliness.
+                  val itIsAGhost = ghostItem.isGhost // It's OK to ask a ghost to prove its ghostliness.
                   intercept[RuntimeException] {
                     ghostItem.datums // It's not OK to ask any other questions - it will just go 'Whooh' at you.
                   }
@@ -1955,8 +1955,8 @@ trait WorldBehaviours
     val variablyTypedDataSamplesForAnIdGenerator =
       dataSamplesForAnIdGenerator_[FooHistory](
         fooHistoryIdGenerator,
-        Gen.oneOf(moreSpecificFooDataSampleGenerator(faulty = false),
-                  dataSampleGenerator1(faulty = false)))
+        Gen.oneOf(moreSpecificFooHistoryDataSampleGenerator(faulty = false),
+                  fooHistoryDataSampleGenerator1(faulty = false)))
 
     val variablyTypedRecordingsGroupedByIdGenerator =
       recordingsGroupedByIdGenerator_(variablyTypedDataSamplesForAnIdGenerator,
@@ -2139,6 +2139,114 @@ trait WorldBehaviours
                   Prop.all(checks.map {
                     case (historyId, actualHistory, expectedHistory) =>
                       ((actualHistory.length == expectedHistory.length) :| s"For ${historyId}, ${actualHistory.length} == expectedHistory.length") &&
+                        Prop.all(
+                          (actualHistory zip expectedHistory zipWithIndex) map {
+                            case ((actual, expected), step) =>
+                              (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}"
+                          }: _*)
+                  }: _*)
+                else Prop.undecided
+            }
+        })
+      }
+    }
+
+    it should "allow events to refer to an item via an abstract type provided it is defined concretely in other events" in {
+      {
+        val testCaseGenerator = for {
+          worldResource                               <- worldResourceGenerator
+          recordingsForAbstractedHistoriesGroupedById <- abstractedHistoryRecordingsGroupedByIdGenerator
+          idsForAbstractedHistories = recordingsForAbstractedHistoriesGroupedById
+            .map(_.historyId)
+            .toSet
+          recordingsForImplementingHistoriesGroupedById <- implementingHistoryRecordingsGroupedByIdGenerator
+          idsForImplementingHistories = recordingsForImplementingHistoriesGroupedById
+            .map(_.historyId)
+            .toSet
+          sharedIds = idsForAbstractedHistories intersect idsForImplementingHistories
+          if sharedIds.nonEmpty
+          relevantRecordingsForAbstractedHistoriesGroupedById = recordingsForAbstractedHistoriesGroupedById filter (
+              recordings => sharedIds.contains(recordings.historyId))
+          relevantRecordingsForImplementedHistoriesGroupedById = recordingsForImplementingHistoriesGroupedById filter (
+              recordings => sharedIds.contains(recordings.historyId))
+          seed <- seedGenerator
+          random = new Random(seed)
+          shuffledRecordingsForAbstractedHistories = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+            random,
+            relevantRecordingsForAbstractedHistoriesGroupedById)
+          shuffledRecordingsForImplementingHistories = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+            random,
+            relevantRecordingsForImplementedHistoriesGroupedById)
+          bigShuffledHistoryOverLotsOfThingsThatMakesSureThatAtLeastOneImplementingHistoryGetsBookedInFirst = liftRecordings(
+            random
+              .splitIntoNonEmptyPieces(
+                (shuffledRecordingsForImplementingHistories ++ shuffledRecordingsForAbstractedHistories).zipWithIndex))
+          asOfs <- Gen.listOfN(
+            bigShuffledHistoryOverLotsOfThingsThatMakesSureThatAtLeastOneImplementingHistoryGetsBookedInFirst.length,
+            instantGenerator) map (_.sorted)
+          queryWhen <- unboundedInstantGenerator
+        } yield
+          (worldResource,
+           relevantRecordingsForAbstractedHistoriesGroupedById,
+           relevantRecordingsForImplementedHistoriesGroupedById,
+           bigShuffledHistoryOverLotsOfThingsThatMakesSureThatAtLeastOneImplementingHistoryGetsBookedInFirst,
+           asOfs,
+           queryWhen)
+        check(Prop.forAllNoShrink(testCaseGenerator) {
+          case (worldResource,
+                recordingsForAbstractedHistoriesGroupedById,
+                recordingsForImplementingHistoriesGroupedById,
+                bigShuffledHistoryOverLotsOfThings,
+                asOfs,
+                queryWhen) =>
+            worldResource acquireAndGet {
+              world =>
+                recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
+                                    asOfs,
+                                    world)
+
+                val scope = world.scopeFor(queryWhen, world.nextRevision)
+
+                val checksOnAbstractedHistories = for {
+                  RecordingsNoLaterThan(
+                    historyId,
+                    historiesFrom,
+                    pertinentRecordings,
+                    _,
+                    _) <- recordingsForAbstractedHistoriesGroupedById flatMap (_.thePartNoLaterThan(
+                    queryWhen))
+                  Seq(history) = historiesFrom(scope)
+                } yield
+                  (historyId, history.datums.filter {
+                    case datum: Int => datum > 0
+                  }, pertinentRecordings.map(_._1))
+
+                val checksOnImplementingHistories = for {
+                  RecordingsNoLaterThan(
+                    historyId,
+                    historiesFrom,
+                    pertinentRecordings,
+                    _,
+                    _) <- recordingsForImplementingHistoriesGroupedById flatMap (_.thePartNoLaterThan(
+                    queryWhen))
+                  Seq(history) = historiesFrom(scope)
+                } yield
+                  (historyId, history.datums.filter {
+                    case datum: Int => datum < 0
+                  }, pertinentRecordings.map(_._1))
+
+                if (checksOnAbstractedHistories.nonEmpty && checksOnImplementingHistories.nonEmpty)
+                  Prop.all(checksOnAbstractedHistories.map {
+                    case (historyId, actualHistory, expectedHistory) =>
+                      ((actualHistory.length == expectedHistory.length) :| s"For ${historyId}, ${actualHistory.length} did not equal expected value of: ${expectedHistory.length}") &&
+                        Prop.all(
+                          (actualHistory zip expectedHistory zipWithIndex) map {
+                            case ((actual, expected), step) =>
+                              (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}"
+                          }: _*)
+                  }: _*) && Prop.all(checksOnImplementingHistories.map {
+                    case (historyId, actualHistory, expectedHistory) =>
+                      ((actualHistory.length == expectedHistory.length) :| s"For ${historyId}, ${actualHistory.length} did not equal expected value of: ${expectedHistory.length}") &&
                         Prop.all(
                           (actualHistory zip expectedHistory zipWithIndex) map {
                             case ((actual, expected), step) =>

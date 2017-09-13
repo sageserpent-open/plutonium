@@ -61,11 +61,11 @@ trait ExperimentalWorldBehaviours
           forbidAnnihilations = false)
         seed <- seedGenerator
         random = new Random(seed)
-        bigShuffledHistoryOverLotsOfThings = (random
+        bigShuffledHistoryOverLotsOfThings = random
           .splitIntoNonEmptyPieces(
             shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
               random,
-              recordingsGroupedById).zipWithIndex))
+              recordingsGroupedById).zipWithIndex)
           .force
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
                              instantGenerator) map (_.sorted)
@@ -124,11 +124,11 @@ trait ExperimentalWorldBehaviours
           forbidMeasurements = true)
         seed <- seedGenerator
         random = new Random(seed)
-        bigShuffledHistoryOverLotsOfThings = (random
+        bigShuffledHistoryOverLotsOfThings = random
           .splitIntoNonEmptyPieces(
             shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
               random,
-              recordingsGroupedById).zipWithIndex))
+              recordingsGroupedById).zipWithIndex)
           .force
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
                              instantGenerator) map (_.sorted)
@@ -198,11 +198,11 @@ trait ExperimentalWorldBehaviours
           forbidAnnihilations = false)
         seed <- seedGenerator
         random = new Random(seed)
-        bigShuffledHistoryOverLotsOfThings = (random
+        bigShuffledHistoryOverLotsOfThings = random
           .splitIntoNonEmptyPieces(
             shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
               random,
-              recordingsGroupedById).zipWithIndex))
+              recordingsGroupedById).zipWithIndex)
           .force
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
                              instantGenerator) map (_.sorted)
@@ -271,20 +271,20 @@ trait ExperimentalWorldBehaviours
           forbidAnnihilations = false)
         seed <- seedGenerator
         random = new Random(seed)
-        bigShuffledHistoryOverLotsOfThings = (random
+        bigShuffledHistoryOverLotsOfThings = random
           .splitIntoNonEmptyPieces(
             shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
               random,
-              recordingsGroupedById).zipWithIndex))
+              recordingsGroupedById).zipWithIndex)
           .force
         allEventIds = bigShuffledHistoryOverLotsOfThings flatMap (_ map (_._2))
         annulmentsGalore = Stream(
           allEventIds map ((None: Option[(Unbounded[Instant], Event)]) -> _))
-        bigFollowingShuffledHistoryOverLotsOfThings = (random
+        bigFollowingShuffledHistoryOverLotsOfThings = random
           .splitIntoNonEmptyPieces(
             shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
               random,
-              followingRecordingsGroupedById).zipWithIndex))
+              followingRecordingsGroupedById).zipWithIndex)
           .force
         baseHistoryLength      = bigShuffledHistoryOverLotsOfThings.length
         annulmentsLength       = annulmentsGalore.length
@@ -382,11 +382,11 @@ trait ExperimentalWorldBehaviours
           forbidAnnihilations = false)
         seed <- seedGenerator
         random = new Random(seed)
-        bigShuffledHistoryOverLotsOfThings = (random
+        bigShuffledHistoryOverLotsOfThings = random
           .splitIntoNonEmptyPieces(
             shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
               random,
-              recordingsGroupedById).zipWithIndex))
+              recordingsGroupedById).zipWithIndex)
           .force
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
                              instantGenerator) map (_.sorted)
@@ -460,20 +460,20 @@ trait ExperimentalWorldBehaviours
           forbidAnnihilations = false)
         seed <- seedGenerator
         random = new Random(seed)
-        bigShuffledHistoryOverLotsOfThings = (random
+        bigShuffledHistoryOverLotsOfThings = random
           .splitIntoNonEmptyPieces(
             shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
               random,
-              recordingsGroupedById).zipWithIndex))
+              recordingsGroupedById).zipWithIndex)
           .force
         allEventIds = bigShuffledHistoryOverLotsOfThings flatMap (_ map (_._2))
         annulmentsGalore = Stream(
           allEventIds map ((None: Option[(Unbounded[Instant], Event)]) -> _))
-        bigFollowingShuffledHistoryOverLotsOfThings = (random
+        bigFollowingShuffledHistoryOverLotsOfThings = random
           .splitIntoNonEmptyPieces(
             shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
               random,
-              followingRecordingsGroupedById).zipWithIndex))
+              followingRecordingsGroupedById).zipWithIndex)
           .force
         baseHistoryLength      = bigShuffledHistoryOverLotsOfThings.length
         annulmentsLength       = annulmentsGalore.length
@@ -570,11 +570,11 @@ trait ExperimentalWorldBehaviours
           forbidAnnihilations = false)
         seed <- seedGenerator
         random = new Random(seed)
-        bigShuffledHistoryOverLotsOfThings = (random
+        bigShuffledHistoryOverLotsOfThings = random
           .splitIntoNonEmptyPieces(
             shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
               random,
-              recordingsGroupedById).zipWithIndex))
+              recordingsGroupedById).zipWithIndex)
           .force
         allEventIds = bigShuffledHistoryOverLotsOfThings flatMap (_ map (_._2))
         annulmentsGalore = Stream(
