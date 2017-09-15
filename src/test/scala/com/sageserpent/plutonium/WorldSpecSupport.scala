@@ -60,15 +60,15 @@ trait WorldSpecSupport extends Assertions {
 
   val moreSpecificFooHistoryIdGenerator = fooHistoryIdGenerator // Just making a point that both kinds of bitemporal will use the same type of ids.
 
-  private def eventConstructorReferringToOneItem[AHistory <: History: TypeTag](
+  def eventConstructorReferringToOneItem[AHistory <: History: TypeTag](
       makeAChange: Boolean)(
       when: Unbounded[Instant]): (AHistory#Id, AHistory => Unit) => Event =
     if (makeAChange) Change.forOneItem(when)(_, _)
     else Measurement.forOneItem(when)(_, _)
 
-  private def eventConstructorReferringToTwoItems[
-      AHistory <: History: TypeTag,
-      AnotherHistory <: History: TypeTag](makeAChange: Boolean)(
+  def eventConstructorReferringToTwoItems[AHistory <: History: TypeTag,
+                                          AnotherHistory <: History: TypeTag](
+      makeAChange: Boolean)(
       when: Unbounded[Instant]): (AHistory#Id,
                                   AnotherHistory#Id,
                                   (AHistory, AnotherHistory) => Unit) => Event =
@@ -243,54 +243,6 @@ trait WorldSpecSupport extends Assertions {
                if (faulty) integerHistory.forceInvariantBreakage() // Modelling breakage of the bitemporal invariant.
 
                integerHistory.integerProperty = data
-             }
-         ))
-
-  def abstractedHistoryDataSampleGenerator(faulty: Boolean) =
-    for { data <- Gen.posNum[Int] } yield
-      (data,
-       (when: americium.Unbounded[Instant],
-        makeAChange: Boolean,
-        abstractedHistoryId: AbstractedHistory#Id) =>
-         eventConstructorReferringToOneItem[AbstractedHistory](makeAChange)(
-           when)
-           .apply(
-             abstractedHistoryId,
-             (abstractedHistory: AbstractedHistory) => {
-               // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
-               assert(abstractedHistoryId == abstractedHistory.id)
-               assertThrows[UnsupportedOperationException](
-                 abstractedHistory.datums)
-               assertThrows[UnsupportedOperationException](
-                 abstractedHistory.property)
-
-               if (faulty) abstractedHistory.forceInvariantBreakage() // Modelling breakage of the bitemporal invariant.
-
-               abstractedHistory.property = data
-             }
-         ))
-
-  def implementingHistoryDataSampleGenerator(faulty: Boolean) =
-    for { data <- Gen.negNum[Int] } yield
-      (data,
-       (when: americium.Unbounded[Instant],
-        makeAChange: Boolean,
-        implementingHistoryId: ImplementingHistory#Id) =>
-         eventConstructorReferringToOneItem[ImplementingHistory](makeAChange)(
-           when)
-           .apply(
-             implementingHistoryId,
-             (implementingHistory: ImplementingHistory) => {
-               // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
-               assert(implementingHistoryId == implementingHistory.id)
-               assertThrows[UnsupportedOperationException](
-                 implementingHistory.datums)
-               assertThrows[UnsupportedOperationException](
-                 implementingHistory.property)
-
-               if (faulty) implementingHistory.forceInvariantBreakage() // Modelling breakage of the bitemporal invariant.
-
-               implementingHistory.property = data
              }
          ))
 
@@ -939,26 +891,6 @@ trait WorldSpecSupport extends Assertions {
       integerHistoryDataSampleGenerator(faulty = false))
   val integerHistoryRecordingsGroupedByIdGenerator =
     recordingsGroupedByIdGenerator_(integerDataSamplesForAnIdGenerator)
-
-  val abstractedDataSamplesForAnIdGenerator =
-    dataSamplesForAnIdGenerator_[AbstractedHistory](
-      abstractedOrImplementingHistoryIdGenerator,
-      abstractedHistoryDataSampleGenerator(faulty = false)
-    )
-  val abstractedHistoryRecordingsGroupedByIdGenerator =
-    recordingsGroupedByIdGenerator_(abstractedDataSamplesForAnIdGenerator,
-                                    forbidAnnihilations = true,
-                                    forbidMeasurements = true)
-
-  val implementingDataSamplesForAnIdGenerator =
-    dataSamplesForAnIdGenerator_[ImplementingHistory](
-      abstractedOrImplementingHistoryIdGenerator,
-      implementingHistoryDataSampleGenerator(faulty = false)
-    )
-  val implementingHistoryRecordingsGroupedByIdGenerator =
-    recordingsGroupedByIdGenerator_(implementingDataSamplesForAnIdGenerator,
-                                    forbidAnnihilations = true,
-                                    forbidMeasurements = true)
 
   val referenceToItemDataSamplesForAnIdGenerator =
     dataSamplesForAnIdGenerator_[ReferringHistory](

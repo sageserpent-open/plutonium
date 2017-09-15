@@ -2087,11 +2087,11 @@ trait WorldBehaviours
                   fooHistoryId: MoreSpecificFooHistory#Id <- recordingsGroupedById
                     .map(_.historyId) collect {
                     case id: MoreSpecificFooHistory#Id =>
-                      id.asInstanceOf[MoreSpecificFooHistory#Id]
+                      id
                   }
-                  _ <- queryScope
+                  if queryScope
                     .render(Bitemporal.withId[MoreSpecificFooHistory](
-                      fooHistoryId)) filter (_.isInstanceOf[
+                      fooHistoryId)) exists (_.isInstanceOf[
                     MoreSpecificFooHistory])
                 } {
                   intercept[RuntimeException] {
@@ -2151,15 +2151,80 @@ trait WorldBehaviours
       }
     }
 
+    def abstractedHistoryPositiveIntegerDataSampleGenerator(faulty: Boolean) =
+      for { data <- Gen.posNum[Int] } yield
+        (data,
+         (when: americium.Unbounded[Instant],
+          makeAChange: Boolean,
+          abstractedHistoryId: AbstractedHistory#Id) =>
+           eventConstructorReferringToOneItem[AbstractedHistory](makeAChange)(
+             when)
+             .apply(
+               abstractedHistoryId,
+               (abstractedHistory: AbstractedHistory) => {
+                 // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
+                 assert(abstractedHistoryId == abstractedHistory.id)
+                 assertThrows[UnsupportedOperationException](
+                   abstractedHistory.datums)
+                 assertThrows[UnsupportedOperationException](
+                   abstractedHistory.property)
+
+                 if (faulty) abstractedHistory.forceInvariantBreakage() // Modelling breakage of the bitemporal invariant.
+
+                 abstractedHistory.property = data
+               }
+           ))
+
+    def implementingHistoryNegativeIntegerDataSampleGenerator(faulty: Boolean) =
+      for { data <- Gen.negNum[Int] } yield
+        (data,
+         (when: americium.Unbounded[Instant],
+          makeAChange: Boolean,
+          implementingHistoryId: ImplementingHistory#Id) =>
+           eventConstructorReferringToOneItem[ImplementingHistory](makeAChange)(
+             when)
+             .apply(
+               implementingHistoryId,
+               (implementingHistory: ImplementingHistory) => {
+                 // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
+                 assert(implementingHistoryId == implementingHistory.id)
+                 assertThrows[UnsupportedOperationException](
+                   implementingHistory.datums)
+                 assertThrows[UnsupportedOperationException](
+                   implementingHistory.property)
+
+                 if (faulty) implementingHistory.forceInvariantBreakage() // Modelling breakage of the bitemporal invariant.
+
+                 implementingHistory.property = data
+               }
+           ))
+
+    val abstractedDataSamplesForAnIdGenerator =
+      dataSamplesForAnIdGenerator_[AbstractedHistory](
+        abstractedOrImplementingHistoryIdGenerator,
+        abstractedHistoryPositiveIntegerDataSampleGenerator(faulty = false)
+      )
+    val implementingDataSamplesForAnIdGenerator =
+      dataSamplesForAnIdGenerator_[ImplementingHistory](
+        abstractedOrImplementingHistoryIdGenerator,
+        implementingHistoryNegativeIntegerDataSampleGenerator(faulty = false)
+      )
+
     it should "allow events to refer to an item via an abstract type provided it is defined concretely in other events" in {
       {
         val testCaseGenerator = for {
-          worldResource                               <- worldResourceGenerator
-          recordingsForAbstractedHistoriesGroupedById <- abstractedHistoryRecordingsGroupedByIdGenerator
+          worldResource <- worldResourceGenerator
+          recordingsForAbstractedHistoriesGroupedById <- recordingsGroupedByIdGenerator_(
+            abstractedDataSamplesForAnIdGenerator,
+            forbidAnnihilations = true,
+            forbidMeasurements = false)
           idsForAbstractedHistories = recordingsForAbstractedHistoriesGroupedById
             .map(_.historyId)
             .toSet
-          recordingsForImplementingHistoriesGroupedById <- implementingHistoryRecordingsGroupedByIdGenerator
+          recordingsForImplementingHistoriesGroupedById <- recordingsGroupedByIdGenerator_(
+            implementingDataSamplesForAnIdGenerator,
+            forbidAnnihilations = true,
+            forbidMeasurements = true)
           idsForImplementingHistories = recordingsForImplementingHistoriesGroupedById
             .map(_.historyId)
             .toSet
@@ -2187,73 +2252,220 @@ trait WorldBehaviours
           queryWhen <- unboundedInstantGenerator
         } yield
           (worldResource,
-           relevantRecordingsForAbstractedHistoriesGroupedById,
-           relevantRecordingsForImplementedHistoriesGroupedById,
            bigShuffledHistoryOverLotsOfThingsThatMakesSureThatAtLeastOneImplementingHistoryGetsBookedInFirst,
            asOfs,
            queryWhen)
         check(Prop.forAllNoShrink(testCaseGenerator) {
           case (worldResource,
-                recordingsForAbstractedHistoriesGroupedById,
-                recordingsForImplementingHistoriesGroupedById,
                 bigShuffledHistoryOverLotsOfThings,
                 asOfs,
                 queryWhen) =>
+            worldResource acquireAndGet { world =>
+              recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
+                                  asOfs,
+                                  world)
+
+              Prop.proved
+            }
+        })
+      }
+    }
+
+    it should "allow events to refer to an item via a concrete type when it is defined abstractly in other events" in {
+      {
+        val testCaseGenerator = for {
+          worldResource <- worldResourceGenerator
+          recordingsForAbstractedHistoriesGroupedById <- recordingsGroupedByIdGenerator_(
+            abstractedDataSamplesForAnIdGenerator,
+            forbidAnnihilations = true,
+            forbidMeasurements = true)
+          idsForAbstractedHistories = recordingsForAbstractedHistoriesGroupedById
+            .map(_.historyId)
+            .toSet
+          recordingsForImplementingHistoriesGroupedById <- recordingsGroupedByIdGenerator_(
+            implementingDataSamplesForAnIdGenerator,
+            forbidAnnihilations = true,
+            forbidMeasurements = false)
+          idsForImplementingHistories = recordingsForImplementingHistoriesGroupedById
+            .map(_.historyId)
+            .toSet
+          sharedIds = idsForAbstractedHistories intersect idsForImplementingHistories
+          if sharedIds.nonEmpty
+          relevantRecordingsForAbstractedHistoriesGroupedById = recordingsForAbstractedHistoriesGroupedById filter (
+              recordings => sharedIds.contains(recordings.historyId))
+          relevantRecordingsForImplementedHistoriesGroupedById = recordingsForImplementingHistoriesGroupedById filter (
+              recordings => sharedIds.contains(recordings.historyId))
+          seed <- seedGenerator
+          random = new Random(seed)
+          shuffledRecordingsForAbstractedHistories = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+            random,
+            relevantRecordingsForAbstractedHistoriesGroupedById)
+          shuffledRecordingsForImplementingHistories = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+            random,
+            relevantRecordingsForImplementedHistoriesGroupedById)
+          bigShuffledHistoryOverLotsOfThingsThatMakesSureThatAtLeastOneImplementingHistoryGetsBookedInFirst = liftRecordings(
+            random
+              .splitIntoNonEmptyPieces(
+                (shuffledRecordingsForImplementingHistories ++ shuffledRecordingsForAbstractedHistories).zipWithIndex))
+          asOfs <- Gen.listOfN(
+            bigShuffledHistoryOverLotsOfThingsThatMakesSureThatAtLeastOneImplementingHistoryGetsBookedInFirst.length,
+            instantGenerator) map (_.sorted)
+          queryWhen <- unboundedInstantGenerator
+        } yield
+          (worldResource,
+           bigShuffledHistoryOverLotsOfThingsThatMakesSureThatAtLeastOneImplementingHistoryGetsBookedInFirst,
+           asOfs,
+           queryWhen)
+        check(Prop.forAllNoShrink(testCaseGenerator) {
+          case (worldResource,
+                bigShuffledHistoryOverLotsOfThings,
+                asOfs,
+                queryWhen) =>
+            worldResource acquireAndGet { world =>
+              recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
+                                  asOfs,
+                                  world)
+
+              Prop.proved
+            }
+        })
+      }
+    }
+
+    val mixedAbstractedAndImplementingDataSamplesForAnIdGenerator =
+      dataSamplesForAnIdGenerator_[AbstractedHistory](
+        abstractedOrImplementingHistoryIdGenerator,
+        Gen.frequency(
+          1 -> abstractedHistoryPositiveIntegerDataSampleGenerator(
+            faulty = false),
+          3 -> implementingHistoryNegativeIntegerDataSampleGenerator(
+            faulty = false))
+      )
+
+    it should "record bookings from events using abstract types in the same manner as for concrete types" in {
+      val testCaseGenerator = for {
+        worldResource <- worldResourceGenerator
+        recordingsGroupedById <- recordingsGroupedByIdGenerator_(
+          mixedAbstractedAndImplementingDataSamplesForAnIdGenerator,
+          forbidAnnihilations = true,
+          forbidMeasurements = false)
+        obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
+        seed                          <- seedGenerator
+        random = new Random(seed)
+        shuffledRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          random,
+          recordingsGroupedById)
+        shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          random,
+          obsoleteRecordingsGroupedById)
+        bigShuffledHistoryOverLotsOfThings = intersperseObsoleteEvents(
+          random,
+          shuffledRecordings,
+          shuffledObsoleteRecordings)
+        asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
+                             instantGenerator) map (_.sorted)
+        queryWhen <- unboundedInstantGenerator
+      } yield
+        (worldResource,
+         recordingsGroupedById,
+         bigShuffledHistoryOverLotsOfThings,
+         asOfs,
+         queryWhen,
+         seed)
+      check(
+        Prop.forAllNoShrink(testCaseGenerator) {
+          case (worldResource,
+                recordingsGroupedById,
+                bigShuffledHistoryOverLotsOfThings,
+                asOfs,
+                queryWhen,
+                seed) =>
             worldResource acquireAndGet {
               world =>
+                try {
+                  recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
+                                      asOfs,
+                                      world)
+
+                  val scope =
+                    world.scopeFor(queryWhen, world.nextRevision)
+
+                  val checks = for {
+                    RecordingsNoLaterThan(
+                      historyId,
+                      historiesFrom,
+                      pertinentRecordings,
+                      _,
+                      _) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
+                      queryWhen))
+                    Seq(history) = historiesFrom(scope)
+                    if history.datums.exists { case datum: Int => datum > 0 }
+                  } yield
+                    (historyId, history.datums, pertinentRecordings.map(_._1))
+
+                  checks.nonEmpty ==>
+                    Prop.all(checks.map {
+                      case (historyId, actualHistory, expectedHistory) =>
+                        ((actualHistory.length == expectedHistory.length) :| s"${actualHistory.length} == expectedHistory.length") &&
+                          Prop.all(
+                            (actualHistory zip expectedHistory zipWithIndex) map {
+                              case ((actual, expected), step) =>
+                                (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}"
+                            }: _*)
+                    }: _*)
+                } catch {
+                  case _: UnsupportedOperationException => Prop.undecided
+                }
+            }
+        },
+        minSuccessful(10)
+      )
+    }
+
+    it should "forbid the booking of events that only ever refer to an item via an abstract type" in {
+      {
+        val testCaseGenerator = for {
+          worldResource <- worldResourceGenerator
+          recordingsForAbstractedHistoriesGroupedById <- recordingsGroupedByIdGenerator_(
+            abstractedDataSamplesForAnIdGenerator,
+            forbidAnnihilations = true,
+            forbidMeasurements = false)
+          obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
+          seed                          <- seedGenerator
+          random = new Random(seed)
+          shuffledRecordingsForAbstractedHistories = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+            random,
+            recordingsForAbstractedHistoriesGroupedById)
+          shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+            random,
+            obsoleteRecordingsGroupedById)
+          bigShuffledHistoryOverLotsOfThings = intersperseObsoleteEvents(
+            random,
+            shuffledRecordingsForAbstractedHistories,
+            shuffledObsoleteRecordings)
+          asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
+                               instantGenerator) map (_.sorted)
+          queryWhen <- unboundedInstantGenerator
+        } yield
+          (worldResource,
+           recordingsForAbstractedHistoriesGroupedById,
+           bigShuffledHistoryOverLotsOfThings,
+           asOfs,
+           queryWhen)
+        check(Prop.forAllNoShrink(testCaseGenerator) {
+          case (worldResource,
+                recordingsForAbstractedHistoriesGroupedById,
+                bigShuffledHistoryOverLotsOfThings,
+                asOfs,
+                queryWhen) =>
+            worldResource acquireAndGet { world =>
+              intercept[UnsupportedOperationException] {
                 recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
                                     asOfs,
                                     world)
+              }
 
-                val scope = world.scopeFor(queryWhen, world.nextRevision)
-
-                val checksOnAbstractedHistories = for {
-                  RecordingsNoLaterThan(
-                    historyId,
-                    historiesFrom,
-                    pertinentRecordings,
-                    _,
-                    _) <- recordingsForAbstractedHistoriesGroupedById flatMap (_.thePartNoLaterThan(
-                    queryWhen))
-                  Seq(history) = historiesFrom(scope)
-                } yield
-                  (historyId, history.datums.filter {
-                    case datum: Int => datum > 0
-                  }, pertinentRecordings.map(_._1))
-
-                val checksOnImplementingHistories = for {
-                  RecordingsNoLaterThan(
-                    historyId,
-                    historiesFrom,
-                    pertinentRecordings,
-                    _,
-                    _) <- recordingsForImplementingHistoriesGroupedById flatMap (_.thePartNoLaterThan(
-                    queryWhen))
-                  Seq(history) = historiesFrom(scope)
-                } yield
-                  (historyId, history.datums.filter {
-                    case datum: Int => datum < 0
-                  }, pertinentRecordings.map(_._1))
-
-                if (checksOnAbstractedHistories.nonEmpty && checksOnImplementingHistories.nonEmpty)
-                  Prop.all(checksOnAbstractedHistories.map {
-                    case (historyId, actualHistory, expectedHistory) =>
-                      ((actualHistory.length == expectedHistory.length) :| s"For ${historyId}, ${actualHistory.length} did not equal expected value of: ${expectedHistory.length}") &&
-                        Prop.all(
-                          (actualHistory zip expectedHistory zipWithIndex) map {
-                            case ((actual, expected), step) =>
-                              (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}"
-                          }: _*)
-                  }: _*) && Prop.all(checksOnImplementingHistories.map {
-                    case (historyId, actualHistory, expectedHistory) =>
-                      ((actualHistory.length == expectedHistory.length) :| s"For ${historyId}, ${actualHistory.length} did not equal expected value of: ${expectedHistory.length}") &&
-                        Prop.all(
-                          (actualHistory zip expectedHistory zipWithIndex) map {
-                            case ((actual, expected), step) =>
-                              (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}"
-                          }: _*)
-                  }: _*)
-                else Prop.undecided
+              Prop.proved
             }
         })
       }
