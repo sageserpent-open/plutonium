@@ -2,8 +2,7 @@ import sbt.Keys.libraryDependencies
 
 lazy val settings = Seq(
   organization := "com.sageserpent",
-  name := "plutonium",
-  version := "1.0.2-SNAPSHOT",
+  name := "open-plutonium",
   scalaVersion := "2.12.1",
   scalacOptions += "-Xexperimental",
   libraryDependencies += "org.scalaz"              %% "scalaz-core"                 % "7.3.0-M10",
@@ -25,9 +24,9 @@ lazy val settings = Seq(
   libraryDependencies += "junit"                   % "junit"                        % "4.12" % "test",
   libraryDependencies += "com.novocode"            % "junit-interface"              % "0.11" % "test",
   publishMavenStyle := true,
-  publishTo := Some(
-    Resolver.file("file",
-                  new File(Path.userHome.absolutePath + "/.m2/repository")))
+  bintrayReleaseOnPublish in ThisBuild := false,
+  licenses += ("MIT", url("http://opensource.org/licenses/MIT")),
+  bintrayVcsUrl := Some("git@github.com:sageserpent-open/open-plutonium.git")
 )
 
 lazy val plutonium = (project in file(".")).settings(settings: _*)
