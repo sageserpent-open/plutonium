@@ -15,10 +15,6 @@ trait BitemporalBehaviours
     extends FlatSpec
     with Checkers
     with WorldSpecSupport { this: WorldResource =>
-
-  implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
-    PropertyCheckConfig(maxSize = 30)
-
   def bitemporalBehaviour = {
     it should "be an applicative plus instance" in {
       val testCaseGenerator = for {
@@ -237,7 +233,7 @@ trait BitemporalBehaviours
                     case (item, group) =>
                       (1 == group.size) :| s"More than occurrence of item: ${item}} with id: ${item.id}."
                 } toSeq: _*)
-  }
+          }
       })
     }
   }
@@ -893,6 +889,9 @@ trait BitemporalBehaviours
 class BitemporalSpecUsingWorldReferenceImplementation
     extends BitemporalBehaviours
     with WorldReferenceImplementationResource {
+  implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
+    PropertyCheckConfig(maxSize = 30)
+
   "The class Bitemporal (using the world reference implementation)" should behave like bitemporalBehaviour
 
   "A bitemporal wildcard (using the world reference implementation)" should behave like bitemporalWildcardBehaviour
@@ -910,6 +909,9 @@ class BitemporalSpecUsingWorldRedisBasedImplementation
     extends BitemporalBehaviours
     with WorldRedisBasedImplementationResource {
   val redisServerPort = 6453
+
+  implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
+    PropertyCheckConfig(maxSize = 10)
 
   "The class Bitemporal (using the world Redis-based implementation)" should behave like bitemporalBehaviour
 

@@ -59,16 +59,6 @@ object WorldImplementationCodeFactoring {
     }).sorted.map(_.serializableEvent)
 
   object IdentifiedItemsScope {
-    def hasItemOfSupertypeOf[Item <: Identified: TypeTag](
-        items: scala.collection.mutable.Set[Identified]) = {
-      val reflectedType = typeTag[Item].tpe
-      val clazzOfItem   = currentMirror.runtimeClass(reflectedType)
-      items.exists { item =>
-        val itemClazz = item.getClass
-        itemClazz.isAssignableFrom(clazzOfItem) && itemClazz != clazzOfItem
-      }
-    }
-
     def yieldOnlyItemsOfSupertypeOf[Item <: Identified: TypeTag](
         items: Traversable[Identified]) = {
       val reflectedType = typeTag[Item].tpe
@@ -77,7 +67,7 @@ object WorldImplementationCodeFactoring {
 
       items filter { item =>
         val itemClazz = item.getClass
-        itemClazz.isAssignableFrom(clazzOfItem) && itemClazz != clazzOfItem
+        itemClazz != clazzOfItem && itemClazz.isAssignableFrom(clazzOfItem)
       }
     }
 
@@ -175,7 +165,8 @@ object WorldImplementationCodeFactoring {
 
       val (constructor, clazz) = constructorAndClassFor()
 
-      if (!isForRecordingOnly && Modifier.isAbstract(clazz.getModifiers)) {
+      if (!isForRecordingOnly && clazz.getMethods.exists(method =>
+            Modifier.isAbstract(method.getModifiers))) {
         throw new UnsupportedOperationException(
           s"Attempt to create an instance of an abstract class '$clazz' for id: '$id'.")
       }
@@ -225,7 +216,7 @@ object WorldImplementationCodeFactoring {
     }
 
     val matchMutation: ElementMatcher[MethodDescription] = methodDescription =>
-      methodDescription.getReturnType.represents(classOf[Unit]) && !methodDescription.isAbstract
+      methodDescription.getReturnType.represents(classOf[Unit])
 
     val matchItemReconstitutionData: ElementMatcher[MethodDescription] =
       methodDescription =>
@@ -235,9 +226,10 @@ object WorldImplementationCodeFactoring {
 
     val matchForbiddenReadAccess: ElementMatcher[MethodDescription] =
       methodDescription =>
-        (methodDescription.isAbstract || !IdentifiedItemsScope
-          .alwaysAllowsReadAccessTo(methodDescription)) && !RecordingCallbackStuff
-          .isFinalizer(methodDescription)
+        !IdentifiedItemsScope
+          .alwaysAllowsReadAccessTo(methodDescription) && !RecordingCallbackStuff
+          .isFinalizer(methodDescription) && !methodDescription.getReturnType
+          .represents(classOf[Unit])
 
     object mutation {
       @RuntimeType
@@ -365,16 +357,16 @@ object WorldImplementationCodeFactoring {
       firstMethod: MethodDescription,
       secondMethod: MethodDescription): Boolean =
     secondMethod.getName == firstMethod.getName &&
-      secondMethod.getReceiverType.asErasure
-        .isAssignableFrom(firstMethod.getReceiverType.asErasure) &&
-      (secondMethod.getReturnType.asErasure
-        .isAssignableFrom(firstMethod.getReturnType.asErasure) ||
-        secondMethod.getReturnType.asErasure
-          .isAssignableFrom(firstMethod.getReturnType.asErasure.asBoxed)) &&
-      secondMethod.getParameters.size == firstMethod.getParameters.size &&
-      secondMethod.getParameters.toSeq
-        .map(_.getType) == firstMethod.getParameters.toSeq
-        .map(_.getType) // What about contravariance? Hmmm...
+    secondMethod.getReceiverType.asErasure
+      .isAssignableFrom(firstMethod.getReceiverType.asErasure) &&
+    (secondMethod.getReturnType.asErasure
+      .isAssignableFrom(firstMethod.getReturnType.asErasure) ||
+    secondMethod.getReturnType.asErasure
+      .isAssignableFrom(firstMethod.getReturnType.asErasure.asBoxed)) &&
+    secondMethod.getParameters.size == firstMethod.getParameters.size &&
+    secondMethod.getParameters.toSeq
+      .map(_.getType) == firstMethod.getParameters.toSeq
+      .map(_.getType) // What about contravariance? Hmmm...
 
   def firstMethodIsOverrideCompatibleWithSecond(
       firstMethod: Method,
@@ -560,7 +552,7 @@ object WorldImplementationCodeFactoring {
 
       override def allItems[Item <: Identified: TypeTag](): Stream[Item] =
         identifiedItemsScope.allItems()
-    }
+      }
 
     override def render[Item](bitemporal: Bitemporal[Item]): Stream[Item] =
       itemCache.render(bitemporal)

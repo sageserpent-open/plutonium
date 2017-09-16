@@ -17,10 +17,6 @@ trait ExperimentalWorldBehaviours
     with Matchers
     with Checkers
     with WorldSpecSupport { this: WorldResource =>
-
-  implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
-    PropertyCheckConfig(maxSize = 20, minSuccessful = 200)
-
   def experimentalWorldBehaviour = {
     def scopeAndExperimentalWorldFor(baseWorld: World[Int],
                                      forkWhen: Unbounded[Instant],
@@ -62,11 +58,11 @@ trait ExperimentalWorldBehaviours
           forbidAnnihilations = false)
         seed <- seedGenerator
         random = new Random(seed)
-        bigShuffledHistoryOverLotsOfThings = (random
+        bigShuffledHistoryOverLotsOfThings = random
           .splitIntoNonEmptyPieces(
             shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
               random,
-              recordingsGroupedById).zipWithIndex))
+              recordingsGroupedById).zipWithIndex)
           .force
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
                              instantGenerator) map (_.sorted)
@@ -125,11 +121,11 @@ trait ExperimentalWorldBehaviours
           forbidMeasurements = true)
         seed <- seedGenerator
         random = new Random(seed)
-        bigShuffledHistoryOverLotsOfThings = (random
+        bigShuffledHistoryOverLotsOfThings = random
           .splitIntoNonEmptyPieces(
             shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
               random,
-              recordingsGroupedById).zipWithIndex))
+              recordingsGroupedById).zipWithIndex)
           .force
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
                              instantGenerator) map (_.sorted)
@@ -199,11 +195,11 @@ trait ExperimentalWorldBehaviours
           forbidAnnihilations = false)
         seed <- seedGenerator
         random = new Random(seed)
-        bigShuffledHistoryOverLotsOfThings = (random
+        bigShuffledHistoryOverLotsOfThings = random
           .splitIntoNonEmptyPieces(
             shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
               random,
-              recordingsGroupedById).zipWithIndex))
+              recordingsGroupedById).zipWithIndex)
           .force
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
                              instantGenerator) map (_.sorted)
@@ -272,20 +268,20 @@ trait ExperimentalWorldBehaviours
           forbidAnnihilations = false)
         seed <- seedGenerator
         random = new Random(seed)
-        bigShuffledHistoryOverLotsOfThings = (random
+        bigShuffledHistoryOverLotsOfThings = random
           .splitIntoNonEmptyPieces(
             shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
               random,
-              recordingsGroupedById).zipWithIndex))
+              recordingsGroupedById).zipWithIndex)
           .force
         allEventIds = bigShuffledHistoryOverLotsOfThings flatMap (_ map (_._2))
         annulmentsGalore = Stream(
           allEventIds map ((None: Option[(Unbounded[Instant], Event)]) -> _))
-        bigFollowingShuffledHistoryOverLotsOfThings = (random
+        bigFollowingShuffledHistoryOverLotsOfThings = random
           .splitIntoNonEmptyPieces(
             shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
               random,
-              followingRecordingsGroupedById).zipWithIndex))
+              followingRecordingsGroupedById).zipWithIndex)
           .force
         baseHistoryLength      = bigShuffledHistoryOverLotsOfThings.length
         annulmentsLength       = annulmentsGalore.length
@@ -383,11 +379,11 @@ trait ExperimentalWorldBehaviours
           forbidAnnihilations = false)
         seed <- seedGenerator
         random = new Random(seed)
-        bigShuffledHistoryOverLotsOfThings = (random
+        bigShuffledHistoryOverLotsOfThings = random
           .splitIntoNonEmptyPieces(
             shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
               random,
-              recordingsGroupedById).zipWithIndex))
+              recordingsGroupedById).zipWithIndex)
           .force
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
                              instantGenerator) map (_.sorted)
@@ -461,20 +457,20 @@ trait ExperimentalWorldBehaviours
           forbidAnnihilations = false)
         seed <- seedGenerator
         random = new Random(seed)
-        bigShuffledHistoryOverLotsOfThings = (random
+        bigShuffledHistoryOverLotsOfThings = random
           .splitIntoNonEmptyPieces(
             shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
               random,
-              recordingsGroupedById).zipWithIndex))
+              recordingsGroupedById).zipWithIndex)
           .force
         allEventIds = bigShuffledHistoryOverLotsOfThings flatMap (_ map (_._2))
         annulmentsGalore = Stream(
           allEventIds map ((None: Option[(Unbounded[Instant], Event)]) -> _))
-        bigFollowingShuffledHistoryOverLotsOfThings = (random
+        bigFollowingShuffledHistoryOverLotsOfThings = random
           .splitIntoNonEmptyPieces(
             shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
               random,
-              followingRecordingsGroupedById).zipWithIndex))
+              followingRecordingsGroupedById).zipWithIndex)
           .force
         baseHistoryLength      = bigShuffledHistoryOverLotsOfThings.length
         annulmentsLength       = annulmentsGalore.length
@@ -544,8 +540,7 @@ trait ExperimentalWorldBehaviours
                   _) <- followingRecordingsGroupedById flatMap (_.thePartNoLaterThan(
                   queryWhen))
                 Seq(history) = historiesFrom(scopeFromExperimentalWorld)
-              } yield
-                (historyId, history.datums, pertinentRecordings.map(_._1))
+              } yield (historyId, history.datums, pertinentRecordings.map(_._1))
 
               if (checks.nonEmpty) {
                 Prop.all(checks.map {
@@ -572,11 +567,11 @@ trait ExperimentalWorldBehaviours
           forbidAnnihilations = false)
         seed <- seedGenerator
         random = new Random(seed)
-        bigShuffledHistoryOverLotsOfThings = (random
+        bigShuffledHistoryOverLotsOfThings = random
           .splitIntoNonEmptyPieces(
             shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
               random,
-              recordingsGroupedById).zipWithIndex))
+              recordingsGroupedById).zipWithIndex)
           .force
         allEventIds = bigShuffledHistoryOverLotsOfThings flatMap (_ map (_._2))
         annulmentsGalore = Stream(
@@ -637,8 +632,7 @@ trait ExperimentalWorldBehaviours
                   _) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
                   queryWhen))
                 Seq(history) = historiesFrom(scopeFromBaseWorld)
-              } yield
-                (historyId, history.datums, pertinentRecordings.map(_._1))
+              } yield (historyId, history.datums, pertinentRecordings.map(_._1))
 
               if (checks.nonEmpty) {
                 Prop.all(checks.map {
@@ -660,6 +654,9 @@ trait ExperimentalWorldBehaviours
 class ExperimentalWorldSpecUsingWorldReferenceImplementation
     extends ExperimentalWorldBehaviours
     with WorldReferenceImplementationResource {
+  implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
+    PropertyCheckConfig(maxSize = 20)
+
   "An experimental world (using the world reference implementation)" should behave like experimentalWorldBehaviour
 }
 
@@ -667,6 +664,9 @@ class ExperimentalWorldSpecUsingWorldRedisBasedImplementation
     extends ExperimentalWorldBehaviours
     with WorldRedisBasedImplementationResource {
   val redisServerPort = 6452
+
+  implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
+    PropertyCheckConfig(maxSize = 10)
 
   "An experimental world (using the world Redis-based implementation)" should behave like experimentalWorldBehaviour
 }

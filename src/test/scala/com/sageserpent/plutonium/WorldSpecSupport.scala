@@ -35,26 +35,28 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
 
   val integerHistoryIdGenerator = stringIdGenerator
 
+  val abstractedOrImplementingHistoryIdGenerator = stringIdGenerator
+
   var referringHistoryIdGenerator = stringIdGenerator
 
   val moreSpecificFooHistoryIdGenerator = fooHistoryIdGenerator // Just making a point that both kinds of bitemporal will use the same type of ids.
 
-  private def eventConstructorReferringToOneItem[AHistory <: History: TypeTag](
+  def eventConstructorReferringToOneItem[AHistory <: History: TypeTag](
       makeAChange: Boolean)(
       when: Unbounded[Instant]): (AHistory#Id, AHistory => Unit) => Event =
     if (makeAChange) Change.forOneItem(when)(_, _)
     else Measurement.forOneItem(when)(_, _)
 
-  private def eventConstructorReferringToTwoItems[
-      AHistory <: History: TypeTag,
-      AnotherHistory <: History: TypeTag](makeAChange: Boolean)(
+  def eventConstructorReferringToTwoItems[AHistory <: History: TypeTag,
+                                          AnotherHistory <: History: TypeTag](
+      makeAChange: Boolean)(
       when: Unbounded[Instant]): (AHistory#Id,
                                   AnotherHistory#Id,
                                   (AHistory, AnotherHistory) => Unit) => Event =
     if (makeAChange) Change.forTwoItems(when)(_, _, _)
     else Measurement.forTwoItems(when)(_, _, _)
 
-  def dataSampleGenerator1(faulty: Boolean) =
+  def fooHistoryDataSampleGenerator1(faulty: Boolean) =
     for { data <- Arbitrary.arbitrary[String] } yield
       (data,
        (when: americium.Unbounded[Instant],
@@ -66,7 +68,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
                fooHistoryId,
                (fooHistory: FooHistory) => {
                  // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
-                 val _ = fooHistory.id
+                 assert(fooHistoryId == fooHistory.id)
                  assertThrows[UnsupportedOperationException](fooHistory.datums)
                  assertThrows[UnsupportedOperationException](
                    fooHistory.property1)
@@ -82,7 +84,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
                fooHistoryId,
                (fooHistory: BadFooHistory) => {
                  // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
-                 val _ = fooHistory.id
+                 assert(fooHistoryId == fooHistory.id)
                  assertThrows[UnsupportedOperationException](fooHistory.datums)
                  assertThrows[UnsupportedOperationException](
                    fooHistory.property1)
@@ -93,26 +95,26 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
                }
            ))
 
-  def dataSampleGenerator2(faulty: Boolean) =
+  def fooHistoryDataSampleGenerator2(faulty: Boolean) =
     for { data <- Arbitrary.arbitrary[Boolean] } yield
       (data,
        (when: Unbounded[Instant],
         makeAChange: Boolean,
         fooHistoryId: FooHistory#Id) =>
          if (!faulty)
-         eventConstructorReferringToOneItem[FooHistory](makeAChange)(when)
-           .apply(
-             fooHistoryId,
-             (fooHistory: FooHistory) => {
-               // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
-               val _ = fooHistory.id
-               assertThrows[UnsupportedOperationException](fooHistory.datums)
+           eventConstructorReferringToOneItem[FooHistory](makeAChange)(when)
+             .apply(
+               fooHistoryId,
+               (fooHistory: FooHistory) => {
+                 // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
+                 assert(fooHistoryId == fooHistory.id)
+                 assertThrows[UnsupportedOperationException](fooHistory.datums)
                  assertThrows[UnsupportedOperationException](
                    fooHistory.property1)
                  assertThrows[UnsupportedOperationException](
                    fooHistory.property2)
 
-               fooHistory.property2 = data
+                 fooHistory.property2 = data
                }
              )
          else
@@ -121,7 +123,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
                fooHistoryId,
                (fooHistory: BadFooHistory) => {
                  // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
-                 val _ = fooHistory.id
+                 assert(fooHistoryId == fooHistory.id)
                  assertThrows[UnsupportedOperationException](fooHistory.datums)
                  assertThrows[UnsupportedOperationException](
                    fooHistory.property1)
@@ -129,10 +131,10 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
                    fooHistory.property2)
 
                  fooHistory.property2 = data
-             }
-         ))
+               }
+           ))
 
-  def dataSampleGenerator3(faulty: Boolean) =
+  def barHistoryDataSampleGenerator1(faulty: Boolean) =
     for { data <- Arbitrary.arbitrary[Double] } yield
       (data,
        (when: Unbounded[Instant],
@@ -145,7 +147,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
                if (faulty) barHistory.forceInvariantBreakage() // Modelling breakage of the bitemporal invariant.
 
                // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
-               val _ = barHistory.id
+               assert(barHistory.id == barHistoryId)
                assertThrows[UnsupportedOperationException](barHistory.datums)
                assertThrows[UnsupportedOperationException](
                  barHistory.property1)
@@ -154,7 +156,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
              }
          ))
 
-  def dataSampleGenerator4(faulty: Boolean) =
+  def barHistoryDataSampleGenerator2(faulty: Boolean) =
     for {
       data1 <- Arbitrary.arbitrary[String]
       data2 <- Arbitrary.arbitrary[Int]
@@ -168,7 +170,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
              barHistoryId,
              (barHistory: BarHistory) => {
                // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
-               val _ = barHistory.id
+               assert(barHistory.id == barHistoryId)
                assertThrows[UnsupportedOperationException](barHistory.datums)
                assertThrows[UnsupportedOperationException](
                  barHistory.property1)
@@ -179,7 +181,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
              }
          ))
 
-  def dataSampleGenerator5(faulty: Boolean) =
+  def barHistoryDataSampleGenerator3(faulty: Boolean) =
     for {
       data1 <- Arbitrary.arbitrary[Int]
       data2 <- Arbitrary.arbitrary[String]
@@ -194,7 +196,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
              barHistoryId,
              (barHistory: BarHistory) => {
                // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
-               val _ = barHistory.id
+               assert(barHistory.id == barHistoryId)
                assertThrows[UnsupportedOperationException](barHistory.datums)
                assertThrows[UnsupportedOperationException](
                  barHistory.property1)
@@ -205,7 +207,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
              }
          ))
 
-  def integerDataSampleGenerator(faulty: Boolean) =
+  def integerHistoryDataSampleGenerator(faulty: Boolean) =
     for { data <- Arbitrary.arbitrary[Int] } yield
       (data,
        (when: americium.Unbounded[Instant],
@@ -216,7 +218,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
              integerHistoryId,
              (integerHistory: IntegerHistory) => {
                // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
-               val _ = integerHistory.id
+               assert(integerHistoryId == integerHistory.id)
                assertThrows[UnsupportedOperationException](
                  integerHistory.datums)
                assertThrows[UnsupportedOperationException](
@@ -228,7 +230,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
              }
          ))
 
-  def moreSpecificFooDataSampleGenerator(faulty: Boolean) =
+  def moreSpecificFooHistoryDataSampleGenerator(faulty: Boolean) =
     for { data <- Arbitrary.arbitrary[String] } yield
       (data,
        (when: americium.Unbounded[Instant],
@@ -239,7 +241,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
            fooHistoryId,
            (fooHistory: MoreSpecificFooHistory) => {
              // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
-             val _ = fooHistory.id
+             assert(fooHistoryId == fooHistory.id)
              assertThrows[UnsupportedOperationException](fooHistory.datums)
              assertThrows[UnsupportedOperationException](fooHistory.property1)
              assertThrows[UnsupportedOperationException](fooHistory.property2)
@@ -261,7 +263,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
            referringHistoryId,
            idToReferToAnotherItem,
            (referringHistory: ReferringHistory, referencedItem: FooHistory) => {
-             val _ = referringHistory.id
+             assert(referringHistoryId == referringHistory.id)
 
              if (faulty) referringHistory.forceInvariantBreakage() // Modelling breakage of the bitemporal invariant.
 
@@ -287,7 +289,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
            referringHistoryId,
            idToReferToAnotherItem,
            (referringHistory: ReferringHistory, referencedItem: FooHistory) => {
-             val _ = referringHistory.id
+             assert(referringHistoryId == referringHistory.id)
              assertThrows[UnsupportedOperationException](
                referringHistory.datums)
              assertThrows[UnsupportedOperationException](
@@ -318,9 +320,10 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
       } map (1 -> _): _*))
 
     for {
-      dataSamples <- dataSamplesGenerator
-      historyId   <- historyIdGenerator
-      headsItIs   <- Gen.oneOf(false, true)
+      dataSamples             <- dataSamplesGenerator
+      historyId               <- historyIdGenerator
+      headsItIs               <- Arbitrary.arbBool.arbitrary
+      anotherRoundOfHeadsItIs <- Arbitrary.arbBool.arbitrary
     } yield
       (historyId,
        (scope: Scope) =>
@@ -335,14 +338,25 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
          (index, data, changeFor(_: Unbounded[Instant], _: Boolean, historyId)),
        Annihilation(_: Instant, historyId),
        if (headsItIs)
+         if (anotherRoundOfHeadsItIs)
          Change.forOneItem(_: Unbounded[Instant])(historyId,
                                                   (item: AHistory) => {
                                                     // A useless event: nothing changes!
                                                   })
        else
+           Change.forOneItem(_: Unbounded[Instant])(historyId,
+                                                    (item: History) => {
+                                                      // A useless event: nothing changes - and the event refers to the item type abstractly to boot.
+                                                    })
+       else if (headsItIs)
          Measurement.forOneItem(_: Unbounded[Instant])(historyId,
                                                        (item: AHistory) => {
                                                          // A useless event: nothing is measured!
+                                                       })
+       else
+         Measurement.forOneItem(_: Unbounded[Instant])(historyId,
+                                                       (item: History) => {
+                                                         // A useless event: nothing changes - and the event refers to the item type abstractly to boot.
                                                        }))
   }
 
@@ -772,12 +786,13 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
       Seq(
         dataSamplesForAnIdGenerator_[FooHistory](
           fooHistoryIdGenerator,
-          Gen.oneOf(dataSampleGenerator1(faulty),
-                    moreSpecificFooDataSampleGenerator(faulty)),
-          dataSampleGenerator2(faulty)),
+          Gen.oneOf(fooHistoryDataSampleGenerator1(faulty),
+                    moreSpecificFooHistoryDataSampleGenerator(faulty)),
+          fooHistoryDataSampleGenerator2(faulty)
+        ),
         dataSamplesForAnIdGenerator_[MoreSpecificFooHistory](
           moreSpecificFooHistoryIdGenerator,
-          moreSpecificFooDataSampleGenerator(faulty))
+          moreSpecificFooHistoryDataSampleGenerator(faulty))
       ) map (1 -> _): _*)
 
     val disjointLeftHandDataSamplesForAnIdGenerator =
@@ -790,13 +805,14 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
 
     val mixedDisjointRightHandDataSamplesForAnIdGenerator = Gen.frequency(
       Seq(
-        dataSamplesForAnIdGenerator_[BarHistory](barHistoryIdGenerator,
-                                                 dataSampleGenerator3(faulty),
-                                                 dataSampleGenerator4(faulty),
-                                                 dataSampleGenerator5(faulty)),
+        dataSamplesForAnIdGenerator_[BarHistory](
+          barHistoryIdGenerator,
+          barHistoryDataSampleGenerator1(faulty),
+          barHistoryDataSampleGenerator2(faulty),
+          barHistoryDataSampleGenerator3(faulty)),
         dataSamplesForAnIdGenerator_[IntegerHistory](
           integerHistoryIdGenerator,
-          integerDataSampleGenerator(faulty))
+          integerHistoryDataSampleGenerator(faulty))
       ) map (1 -> _): _*)
 
     val disjointRightHandDataSamplesForAnIdGenerator =
@@ -837,13 +853,14 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
   def mixedNonConflictingDataSamplesForAnIdGenerator(faulty: Boolean = false) =
     Gen.frequency(
       Seq(
-        dataSamplesForAnIdGenerator_[BarHistory](barHistoryIdGenerator,
-                                                 dataSampleGenerator3(faulty),
-                                                 dataSampleGenerator4(faulty),
-                                                 dataSampleGenerator5(faulty)),
+        dataSamplesForAnIdGenerator_[BarHistory](
+          barHistoryIdGenerator,
+          barHistoryDataSampleGenerator1(faulty),
+          barHistoryDataSampleGenerator2(faulty),
+          barHistoryDataSampleGenerator3(faulty)),
         dataSamplesForAnIdGenerator_[IntegerHistory](
           integerHistoryIdGenerator,
-          integerDataSampleGenerator(faulty))
+          integerHistoryDataSampleGenerator(faulty))
       ) map (1 -> _): _*)
 
   val nonConflictingDataSamplesForAnIdGenerator =
@@ -855,7 +872,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
   val integerDataSamplesForAnIdGenerator =
     dataSamplesForAnIdGenerator_[IntegerHistory](
       integerHistoryIdGenerator,
-      integerDataSampleGenerator(faulty = false))
+      integerHistoryDataSampleGenerator(faulty = false))
   val integerHistoryRecordingsGroupedByIdGenerator =
     recordingsGroupedByIdGenerator_(integerDataSamplesForAnIdGenerator)
 
@@ -872,9 +889,9 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
   val mixedRecordingsForReferencedIdGenerator =
     dataSamplesForAnIdGenerator_[FooHistory](
       Gen.oneOf(ReferringHistory.specialFooIds),
-      Gen.oneOf(dataSampleGenerator1(faulty = false),
-                moreSpecificFooDataSampleGenerator(faulty = false)),
-      dataSampleGenerator2(faulty = false)
+      Gen.oneOf(fooHistoryDataSampleGenerator1(faulty = false),
+                moreSpecificFooHistoryDataSampleGenerator(faulty = false)),
+      fooHistoryDataSampleGenerator2(faulty = false)
     )
 
   def referencedHistoryRecordingsGroupedByIdGenerator(

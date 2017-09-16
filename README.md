@@ -1,4 +1,4 @@
-# Plutonium
+# Plutonium [![Build Status](https://travis-ci.org/sageserpent-open/open-plutonium.svg?branch=master)](https://travis-ci.org/sageserpent-open/open-plutonium)
 
 ## Pardon? ##
 No, you are not about to be invited to purchase some fissile material of any isotopic constitution whatsover.
@@ -610,6 +610,8 @@ Let's show Plutonium in action - this is a demo that books in some events in the
 				final double uncoveredValue = StreamSupport
 						.stream(scope.renderAsIterable(packageItemsBitemporal)
 										.spliterator(), false)
+						.filter(((java.util.function.Predicate<PackageItem>)
+                            PackageItem::hasBeenDelivered).negate())
 						.map(PackageItem::getValuePaid)
 						.reduce(0.0, (lhs, rhs) -> lhs + rhs);
 

@@ -22,11 +22,12 @@ trait WorldStateSharingBehaviours
     with Matchers
     with Checkers
     with WorldSpecSupport {
-  implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
-    PropertyCheckConfig(maxSize = 40, minSuccessful = 200)
-
   val worldSharingCommonStateFactoryResourceGenerator: Gen[
     ManagedResource[() => World[Int]]]
+
+  val testParameters: Test.Parameters
+
+  val numberOfConcurrentQueriesPerRevision: Revision
 
   def multipleInstancesRepresentingTheSameWorldBehaviour = {
     they should "yield the same results to scope queries regardless of which instance is used to define a revision" in {
@@ -110,7 +111,8 @@ trait WorldStateSharingBehaviours
          asOfs,
          queryWhen,
          seed)
-      check(Prop.forAllNoShrink(testCaseGenerator) {
+      check(
+        Prop.forAllNoShrink(testCaseGenerator) {
         case (worldSharingCommonStateFactoryResource,
               recordingsGroupedById,
               bigShuffledHistoryOverLotsOfThings,
@@ -139,7 +141,8 @@ trait WorldStateSharingBehaviours
                   _) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
                   queryWhen))
                 Seq(history) = historiesFrom(scope)
-              } yield (historyId, history.datums, pertinentRecordings.map(_._1))
+                } yield
+                  (historyId, history.datums, pertinentRecordings.map(_._1))
 
               checks.nonEmpty ==>
                 Prop.all(checks.map {
@@ -152,7 +155,9 @@ trait WorldStateSharingBehaviours
                         }: _*)
                 }: _*)
           }
-      })
+        },
+        testParameters
+      )
     }
 
     class DemultiplexingWorld(worldFactory: () => World[Int])
@@ -253,7 +258,7 @@ trait WorldStateSharingBehaviours
                 }
             }
         },
-        Test.Parameters.defaultVerbose
+        testParameters
       )
     }
 
@@ -294,7 +299,7 @@ trait WorldStateSharingBehaviours
                 val finalAsOf = asOfs.last
 
                 val queries = for {
-                  _ <- 1 to 100 * numberOfRevisions
+                  _ <- 1 to numberOfConcurrentQueriesPerRevision * numberOfRevisions
                 } yield
                   () => {
                     try {
@@ -352,7 +357,7 @@ trait WorldStateSharingBehaviours
                 checks.reduce(_ ++ _)
             }
         },
-        Test.Parameters.defaultVerbose
+        testParameters
       )
     }
 
@@ -421,7 +426,7 @@ trait WorldStateSharingBehaviours
                           Prop.undecided)
                     }
                   }
-                val revisionChecks = (revisionCommands.toParArray map (_.apply))
+                val revisionChecks = revisionCommands.toParArray map (_.apply)
                 val revisionRange  = World.initialRevision until demultiplexingWorld.nextRevision
                 val queryChecks = for {
                   (previousNextRevision, nextRevision) <- revisionRange zip revisionRange.tail
@@ -447,7 +452,7 @@ trait WorldStateSharingBehaviours
                   .getOrElse(Prop.proved)
             }
         },
-        Test.Parameters.defaultVerbose
+        testParameters
       )
     }
   }
@@ -461,6 +466,11 @@ class Item(val id: Item#Id) extends Identified {
 
 class WorldStateSharingSpecUsingWorldReferenceImplementation
     extends WorldStateSharingBehaviours {
+  val testParameters: Test.Parameters =
+    Test.Parameters.defaultVerbose.withMaxSize(50).withMinSuccessfulTests(50)
+
+  val numberOfConcurrentQueriesPerRevision: Revision = 100
+
   val worldSharingCommonStateFactoryResourceGenerator
     : Gen[ManagedResource[() => World[Int]]] =
     Gen.const(
@@ -478,6 +488,11 @@ class WorldStateSharingSpecUsingWorldRedisBasedImplementation
     extends WorldStateSharingBehaviours
     with RedisServerFixture {
   val redisServerPort: Int = 6451
+
+  val testParameters: Test.Parameters =
+    Test.Parameters.defaultVerbose.withMaxSize(30).withMinSuccessfulTests(50)
+
+  val numberOfConcurrentQueriesPerRevision: Revision = 20
 
   val worldSharingCommonStateFactoryResourceGenerator
     : Gen[ManagedResource[() => World[Int]]] =
