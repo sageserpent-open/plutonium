@@ -2380,42 +2380,44 @@ trait WorldBehaviours
                 asOfs,
                 queryWhen,
                 seed) =>
-            worldResource acquireAndGet {
-              world =>
-                try {
-                  recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
-                                      asOfs,
-                                      world)
+            worldResource acquireAndGet { world =>
+              try {
+                recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
+                                    asOfs,
+                                    world)
 
-                  val scope =
-                    world.scopeFor(queryWhen, world.nextRevision)
+                val scope =
+                  world.scopeFor(queryWhen, world.nextRevision)
 
-                  val checks = for {
-                    RecordingsNoLaterThan(
-                      historyId,
-                      historiesFrom,
-                      pertinentRecordings,
-                      _,
-                      _) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
-                      queryWhen))
-                    Seq(history) = historiesFrom(scope)
-                    if history.datums.exists { case datum: Int => datum > 0 }
-                  } yield
-                    (historyId, history.datums, pertinentRecordings.map(_._1))
+                val checks = for {
+                  RecordingsNoLaterThan(
+                    historyId,
+                    historiesFrom,
+                    pertinentRecordings,
+                    _,
+                    _) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
+                    queryWhen))
+                  Seq(history) = historiesFrom(scope)
+                  haveBothAnAbstractedAndAnImplementingDatumSomewhere = history.datums
+                    .exists { case datum: Int => datum > 0 } && history.datums
+                    .exists { case datum: Int => datum < 0 }
+                  if haveBothAnAbstractedAndAnImplementingDatumSomewhere
+                } yield
+                  (historyId, history.datums, pertinentRecordings.map(_._1))
 
-                  checks.nonEmpty ==>
-                    Prop.all(checks.map {
-                      case (historyId, actualHistory, expectedHistory) =>
-                        ((actualHistory.length == expectedHistory.length) :| s"${actualHistory.length} == expectedHistory.length") &&
-                          Prop.all(
-                            (actualHistory zip expectedHistory zipWithIndex) map {
-                              case ((actual, expected), step) =>
-                                (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}"
-                            }: _*)
-                    }: _*)
-                } catch {
-                  case _: UnsupportedOperationException => Prop.undecided
-                }
+                checks.nonEmpty ==>
+                  Prop.all(checks.map {
+                    case (historyId, actualHistory, expectedHistory) =>
+                      ((actualHistory.length == expectedHistory.length) :| s"${actualHistory.length} == expectedHistory.length") &&
+                        Prop.all(
+                          (actualHistory zip expectedHistory zipWithIndex) map {
+                            case ((actual, expected), step) =>
+                              (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}"
+                          }: _*)
+                  }: _*)
+              } catch {
+                case _: UnsupportedOperationException => Prop.undecided
+              }
             }
         },
         minSuccessful(10)
