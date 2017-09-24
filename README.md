@@ -57,7 +57,15 @@ We're free to use the usual mechanisms in Java for expressing relationships betw
 
 We'll also add in some lifecycle state to the packages that reflect where in the process of delivery to the customer they are.
 
-OK, first, let's meet _PackageItem_:-
+OK, first, let's meet _`PackageItem`_. A package item is delivered to a customer; it has contents, an amount of money that was paid for it and a package holder - where it currently resides. One can set an intended destination, and whether it has been delivered to that destination as intrinsic properties.
+
+There is an id that distinguishes a package item from others.
+
+The package holder is modelled as bidirectional many-to-one association from package item to package holder; this is maintained by a public mutative method that is not just a simple attribute setter.
+
+Finally, there is an optional invariant on its state that captures business logic constraints that we don't want to break in a correct system too. We don't have to define this if there are no rules to model (or we don't care if they are broken).
+
+The superclass `Identified` confers the notion of an id and an invariant on `PackageItem` - apart from that, there is no other intrusion of Plutonium into the client code.
 
 ```java
 package com.sageserpent.plutonium.javaApi.examples;
@@ -209,7 +217,9 @@ public class PackageItem extends Identified {
 }
 ```
 
-Now for _PackageHolder_:-
+Now for _`PackageHolder`_. This represents things such as warehouses and delivery vans, where package items are held. If you looked carefully at the previous `PackageItem`, you would have seen that once a package item is delivered, it is no longer considered to be held. This reflects the fact that from the point of view of the business selling the item, once it has been sold and delivered, there is no resposibility for tracking where it is - the packaging will hopefully be recycled and the contents will be the property of the customer, to be used / consumed / presented as a gift / sold on according to their whim.
+
+It too has `Identified` as a superclass and defines an id and invariant.
 
 ```java
 package com.sageserpent.plutonium.javaApi.examples;
