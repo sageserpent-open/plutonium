@@ -217,7 +217,7 @@ public class PackageItem extends Identified {
 }
 ```
 
-Now for _`PackageHolder`_. This represents things such as warehouses and delivery vans, where package items are held. If you looked carefully at the previous `PackageItem`, you would have seen that once a package item is delivered, it is no longer considered to be held. This reflects the fact that from the point of view of the business selling the item, once it has been sold and delivered, there is no resposibility for tracking where it is - the packaging will hopefully be recycled and the contents will be the property of the customer, to be used / consumed / presented as a gift / sold on according to their whim.
+Now for _`PackageHolder`_. This represents things such as warehouses and delivery vans, where package items are held. If you looked carefully at the previous `PackageItem`, you would have seen that once a package item is delivered, it is no longer considered to be held. This reflects the fact that from the point of view of the business selling the item, once it has been sold and delivered, there is no resposibility for tracking where it is - the packaging will hopefully be recycled and the contents will be the property of the customer, to be used / consumed / presented as a gift / sold on according to their whim. `PackageItem` does have a delivery address property though, which is handy if the item needs be picked up for return in case of refund.
 
 It too has `Identified` as a superclass and defines an id and invariant.
 
@@ -281,7 +281,9 @@ public class PackageHolder extends Identified {
 }
 ```
 
-Let's show Plutonium in action - this is a demo that books in some events in the real world and makes some queries.
+So far, all that we've seen as the client code domain model. Now let's show Plutonium in action - this is a demo session where we drive Plutonium through a hand-crafted scenario, think of it as a smoke test. We'll tell Plutonium about events as they unfold - the *'C'* part of *CQRS*, and occasionally stop and make some queries - you may have guessed that this is the *'Q'* part by now, hmm.
+
+At the end we'll see where all of undelivered package items are - back in the warehouse, out in a van somewhere, or at the final delivery address, and we'll also see how much money we've taken off customers that isn't covered by having delivered the corresponding package items - we may still have to refund that money, so it's good to know how much we may owe.
 
 ```java
 package com.sageserpent.plutonium.javaApi.examples;
