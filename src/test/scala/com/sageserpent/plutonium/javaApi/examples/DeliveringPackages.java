@@ -63,7 +63,7 @@ public class DeliveringPackages {
                                 .now() /*As-of time that picks out the
                                 revision.*/);
                 assert "Big warehouse by motorway".equals(scope.render(
-                        Bitemporal.singleOneOf(warehouseName,
+                        Bitemporal.withId(warehouseName,
                                                PackageHolder.class)).head()
                                                                   .getLocation());
             }
@@ -97,11 +97,11 @@ public class DeliveringPackages {
                     Instant.now() /*As-of time that picks out the revision
                     .*/);
             assert "Big warehouse by motorway".equals(scope.render(
-                    Bitemporal.singleOneOf(
+                    Bitemporal.withId(
                             warehouseName,
                             PackageHolder.class)).head().getLocation());
             assert "SuperTron HiPlasmatic Telly".equals(scope.render(
-                    Bitemporal.singleOneOf("Package #1", PackageItem.class))
+                    Bitemporal.withId("Package #1", PackageItem.class))
                                                                 .head()
                                                                 .getContents());
         }
@@ -205,11 +205,11 @@ public class DeliveringPackages {
                     Instant.now() /*As-of time that picks out the revision
                     .*/);
             assert "Big warehouse by motorway".equals(scope.render(
-                    Bitemporal.singleOneOf(
+                    Bitemporal.withId(
                             warehouseName,
                             PackageHolder.class)).head().getLocation());
             assert "Krasster kipper ties".equals(scope.render(
-                    Bitemporal.singleOneOf("Package #1", PackageItem.class))
+                    Bitemporal.withId("Package #1", PackageItem.class))
                                                          .head()
                                                          .getContents());
         }
@@ -295,7 +295,7 @@ public class DeliveringPackages {
                     Instant.now() /*As-of time that picks out the revision
                     .*/);
             assert "JA10 PIE".equals(scope.render(
-                    Bitemporal.singleOneOf("Package #3", PackageItem.class))
+                    Bitemporal.withId("Package #3", PackageItem.class))
                                              .head().holder().id());
         }
 
@@ -308,7 +308,7 @@ public class DeliveringPackages {
                     Instant.now() /*As-of time that picks out the revision
                     .*/);
             assert warehouseName.equals(scope.render(
-                    Bitemporal.singleOneOf("Package #3", PackageItem.class))
+                    Bitemporal.withId("Package #3", PackageItem.class))
                                                 .head().holder().id());
         }
 

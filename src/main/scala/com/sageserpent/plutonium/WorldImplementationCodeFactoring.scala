@@ -587,12 +587,6 @@ object WorldImplementationCodeFactoring {
         case bitemporal @ IdentifiedItemsBitemporalResult(id) =>
           implicit val typeTag = bitemporal.capturedTypeTag
           itemsFor(id)
-        case bitemporal @ ZeroOrOneIdentifiedItemBitemporalResult(id) =>
-          implicit val typeTag = bitemporal.capturedTypeTag
-          zeroOrOneItemFor(id)
-        case bitemporal @ SingleIdentifiedItemBitemporalResult(id) =>
-          implicit val typeTag = bitemporal.capturedTypeTag
-          singleItemFor(id)
         case bitemporal @ WildcardBitemporalResult() =>
           implicit val typeTag = bitemporal.capturedTypeTag
           allItems
