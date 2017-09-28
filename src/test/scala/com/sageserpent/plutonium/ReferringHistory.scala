@@ -4,7 +4,7 @@ object ReferringHistory {
   val specialFooIds: Seq[FooHistory#Id] = Seq("Huey", "Duey", "Louie")
 }
 
-class ReferringHistory(override val id: ReferringHistory#Id) extends History {
+abstract class ReferringHistory extends History {
   type Id = String
 
   override def checkInvariant(): Unit = {

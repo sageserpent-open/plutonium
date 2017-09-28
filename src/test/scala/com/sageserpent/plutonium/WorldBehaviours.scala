@@ -28,10 +28,12 @@ trait WorldBehaviours
     with Checkers
     with WorldSpecSupport { this: WorldResource =>
 
-  class NonExistentIdentified extends Identified {
-    override type Id = String
-    override val id = fail(
-      "If I am not supposed to exist, why is something asking for my id?")
+  case class NonExistentId() {
+    fail("If I am not supposed to exist, why is something asking for me?")
+  }
+
+  abstract class NonExistentIdentified extends Identified {
+    override type Id = NonExistentId
   }
 
   def worldWithNoHistoryBehaviour = {
@@ -3032,8 +3034,7 @@ class WorldSpecUsingWorldReferenceImplementation
   "A world with events that have since been corrected (using the world reference implementation)" should behave like worldWithEventsThatHaveSinceBeenCorrectedBehaviour
 }
 
-class HistoryWhoseIdWontSerialize(val id: HistoryWhoseIdWontSerialize#Id)
-    extends History {
+abstract class HistoryWhoseIdWontSerialize extends History {
   type Id = WontSerializeId
 
   var property: String = ""
@@ -3050,8 +3051,7 @@ case class WontSerializeId(var id: Int) extends KryoSerializable {
   }
 }
 
-class HistoryWhoseIdWontDeserialize(val id: HistoryWhoseIdWontDeserialize#Id)
-    extends History {
+abstract class HistoryWhoseIdWontDeserialize extends History {
   type Id = WontDeserializeId
 
   var property: Boolean = false
