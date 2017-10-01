@@ -3,14 +3,10 @@ package com.sageserpent.plutonium.javaApi;
 import com.sageserpent.americium.Finite;
 import com.sageserpent.americium.NegativeInfinity;
 import com.sageserpent.americium.Unbounded;
-import com.sageserpent.plutonium.*;
-import com.sageserpent.plutonium.javaApi.*;
+import com.sageserpent.plutonium.WorldReferenceImplementation;
 import org.junit.Test;
-import static org.junit.Assert.assertEquals;
 
 import java.time.Instant;
-import java.util.HashMap;
-import java.util.Optional;
 
 /**
  * Created by Gerard on 09/05/2016.
@@ -20,134 +16,129 @@ public class JavaApiTest {
     public void smokeTestTheApi() {
         World<Integer> world = new WorldReferenceImplementation<>();
 
-        final NegativeInfinity<Instant> agesAgo = NegativeInfinity.apply();
+        final NegativeInfinity<Instant> atTheBeginningOfTime = NegativeInfinity.apply();
+
         {
-            HashMap<Integer, Optional<Event>> eventMap = new HashMap<>();
+            final Instant asOf = Instant.now();
 
-            eventMap.put(0, Optional.of(Change.forOneItem(agesAgo, "Fred", Example.class, exampleItem -> {
-                exampleItem.setAge(50);
-            })));
+            final int eventId = 0;
 
-            Instant asOf = Instant.now();
+            world.revise(eventId, Change.forOneItem(atTheBeginningOfTime, "Fred", Account.class, accountItem -> {
+                accountItem.setCash(5.0);
+            }), asOf);
+        }
 
-            world.revise(eventMap, asOf);
+        final Instant toStartWith = Instant.ofEpochSecond(0);
+
+        final int rememberThisEventId = 1;
+
+        {
+            final Instant asOf = Instant.now();
+
+            world.revise(rememberThisEventId, Measurement.forOneItem(toStartWith, "Fred", Account.class, accountItem -> {
+                accountItem.setCash(3.8);
+            }), asOf);
+        }
+
+        final Instant oneHourLater = toStartWith.plusSeconds(3600L);
+
+        {
+            final Instant asOf = Instant.now();
+
+            final int eventId = 2;
+
+            world.revise(eventId, Change.forOneItem(oneHourLater, "Fred", Account.class, accountItem -> {
+                accountItem.setCash(6.7);
+            }), asOf);
+        }
+
+        final Instant twoHoursLater = oneHourLater.plusSeconds(3600L);
+
+        {
+            final Instant asOf = Instant.now();
+
+            final int eventId = 3;
+
+            world.revise(eventId, Annihilation.apply(twoHoursLater, "Fred", Account.class), asOf);
         }
 
         {
-            HashMap<Integer, Optional<Event>> eventMap = new HashMap<>();
+            final Instant asOf = Instant.now();
 
-            eventMap.put(1, Optional.of(Measurement.forOneItem(Instant.ofEpochSecond(0), "Fred", Example.class, exampleItem -> {
-                exampleItem.setAge(38);
-            })));
-
-            Instant asOf = Instant.now();
-
-            world.revise(eventMap, asOf);
+            world.revise(rememberThisEventId, Change.forOneItem(toStartWith, "Fred", Account.class, accountItem -> {
+                accountItem.setCash(3.0);
+            }), asOf);
         }
 
 
+        final Unbounded<Instant> queryTime = Finite.apply(twoHoursLater);
+
         {
-            HashMap<Integer, Optional<Event>> eventMap = new HashMap<>();
+            final int followingRevision = 0;
 
-            eventMap.put(2, Optional.of(Change.forOneItem(Instant.ofEpochSecond(1), "Fred", Example.class, exampleItem -> {
-                exampleItem.setAge(67);
-            })));
+            final Scope scope = world.scopeFor(queryTime, followingRevision);
 
-            Instant asOf = Instant.now();
-
-            world.revise(eventMap, asOf);
+            assert scope.render(Bitemporal.withId("Fred", Account.class)).isEmpty();
         }
 
         {
-            HashMap<Integer, Optional<Event>> eventMap = new HashMap<>();
+            final int followingRevision = 1;
 
-            eventMap.put(3, Optional.of(Annihilation.apply(Instant.ofEpochSecond(2), "Fred", Example.class)));
+            final Scope scope = world.scopeFor(atTheBeginningOfTime, followingRevision);
 
-            Instant asOf = Instant.now();
+            final Account account = scope.render(Bitemporal.withId("Fred", Account.class)).head();
 
-            world.revise(eventMap, asOf);
+            assert 5.0 == account.getCash();
         }
 
         {
-            HashMap<Integer, Optional<Event>> eventMap = new HashMap<>();
+            final int followingRevision = 2;
 
-            eventMap.put(1, Optional.of(Measurement.forOneItem(Instant.ofEpochSecond(0), "Fred", Example.class, exampleItem -> {
-                exampleItem.setAge(3);
-            })));
+            final Scope scope = world.scopeFor(atTheBeginningOfTime, followingRevision);
 
-            Instant asOf = Instant.now();
+            final Account account = scope.render(Bitemporal.withId("Fred", Account.class)).head();
 
-            world.revise(eventMap, asOf);
-        }
-
-
-        Unbounded<Instant> queryTime = Finite.apply(Instant.ofEpochSecond(2));
-
-        {
-            int followingRevision = 0;
-
-            Scope scope = world.scopeFor(queryTime, followingRevision);
-
-            assert (scope.render(Bitemporal.withId("Fred", Example.class)).isEmpty());
-        }
-
-        {
-            int followingRevision = 1;
-
-            Scope scope = world.scopeFor(agesAgo, followingRevision);
-
-            Example example = scope.render(Bitemporal.withId("Fred", Example.class)).head();
-
-            assertEquals(50, example.getAge());
-        }
-
-        {
-            int followingRevision = 2;
-
-            Scope scope = world.scopeFor(agesAgo, followingRevision);
-
-            Example example = scope.render(Bitemporal.withId("Fred", Example.class)).head();
-
-            assertEquals(38, example.getAge());
+            assert 3.8 == account.getCash();
         }
 
         {
             int followingRevision = 3;
 
             {
-                Scope scope = world.scopeFor(agesAgo, followingRevision);
+                final Scope scope = world.scopeFor(atTheBeginningOfTime, followingRevision);
 
-                Example example = scope.render(Bitemporal.withId("Fred", Example.class)).head();
+                final Account account = scope.render(Bitemporal.withId("Fred", Account.class)).head();
 
-                assertEquals(38, example.getAge());
+                assert 3.8 == account.getCash();
             }
 
             {
-                Scope scope = world.scopeFor(queryTime, followingRevision);
+                final Scope scope = world.scopeFor(queryTime, followingRevision);
 
-                Example example = scope.render(Bitemporal.withId("Fred", Example.class)).head();
+                final Account account = scope.render(Bitemporal.withId("Fred", Account.class)).head();
 
-                assertEquals(67, example.getAge());
+                assert 6.7 == account.getCash();
             }
         }
 
         {
             int followingRevision = 4;
 
-            Scope scope = world.scopeFor(queryTime, followingRevision);
+            final Scope scope = world.scopeFor(queryTime, followingRevision);
 
-            final Iterable<Example> exampleIterable = scope.renderAsIterable(Bitemporal.withId("Fred", Example.class));
+            final Iterable<Account> exampleIterable = scope.renderAsIterable(Bitemporal.withId("Fred", Account.class));
+
             assert !exampleIterable.iterator().hasNext();
         }
 
         {
             int followingRevision = 5;
 
-            Scope scope = world.scopeFor(agesAgo, followingRevision);
+            final Scope scope = world.scopeFor(Finite.apply(toStartWith), followingRevision);
 
-            Example example = scope.render(Bitemporal.withId("Fred", Example.class)).head();
+            final Account account = scope.render(Bitemporal.withId("Fred", Account.class)).head();
 
-            assertEquals(3, example.getAge());
+            assert 3.0 == account.getCash();
         }
     }
 }
