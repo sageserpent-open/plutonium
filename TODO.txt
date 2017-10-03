@@ -63,7 +63,7 @@ Similarly, wildcards need zero, one or many matches. (DONE)
 
 10. Is all of the commentary in the API covered by tests? OK if doing fault injection reveals a failure via existing tests?
 
-For account, is there a test that checks that a scope passed to a change's spore captures the state of the world at the event when of the change, only without that change applied (or any other subsequent events)?
+For example, is there a test that checks that a scope passed to a change's spore captures the state of the world at the event when of the change, only without that change applied (or any other subsequent events)?
 
 Could do this for one of the test data classes by imposing a precondition on the setter that the new value is, say, one greater than the previous value - if the test can guarantee this the absence of a precondition failure implies
 that the scope in a spore captures all the history up to, but not including, the change.

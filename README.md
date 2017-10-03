@@ -257,4 +257,4 @@ jshell>
 
 ## How? ##
 
-See the [account and following discussion here](https://github.com/sageserpent-open/open-plutonium/blob/master/account.md)
+See the [example and following discussion here](https://github.com/sageserpent-open/open-plutonium/blob/master/example.md)
