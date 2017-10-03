@@ -23,12 +23,17 @@ lazy val settings = Seq(
   libraryDependencies += "com.github.kstyrc"       % "embedded-redis"               % "0.6" % "test",
   libraryDependencies += "junit"                   % "junit"                        % "4.12" % "test",
   libraryDependencies += "com.novocode"            % "junit-interface"              % "0.11" % "test",
+  libraryDependencies += "com.storm-enroute"       %% "scalameter"                  % "0.8.2",
   publishMavenStyle := true,
   bintrayReleaseOnPublish in ThisBuild := false,
   licenses += ("MIT", url("http://opensource.org/licenses/MIT")),
-  bintrayVcsUrl := Some("git@github.com:sageserpent-open/open-plutonium.git")
+  bintrayVcsUrl := Some("git@github.com:sageserpent-open/open-plutonium.git"),
+  testFrameworks += new TestFramework("org.scalameter.ScalaMeterFramework")
 )
 
 lazy val plutonium = (project in file(".")).settings(settings: _*)
 
 resolvers += Resolver.jcenterRepo
+
+resolvers += "Sonatype OSS Snapshots" at
+  "https://oss.sonatype.org/content/repositories/releases"
