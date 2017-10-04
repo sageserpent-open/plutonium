@@ -16,7 +16,7 @@ object Benchmark extends Bench.LocalTime {
     var reference: Option[Thing] = None
   }
 
-  val sizes = Gen.range("Number of bookings")(0, 1400, 50)
+  val sizes = Gen.range("Number of bookings")(0, /*1400*/ 500, 50)
 
   performance of "Bookings" in {
     using(sizes) in { size =>
