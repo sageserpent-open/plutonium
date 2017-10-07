@@ -6,19 +6,12 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
-public class PackageHolder extends Identified {
-    private String name;
+public abstract class PackageHolder extends Identified {
     private Set<PackageItem> packageItems = new HashSet<>();
     private String location;
 
-    public PackageHolder(String name) {
-        this.name = name;
-    }
-
     @Override
-    public String id() {
-        return name;
-    }
+    public abstract String id();
 
     @Override
     public void checkInvariant() {

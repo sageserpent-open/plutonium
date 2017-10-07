@@ -3,7 +3,7 @@ package com.sageserpent.plutonium
 /**
   * Created by Gerard on 21/09/2015.
   */
-class FooHistory(val id: FooHistory#Id) extends History {
+abstract class FooHistory extends History {
   type Id = String
 
   def property1 = ???

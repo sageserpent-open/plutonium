@@ -5,7 +5,7 @@ import com.sageserpent.plutonium.WorldSpecSupport.changeError
 /**
   * Created by Gerard on 11/03/2016.
   */
-class BadFooHistory(id: FooHistory#Id) extends FooHistory(id) {
+abstract class BadFooHistory extends FooHistory {
   override def property1_=(data: String): Unit = {
     throw changeError // Modelling a precondition failure.
   }
