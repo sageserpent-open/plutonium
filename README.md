@@ -32,6 +32,8 @@ Add this to your _build.sbt_:
 
     libraryDependencies += "com.sageserpent" %% "open-plutonium" % "1.2.0"
     
+[release history here](https://github.com/sageserpent-open/open-plutonium/blob/master/releaseHistory.md)
+    
 #### Gradle ####
 Add this to your _build.gradle_:
 
