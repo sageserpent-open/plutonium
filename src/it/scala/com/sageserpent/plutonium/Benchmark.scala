@@ -2,8 +2,8 @@ package com.sageserpent.plutonium
 
 import java.time.Instant
 
-import org.scalameter.{Bench, Gen}
 import com.sageserpent.americium.randomEnrichment._
+import org.scalameter.{Bench, Gen}
 
 object Benchmark extends Bench.LocalTime {
   type EventId = Int
