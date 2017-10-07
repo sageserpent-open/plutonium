@@ -8,7 +8,7 @@ import org.scalameter.{Bench, Gen}
 object Benchmark extends Bench.LocalTime {
   type EventId = Int
 
-  class Thing(override val id: Thing#Id) extends Identified {
+  abstract class Thing extends Identified {
     override type Id = Int
 
     var property: Int = 0
