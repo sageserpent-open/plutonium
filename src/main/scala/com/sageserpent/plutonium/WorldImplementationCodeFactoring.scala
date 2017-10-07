@@ -570,27 +570,6 @@ object WorldImplementationCodeFactoring {
         identifiedItemsScope.itemsFor(id)
       }
 
-      def zeroOrOneItemFor[Item <: Identified: TypeTag](
-          id: Item#Id): Stream[Item] = {
-        itemsFor(id) match {
-          case zeroOrOneItems @ (Stream.Empty | _ #:: Stream.Empty) =>
-            zeroOrOneItems
-          case _ =>
-            throw new scala.RuntimeException(
-              s"Id: '${id}' matches more than one item of type: '${typeTag.tpe}'.")
-        }
-      }
-
-      def singleItemFor[Item <: Identified: TypeTag](
-          id: Item#Id): Stream[Item] = {
-        zeroOrOneItemFor(id) match {
-          case Stream.Empty =>
-            throw new scala.RuntimeException(
-              s"Id: '${id}' does not match any items of type: '${typeTag.tpe}'.")
-          case result @ Stream(_) => result
-        }
-      }
-
       def allItems[Item <: Identified: TypeTag]: Stream[Item] = {
         identifiedItemsScope.allItems()
       }
