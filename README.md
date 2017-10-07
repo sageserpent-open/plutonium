@@ -283,7 +283,7 @@ false
 1970-01-01T00:00:00Z
 3.0
 ```
-![Revision Four Revisited](https://github.com/sageserpent-open/open-plutonium/blob/master/Revision%20One%20Revisited.png)
+![Revision Four Revisited](https://github.com/sageserpent-open/open-plutonium/blob/master/Revision%20Four%20Revisited.png)
 
 ## How? ##
 
