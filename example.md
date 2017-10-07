@@ -24,14 +24,15 @@ Finally, there is an optional invariant on its state that captures business logi
 
 The superclass `Identified` confers the notion of an id and an invariant on `PackageItem` - apart from that, there is no other intrusion of Plutonium into the client code.
 
+Note how `id` is left abstract (and therefore so is `PackageItem`) - other then defining the type of the id, there is no need to implement it; Plutonium will take care of that for us.
+
 ```java
 package com.sageserpent.plutonium.javaApi.examples;
 
 import com.sageserpent.plutonium.Identified;
 
 
-public class PackageItem extends Identified {
-    private final String id;
+public abstract class PackageItem extends Identified {
     private PackageHolder holder;
     private String intendedDestination;
     private String actualDestination;
@@ -39,14 +40,8 @@ public class PackageItem extends Identified {
     private double valuePaid = 0.0;
     private boolean isWrongItem = false;
 
-    public PackageItem(String id) {
-        this.id = id;
-    }
-
     @Override
-    public String id() {
-        return id;
-    }
+    public abstract String id();
 
     @Override
     public void checkInvariant() {
@@ -177,7 +172,7 @@ public class PackageItem extends Identified {
 #### Domain model: _`PackageHolder`_ ####
 This represents things such as warehouses and delivery vans, where package items are held. If you looked carefully at the previous `PackageItem`, you would have seen that once a package item is delivered, it is no longer considered to be held. This reflects the fact that from the point of view of the business selling the item, once it has been sold and delivered, there is no resposibility for tracking where it is - the packaging will hopefully be recycled and the contents will be the property of the customer, to be used / consumed / presented as a gift / sold on according to their whim. `PackageItem` does have a delivery address property though, which is handy if the item needs be picked up for return in case of refund.
 
-It too has `Identified` as a superclass and defines an id and invariant.
+It too has `Identified` as a superclass and defines an id (again, left abstract) and invariant.
 
 ```java
 package com.sageserpent.plutonium.javaApi.examples;
@@ -188,19 +183,12 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
-public class PackageHolder extends Identified {
-    private String name;
+public abstract class PackageHolder extends Identified {
     private Set<PackageItem> packageItems = new HashSet<>();
     private String location;
 
-    public PackageHolder(String name) {
-        this.name = name;
-    }
-
     @Override
-    public String id() {
-        return name;
-    }
+    public abstract String id();
 
     @Override
     public void checkInvariant() {
