@@ -1288,7 +1288,7 @@ trait WorldBehaviours
                   val scope = world.scopeFor(laterQueryWhenAtAnnihilation,
                                              world.nextRevision)
                   val Seq(referringHistory) = scope.render(
-                    Bitemporal.singleOneOf[ReferringHistory](theReferrerId))
+                    Bitemporal.withId[ReferringHistory](theReferrerId))
                   val ghostItem =
                     referringHistory.referencedHistories(referencedHistoryId)
                   val idOfGhost  = ghostItem.id      // It's OK to ask a ghost what its name is.
@@ -3141,7 +3141,7 @@ class WorldSpecUsingWorldRedisBasedImplementation
 
             val queryOk = (world
               .scopeFor(queryWhen, world.nextRevision)
-              .render(Bitemporal.singleOneOf[BarHistory](itemTwoId))
+              .render(Bitemporal.withId[BarHistory](itemTwoId))
               .head
               .datums == Seq(4)) :| "Expected to see effects of the successful revision."
 
