@@ -42,6 +42,10 @@ object capturePatches {
           val isForRecordingOnly = true
 
           override val stateToBeAcquiredByProxy = new AcquiredState {
+            type Id = Item#Id
+
+            val _id = id
+
             def itemReconstitutionData: Recorder#ItemReconstitutionData[Item] =
               id -> typeTag[Item]
 

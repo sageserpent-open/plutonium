@@ -2,14 +2,8 @@ package com.sageserpent.plutonium.javaApi;
 
 import com.sageserpent.plutonium.Identified;
 
-public class Account extends Identified {
-    public Account(String id){
-        this.id = id;
-    }
-
-    public String id() {
-        return id;
-    }
+public abstract class Account extends Identified {
+    public abstract String id();
 
     public void setCash(double cash){
         this.cash = cash;
@@ -18,8 +12,6 @@ public class Account extends Identified {
     public double getCash(){
         return cash;
     }
-
-    private String id;
 
     private double cash;
 }
