@@ -2,9 +2,13 @@
 
 #### 1.1.0 ####
 
+_September 15th, 2017._
+
 First public release to Bintray / JCenter.
 
 #### 1.2.0 ####
+
+_October 7th, 2017._
 
 The API is not binary compatible with that of 1.1.0.
 
