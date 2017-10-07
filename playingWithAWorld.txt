@@ -37,7 +37,7 @@ int rememberThisEventId = 1;
 {
     final Instant asOf = Instant.now();
 
-    world.revise(rememberThisEventId, Measurement.forOneItem(toStartWith, "Fred", Account.class, accountItem -> {
+    world.revise(rememberThisEventId, Change.forOneItem(toStartWith, "Fred", Account.class, accountItem -> {
         accountItem.setCash(3.8);
     }), asOf);
 
@@ -103,15 +103,13 @@ Instant twoHoursLater = oneHourLater.plusSeconds(3600L);
 }
 
 
-Unbounded<Instant> queryTime = Finite.apply(twoHoursLater);
-
 {
     final int followingRevision = 0;
 
-    final Scope scope = world.scopeFor(queryTime, followingRevision);
+    final Scope scope = world.scopeFor(Finite.apply(twoHoursLater), followingRevision);
 
     System.out.println(followingRevision);
-    System.out.println(queryTime);
+    System.out.println(Finite.apply(twoHoursLater));
     System.out.println(scope.render(Bitemporal.withId("Fred", Account.class)).isEmpty());
 }
 
@@ -153,12 +151,12 @@ Unbounded<Instant> queryTime = Finite.apply(twoHoursLater);
     }
 
     {
-        final Scope scope = world.scopeFor(queryTime, followingRevision);
+        final Scope scope = world.scopeFor(Finite.apply(twoHoursLater), followingRevision);
 
         final Account account = scope.render(Bitemporal.withId("Fred", Account.class)).head();
 
         System.out.println(followingRevision);
-        System.out.println(queryTime);
+        System.out.println(Finite.apply(twoHoursLater));
         System.out.println(account.getCash());
     }
 }
@@ -166,12 +164,12 @@ Unbounded<Instant> queryTime = Finite.apply(twoHoursLater);
 {
     int followingRevision = 4;
 
-    final Scope scope = world.scopeFor(queryTime, followingRevision);
+    final Scope scope = world.scopeFor(Finite.apply(twoHoursLater), followingRevision);
 
     final Iterable<Account> accountIterable = scope.renderAsIterable(Bitemporal.withId("Fred", Account.class));
 
     System.out.println(followingRevision);
-    System.out.println(queryTime);
+    System.out.println(Finite.apply(twoHoursLater));
     System.out.println(accountIterable.iterator().hasNext());
 }
 

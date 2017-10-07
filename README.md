@@ -86,7 +86,7 @@ NegativeInfinity()
 -: {
        final Instant asOf = Instant.now();
    
-       world.revise(rememberThisEventId, Measurement.forOneItem(toStartWith, "Fred", Account.class, accountItem -> {
+       world.revise(rememberThisEventId, Change.forOneItem(toStartWith, "Fred", Account.class, accountItem -> {
            accountItem.setCash(3.8);
        }), asOf);
    
@@ -155,14 +155,13 @@ NegativeInfinity()
    }
 5
 1970-01-01T00:00:00Z
--: Unbounded<Instant> queryTime = Finite.apply(twoHoursLater);
 -: {
        final int followingRevision = 0;
    
-       final Scope scope = world.scopeFor(queryTime, followingRevision);
+       final Scope scope = world.scopeFor(Finite.apply(twoHoursLater), followingRevision);
    
        System.out.println(followingRevision);
-       System.out.println(queryTime);
+       System.out.println(Finite.apply(twoHoursLater));
        System.out.println(scope.render(Bitemporal.withId("Fred", Account.class)).isEmpty());
    }
 0
@@ -195,7 +194,7 @@ NegativeInfinity()
    }
 2
 NegativeInfinity()
-3.8
+5.0
 -: {
        int followingRevision = 3;
    
@@ -210,30 +209,30 @@ NegativeInfinity()
        }
    
        {
-           final Scope scope = world.scopeFor(queryTime, followingRevision);
+           final Scope scope = world.scopeFor(Finite.apply(twoHoursLater), followingRevision);
    
            final Account account = scope.render(Bitemporal.withId("Fred", Account.class)).head();
    
            System.out.println(followingRevision);
-           System.out.println(queryTime);
+           System.out.println(Finite.apply(twoHoursLater));
            System.out.println(account.getCash());
        }
    }
 3
 NegativeInfinity()
-3.8
+5.0
 3
 Finite(1970-01-01T02:00:00Z)
 6.7
 -: {
        int followingRevision = 4;
    
-       final Scope scope = world.scopeFor(queryTime, followingRevision);
+       final Scope scope = world.scopeFor(Finite.apply(twoHoursLater), followingRevision);
    
        final Iterable<Account> accountIterable = scope.renderAsIterable(Bitemporal.withId("Fred", Account.class));
    
        System.out.println(followingRevision);
-       System.out.println(queryTime);
+       System.out.println(Finite.apply(twoHoursLater));
        System.out.println(accountIterable.iterator().hasNext());
    }
 4
