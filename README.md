@@ -30,7 +30,7 @@ Add this to your _build.sbt_:
 
     resolvers += Resolver.jcenterRepo
 
-    libraryDependencies += "com.sageserpent" %% "open-plutonium" % "1.1.0"
+    libraryDependencies += "com.sageserpent" %% "open-plutonium" % "1.2.0"
     
 #### Gradle ####
 Add this to your _build.gradle_:
