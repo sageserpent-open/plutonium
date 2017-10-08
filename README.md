@@ -50,7 +50,6 @@ Add this to your _build.gradle_:
 ```java
 jshell> /reload
 |  Restarting and restoring state.
--: import com.sageserpent.americium.Finite;
 -: import com.sageserpent.americium.NegativeInfinity;
 -: import com.sageserpent.americium.Unbounded;
 -: import com.sageserpent.plutonium.World;
@@ -95,7 +94,7 @@ NegativeInfinity()
    
        final int followingRevision = world.nextRevision();
    
-       final Scope scope = world.scopeFor(Finite.apply(toStartWith), followingRevision);
+       final Scope scope = world.scopeFor(toStartWith, followingRevision);
    
        final Account account = scope.render(Bitemporal.withId("Fred", Account.class)).head();
    
@@ -121,7 +120,7 @@ NegativeInfinity()
    
        final int followingRevision = world.nextRevision();
    
-       final Scope scope = world.scopeFor(Finite.apply(oneHourLater), followingRevision);
+       final Scope scope = world.scopeFor(oneHourLater, followingRevision);
    
        final Account account = scope.render(Bitemporal.withId("Fred", Account.class)).head();
    
@@ -173,14 +172,14 @@ NegativeInfinity()
 -: {
        final int followingRevision = 0;
    
-       final Scope scope = world.scopeFor(Finite.apply(twoHoursLater), followingRevision);
+       final Scope scope = world.scopeFor(twoHoursLater, followingRevision);
    
        System.out.println(followingRevision);
-       System.out.println(Finite.apply(twoHoursLater));
+       System.out.println(twoHoursLater);
        System.out.println(scope.render(Bitemporal.withId("Fred", Account.class)).isEmpty());
    }
 0
-Finite(1970-01-01T02:00:00Z)
+1970-01-01T02:00:00Z
 true
 ```
 ![Empty World](https://github.com/sageserpent-open/open-plutonium/blob/master/Empty%20World.png)
@@ -233,12 +232,12 @@ NegativeInfinity()
        }
    
        {
-           final Scope scope = world.scopeFor(Finite.apply(twoHoursLater), followingRevision);
+           final Scope scope = world.scopeFor(twoHoursLater, followingRevision);
    
            final Account account = scope.render(Bitemporal.withId("Fred", Account.class)).head();
    
            System.out.println(followingRevision);
-           System.out.println(Finite.apply(twoHoursLater));
+           System.out.println(twoHoursLater);
            System.out.println(account.getCash());
        }
    }
@@ -246,7 +245,7 @@ NegativeInfinity()
 NegativeInfinity()
 5.0
 3
-Finite(1970-01-01T02:00:00Z)
+1970-01-01T02:00:00Z
 6.7
 ```
 ![Revision Two Revisited](https://github.com/sageserpent-open/open-plutonium/blob/master/Revision%20Two%20Revisited.png)
@@ -254,16 +253,16 @@ Finite(1970-01-01T02:00:00Z)
 -: {
        int followingRevision = 4;
    
-       final Scope scope = world.scopeFor(Finite.apply(twoHoursLater), followingRevision);
+       final Scope scope = world.scopeFor(twoHoursLater, followingRevision);
    
        final Iterable<Account> accountIterable = scope.renderAsIterable(Bitemporal.withId("Fred", Account.class));
    
        System.out.println(followingRevision);
-       System.out.println(Finite.apply(twoHoursLater));
+       System.out.println(twoHoursLater);
        System.out.println(accountIterable.iterator().hasNext());
    }
 4
-Finite(1970-01-01T02:00:00Z)
+1970-01-01T02:00:00Z
 false
 ```
 ![Revision Three Revisited](https://github.com/sageserpent-open/open-plutonium/blob/master/Revision%20Three%20Revisited.png)
@@ -271,7 +270,7 @@ false
 -: {
        final int followingRevision = 5;
    
-       final Scope scope = world.scopeFor(Finite.apply(toStartWith), followingRevision);
+       final Scope scope = world.scopeFor(toStartWith, followingRevision);
    
        final Account account = scope.render(Bitemporal.withId("Fred", Account.class)).head();
    

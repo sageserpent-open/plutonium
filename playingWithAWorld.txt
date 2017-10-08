@@ -1,4 +1,3 @@
-import com.sageserpent.americium.Finite;
 import com.sageserpent.americium.NegativeInfinity;
 import com.sageserpent.americium.Unbounded;
 import com.sageserpent.plutonium.World;
@@ -43,7 +42,7 @@ int rememberThisEventId = 1;
 
     final int followingRevision = world.nextRevision();
 
-    final Scope scope = world.scopeFor(Finite.apply(toStartWith), followingRevision);
+    final Scope scope = world.scopeFor(toStartWith, followingRevision);
 
     final Account account = scope.render(Bitemporal.withId("Fred", Account.class)).head();
 
@@ -65,7 +64,7 @@ Instant oneHourLater = toStartWith.plusSeconds(3600L);
 
     final int followingRevision = world.nextRevision();
 
-    final Scope scope = world.scopeFor(Finite.apply(oneHourLater), followingRevision);
+    final Scope scope = world.scopeFor(oneHourLater, followingRevision);
 
     final Account account = scope.render(Bitemporal.withId("Fred", Account.class)).head();
 
@@ -106,10 +105,10 @@ Instant twoHoursLater = oneHourLater.plusSeconds(3600L);
 {
     final int followingRevision = 0;
 
-    final Scope scope = world.scopeFor(Finite.apply(twoHoursLater), followingRevision);
+    final Scope scope = world.scopeFor(twoHoursLater, followingRevision);
 
     System.out.println(followingRevision);
-    System.out.println(Finite.apply(twoHoursLater));
+    System.out.println(twoHoursLater);
     System.out.println(scope.render(Bitemporal.withId("Fred", Account.class)).isEmpty());
 }
 
@@ -151,12 +150,12 @@ Instant twoHoursLater = oneHourLater.plusSeconds(3600L);
     }
 
     {
-        final Scope scope = world.scopeFor(Finite.apply(twoHoursLater), followingRevision);
+        final Scope scope = world.scopeFor(twoHoursLater, followingRevision);
 
         final Account account = scope.render(Bitemporal.withId("Fred", Account.class)).head();
 
         System.out.println(followingRevision);
-        System.out.println(Finite.apply(twoHoursLater));
+        System.out.println(twoHoursLater);
         System.out.println(account.getCash());
     }
 }
@@ -164,19 +163,19 @@ Instant twoHoursLater = oneHourLater.plusSeconds(3600L);
 {
     int followingRevision = 4;
 
-    final Scope scope = world.scopeFor(Finite.apply(twoHoursLater), followingRevision);
+    final Scope scope = world.scopeFor(twoHoursLater, followingRevision);
 
     final Iterable<Account> accountIterable = scope.renderAsIterable(Bitemporal.withId("Fred", Account.class));
 
     System.out.println(followingRevision);
-    System.out.println(Finite.apply(twoHoursLater));
+    System.out.println(twoHoursLater);
     System.out.println(accountIterable.iterator().hasNext());
 }
 
 {
     final int followingRevision = 5;
 
-    final Scope scope = world.scopeFor(Finite.apply(toStartWith), followingRevision);
+    final Scope scope = world.scopeFor(toStartWith, followingRevision);
 
     final Account account = scope.render(Bitemporal.withId("Fred", Account.class)).head();
 
