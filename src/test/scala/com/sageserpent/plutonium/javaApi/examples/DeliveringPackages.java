@@ -2,7 +2,6 @@ package com.sageserpent.plutonium.javaApi.examples;
 
 import com.google.common.collect.ImmutableMap;
 import com.lambdaworks.redis.RedisClient;
-import com.sageserpent.americium.Finite;
 import com.sageserpent.americium.NegativeInfinity;
 import com.sageserpent.americium.PositiveInfinity;
 import com.sageserpent.plutonium.*;
@@ -93,7 +92,7 @@ public class DeliveringPackages {
         {
             // Make a query at the point in time when the event took place...
             final Scope scope = world.scopeFor(
-                    Finite.apply(Instant.parse("2016-12-03T00:00:00Z")),
+                    Instant.parse("2016-12-03T00:00:00Z"),
                     Instant.now() /*As-of time that picks out the revision
                     .*/);
             assert "Big warehouse by motorway".equals(scope.render(
@@ -201,7 +200,7 @@ public class DeliveringPackages {
         {
             // Make a query at the point in time when the event took place...
             final Scope scope = world.scopeFor(
-                    Finite.apply(Instant.parse("2016-12-03T00:00:00Z")),
+                    Instant.parse("2016-12-03T00:00:00Z"),
                     Instant.now() /*As-of time that picks out the revision
                     .*/);
             assert "Big warehouse by motorway".equals(scope.render(
@@ -291,7 +290,7 @@ public class DeliveringPackages {
 
         {
             final Scope scope = world.scopeFor(
-                    Finite.apply(Instant.parse("2016-12-09T01:00:00Z")),
+                    Instant.parse("2016-12-09T01:00:00Z"),
                     Instant.now() /*As-of time that picks out the revision
                     .*/);
             assert "JA10 PIE".equals(scope.render(
@@ -304,7 +303,7 @@ public class DeliveringPackages {
 
         {
             final Scope scope = world.scopeFor(
-                    Finite.apply(Instant.parse("2016-12-09T01:00:00Z")),
+                    Instant.parse("2016-12-09T01:00:00Z"),
                     Instant.now() /*As-of time that picks out the revision
                     .*/);
             assert warehouseName.equals(scope.render(
@@ -329,7 +328,7 @@ public class DeliveringPackages {
             // Use the revision-based overload here to make a scope that
             // will include the latest revision of the world.
             final Scope scope = world.scopeFor(
-                    Finite.apply(Instant.parse("2016-12-10T07:00:00Z")),
+                    Instant.parse("2016-12-10T07:00:00Z"),
                     world.nextRevision());
 
             // Where are the items now?

@@ -1,8 +1,6 @@
 package com.sageserpent.plutonium.javaApi;
 
-import com.sageserpent.americium.Finite;
 import com.sageserpent.americium.NegativeInfinity;
-import com.sageserpent.americium.Unbounded;
 import com.sageserpent.plutonium.WorldReferenceImplementation;
 import org.junit.Test;
 
@@ -71,12 +69,10 @@ public class JavaApiTest {
         }
 
 
-        final Unbounded<Instant> queryTime = Finite.apply(twoHoursLater);
-
         {
             final int followingRevision = 0;
 
-            final Scope scope = world.scopeFor(queryTime, followingRevision);
+            final Scope scope = world.scopeFor(twoHoursLater, followingRevision);
 
             assert scope.render(Bitemporal.withId("Fred", Account.class)).isEmpty();
         }
@@ -113,7 +109,7 @@ public class JavaApiTest {
             }
 
             {
-                final Scope scope = world.scopeFor(queryTime, followingRevision);
+                final Scope scope = world.scopeFor(twoHoursLater, followingRevision);
 
                 final Account account = scope.render(Bitemporal.withId("Fred", Account.class)).head();
 
@@ -124,7 +120,7 @@ public class JavaApiTest {
         {
             int followingRevision = 4;
 
-            final Scope scope = world.scopeFor(queryTime, followingRevision);
+            final Scope scope = world.scopeFor(twoHoursLater, followingRevision);
 
             final Iterable<Account> exampleIterable = scope.renderAsIterable(Bitemporal.withId("Fred", Account.class));
 
@@ -134,7 +130,7 @@ public class JavaApiTest {
         {
             int followingRevision = 5;
 
-            final Scope scope = world.scopeFor(Finite.apply(toStartWith), followingRevision);
+            final Scope scope = world.scopeFor(toStartWith, followingRevision);
 
             final Account account = scope.render(Bitemporal.withId("Fred", Account.class)).head();
 

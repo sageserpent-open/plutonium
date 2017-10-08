@@ -45,10 +45,14 @@ trait World[EventId] extends WorldConstants {
   // NOTE: precondition that 'nextRevision' <= 'this.nextRevision' - which implies that a scope makes a *snapshot* of the world when it is created - subsequent revisions to the world are disregarded.
   def scopeFor(when: Unbounded[Instant], nextRevision: Int): Scope
 
+  def scopeFor(when: Instant, nextRevision: Int): Scope
+
   // This produces a 'read-only' scope - objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
   // I can imagine queries being set to 'the beginning of time' and 'past the latest event'...
   // NOTE: again, the scope makes a *snapshot*, so the 'asOf' is interpreted wrt the state of the world at the point of creation of the scope.
   def scopeFor(when: Unbounded[Instant], asOf: Instant): Scope
+
+  def scopeFor(when: Instant, asOf: Instant): Scope
 
   // This creates a fresh world instance anew whose revision history is the same as the receiver world, with the important
   // differences that a) the revision history is truncated after the scope's revision and b) that only events coming no
