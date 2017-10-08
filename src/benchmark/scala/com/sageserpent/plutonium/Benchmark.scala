@@ -16,7 +16,7 @@ object Benchmark extends Bench.LocalTime {
     var reference: Option[Thing] = None
   }
 
-  val sizes = Gen.range("Number of bookings")(0, 1400, 50)
+  val sizes = Gen.range("Number of bookings")(0, 2000, 50)
 
   performance of "Bookings" in {
     using(sizes) in { size =>
@@ -34,9 +34,17 @@ object Benchmark extends Bench.LocalTime {
 
         val eventId = randomBehaviour.chooseOneOf(eventIds)
 
+        val theHourFromTheStart = 3600L * (if (0 < randomBehaviour
+                                                 .chooseAnyNumberFromZeroToOneLessThan(
+                                                   3)) step
+                                           else
+                                             randomBehaviour
+                                               .chooseAnyNumberFromZeroToOneLessThan(
+                                                 step))
         world.revise(
           eventId,
-          Change.forTwoItems[Thing, Thing](Instant.ofEpochSecond(3600L * step))(
+          Change.forTwoItems[Thing, Thing](
+            Instant.ofEpochSecond(theHourFromTheStart))(
             oneId,
             anotherId,
             (oneThing, anotherThing) => {
