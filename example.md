@@ -237,7 +237,6 @@ package com.sageserpent.plutonium.javaApi.examples;
 
 import com.google.common.collect.ImmutableMap;
 import com.lambdaworks.redis.RedisClient;
-import com.sageserpent.americium.Finite;
 import com.sageserpent.americium.NegativeInfinity;
 import com.sageserpent.americium.PositiveInfinity;
 import com.sageserpent.plutonium.*;
@@ -285,11 +284,10 @@ public class DeliveringPackages {
         {
             world.revise("Define warehouse",
                          Change.forOneItem(warehouseName, PackageHolder.class,
-                                           warehouse -> {
-                                               warehouse.setLocation(
-                                                       "Big warehouse by " +
-                                                               "motorway");
-                                           }), Instant.now() /*As-of time
+                                           warehouse -> warehouse.setLocation(
+                                                   "Big warehouse by " +
+                                                           "motorway")),
+                         Instant.now() /*As-of time
                                            for the revision.*/);
 
             {
@@ -299,7 +297,7 @@ public class DeliveringPackages {
                                 .now() /*As-of time that picks out the
                                 revision.*/);
                 assert "Big warehouse by motorway".equals(scope.render(
-                        Bitemporal.singleOneOf(warehouseName,
+                        Bitemporal.withId(warehouseName,
                                                PackageHolder.class)).head()
                                                                   .getLocation());
             }
@@ -329,15 +327,15 @@ public class DeliveringPackages {
         {
             // Make a query at the point in time when the event took place...
             final Scope scope = world.scopeFor(
-                    Finite.apply(Instant.parse("2016-12-03T00:00:00Z")),
+                    Instant.parse("2016-12-03T00:00:00Z"),
                     Instant.now() /*As-of time that picks out the revision
                     .*/);
             assert "Big warehouse by motorway".equals(scope.render(
-                    Bitemporal.singleOneOf(
+                    Bitemporal.withId(
                             warehouseName,
                             PackageHolder.class)).head().getLocation());
             assert "SuperTron HiPlasmatic Telly".equals(scope.render(
-                    Bitemporal.singleOneOf("Package #1", PackageItem.class))
+                    Bitemporal.withId("Package #1", PackageItem.class))
                                                                 .head()
                                                                 .getContents());
         }
@@ -437,15 +435,15 @@ public class DeliveringPackages {
         {
             // Make a query at the point in time when the event took place...
             final Scope scope = world.scopeFor(
-                    Finite.apply(Instant.parse("2016-12-03T00:00:00Z")),
+                    Instant.parse("2016-12-03T00:00:00Z"),
                     Instant.now() /*As-of time that picks out the revision
                     .*/);
             assert "Big warehouse by motorway".equals(scope.render(
-                    Bitemporal.singleOneOf(
+                    Bitemporal.withId(
                             warehouseName,
                             PackageHolder.class)).head().getLocation());
             assert "Krasster kipper ties".equals(scope.render(
-                    Bitemporal.singleOneOf("Package #1", PackageItem.class))
+                    Bitemporal.withId("Package #1", PackageItem.class))
                                                          .head()
                                                          .getContents());
         }
@@ -461,7 +459,7 @@ public class DeliveringPackages {
         // order of time, we'll do this here to add more information to our
         // record of past events. Also note that events in a revision can
         // occur at different times - a revision of the world is a revision
-        // of our *knowledge* about its entire historical record, not just 
+        // of our *knowledge* about its entire historical record, not just
         // a log entry for a single event.
 
         {
@@ -527,11 +525,11 @@ public class DeliveringPackages {
 
         {
             final Scope scope = world.scopeFor(
-                    Finite.apply(Instant.parse("2016-12-09T01:00:00Z")),
+                    Instant.parse("2016-12-09T01:00:00Z"),
                     Instant.now() /*As-of time that picks out the revision
                     .*/);
             assert "JA10 PIE".equals(scope.render(
-                    Bitemporal.singleOneOf("Package #3", PackageItem.class))
+                    Bitemporal.withId("Package #3", PackageItem.class))
                                              .head().holder().id());
         }
 
@@ -540,11 +538,11 @@ public class DeliveringPackages {
 
         {
             final Scope scope = world.scopeFor(
-                    Finite.apply(Instant.parse("2016-12-09T01:00:00Z")),
+                    Instant.parse("2016-12-09T01:00:00Z"),
                     Instant.now() /*As-of time that picks out the revision
                     .*/);
             assert warehouseName.equals(scope.render(
-                    Bitemporal.singleOneOf("Package #3", PackageItem.class))
+                    Bitemporal.withId("Package #3", PackageItem.class))
                                                 .head().holder().id());
         }
 
@@ -552,11 +550,11 @@ public class DeliveringPackages {
         /*
             Resulting console output:-
 
-            Location for: Package #3 is:-
+            Location for: Package #3(SuperTron Connoisseur Music System.) is:-
             Big warehouse by motorway
-            Location for: Package #2 is:-
+            Location for: Package #2(SuperTron HiPlasmatic Telly) is:-
             Big warehouse by motorway
-            Location for: Package #1 is:-
+            Location for: Package #1(Krasster kipper ties) is:-
             Big warehouse by motorway
             Payments received for items awaiting delivery is: 1100.0
         */
@@ -565,7 +563,7 @@ public class DeliveringPackages {
             // Use the revision-based overload here to make a scope that
             // will include the latest revision of the world.
             final Scope scope = world.scopeFor(
-                    Finite.apply(Instant.parse("2016-12-10T07:00:00Z")),
+                    Instant.parse("2016-12-10T07:00:00Z"),
                     world.nextRevision());
 
             // Where are the items now?
@@ -577,7 +575,8 @@ public class DeliveringPackages {
             for (PackageItem packageItem : scope
                     .renderAsIterable(packageItemsBitemporal)) {
                 System.out.println(
-                        "Location for: " + packageItem.id() + " is:-");
+                        "Location for: " + packageItem.id() + "(" +
+                                packageItem.getContents() + ") is:-");
                 if (packageItem.hasBeenDelivered()) {
                     System.out.println(packageItem.actualDestination());
                 } else {

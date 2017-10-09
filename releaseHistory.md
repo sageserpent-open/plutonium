@@ -22,4 +22,4 @@ The API is not binary compatible with that of 1.1.0.
 
 _October 8th, 2017._
 
-Introduce more convenient factory method overloads for creating scopes from a world - these work with 'Instant' rather than the lifted type `Unbounded[Instant]`.
+Introduce more convenient factory method overloads for creating scopes from a world - these work with `Instant` rather than the lifted type `Unbounded[Instant]`.
