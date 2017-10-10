@@ -30,7 +30,13 @@ trait World[EventId] extends javaApi.World[EventId] {
 
   def scopeFor(when: Unbounded[Instant], nextRevision: World.Revision): Scope
 
+  def scopeFor(when: Instant, nextRevision: Int): Scope =
+    scopeFor(Finite(when), nextRevision)
+
   def scopeFor(when: Unbounded[Instant], asOf: Instant): Scope
+
+  def scopeFor(when: Instant, asOf: Instant): Scope =
+    scopeFor(Finite(when), asOf)
 
   def forkExperimentalWorld(scope: javaApi.Scope): World[EventId]
 }

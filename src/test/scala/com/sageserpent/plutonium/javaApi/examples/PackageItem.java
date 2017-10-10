@@ -3,8 +3,7 @@ package com.sageserpent.plutonium.javaApi.examples;
 import com.sageserpent.plutonium.Identified;
 
 
-public class PackageItem extends Identified {
-    private final String id;
+public abstract class PackageItem extends Identified {
     private PackageHolder holder;
     private String intendedDestination;
     private String actualDestination;
@@ -12,14 +11,8 @@ public class PackageItem extends Identified {
     private double valuePaid = 0.0;
     private boolean isWrongItem = false;
 
-    public PackageItem(String id) {
-        this.id = id;
-    }
-
     @Override
-    public String id() {
-        return id;
-    }
+    public abstract String id();
 
     @Override
     public void checkInvariant() {

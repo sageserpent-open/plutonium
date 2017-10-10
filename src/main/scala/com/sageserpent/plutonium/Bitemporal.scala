@@ -36,18 +36,6 @@ case class IdentifiedItemsBitemporalResult[Item <: Identified: TypeTag](
   val capturedTypeTag = typeTag[Item]
 }
 
-case class ZeroOrOneIdentifiedItemBitemporalResult[Item <: Identified: TypeTag](
-    id: Item#Id)
-    extends Bitemporal[Item] {
-  val capturedTypeTag = typeTag[Item]
-}
-
-case class SingleIdentifiedItemBitemporalResult[Item <: Identified: TypeTag](
-    id: Item#Id)
-    extends Bitemporal[Item] {
-  val capturedTypeTag = typeTag[Item]
-}
-
 case class WildcardBitemporalResult[Item <: Identified: TypeTag]()
     extends Bitemporal[Item] {
   val capturedTypeTag = typeTag[Item]
@@ -60,12 +48,6 @@ object Bitemporal {
 
   def withId[Item <: Identified: TypeTag](id: Item#Id): Bitemporal[Item] =
     IdentifiedItemsBitemporalResult(id)
-
-  def zeroOrOneOf[Item <: Identified: TypeTag](id: Item#Id): Bitemporal[Item] =
-    ZeroOrOneIdentifiedItemBitemporalResult(id)
-
-  def singleOneOf[Item <: Identified: TypeTag](id: Item#Id): Bitemporal[Item] =
-    SingleIdentifiedItemBitemporalResult(id)
 
   def wildcard[Item <: Identified: TypeTag](): Bitemporal[Item] =
     WildcardBitemporalResult[Item]
