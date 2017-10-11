@@ -108,7 +108,19 @@ object WorldImplementationCodeFactoring {
     def acquire(acquiredState: AcquiredState)
   }
 
-  trait ProxyFactory[AcquiredState <: AnyRef] {
+  trait AcquiredStateCapturingId {
+    type Id
+    val _id: Id
+  }
+
+  object id {
+    @RuntimeType
+    def apply(
+        @FieldValue("acquiredState") acquiredState: AcquiredStateCapturingId) =
+      acquiredState._id
+  }
+
+  trait ProxyFactory[AcquiredState <: AcquiredStateCapturingId] {
     val isForRecordingOnly: Boolean
 
     val stateToBeAcquiredByProxy: AcquiredState
@@ -117,7 +129,7 @@ object WorldImplementationCodeFactoring {
 
     private def createProxyClass(clazz: Class[_]): Class[_] = {
       val builder = byteBuddy
-        .subclass(clazz, ConstructorStrategy.Default.IMITATE_SUPER_CLASS_PUBLIC)
+        .subclass(clazz, ConstructorStrategy.Default.DEFAULT_CONSTRUCTOR)
         .implement(additionalInterfaces.toSeq)
         .method(matchGetClass)
         .intercept(FixedValue.value(clazz))
@@ -133,6 +145,8 @@ object WorldImplementationCodeFactoring {
         .implement(stateAcquisitionTypeBuilder.build)
         .method(ElementMatchers.named("acquire"))
         .intercept(FieldAccessor.ofField("acquiredState"))
+        .method(ElementMatchers.named("id"))
+        .intercept(MethodDelegation.to(id))
 
       builderWithInterceptions
         .make()
@@ -165,12 +179,15 @@ object WorldImplementationCodeFactoring {
 
       val (constructor, clazz) = constructorAndClassFor()
 
-      if (!isForRecordingOnly && clazz.getMethods.exists(method =>
-            Modifier.isAbstract(method.getModifiers))) {
+      if (!isForRecordingOnly && clazz.getMethods.exists(
+            method =>
+              // TODO - cleanup.
+              "id" != method.getName && Modifier.isAbstract(
+                method.getModifiers))) {
         throw new UnsupportedOperationException(
           s"Attempt to create an instance of an abstract class '$clazz' for id: '$id'.")
       }
-      val proxy = constructor(id).asInstanceOf[Item]
+      val proxy = constructor().asInstanceOf[Item]
 
       proxy
         .asInstanceOf[StateAcquisition[AcquiredState]]
@@ -208,7 +225,7 @@ object WorldImplementationCodeFactoring {
       methodDescription.getName == "finalize" && methodDescription.getParameters.isEmpty && methodDescription.getReturnType
         .represents(classOf[Unit])
 
-    trait AcquiredState {
+    trait AcquiredState extends AcquiredStateCapturingId {
       def itemReconstitutionData
         : Recorder#ItemReconstitutionData[_ <: Identified]
 
@@ -266,7 +283,7 @@ object WorldImplementationCodeFactoring {
       mutable.Map
         .empty[universe.Type, (universe.MethodMirror, Class[_ <: Identified])]
 
-    trait AcquiredState extends AnnihilationHook {
+    trait AcquiredState extends AcquiredStateCapturingId with AnnihilationHook {
       def itemReconstitutionData
         : Recorder#ItemReconstitutionData[_ <: Identified]
 
@@ -446,6 +463,10 @@ object WorldImplementationCodeFactoring {
 
           override val stateToBeAcquiredByProxy: AcquiredState =
             new AcquiredState {
+              type Id = Item#Id
+
+              val _id = id
+
               def itemReconstitutionData
                 : Recorder#ItemReconstitutionData[Item] = id -> typeTag[Item]
 

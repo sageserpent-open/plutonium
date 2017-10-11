@@ -458,7 +458,7 @@ trait WorldStateSharingBehaviours
   }
 }
 
-class Item(val id: Item#Id) extends Identified {
+abstract class Item extends Identified {
   type Id = Integer
 
   var property: Int = 0

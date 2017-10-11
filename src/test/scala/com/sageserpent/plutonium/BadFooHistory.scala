@@ -2,7 +2,7 @@ package com.sageserpent.plutonium
 
 import com.sageserpent.plutonium.WorldSpecSupport.changeError
 
-class BadFooHistory(id: FooHistory#Id) extends FooHistory(id) {
+abstract class BadFooHistory extends FooHistory {
   override def property1_=(data: String): Unit = {
     throw changeError // Modelling a precondition failure.
   }

@@ -25,10 +25,12 @@ trait WorldBehaviours
     with Checkers
     with WorldSpecSupport { this: WorldResource =>
 
-  class NonExistentIdentified extends Identified {
-    override type Id = String
-    override val id = fail(
-      "If I am not supposed to exist, why is something asking for my id?")
+  case class NonExistentId() {
+    fail("If I am not supposed to exist, why is something asking for me?")
+  }
+
+  abstract class NonExistentIdentified extends Identified {
+    override type Id = NonExistentId
   }
 
   def worldWithNoHistoryBehaviour = {
@@ -1285,7 +1287,7 @@ trait WorldBehaviours
                   val scope = world.scopeFor(laterQueryWhenAtAnnihilation,
                                              world.nextRevision)
                   val Seq(referringHistory) = scope.render(
-                    Bitemporal.singleOneOf[ReferringHistory](theReferrerId))
+                    Bitemporal.withId[ReferringHistory](theReferrerId))
                   val ghostItem =
                     referringHistory.referencedHistories(referencedHistoryId)
                   val idOfGhost  = ghostItem.id      // It's OK to ask a ghost what its name is.
@@ -3041,8 +3043,7 @@ class WorldSpecUsingWorldEfficientInMemoryImplementation
   "A world with events that have since been corrected (using the world efficient in-memory implementation)" should behave like worldWithEventsThatHaveSinceBeenCorrectedBehaviour
 }
 
-class HistoryWhoseIdWontSerialize(val id: HistoryWhoseIdWontSerialize#Id)
-    extends History {
+abstract class HistoryWhoseIdWontSerialize extends History {
   type Id = WontSerializeId
 
   var property: String = ""
@@ -3059,8 +3060,7 @@ case class WontSerializeId(var id: Int) extends KryoSerializable {
   }
 }
 
-class HistoryWhoseIdWontDeserialize(val id: HistoryWhoseIdWontDeserialize#Id)
-    extends History {
+abstract class HistoryWhoseIdWontDeserialize extends History {
   type Id = WontDeserializeId
 
   var property: Boolean = false
@@ -3150,7 +3150,7 @@ class WorldSpecUsingWorldRedisBasedImplementation
 
             val queryOk = (world
               .scopeFor(queryWhen, world.nextRevision)
-              .render(Bitemporal.singleOneOf[BarHistory](itemTwoId))
+              .render(Bitemporal.withId[BarHistory](itemTwoId))
               .head
               .datums == Seq(4)) :| "Expected to see effects of the successful revision."
 

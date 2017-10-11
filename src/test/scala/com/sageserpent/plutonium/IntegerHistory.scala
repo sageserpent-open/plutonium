@@ -1,6 +1,6 @@
 package com.sageserpent.plutonium
 
-class IntegerHistory(val id: IntegerHistory#Id) extends History {
+abstract class IntegerHistory extends History {
   type Id = String
 
   def integerProperty: Int = datums.head.asInstanceOf[Int]

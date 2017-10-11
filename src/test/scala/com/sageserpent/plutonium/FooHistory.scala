@@ -1,6 +1,6 @@
 package com.sageserpent.plutonium
 
-class FooHistory(val id: FooHistory#Id) extends History {
+abstract class FooHistory extends History {
   type Id = String
 
   def property1 = ???

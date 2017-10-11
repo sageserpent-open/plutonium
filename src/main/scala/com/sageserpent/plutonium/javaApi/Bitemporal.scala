@@ -11,16 +11,6 @@ object Bitemporal {
                                  clazz: Class[Item]): ScalaBitemporal[Item] =
     ScalaBitemporal.withId(id)(typeTagForClass(clazz))
 
-  def zeroOrOneOf[Item <: Identified](
-      id: Item#Id,
-      clazz: Class[Item]): ScalaBitemporal[Item] =
-    ScalaBitemporal.zeroOrOneOf(id)(typeTagForClass(clazz))
-
-  def singleOneOf[Item <: Identified](
-      id: Item#Id,
-      clazz: Class[Item]): ScalaBitemporal[Item] =
-    ScalaBitemporal.singleOneOf(id)(typeTagForClass(clazz))
-
   def wildcard[Item <: Identified](clazz: Class[Item]): ScalaBitemporal[Item] =
     ScalaBitemporal.wildcard()(typeTagForClass(clazz))
 }

@@ -1,3 +1,5 @@
+import sbt.Configurations.config
+import sbt.Defaults.testSettings
 import sbt.Keys.libraryDependencies
 
 lazy val settings = Seq(
@@ -23,12 +25,22 @@ lazy val settings = Seq(
   libraryDependencies += "com.github.kstyrc"       % "embedded-redis"               % "0.6" % "test",
   libraryDependencies += "junit"                   % "junit"                        % "4.12" % "test",
   libraryDependencies += "com.novocode"            % "junit-interface"              % "0.11" % "test",
+  libraryDependencies += "com.storm-enroute"       %% "scalameter"                  % "0.8.2" % "benchmark",
+  testFrameworks in Benchmark += new TestFramework(
+    "org.scalameter.ScalaMeterFramework"),
   publishMavenStyle := true,
   publishTo := Some(
     Resolver.file("file",
       new File(Path.userHome.absolutePath + "/.m2/repository")))
 )
 
-lazy val plutonium = (project in file(".")).settings(settings: _*)
+lazy val Benchmark = config("benchmark") extend Test
+
+lazy val plutonium = (project in file("."))
+  .configs(Benchmark)
+  .settings(settings ++ inConfig(Benchmark)(testSettings): _*)
 
 resolvers += Resolver.jcenterRepo
+
+resolvers += "Sonatype OSS Snapshots" at
+  "https://oss.sonatype.org/content/repositories/releases"

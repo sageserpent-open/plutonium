@@ -1,6 +1,6 @@
 package com.sageserpent.plutonium
 
-class AnotherSpecificFooHistory(id: FooHistory#Id) extends FooHistory(id) {
+abstract class AnotherSpecificFooHistory extends FooHistory {
   def property3 = ???
 
   def property3_=(data: Int): Unit = {

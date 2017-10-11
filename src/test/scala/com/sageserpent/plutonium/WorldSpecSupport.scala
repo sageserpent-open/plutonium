@@ -327,8 +327,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
     } yield
       (historyId,
        (scope: Scope) =>
-         scope.render(Bitemporal.zeroOrOneOf[AHistory](historyId)): Seq[
-           History],
+         scope.render(Bitemporal.withId[AHistory](historyId)): Seq[History],
        for {
          (index,
           (data,

@@ -1,6 +1,6 @@
 package com.sageserpent.plutonium
 
-class BarHistory(val id: BarHistory#Id) extends History {
+abstract class BarHistory extends History {
   type Id = Int
 
   def property1 = ???
