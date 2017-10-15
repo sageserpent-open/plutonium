@@ -212,7 +212,8 @@ object WorldImplementationCodeFactoring {
   }
 
   object RecordingCallbackStuff {
-    val additionalInterfaces: Array[Class[_]] = Array(classOf[Recorder])
+    val additionalInterfaces: Array[Class[_]] =
+      Array(classOf[Identified], classOf[Recorder])
     val cachedProxyConstructors =
       mutable.Map.empty[universe.Type, (universe.MethodMirror, Class[_])]
 
@@ -272,7 +273,8 @@ object WorldImplementationCodeFactoring {
   }
 
   object QueryCallbackStuff {
-    val additionalInterfaces: Array[Class[_]] = Array(classOf[AnnihilationHook])
+    val additionalInterfaces: Array[Class[_]] =
+      Array(classOf[Identified], classOf[AnnihilationHook])
     val cachedProxyConstructors =
       mutable.Map.empty[universe.Type, (universe.MethodMirror, Class[_])]
 
@@ -390,7 +392,7 @@ object WorldImplementationCodeFactoring {
     classOf[Identified].getMethod("checkInvariant"))
 
   def isInvariantCheck(method: MethodDescription): Boolean =
-    firstMethodIsOverrideCompatibleWithSecond(method, invariantCheckMethod)
+    "checkInvariant" == method.getName // TODO: this is hokey.
 
   class IdentifiedItemsScope { identifiedItemsScopeThis =>
 

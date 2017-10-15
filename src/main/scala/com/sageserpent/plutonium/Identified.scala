@@ -1,15 +1,16 @@
 package com.sageserpent.plutonium
 
-abstract class Identified {
+trait Identified {
   type Id
   val id: Id
 
-  def checkInvariant(): Unit = {
+  // TODO - find a new home for the implementation.
+  def checkInvariant(): Unit /* = {
     if (isGhost) {
       throw new RuntimeException(
         s"Item: '$id' has been annihilated but is being referred to in an invariant.")
     }
-  }
+  }*/
 
   // If an item has been annihilated, it will not be accessible from a query on a scope - but
   // if there was an event that made another item refer to the annihilated one earlier in time,
