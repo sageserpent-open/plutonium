@@ -115,8 +115,7 @@ object WorldImplementationCodeFactoring {
   }
 
   trait AcquiredStateCapturingId {
-    type Id
-    val _id: Id
+    val _id: Any
   }
 
   object id {
@@ -174,7 +173,7 @@ object WorldImplementationCodeFactoring {
       classMirror.reflectConstructor(constructor.asMethod) -> clazz
     }
 
-    def constructFrom[Item <: Identified: TypeTag](id: Item#Id) = {
+    def constructFrom[Item: TypeTag](id: Any) = {
       // NOTE: this returns items that are proxies to 'Item' rather than direct instances of 'Item' itself. Depending on the
       // context (using a scope created by a client from a world, as opposed to while building up that scope from patches),
       // the items may forbid certain operations on them - e.g. for rendering from a client's scope, the items should be
@@ -222,8 +221,7 @@ object WorldImplementationCodeFactoring {
         .represents(classOf[Unit])
 
     trait AcquiredState extends AcquiredStateCapturingId {
-      def itemReconstitutionData
-        : Recorder#ItemReconstitutionData[_ <: Identified]
+      def itemReconstitutionData: Recorder#ItemReconstitutionData[_]
 
       def capturePatch(patch: AbstractPatch): Unit
     }
@@ -279,8 +277,7 @@ object WorldImplementationCodeFactoring {
       mutable.Map.empty[universe.Type, (universe.MethodMirror, Class[_])]
 
     trait AcquiredState extends AcquiredStateCapturingId with AnnihilationHook {
-      def itemReconstitutionData
-        : Recorder#ItemReconstitutionData[_ <: Identified]
+      def itemReconstitutionData: Recorder#ItemReconstitutionData[_]
 
       def itemsAreLocked: Boolean
     }
@@ -450,7 +447,7 @@ object WorldImplementationCodeFactoring {
 
     val idToItemsMultiMap = new MultiMap[Any, Any]
 
-    def itemFor[Item <: Identified: TypeTag](id: Item#Id): Item = {
+    def itemFor[Item: TypeTag](id: Any): Item = {
       def constructAndCacheItem(): Item = {
         import QueryCallbackStuff._
 
@@ -459,8 +456,6 @@ object WorldImplementationCodeFactoring {
 
           override val stateToBeAcquiredByProxy: AcquiredState =
             new AcquiredState {
-              type Id = Item#Id
-
               val _id = id
 
               def itemReconstitutionData
@@ -520,8 +515,7 @@ object WorldImplementationCodeFactoring {
       }
     }
 
-    def annihilateItemFor[Item <: Identified: TypeTag](id: Item#Id,
-                                                       when: Instant): Unit = {
+    def annihilateItemFor[Item: TypeTag](id: Any, when: Instant): Unit = {
       idToItemsMultiMap.get(id) match {
         case Some(items) =>
           assert(items.nonEmpty)

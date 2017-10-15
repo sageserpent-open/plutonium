@@ -63,18 +63,15 @@ abstract class PatchRecorderImplementation(
     refineRelevantItemStatesAndYieldTarget(patch).addPatch(when, patch)
   }
 
-  def annihilateItemFor_[SubclassOfItem <: Item, Item <: Identified](
-      id: Item#Id,
+  def annihilateItemFor_[SubclassOfItem <: Item, Item](
+      id: Any,
       typeTag: universe.TypeTag[SubclassOfItem],
       when: Instant): Unit = {
-    identifiedItemsScope.annihilateItemFor[SubclassOfItem](
-      id.asInstanceOf[SubclassOfItem#Id],
-      when)(typeTag)
+    identifiedItemsScope.annihilateItemFor[SubclassOfItem](id, when)(typeTag)
   }
 
-  override def recordAnnihilation[Item <: Identified: TypeTag](
-      _when: Instant,
-      id: Item#Id): Unit = {
+  override def recordAnnihilation[Item: TypeTag](_when: Instant,
+                                                 id: Any): Unit = {
     val liftedWhen = Finite(_when)
     _whenEventPertainedToByLastRecordingTookPlace = Some(liftedWhen)
 
@@ -162,7 +159,7 @@ abstract class PatchRecorderImplementation(
   private type CandidatePatches = mutable.MutableList[CandidatePatchTuple]
 
   private class ItemState(
-      initialTypeTag: TypeTag[_ <: Identified],
+      initialTypeTag: TypeTag[_],
       private var _itemWouldConflictWithEarlierLifecyclePriorTo: SequenceIndex) {
     def itemWouldConflictWithEarlierLifecyclePriorTo =
       _itemWouldConflictWithEarlierLifecyclePriorTo
@@ -185,13 +182,13 @@ abstract class PatchRecorderImplementation(
 
     private var _upperBoundTypeTag = initialTypeTag
 
-    def isInconsistentWith(typeTag: TypeTag[_ <: Identified]) =
+    def isInconsistentWith(typeTag: TypeTag[_]) =
       typeTag.tpe <:< this._upperBoundTypeTag.tpe && !isFusibleWith(typeTag)
 
-    def isFusibleWith(typeTag: TypeTag[_ <: Identified]) =
+    def isFusibleWith(typeTag: TypeTag[_]) =
       this._lowerBoundTypeTag.tpe <:< typeTag.tpe || typeTag.tpe <:< this._lowerBoundTypeTag.tpe
 
-    def canBeAnnihilatedAs(typeTag: TypeTag[_ <: Identified]) =
+    def canBeAnnihilatedAs(typeTag: TypeTag[_]) =
       this._lowerBoundTypeTag.tpe <:< typeTag.tpe
 
     def addPatch(when: Unbounded[Instant], patch: AbstractPatch) = {
@@ -211,9 +208,7 @@ abstract class PatchRecorderImplementation(
       }
     }
 
-    def refineType(
-        typeTag: _root_.scala.reflect.runtime.universe.TypeTag[_ <: Identified])
-      : Unit = {
+    def refineType(typeTag: TypeTag[_]): Unit = {
       if (typeTag.tpe <:< this._lowerBoundTypeTag.tpe) {
         this._lowerBoundTypeTag = typeTag
       } else if (this._upperBoundTypeTag.tpe <:< typeTag.tpe) {
@@ -265,7 +260,7 @@ abstract class PatchRecorderImplementation(
     mutable.Map.empty[Any, mutable.Set[ItemState]]
 
   private type ItemReconstitutionDataToItemStateMap =
-    mutable.Map[Recorder#ItemReconstitutionData[_ <: Identified], ItemState]
+    mutable.Map[Recorder#ItemReconstitutionData[_], ItemState]
 
   private val patchToItemStatesMap =
     mutable.Map.empty[AbstractPatch, ItemReconstitutionDataToItemStateMap]
@@ -309,7 +304,7 @@ abstract class PatchRecorderImplementation(
         }
       }
 
-      override def reconstitute[Item <: Identified](
+      override def reconstitute[Item](
           itemReconstitutionData: Recorder#ItemReconstitutionData[Item])
         : Item = {
         val id        = itemReconstitutionData._1
@@ -318,11 +313,11 @@ abstract class PatchRecorderImplementation(
         itemFor_(id, itemState.lowerBoundTypeTag).asInstanceOf[Item]
       }
 
-      def itemFor_[SubclassOfItem <: Item, Item <: Identified](
-          id: Item#Id,
+      def itemFor_[SubclassOfItem <: Item, Item](
+          id: Any,
           typeTag: universe.TypeTag[SubclassOfItem]): SubclassOfItem = {
         PatchRecorderImplementation.this.identifiedItemsScope
-          .itemFor[SubclassOfItem](id.asInstanceOf[SubclassOfItem#Id])(typeTag)
+          .itemFor[SubclassOfItem](id)(typeTag)
       }
     }
 
@@ -353,8 +348,8 @@ abstract class PatchRecorderImplementation(
 
   private def refineRelevantItemStatesAndYieldTarget(
       patch: AbstractPatch): ItemState = {
-    def refinedItemStateFor(reconstitutionData: Recorder#ItemReconstitutionData[
-      _ <: Identified]) = {
+    def refinedItemStateFor(
+        reconstitutionData: Recorder#ItemReconstitutionData[_]) = {
       val itemState = itemStateFor(reconstitutionData)
       itemState.refineType(reconstitutionData._2)
       patchToItemStatesMap.getOrElseUpdate(patch, mutable.Map.empty) += reconstitutionData -> itemState
@@ -368,8 +363,7 @@ abstract class PatchRecorderImplementation(
   }
 
   private def itemStateFor(
-      itemReconstitutionData: Recorder#ItemReconstitutionData[_ <: Identified])
-    : ItemState = {
+      itemReconstitutionData: Recorder#ItemReconstitutionData[_]): ItemState = {
     val (id, typeTag) = itemReconstitutionData
 
     val (itemStatesFromPreviousLifecycles, itemStates) = idToItemStatesMap
