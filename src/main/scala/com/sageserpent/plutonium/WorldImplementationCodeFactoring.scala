@@ -566,14 +566,6 @@ object WorldImplementationCodeFactoring {
     val identifiedItemsScope: IdentifiedItemsScope
 
     override def render[Item](bitemporal: Bitemporal[Item]): Stream[Item] = {
-      def itemsFor[Item <: Identified: TypeTag](id: Item#Id): Stream[Item] = {
-        identifiedItemsScope.itemsFor(id)
-      }
-
-      def allItems[Item <: Identified: TypeTag]: Stream[Item] = {
-        identifiedItemsScope.allItems()
-      }
-
       bitemporal match {
         case ApBitemporalResult(preceedingContext,
                                 stage: (Bitemporal[(_) => Item])) =>
@@ -586,17 +578,30 @@ object WorldImplementationCodeFactoring {
         case NoneBitemporalResult()         => Stream.empty
         case bitemporal @ IdentifiedItemsBitemporalResult(id) =>
           implicit val typeTag = bitemporal.capturedTypeTag
-          itemsFor(id)
+          identifiedItemsScope.itemsFor(id)
         case bitemporal @ WildcardBitemporalResult() =>
           implicit val typeTag = bitemporal.capturedTypeTag
-          allItems
+          identifiedItemsScope.allItems()
       }
     }
 
-    override def numberOf[Item <: Identified: TypeTag](id: Item#Id): Int =
-      identifiedItemsScope.itemsFor(id).size
+    override def numberOf[Item](bitemporal: Bitemporal[Item]): Int = {
+      bitemporal match {
+        case ApBitemporalResult(preceedingContext,
+                                stage: (Bitemporal[(_) => Item])) =>
+          numberOf(preceedingContext) * numberOf(stage)
+        case PlusBitemporalResult(lhs, rhs) => numberOf(lhs) + numberOf(rhs)
+        case PointBitemporalResult(item)    => 1
+        case NoneBitemporalResult()         => 0
+        case bitemporal @ IdentifiedItemsBitemporalResult(id) =>
+          implicit val typeTag = bitemporal.capturedTypeTag
+          identifiedItemsScope.itemsFor(id).size
+        case bitemporal @ WildcardBitemporalResult() =>
+          implicit val typeTag = bitemporal.capturedTypeTag
+          identifiedItemsScope.allItems().size
+      }
+    }
   }
-
 }
 
 abstract class WorldImplementationCodeFactoring[EventId]
