@@ -12,7 +12,7 @@ trait Scope {
   val nextRevision: Int
   val asOf: Unbounded[Instant]
 
-  def numberOf[Item <: Identified](id: Item#Id, clazz: Class[Item]): Int
+  def numberOf[Item](id: Any, clazz: Class[Item]): Int
 
   // Why a stream for the result type? - two reasons that overlap - we may have no instance in force for the scope, or we might have several that share the same id, albeit with
   // different runtime subtypes of 'Item'. What's more, if 'bitemporal' was cooked using 'Bitemporal.wildcard', we'll have every single instance of a runtime subtype of 'Item'.

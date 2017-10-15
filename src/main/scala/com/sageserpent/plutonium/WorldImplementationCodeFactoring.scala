@@ -79,8 +79,7 @@ object WorldImplementationCodeFactoring {
       }
     }
 
-    def yieldOnlyItemsOfType[Item <: Identified: TypeTag](
-        items: Traversable[Identified]) = {
+    def yieldOnlyItemsOfType[Item: TypeTag](items: Traversable[Any]) = {
       val reflectedType = typeTag[Item].tpe
       val clazzOfItem =
         currentMirror.runtimeClass(reflectedType).asInstanceOf[Class[Item]]
@@ -450,7 +449,7 @@ object WorldImplementationCodeFactoring {
           scala.collection.mutable.Set[Value]]
         with scala.collection.mutable.MultiMap[Key, Value] {}
 
-    val idToItemsMultiMap = new MultiMap[Identified#Id, Identified]
+    val idToItemsMultiMap = new MultiMap[Any, Identified]
 
     def itemFor[Item <: Identified: TypeTag](id: Item#Id): Item = {
       def constructAndCacheItem(): Item = {
@@ -551,7 +550,7 @@ object WorldImplementationCodeFactoring {
       }
     }
 
-    def itemsFor[Item <: Identified: TypeTag](id: Item#Id): Stream[Item] = {
+    def itemsFor[Item: TypeTag](id: Any): Stream[Item] = {
       val items = idToItemsMultiMap.getOrElse(id, Set.empty[Item])
 
       IdentifiedItemsScope.yieldOnlyItemsOfType(items)
@@ -566,11 +565,11 @@ object WorldImplementationCodeFactoring {
     val identifiedItemsScope: IdentifiedItemsScope
 
     override def render[Item](bitemporal: Bitemporal[Item]): Stream[Item] = {
-      def itemsFor[Item <: Identified: TypeTag](id: Item#Id): Stream[Item] = {
+      def itemsFor[Item: TypeTag](id: Any): Stream[Item] = {
         identifiedItemsScope.itemsFor(id)
       }
 
-      def allItems[Item <: Identified: TypeTag]: Stream[Item] = {
+      def allItems[Item: TypeTag]: Stream[Item] = {
         identifiedItemsScope.allItems()
       }
 
@@ -593,7 +592,7 @@ object WorldImplementationCodeFactoring {
       }
     }
 
-    override def numberOf[Item <: Identified: TypeTag](id: Item#Id): Int =
+    override def numberOf[Item: TypeTag](id: Any): Int =
       identifiedItemsScope.itemsFor(id).size
   }
 

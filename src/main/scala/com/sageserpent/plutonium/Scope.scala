@@ -10,10 +10,10 @@ import scala.reflect.runtime.universe._
 trait Scope extends javaApi.Scope {
   val nextRevision: World.Revision
 
-  def numberOf[Item <: Identified](id: Item#Id, clazz: Class[Item]): Int =
+  def numberOf[Item](id: Any, clazz: Class[Item]): Int =
     numberOf(id)(typeTagForClass(clazz))
 
-  def numberOf[Item <: Identified: TypeTag](id: Item#Id): Int
+  def numberOf[Item: TypeTag](id: Any): Int
 
   def renderAsIterable[Item](
       bitemporal: Bitemporal[Item]): java.lang.Iterable[Item] =
