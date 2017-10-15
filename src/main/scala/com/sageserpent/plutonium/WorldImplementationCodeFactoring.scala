@@ -67,8 +67,7 @@ object WorldImplementationCodeFactoring {
     }).sorted.map(_.serializableEvent)
 
   object IdentifiedItemsScope {
-    def yieldOnlyItemsOfSupertypeOf[Item <: Identified: TypeTag](
-        items: Traversable[Identified]) = {
+    def yieldOnlyItemsOfSupertypeOf[Item: TypeTag](items: Traversable[Any]) = {
       val reflectedType = typeTag[Item].tpe
       val clazzOfItem =
         currentMirror.runtimeClass(reflectedType).asInstanceOf[Class[Item]]
@@ -449,7 +448,7 @@ object WorldImplementationCodeFactoring {
           scala.collection.mutable.Set[Value]]
         with scala.collection.mutable.MultiMap[Key, Value] {}
 
-    val idToItemsMultiMap = new MultiMap[Any, Identified]
+    val idToItemsMultiMap = new MultiMap[Any, Any]
 
     def itemFor[Item <: Identified: TypeTag](id: Item#Id): Item = {
       def constructAndCacheItem(): Item = {
@@ -556,7 +555,7 @@ object WorldImplementationCodeFactoring {
       IdentifiedItemsScope.yieldOnlyItemsOfType(items)
     }
 
-    def allItems[Item <: Identified: TypeTag](): Stream[Item] =
+    def allItems[Item: TypeTag](): Stream[Item] =
       IdentifiedItemsScope.yieldOnlyItemsOfType(
         idToItemsMultiMap.values.flatten)
   }

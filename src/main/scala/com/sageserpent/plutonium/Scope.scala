@@ -19,7 +19,7 @@ trait Scope extends javaApi.Scope {
   def numberOf[Item: TypeTag](id: Any): Int =
     numberOf(Bitemporal.withId(id))
 
-  def numberOf[Item <: Identified](bitemporal: Bitemporal[Item]): Int
+  def numberOf[Item](bitemporal: Bitemporal[Item]): Int
 
   def renderAsIterable[Item](
       bitemporal: Bitemporal[Item]): java.lang.Iterable[Item] =
