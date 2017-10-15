@@ -11,9 +11,15 @@ trait Scope extends javaApi.Scope {
   val nextRevision: World.Revision
 
   def numberOf[Item](id: Any, clazz: Class[Item]): Int =
-    numberOf(id)(typeTagForClass(clazz))
+    numberOf(javaApi.Bitemporal.withId(id, clazz))
 
-  def numberOf[Item: TypeTag](id: Any): Int
+  @deprecated(
+    message = "Use the overload of 'numberOf' that takes a bitemporal instead.",
+    since = "1.2.2")
+  def numberOf[Item: TypeTag](id: Any): Int =
+    numberOf(Bitemporal.withId(id))
+
+  def numberOf[Item <: Identified](bitemporal: Bitemporal[Item]): Int
 
   def renderAsIterable[Item](
       bitemporal: Bitemporal[Item]): java.lang.Iterable[Item] =
