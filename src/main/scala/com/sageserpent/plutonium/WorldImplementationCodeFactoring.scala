@@ -315,10 +315,7 @@ object WorldImplementationCodeFactoring {
 
     object recordAnnihilation {
       @RuntimeType
-      def apply(@Origin method: Method,
-                @AllArguments arguments: Array[AnyRef],
-                @This target: AnyRef,
-                @FieldValue("acquiredState") acquiredState: AcquiredState) = {
+      def apply(@FieldValue("acquiredState") acquiredState: AcquiredState) = {
         acquiredState.recordAnnihilation()
         null
       }
@@ -327,8 +324,7 @@ object WorldImplementationCodeFactoring {
     object mutation {
       @RuntimeType
       def apply(@Origin method: Method,
-                @AllArguments arguments: Array[AnyRef],
-                @Super target: AnyRef,
+                @This target: AnyRef,
                 @SuperCall superCall: Callable[_],
                 @FieldValue("acquiredState") acquiredState: AcquiredState) = {
         if (acquiredState.itemsAreLocked) {
@@ -348,18 +344,13 @@ object WorldImplementationCodeFactoring {
 
     object isGhost {
       @RuntimeType
-      def apply(@Origin method: Method,
-                @AllArguments arguments: Array[AnyRef],
-                @This target: AnyRef,
-                @FieldValue("acquiredState") acquiredState: AcquiredState) =
+      def apply(@FieldValue("acquiredState") acquiredState: AcquiredState) =
         acquiredState.isGhost
     }
 
     object checkedReadAccess {
       @RuntimeType
       def apply(@Origin method: Method,
-                @AllArguments arguments: Array[AnyRef],
-                @Super target: AnyRef,
                 @SuperCall superCall: Callable[_],
                 @FieldValue("acquiredState") acquiredState: AcquiredState) = {
         if (acquiredState.isGhost) {
