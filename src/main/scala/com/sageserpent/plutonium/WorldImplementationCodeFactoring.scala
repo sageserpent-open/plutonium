@@ -125,6 +125,15 @@ object WorldImplementationCodeFactoring {
       acquiredState._id
   }
 
+  object checkInvariant {
+    def apply(@This thiz: Identified): Unit = {
+      if (thiz.isGhost) {
+        throw new RuntimeException(
+          s"Item: '$id' has been annihilated but is being referred to in an invariant.")
+      }
+    }
+  }
+
   trait ProxyFactory[AcquiredState <: AcquiredStateCapturingId] {
     val isForRecordingOnly: Boolean
 
@@ -136,6 +145,8 @@ object WorldImplementationCodeFactoring {
       val builder = byteBuddy
         .subclass(clazz, ConstructorStrategy.Default.DEFAULT_CONSTRUCTOR)
         .implement(classOf[Identified])
+        .method(ElementMatchers.named("checkInvariant"))
+        .intercept(MethodDelegation.to(checkInvariant))
         .implement(additionalInterfaces.toSeq)
         .method(matchGetClass)
         .intercept(FixedValue.value(clazz))

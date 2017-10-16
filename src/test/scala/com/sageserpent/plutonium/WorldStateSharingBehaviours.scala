@@ -462,7 +462,7 @@ trait WorldStateSharingBehaviours
 }
 
 abstract class Item {
-  val id: Int
+  val id: Integer
   var property: Int = 0
 }
 
