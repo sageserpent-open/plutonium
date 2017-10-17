@@ -125,15 +125,6 @@ object WorldImplementationCodeFactoring {
       acquiredState._id
   }
 
-  object checkInvariant {
-    def apply(@This thiz: Identified): Unit = {
-      if (thiz.isGhost) {
-        throw new RuntimeException(
-          s"Item: '$id' has been annihilated but is being referred to in an invariant.")
-      }
-    }
-  }
-
   trait ProxyFactory[AcquiredState <: AcquiredStateCapturingId] {
     val isForRecordingOnly: Boolean
 
@@ -144,9 +135,6 @@ object WorldImplementationCodeFactoring {
     private def createProxyClass(clazz: Class[_]): Class[_] = {
       val builder = byteBuddy
         .subclass(clazz, ConstructorStrategy.Default.DEFAULT_CONSTRUCTOR)
-        .implement(classOf[Identified])
-        .method(ElementMatchers.named("checkInvariant"))
-        .intercept(MethodDelegation.to(checkInvariant))
         .implement(additionalInterfaces.toSeq)
         .method(matchGetClass)
         .intercept(FixedValue.value(clazz))
@@ -280,11 +268,11 @@ object WorldImplementationCodeFactoring {
           s"Attempt to call method: '$method' with a non-unit return type on a recorder proxy: '$target' while capturing a change or measurement.")
       }
     }
-
   }
 
   object QueryCallbackStuff {
-    val additionalInterfaces: Array[Class[_]] = Array(classOf[AnnihilationHook])
+    val additionalInterfaces: Array[Class[_]] =
+      Array(classOf[Identified], classOf[AnnihilationHook])
     val cachedProxyConstructors =
       mutable.Map.empty[universe.Type, (universe.MethodMirror, Class[_])]
 
@@ -295,23 +283,24 @@ object WorldImplementationCodeFactoring {
     }
 
     val matchRecordAnnihilation: ElementMatcher[MethodDescription] =
-      methodDescription =>
-        firstMethodIsOverrideCompatibleWithSecond(
-          methodDescription,
-          IdentifiedItemsScope.isRecordAnnihilationMethod)
+      firstMethodIsOverrideCompatibleWithSecond(
+        _,
+        IdentifiedItemsScope.isRecordAnnihilationMethod)
 
     val matchMutation: ElementMatcher[MethodDescription] = methodDescription =>
       methodDescription.getReturnType.represents(classOf[Unit]) && !WorldImplementationCodeFactoring
         .isInvariantCheck(methodDescription)
 
-    val matchIsGhost: ElementMatcher[MethodDescription] = methodDescription =>
+    val matchIsGhost: ElementMatcher[MethodDescription] =
       firstMethodIsOverrideCompatibleWithSecond(
-        methodDescription,
+        _,
         IdentifiedItemsScope.isGhostProperty)
 
     val matchCheckedReadAccess: ElementMatcher[MethodDescription] =
-      methodDescription =>
-        !IdentifiedItemsScope.alwaysAllowsReadAccessTo(methodDescription)
+      !IdentifiedItemsScope.alwaysAllowsReadAccessTo(_)
+
+    val matchInvariantCheck: ElementMatcher[MethodDescription] =
+      WorldImplementationCodeFactoring.isInvariantCheck(_)
 
     object recordAnnihilation {
       @RuntimeType
@@ -363,6 +352,20 @@ object WorldImplementationCodeFactoring {
       }
     }
 
+    object checkInvariant {
+      def apply(@This thiz: Identified): Unit = {
+        if (thiz.isGhost) {
+          throw new RuntimeException(
+            s"Item: '$id' has been annihilated but is being referred to in an invariant.")
+        }
+      }
+
+      def apply(@This thiz: Identified,
+                @SuperCall superCall: Callable[Unit]): Unit = {
+        superCall.call()
+        apply(thiz)
+      }
+    }
   }
 
   def firstMethodIsOverrideCompatibleWithSecond(
@@ -488,6 +491,8 @@ object WorldImplementationCodeFactoring {
               .intercept(MethodDelegation.to(mutation))
               .method(matchRecordAnnihilation)
               .intercept(MethodDelegation.to(recordAnnihilation))
+              .method(matchInvariantCheck)
+              .intercept(MethodDelegation.to(checkInvariant))
         }
 
         val item = proxyFactory.constructFrom(id)
