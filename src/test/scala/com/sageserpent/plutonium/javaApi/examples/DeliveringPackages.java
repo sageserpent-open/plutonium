@@ -36,7 +36,7 @@ public class DeliveringPackages {
                     world.scopeFor(PositiveInfinity.apply(), Instant.now()
                                    /*As-of time that picks out the revision
                                    .*/);
-            assert scope.render(Bitemporal.wildcard(Identified.class))
+            assert scope.render(Bitemporal.wildcard(Object.class))
                     .isEmpty();
         }
 

@@ -2,7 +2,7 @@ package com.sageserpent.plutonium.javaApi
 import java.time.Instant
 
 import com.sageserpent.americium.Unbounded
-import com.sageserpent.plutonium.{Identified, Bitemporal => ScalaBitemporal}
+import com.sageserpent.plutonium.{Bitemporal => ScalaBitemporal}
 
 /**
   * Created by Gerard on 03/05/2016.

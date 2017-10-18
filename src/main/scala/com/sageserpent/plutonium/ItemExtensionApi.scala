@@ -1,6 +1,6 @@
 package com.sageserpent.plutonium
 
-trait Identified {
+trait ItemExtensionApi {
   def checkInvariant(): Unit
 
   // If an item has been annihilated, it will not be accessible from a query on a scope - but

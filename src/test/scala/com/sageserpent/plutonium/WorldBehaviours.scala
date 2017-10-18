@@ -723,7 +723,7 @@ trait WorldBehaviours
                   scope) if referringHistory.referencedDatums.contains(
                   referencedHistoryId) && !referringHistory
                   .referencedHistories(referencedHistoryId)
-                  .asInstanceOf[Identified] // TODO: use of hidden interface in test code.
+                  .asInstanceOf[ItemExtensionApi]
                   .isGhost
               } yield
                 (referringHistoryId,
@@ -810,7 +810,7 @@ trait WorldBehaviours
                   scope) if referringHistory.referencedDatums.contains(
                   referencedHistoryId) && !referringHistory
                   .referencedHistories(referencedHistoryId)
-                  .asInstanceOf[Identified] // TODO: use of hidden interface in test code.
+                  .asInstanceOf[ItemExtensionApi]
                   .isGhost
               } yield (referringHistoryId, referencedHistoryId)
 
@@ -1019,7 +1019,7 @@ trait WorldBehaviours
                       scope) if referringHistory.referencedDatums.contains(
                       referencedHistoryId) && !referringHistory
                       .referencedHistories(referencedHistoryId)
-                      .asInstanceOf[Identified] // TODO: use of hidden interface in test code.
+                      .asInstanceOf[ItemExtensionApi]
                       .isGhost
                     Seq(referencedHistory) = referencedHistoriesFrom(scope)
                   } yield (referencedHistoryId, referencedHistory)
@@ -1298,7 +1298,7 @@ trait WorldBehaviours
                     referringHistory.referencedHistories(referencedHistoryId)
                   val idOfGhost = ghostItem.id // It's OK to ask a ghost what its name is.
                   val itIsAGhost = ghostItem
-                    .asInstanceOf[Identified] // TODO: use of hidden interface in test code.
+                    .asInstanceOf[ItemExtensionApi]
                     .isGhost // It's OK to ask a ghost to prove its ghostliness.
                   intercept[RuntimeException] {
                     ghostItem.datums // It's not OK to ask any other questions - it will just go 'Whooh' at you.

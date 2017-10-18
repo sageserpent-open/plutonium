@@ -4,11 +4,7 @@ import java.time.Instant
 import java.util.function.{BiConsumer, Consumer}
 
 import com.sageserpent.americium.Unbounded
-import com.sageserpent.plutonium.{
-  Change => ScalaChange,
-  Identified,
-  typeTagForClass
-}
+import com.sageserpent.plutonium.{typeTagForClass, Change => ScalaChange}
 
 /**
   * Created by Gerard on 02/05/2016.

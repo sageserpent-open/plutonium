@@ -5,9 +5,8 @@ import java.util.function.{BiConsumer, Consumer}
 
 import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.{
-  Identified,
-  Measurement => ScalaMeasurement,
-  typeTagForClass
+  typeTagForClass,
+  Measurement => ScalaMeasurement
 }
 
 /**

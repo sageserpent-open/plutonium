@@ -1,14 +1,9 @@
-import com.sageserpent.plutonium.Identified
-
 object Uranium {
   val fissileUraniumMassNumbers = Set(233, 235)
   val symbol                    = "U"
 }
 
-class Drum(val id: String, var mass: Double, var chemicalAssay: ChemicalAssay)
-    extends Identified {
-  type Id = String
-
+class Drum(val id: String, var mass: Double, var chemicalAssay: ChemicalAssay) {
   def isotopeMasses = chemicalAssay.isotopeMolarFractions.mapValues(mass * _)
 
   def fissileUraniumMass =
@@ -22,8 +17,6 @@ class Drum(val id: String, var mass: Double, var chemicalAssay: ChemicalAssay)
 class ChemicalAssay(val id: String,
                     var elementMolarFractions: Map[String, Double],
                     var isotopicAssay: IsotopicAssay) {
-  type Id = String
-
   def isotopeMolarFractions = elementMolarFractions.flatMap {
     case (element, elementMolarFraction) =>
       isotopicAssay.isotopeMolarFractionsByElement(element).map {
@@ -35,17 +28,12 @@ class ChemicalAssay(val id: String,
 
 class IsotopicAssay(
     val id: String,
-    var isotopeMolarFractionsByElement: Map[String, Map[Int, Double]])
-    extends Identified {
-  type Id = String
+    var isotopeMolarFractionsByElement: Map[String, Map[Int, Double]]) {
 }
 
 // NOTE: abstract over what market data is required by specific instrument subclasses.
-trait Instrument { this: Identified =>
-
-  type Id = Long
-
-  val id: Id
+trait Instrument {
+  val id: Long
 
   def fairPrice: Double
 }
@@ -54,9 +42,6 @@ class Contract(val id: Long,
                var party: String,
                var counterparty: String,
                var instrument: Instrument,
-               var volume: Double)
-    extends Identified {
-  type Id = Long
-
+               var volume: Double) {
   def fairPrice: Double = volume * instrument.fairPrice
 }

@@ -1,9 +1,8 @@
 package com.sageserpent.plutonium.javaApi
 
 import com.sageserpent.plutonium.{
-  Bitemporal => ScalaBitemporal,
-  Identified,
-  typeTagForClass
+  typeTagForClass,
+  Bitemporal => ScalaBitemporal
 }
 
 /**

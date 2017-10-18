@@ -3,9 +3,8 @@ package com.sageserpent.plutonium.javaApi
 import java.time.Instant
 
 import com.sageserpent.plutonium.{
-  Annihilation => ScalaAnnihilation,
-  Identified,
-  typeTagForClass
+  typeTagForClass,
+  Annihilation => ScalaAnnihilation
 }
 
 /**

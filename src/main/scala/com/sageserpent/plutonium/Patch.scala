@@ -76,7 +76,7 @@ class Patch(
   def checkInvariant(identifiedItemAccess: IdentifiedItemAccess): Unit = {
     identifiedItemAccess
       .reconstitute(targetReconstitutionData)
-      .asInstanceOf[Identified]
+      .asInstanceOf[ItemExtensionApi]
       .checkInvariant()
   }
 }

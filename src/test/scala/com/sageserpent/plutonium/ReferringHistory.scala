@@ -13,7 +13,7 @@ abstract class ReferringHistory extends History {
     _referencedHistories.foreach {
       case (_, referred)
           if !referred
-            .asInstanceOf[Identified] // TODO: use of hidden interface in test code.
+            .asInstanceOf[ItemExtensionApi]
             .isGhost =>
         referred.checkInvariant()
       case _ =>

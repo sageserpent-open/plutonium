@@ -92,14 +92,14 @@ object WorldImplementationCodeFactoring {
         firstMethodIsOverrideCompatibleWithSecond(method, exclusionMethod)
       })
 
-    val nonMutableMembersThatCanAlwaysBeReadFrom = (classOf[Identified].getMethods ++ classOf[
+    val nonMutableMembersThatCanAlwaysBeReadFrom = (classOf[ItemExtensionApi].getMethods ++ classOf[
       AnyRef].getMethods) map (new MethodDescription.ForLoadedMethod(_))
 
     val itemReconstitutionDataProperty = new MethodDescription.ForLoadedMethod(
       classOf[Recorder].getMethod("itemReconstitutionData"))
 
     val isGhostProperty = new MethodDescription.ForLoadedMethod(
-      classOf[Identified].getMethod("isGhost"))
+      classOf[ItemExtensionApi].getMethod("isGhost"))
 
     val isRecordAnnihilationMethod = new MethodDescription.ForLoadedMethod(
       classOf[AnnihilationHook].getMethod("recordAnnihilation"))
@@ -272,7 +272,7 @@ object WorldImplementationCodeFactoring {
 
   object QueryCallbackStuff {
     val additionalInterfaces: Array[Class[_]] =
-      Array(classOf[Identified], classOf[AnnihilationHook])
+      Array(classOf[ItemExtensionApi], classOf[AnnihilationHook])
     val cachedProxyConstructors =
       mutable.Map.empty[universe.Type, (universe.MethodMirror, Class[_])]
 
@@ -353,17 +353,17 @@ object WorldImplementationCodeFactoring {
     }
 
     object checkInvariant {
-      def apply(@This thiz: Identified): Unit = {
+      def apply(@This thiz: ItemExtensionApi): Unit = {
         if (thiz.isGhost) {
           throw new RuntimeException(
             s"Item: '$id' has been annihilated but is being referred to in an invariant.")
         }
       }
 
-      def apply(@This thiz: Identified,
+      def apply(@This thiz: ItemExtensionApi,
                 @SuperCall superCall: Callable[Unit]): Unit = {
-        superCall.call()
         apply(thiz)
+        superCall.call()
       }
     }
   }
@@ -393,7 +393,7 @@ object WorldImplementationCodeFactoring {
   }
 
   val invariantCheckMethod = new MethodDescription.ForLoadedMethod(
-    classOf[Identified].getMethod("checkInvariant"))
+    classOf[ItemExtensionApi].getMethod("checkInvariant"))
 
   def isInvariantCheck(method: MethodDescription): Boolean =
     "checkInvariant" == method.getName // TODO: this is hokey.
