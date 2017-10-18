@@ -1,5 +1,6 @@
 package com.sageserpent.plutonium
 
+import java.lang.reflect.Method
 import java.time.Instant
 
 import com.esotericsoftware.kryo.serializers.JavaSerializer
@@ -7,16 +8,20 @@ import com.esotericsoftware.kryo.serializers.FieldSerializer.Bind
 import com.sageserpent.americium
 import com.sageserpent.americium.{Finite, PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.WorldImplementationCodeFactoring.{
+  AcquiredStateCapturingId,
+  IdentifiedItemsScope,
   ProxyFactory,
-  RecordingCallbackStuff
+  firstMethodIsOverrideCompatibleWithSecond
 }
-
+import net.bytebuddy.description.method.MethodDescription
 import net.bytebuddy.dynamic.DynamicType.Builder
 import net.bytebuddy.implementation.MethodDelegation
+import net.bytebuddy.implementation.bind.annotation._
+import net.bytebuddy.matcher.ElementMatcher
 
 import scala.collection.mutable
 import scala.reflect.runtime.universe
-import scala.reflect.runtime.universe._
+import scala.reflect.runtime.universe.{This => _, _}
 
 /**
   * Created by Gerard on 09/07/2015.
@@ -30,6 +35,65 @@ sealed abstract class Event {
 }
 
 object capturePatches {
+  object RecordingCallbackStuff {
+    val additionalInterfaces: Array[Class[_]] = Array(classOf[Recorder])
+    val cachedProxyConstructors =
+      mutable.Map.empty[universe.Type, (universe.MethodMirror, Class[_])]
+
+    def isFinalizer(methodDescription: MethodDescription): Boolean =
+      methodDescription.getName == "finalize" && methodDescription.getParameters.isEmpty && methodDescription.getReturnType
+        .represents(classOf[Unit])
+
+    trait AcquiredState extends AcquiredStateCapturingId {
+      def itemReconstitutionData: Recorder#ItemReconstitutionData[_]
+
+      def capturePatch(patch: AbstractPatch): Unit
+    }
+
+    val matchMutation: ElementMatcher[MethodDescription] = methodDescription =>
+      methodDescription.getReturnType.represents(classOf[Unit])
+
+    val matchItemReconstitutionData: ElementMatcher[MethodDescription] =
+      methodDescription =>
+        firstMethodIsOverrideCompatibleWithSecond(
+          methodDescription,
+          IdentifiedItemsScope.itemReconstitutionDataProperty)
+
+    val matchForbiddenReadAccess: ElementMatcher[MethodDescription] =
+      methodDescription =>
+        !IdentifiedItemsScope
+          .alwaysAllowsReadAccessTo(methodDescription) && !RecordingCallbackStuff
+          .isFinalizer(methodDescription) && !methodDescription.getReturnType
+          .represents(classOf[Unit])
+
+    object mutation {
+      @RuntimeType
+      def apply(@Origin method: Method,
+                @AllArguments arguments: Array[AnyRef],
+                @This target: AnyRef,
+                @FieldValue("acquiredState") acquiredState: AcquiredState) = {
+        val item = target.asInstanceOf[Recorder]
+        // Remember, the outer context is making a proxy of type 'Item'.
+        acquiredState.capturePatch(Patch(item, method, arguments))
+        null // Representation of a unit value by a ByteBuddy interceptor.
+      }
+    }
+
+    object itemReconstitutionData {
+      @RuntimeType
+      def apply(@FieldValue("acquiredState") acquiredState: AcquiredState) =
+        acquiredState.itemReconstitutionData
+    }
+
+    object forbiddenReadAccess {
+      @RuntimeType
+      def apply(@Origin method: Method, @This target: AnyRef) = {
+        throw new UnsupportedOperationException(
+          s"Attempt to call method: '$method' with a non-unit return type on a recorder proxy: '$target' while capturing a change or measurement.")
+      }
+    }
+  }
+
   def apply(update: RecorderFactory => Unit): Seq[AbstractPatch] = {
     val capturedPatches =
       mutable.MutableList.empty[AbstractPatch]

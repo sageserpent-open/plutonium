@@ -211,65 +211,6 @@ object WorldImplementationCodeFactoring {
       (universe.MethodMirror, Class[_])]
   }
 
-  object RecordingCallbackStuff {
-    val additionalInterfaces: Array[Class[_]] = Array(classOf[Recorder])
-    val cachedProxyConstructors =
-      mutable.Map.empty[universe.Type, (universe.MethodMirror, Class[_])]
-
-    def isFinalizer(methodDescription: MethodDescription): Boolean =
-      methodDescription.getName == "finalize" && methodDescription.getParameters.isEmpty && methodDescription.getReturnType
-        .represents(classOf[Unit])
-
-    trait AcquiredState extends AcquiredStateCapturingId {
-      def itemReconstitutionData: Recorder#ItemReconstitutionData[_]
-
-      def capturePatch(patch: AbstractPatch): Unit
-    }
-
-    val matchMutation: ElementMatcher[MethodDescription] = methodDescription =>
-      methodDescription.getReturnType.represents(classOf[Unit])
-
-    val matchItemReconstitutionData: ElementMatcher[MethodDescription] =
-      methodDescription =>
-        firstMethodIsOverrideCompatibleWithSecond(
-          methodDescription,
-          IdentifiedItemsScope.itemReconstitutionDataProperty)
-
-    val matchForbiddenReadAccess: ElementMatcher[MethodDescription] =
-      methodDescription =>
-        !IdentifiedItemsScope
-          .alwaysAllowsReadAccessTo(methodDescription) && !RecordingCallbackStuff
-          .isFinalizer(methodDescription) && !methodDescription.getReturnType
-          .represents(classOf[Unit])
-
-    object mutation {
-      @RuntimeType
-      def apply(@Origin method: Method,
-                @AllArguments arguments: Array[AnyRef],
-                @This target: AnyRef,
-                @FieldValue("acquiredState") acquiredState: AcquiredState) = {
-        val item = target.asInstanceOf[Recorder]
-        // Remember, the outer context is making a proxy of type 'Item'.
-        acquiredState.capturePatch(Patch(item, method, arguments))
-        null // Representation of a unit value by a ByteBuddy interceptor.
-      }
-    }
-
-    object itemReconstitutionData {
-      @RuntimeType
-      def apply(@FieldValue("acquiredState") acquiredState: AcquiredState) =
-        acquiredState.itemReconstitutionData
-    }
-
-    object forbiddenReadAccess {
-      @RuntimeType
-      def apply(@Origin method: Method, @This target: AnyRef) = {
-        throw new UnsupportedOperationException(
-          s"Attempt to call method: '$method' with a non-unit return type on a recorder proxy: '$target' while capturing a change or measurement.")
-      }
-    }
-  }
-
   object QueryCallbackStuff {
     val additionalInterfaces: Array[Class[_]] =
       Array(classOf[ItemExtensionApi], classOf[AnnihilationHook])
