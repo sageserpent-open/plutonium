@@ -1,10 +1,6 @@
 package com.sageserpent.plutonium
 
 trait Identified {
-  type Id
-  val id: Id
-
-  // TODO - find a new home for the implementation.
   def checkInvariant(): Unit
 
   // If an item has been annihilated, it will not be accessible from a query on a scope - but

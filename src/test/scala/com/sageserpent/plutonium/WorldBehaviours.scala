@@ -32,7 +32,7 @@ trait WorldBehaviours
     fail("If I am not supposed to exist, why is something asking for me?")
   }
 
-  abstract class NonExistentIdentified extends Identified {
+  abstract class NonExistentHistory extends History {
     override type Id = NonExistentId
   }
 
@@ -46,7 +46,7 @@ trait WorldBehaviours
         worldResource.acquireAndGet(world =>
           world.scopeFor(when = when, asOf = asOf))
       check(Prop.forAllNoShrink(scopeGenerator)((scope: Scope) => {
-        val exampleBitemporal = Bitemporal.wildcard[NonExistentIdentified]()
+        val exampleBitemporal = Bitemporal.wildcard[NonExistentHistory]()
 
         scope.render(exampleBitemporal).isEmpty
       }))

@@ -322,7 +322,6 @@ abstract class PatchRecorderImplementation(
     }
 
     val identifiedItemAccess = new IdentifiedItemAccessImplementation
-    with IdentifiedItemAccessContracts
 
     val itemStatesReferencedByBestPatch =
       reconstitutionDataToItemStateMap.values
