@@ -11,8 +11,12 @@ abstract class ReferringHistory extends History {
     super.checkInvariant()
 
     _referencedHistories.foreach {
-      case (_, referred) if !referred.isGhost => referred.checkInvariant()
-      case _                                  =>
+      case (_, referred)
+          if !referred
+            .asInstanceOf[ItemExtensionApi]
+            .isGhost =>
+        referred.checkInvariant()
+      case _ =>
     }
   }
 

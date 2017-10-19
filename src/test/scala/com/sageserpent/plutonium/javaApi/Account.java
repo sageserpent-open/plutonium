@@ -1,8 +1,6 @@
 package com.sageserpent.plutonium.javaApi;
 
-import com.sageserpent.plutonium.Identified;
-
-public abstract class Account extends Identified {
+public abstract class Account {
     public abstract String id();
 
     public void setCash(double cash){

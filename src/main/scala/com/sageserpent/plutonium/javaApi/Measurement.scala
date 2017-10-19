@@ -5,43 +5,39 @@ import java.util.function.{BiConsumer, Consumer}
 
 import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.{
-  Identified,
-  Measurement => ScalaMeasurement,
-  typeTagForClass
+  typeTagForClass,
+  Measurement => ScalaMeasurement
 }
 
 /**
   * Created by Gerard on 02/05/2016.
   */
 object Measurement {
-  def forOneItem[Item <: Identified](
-      when: Unbounded[Instant],
-      id: Item#Id,
-      clazz: Class[Item],
-      update: Consumer[Item]): ScalaMeasurement =
+  def forOneItem[Item](when: Unbounded[Instant],
+                       id: Any,
+                       clazz: Class[Item],
+                       update: Consumer[Item]): ScalaMeasurement =
     ScalaMeasurement.forOneItem(when)(id, update.accept(_: Item))(
       typeTagForClass(clazz))
 
-  def forOneItem[Item <: Identified](
-      when: Instant,
-      id: Item#Id,
-      clazz: Class[Item],
-      update: Consumer[Item]): ScalaMeasurement =
+  def forOneItem[Item](when: Instant,
+                       id: Any,
+                       clazz: Class[Item],
+                       update: Consumer[Item]): ScalaMeasurement =
     ScalaMeasurement.forOneItem(when)(id, update.accept(_: Item))(
       typeTagForClass(clazz))
 
-  def forOneItem[Item <: Identified](
-      id: Item#Id,
-      clazz: Class[Item],
-      update: Consumer[Item]): ScalaMeasurement =
+  def forOneItem[Item](id: Any,
+                       clazz: Class[Item],
+                       update: Consumer[Item]): ScalaMeasurement =
     ScalaMeasurement.forOneItem(id, update.accept(_: Item))(
       typeTagForClass(clazz))
 
-  def forTwoItems[Item1 <: Identified, Item2 <: Identified](
+  def forTwoItems[Item1, Item2](
       when: Unbounded[Instant],
-      id1: Item1#Id,
+      id1: Any,
       clazz1: Class[Item1],
-      id2: Item2#Id,
+      id2: Any,
       clazz2: Class[Item2],
       update: BiConsumer[Item1, Item2]): ScalaMeasurement =
     ScalaMeasurement.forTwoItems(when)(id1,
@@ -50,11 +46,11 @@ object Measurement {
       typeTagForClass(clazz1),
       typeTagForClass(clazz2))
 
-  def forTwoItems[Item1 <: Identified, Item2 <: Identified](
+  def forTwoItems[Item1, Item2](
       when: Instant,
-      id1: Item1#Id,
+      id1: Any,
       clazz1: Class[Item1],
-      id2: Item2#Id,
+      id2: Any,
       clazz2: Class[Item2],
       update: BiConsumer[Item1, Item2]): ScalaMeasurement =
     ScalaMeasurement.forTwoItems(when)(id1,
@@ -63,10 +59,10 @@ object Measurement {
       typeTagForClass(clazz1),
       typeTagForClass(clazz2))
 
-  def forTwoItems[Item1 <: Identified, Item2 <: Identified](
-      id1: Item1#Id,
+  def forTwoItems[Item1, Item2](
+      id1: Any,
       clazz1: Class[Item1],
-      id2: Item2#Id,
+      id2: Any,
       clazz2: Class[Item2],
       update: BiConsumer[Item1, Item2]): ScalaMeasurement =
     ScalaMeasurement.forTwoItems(id1, id2, update.accept(_: Item1, _: Item2))(

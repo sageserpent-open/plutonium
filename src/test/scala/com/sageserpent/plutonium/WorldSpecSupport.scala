@@ -412,7 +412,7 @@ trait WorldSpecSupport extends Assertions {
   class RecordingsForAPhoenixId(
       override val historyId: Any,
       override val historiesFrom: Scope => Seq[History],
-      annihilationFor: Instant => Annihilation[_ <: Identified],
+      annihilationFor: Instant => Annihilation[_],
       ineffectiveEventFor: Unbounded[Instant] => Event,
       dataSamplesGroupedForLifespans: Stream[
         Traversable[(Int, Any, (Unbounded[Instant], Boolean) => Event)]],
@@ -611,7 +611,7 @@ trait WorldSpecSupport extends Assertions {
         (Any,
          Scope => Seq[History],
          List[(Int, Any, (Unbounded[Instant], Boolean) => Event)],
-         Instant => Annihilation[_ <: Identified],
+         Instant => Annihilation[_],
          Unbounded[Instant] => Event)],
       forbidAnnihilations: Boolean = false,
       forbidMeasurements: Boolean = false) = {
