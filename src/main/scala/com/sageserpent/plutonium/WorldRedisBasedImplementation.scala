@@ -24,7 +24,7 @@ object WorldRedisBasedImplementation {
 
   val javaSerializer = new JavaSerializer
 
-  class ItemReconstitutionDataSerializer[Item <: Identified]
+  class ItemReconstitutionDataSerializer[Item]
       extends Serializer[Recorder#ItemReconstitutionData[Item]] {
     override def write(kryo: Kryo,
                        output: Output,
@@ -38,7 +38,7 @@ object WorldRedisBasedImplementation {
                       input: Input,
                       dataType: Class[Recorder#ItemReconstitutionData[Item]])
       : Recorder#ItemReconstitutionData[Item] = {
-      val id = kryo.readClassAndObject(input).asInstanceOf[Item#Id]
+      val id = kryo.readClassAndObject(input).asInstanceOf[Any]
       val typeTag = kryo
         .readObject[TypeTag[Item]](input,
                                    classOf[TypeTag[Item]],
@@ -50,7 +50,7 @@ object WorldRedisBasedImplementation {
   val kryoPool = KryoPool.withByteArrayOutputStream(
     40,
     new ScalaKryoInstantiator().withRegistrar((kryo: Kryo) => {
-      def registerSerializerForItemReconstitutionData[Item <: Identified]() = {
+      def registerSerializerForItemReconstitutionData[Item]() = {
         // TODO - I think this is a potential bug, as 'Recorder#ItemReconstitutionData[Item]' is an alias
         // to a tuple type instance that is erased at runtime - so all kinds of things could be passed to
         // the special case serializer. Need to think about this, perhaps a value class wrapper will do the trick?

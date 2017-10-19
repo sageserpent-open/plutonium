@@ -118,22 +118,21 @@ object BlobStorageInMemory {
     new BlobStorageInMemory[EventId](
       revision = 0,
       eventRevisions = Map.empty[EventId, Revision],
-      lifecycles =
-        Map.empty[UniqueItemSpecification[_ <: Identified], Lifecycle[EventId]]
+      lifecycles = Map.empty[UniqueItemSpecification[_], Lifecycle[EventId]]
     )
 }
 
 case class BlobStorageInMemory[EventId] private (
     val revision: BlobStorageInMemory.Revision,
     val eventRevisions: Map[EventId, BlobStorageInMemory.Revision],
-    val lifecycles: Map[UniqueItemSpecification[_ <: Identified],
+    val lifecycles: Map[UniqueItemSpecification[_],
                         BlobStorageInMemory.Lifecycle[EventId]])
     extends BlobStorage[EventId] {
   thisBlobStorage =>
 
   override def timeSlice(when: Unbounded[Instant]): Timeslice = {
     trait TimesliceImplementation extends Timeslice {
-      override def uniqueItemQueriesFor[Item <: Identified: TypeTag]
+      override def uniqueItemQueriesFor[Item: TypeTag]
         : Stream[UniqueItemSpecification[_ <: Item]] =
         lifecycles
           .filter {
@@ -145,8 +144,8 @@ case class BlobStorageInMemory[EventId] private (
           .toStream
           .asInstanceOf[Stream[UniqueItemSpecification[_ <: Item]]]
 
-      override def uniqueItemQueriesFor[Item <: Identified: TypeTag](
-          id: Item#Id): Stream[UniqueItemSpecification[_ <: Item]] =
+      override def uniqueItemQueriesFor[Item: TypeTag](
+          id: Any): Stream[UniqueItemSpecification[_ <: Item]] =
         lifecycles
           .filter {
             case ((itemId, itemTypeTag), lifecycle) =>
@@ -158,7 +157,7 @@ case class BlobStorageInMemory[EventId] private (
           .toStream
           .asInstanceOf[Stream[UniqueItemSpecification[_ <: Item]]]
 
-      override def snapshotBlobFor[Item <: Identified](
+      override def snapshotBlobFor[Item](
           uniqueItemSpecification: UniqueItemSpecification[Item])
         : SnapshotBlob =
         lifecycles(uniqueItemSpecification)
@@ -173,7 +172,7 @@ case class BlobStorageInMemory[EventId] private (
       type Event =
         (EventId,
          Option[(Unbounded[Instant],
-                 Map[UniqueItemSpecification[_ <: Identified], SnapshotBlob])])
+                 Map[UniqueItemSpecification[_], SnapshotBlob])])
 
       val events = mutable.MutableList.empty[Event]
 
@@ -184,8 +183,8 @@ case class BlobStorageInMemory[EventId] private (
       override def recordSnapshotBlobsForEvent(
           eventId: EventId,
           when: Unbounded[Instant],
-          snapshotBlobs: Map[UniqueItemSpecification[_ <: Identified],
-                             SnapshotBlob]): Unit = {
+          snapshotBlobs: Map[UniqueItemSpecification[_], SnapshotBlob])
+        : Unit = {
         events += eventId -> Some(when -> snapshotBlobs)
       }
 

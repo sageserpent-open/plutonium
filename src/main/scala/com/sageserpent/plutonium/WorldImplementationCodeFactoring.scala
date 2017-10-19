@@ -59,8 +59,7 @@ object WorldImplementationCodeFactoring {
     }).sorted.map(_.serializableEvent)
 
   object IdentifiedItemsScope {
-    def yieldOnlyItemsOfSupertypeOf[Item <: Identified: TypeTag](
-        items: Traversable[Identified]) = {
+    def yieldOnlyItemsOfSupertypeOf[Item: TypeTag](items: Traversable[Any]) = {
       val reflectedType = typeTag[Item].tpe
       val clazzOfItem =
         currentMirror.runtimeClass(reflectedType).asInstanceOf[Class[Item]]
@@ -71,8 +70,7 @@ object WorldImplementationCodeFactoring {
       }
     }
 
-    def yieldOnlyItemsOfType[Item <: Identified: TypeTag](
-        items: Traversable[Identified]) = {
+    def yieldOnlyItemsOfType[Item: TypeTag](items: Traversable[Any]) = {
       val reflectedType = typeTag[Item].tpe
       val clazzOfItem =
         currentMirror.runtimeClass(reflectedType).asInstanceOf[Class[Item]]
@@ -86,14 +84,14 @@ object WorldImplementationCodeFactoring {
         firstMethodIsOverrideCompatibleWithSecond(method, exclusionMethod)
       })
 
-    val nonMutableMembersThatCanAlwaysBeReadFrom = (classOf[Identified].getMethods ++ classOf[
+    val nonMutableMembersThatCanAlwaysBeReadFrom = (classOf[ItemExtensionApi].getMethods ++ classOf[
       AnyRef].getMethods) map (new MethodDescription.ForLoadedMethod(_))
 
     val itemReconstitutionDataProperty = new MethodDescription.ForLoadedMethod(
       classOf[Recorder].getMethod("itemReconstitutionData"))
 
     val isGhostProperty = new MethodDescription.ForLoadedMethod(
-      classOf[Identified].getMethod("isGhost"))
+      classOf[ItemExtensionApi].getMethod("isGhost"))
 
     val isRecordAnnihilationMethod = new MethodDescription.ForLoadedMethod(
       classOf[AnnihilationHook].getMethod("recordAnnihilation"))
@@ -109,8 +107,7 @@ object WorldImplementationCodeFactoring {
   }
 
   trait AcquiredStateCapturingId {
-    type Id
-    val _id: Id
+    val _id: Any
   }
 
   object id {
@@ -156,12 +153,12 @@ object WorldImplementationCodeFactoring {
 
     protected def configureInterceptions(builder: Builder[_]): Builder[_]
 
-    private def constructorFor(identifiableType: Type)
-      : (universe.MethodMirror, Class[_ <: Identified]) = {
+    private def constructorFor(
+        identifiableType: Type): (universe.MethodMirror, Class[_]) = {
       val clazz =
         currentMirror
           .runtimeClass(identifiableType.typeSymbol.asClass)
-          .asInstanceOf[Class[_ <: Identified]]
+          .asInstanceOf[Class[_]]
 
       val proxyClazz = createProxyClass(clazz)
 
@@ -171,7 +168,7 @@ object WorldImplementationCodeFactoring {
       classMirror.reflectConstructor(constructor.asMethod) -> clazz
     }
 
-    def constructFrom[Item <: Identified: TypeTag](id: Item#Id) = {
+    def constructFrom[Item: TypeTag](id: Any) = {
       // NOTE: this returns items that are proxies to 'Item' rather than direct instances of 'Item' itself. Depending on the
       // context (using a scope created by a client from a world, as opposed to while building up that scope from patches),
       // the items may forbid certain operations on them - e.g. for rendering from a client's scope, the items should be
@@ -196,8 +193,8 @@ object WorldImplementationCodeFactoring {
       proxy
     }
 
-    def constructorAndClassFor[Item <: Identified: TypeTag]()
-      : (universe.MethodMirror, Class[_ <: Identified]) = {
+    def constructorAndClassFor[Item: TypeTag]()
+      : (universe.MethodMirror, Class[_]) = {
       val typeOfItem = typeOf[Item]
       val (constructor, clazz) = cachedProxyConstructors.get(typeOfItem) match {
         case Some(cachedProxyConstructorData) => cachedProxyConstructorData
@@ -212,109 +209,45 @@ object WorldImplementationCodeFactoring {
     protected val additionalInterfaces: Array[Class[_]]
     protected val cachedProxyConstructors: scala.collection.mutable.Map[
       (Type),
-      (universe.MethodMirror, Class[_ <: Identified])]
-  }
-
-  object RecordingCallbackStuff {
-    val additionalInterfaces: Array[Class[_]] = Array(classOf[Recorder])
-    val cachedProxyConstructors =
-      mutable.Map
-        .empty[universe.Type, (universe.MethodMirror, Class[_ <: Identified])]
-
-    def isFinalizer(methodDescription: MethodDescription): Boolean =
-      methodDescription.getName == "finalize" && methodDescription.getParameters.isEmpty && methodDescription.getReturnType
-        .represents(classOf[Unit])
-
-    trait AcquiredState extends AcquiredStateCapturingId {
-      def itemReconstitutionData
-        : Recorder#ItemReconstitutionData[_ <: Identified]
-
-      def capturePatch(patch: AbstractPatch): Unit
-    }
-
-    val matchMutation: ElementMatcher[MethodDescription] = methodDescription =>
-      methodDescription.getReturnType.represents(classOf[Unit])
-
-    val matchItemReconstitutionData: ElementMatcher[MethodDescription] =
-      methodDescription =>
-        firstMethodIsOverrideCompatibleWithSecond(
-          methodDescription,
-          IdentifiedItemsScope.itemReconstitutionDataProperty)
-
-    val matchForbiddenReadAccess: ElementMatcher[MethodDescription] =
-      methodDescription =>
-        !IdentifiedItemsScope
-          .alwaysAllowsReadAccessTo(methodDescription) && !RecordingCallbackStuff
-          .isFinalizer(methodDescription) && !methodDescription.getReturnType
-          .represents(classOf[Unit])
-
-    object mutation {
-      @RuntimeType
-      def apply(@Origin method: Method,
-                @AllArguments arguments: Array[AnyRef],
-                @This target: AnyRef,
-                @FieldValue("acquiredState") acquiredState: AcquiredState) = {
-        val item = target.asInstanceOf[Recorder]
-        // Remember, the outer context is making a proxy of type 'Item'.
-        acquiredState.capturePatch(Patch(item, method, arguments))
-        null // Representation of a unit value by a ByteBuddy interceptor.
-      }
-    }
-
-    object itemReconstitutionData {
-      @RuntimeType
-      def apply(@FieldValue("acquiredState") acquiredState: AcquiredState) =
-        acquiredState.itemReconstitutionData
-    }
-
-    object forbiddenReadAccess {
-      @RuntimeType
-      def apply(@Origin method: Method, @This target: AnyRef) = {
-        throw new UnsupportedOperationException(
-          s"Attempt to call method: '$method' with a non-unit return type on a recorder proxy: '$target' while capturing a change or measurement.")
-      }
-    }
-
+      (universe.MethodMirror, Class[_])]
   }
 
   object QueryCallbackStuff {
-    val additionalInterfaces: Array[Class[_]] = Array(classOf[AnnihilationHook])
+    val additionalInterfaces: Array[Class[_]] =
+      Array(classOf[ItemExtensionApi], classOf[AnnihilationHook])
     val cachedProxyConstructors =
       mutable.Map
-        .empty[universe.Type, (universe.MethodMirror, Class[_ <: Identified])]
+        .empty[universe.Type, (universe.MethodMirror, Class[_])]
 
     trait AcquiredState extends AcquiredStateCapturingId with AnnihilationHook {
-      def itemReconstitutionData
-        : Recorder#ItemReconstitutionData[_ <: Identified]
+      def itemReconstitutionData: Recorder#ItemReconstitutionData[_]
 
       def itemsAreLocked: Boolean
     }
 
     val matchRecordAnnihilation: ElementMatcher[MethodDescription] =
-      methodDescription =>
-        firstMethodIsOverrideCompatibleWithSecond(
-          methodDescription,
-          IdentifiedItemsScope.isRecordAnnihilationMethod)
+      firstMethodIsOverrideCompatibleWithSecond(
+        _,
+        IdentifiedItemsScope.isRecordAnnihilationMethod)
 
     val matchMutation: ElementMatcher[MethodDescription] = methodDescription =>
       methodDescription.getReturnType.represents(classOf[Unit]) && !WorldImplementationCodeFactoring
         .isInvariantCheck(methodDescription)
 
-    val matchIsGhost: ElementMatcher[MethodDescription] = methodDescription =>
+    val matchIsGhost: ElementMatcher[MethodDescription] =
       firstMethodIsOverrideCompatibleWithSecond(
-        methodDescription,
+        _,
         IdentifiedItemsScope.isGhostProperty)
 
     val matchCheckedReadAccess: ElementMatcher[MethodDescription] =
-      methodDescription =>
-        !IdentifiedItemsScope.alwaysAllowsReadAccessTo(methodDescription)
+      !IdentifiedItemsScope.alwaysAllowsReadAccessTo(_)
+
+    val matchInvariantCheck: ElementMatcher[MethodDescription] =
+      WorldImplementationCodeFactoring.isInvariantCheck(_)
 
     object recordAnnihilation {
       @RuntimeType
-      def apply(@Origin method: Method,
-                @AllArguments arguments: Array[AnyRef],
-                @This target: AnyRef,
-                @FieldValue("acquiredState") acquiredState: AcquiredState) = {
+      def apply(@FieldValue("acquiredState") acquiredState: AcquiredState) = {
         acquiredState.recordAnnihilation()
         null
       }
@@ -323,8 +256,7 @@ object WorldImplementationCodeFactoring {
     object mutation {
       @RuntimeType
       def apply(@Origin method: Method,
-                @AllArguments arguments: Array[AnyRef],
-                @Super target: AnyRef,
+                @This target: AnyRef,
                 @SuperCall superCall: Callable[_],
                 @FieldValue("acquiredState") acquiredState: AcquiredState) = {
         if (acquiredState.itemsAreLocked) {
@@ -344,18 +276,13 @@ object WorldImplementationCodeFactoring {
 
     object isGhost {
       @RuntimeType
-      def apply(@Origin method: Method,
-                @AllArguments arguments: Array[AnyRef],
-                @This target: AnyRef,
-                @FieldValue("acquiredState") acquiredState: AcquiredState) =
+      def apply(@FieldValue("acquiredState") acquiredState: AcquiredState) =
         acquiredState.isGhost
     }
 
     object checkedReadAccess {
       @RuntimeType
       def apply(@Origin method: Method,
-                @AllArguments arguments: Array[AnyRef],
-                @Super target: AnyRef,
                 @SuperCall superCall: Callable[_],
                 @FieldValue("acquiredState") acquiredState: AcquiredState) = {
         if (acquiredState.isGhost) {
@@ -368,22 +295,36 @@ object WorldImplementationCodeFactoring {
       }
     }
 
+    object checkInvariant {
+      def apply(@This thiz: ItemExtensionApi): Unit = {
+        if (thiz.isGhost) {
+          throw new RuntimeException(
+            s"Item: '$id' has been annihilated but is being referred to in an invariant.")
+        }
+      }
+
+      def apply(@This thiz: ItemExtensionApi,
+                @SuperCall superCall: Callable[Unit]): Unit = {
+        apply(thiz)
+        superCall.call()
+      }
+    }
   }
 
   def firstMethodIsOverrideCompatibleWithSecond(
       firstMethod: MethodDescription,
       secondMethod: MethodDescription): Boolean =
     secondMethod.getName == firstMethod.getName &&
-    secondMethod.getReceiverType.asErasure
-      .isAssignableFrom(firstMethod.getReceiverType.asErasure) &&
-    (secondMethod.getReturnType.asErasure
-      .isAssignableFrom(firstMethod.getReturnType.asErasure) ||
-    secondMethod.getReturnType.asErasure
-      .isAssignableFrom(firstMethod.getReturnType.asErasure.asBoxed)) &&
-    secondMethod.getParameters.size == firstMethod.getParameters.size &&
-    secondMethod.getParameters.toSeq
-      .map(_.getType) == firstMethod.getParameters.toSeq
-      .map(_.getType) // What about contravariance? Hmmm...
+      secondMethod.getReceiverType.asErasure
+        .isAssignableFrom(firstMethod.getReceiverType.asErasure) &&
+      (secondMethod.getReturnType.asErasure
+        .isAssignableFrom(firstMethod.getReturnType.asErasure) ||
+        secondMethod.getReturnType.asErasure
+          .isAssignableFrom(firstMethod.getReturnType.asErasure.asBoxed)) &&
+      secondMethod.getParameters.size == firstMethod.getParameters.size &&
+      secondMethod.getParameters.toSeq
+        .map(_.getType) == firstMethod.getParameters.toSeq
+        .map(_.getType) // What about contravariance? Hmmm...
 
   def firstMethodIsOverrideCompatibleWithSecond(
       firstMethod: Method,
@@ -394,10 +335,10 @@ object WorldImplementationCodeFactoring {
   }
 
   val invariantCheckMethod = new MethodDescription.ForLoadedMethod(
-    classOf[Identified].getMethod("checkInvariant"))
+    classOf[ItemExtensionApi].getMethod("checkInvariant"))
 
   def isInvariantCheck(method: MethodDescription): Boolean =
-    firstMethodIsOverrideCompatibleWithSecond(method, invariantCheckMethod)
+    "checkInvariant" == method.getName // TODO: this is hokey.
 
   class IdentifiedItemsScope { identifiedItemsScopeThis =>
 
@@ -448,13 +389,13 @@ object WorldImplementationCodeFactoring {
 
     class MultiMap
         extends scala.collection.mutable.HashMap[
-          Identified#Id,
-          scala.collection.mutable.Set[Identified]]
-        with scala.collection.mutable.MultiMap[Identified#Id, Identified] {}
+          Any,
+          scala.collection.mutable.Set[Any]]
+        with scala.collection.mutable.MultiMap[Any, Any] {}
 
     val idToItemsMultiMap = new MultiMap
 
-    def itemFor[Item <: Identified: TypeTag](id: Item#Id): Item = {
+    def itemFor[Item: TypeTag](id: Any): Item = {
       def constructAndCacheItem(): Item = {
         import QueryCallbackStuff._
 
@@ -463,8 +404,6 @@ object WorldImplementationCodeFactoring {
 
           override val stateToBeAcquiredByProxy: AcquiredState =
             new AcquiredState {
-              type Id = Item#Id
-
               val _id = id
 
               def itemReconstitutionData
@@ -479,8 +418,7 @@ object WorldImplementationCodeFactoring {
           override val additionalInterfaces: Array[Class[_]] =
             QueryCallbackStuff.additionalInterfaces
           override val cachedProxyConstructors
-            : mutable.Map[universe.Type,
-                          (universe.MethodMirror, Class[_ <: Identified])] =
+            : mutable.Map[universe.Type, (universe.MethodMirror, Class[_])] =
             QueryCallbackStuff.cachedProxyConstructors
 
           override protected def configureInterceptions(
@@ -494,6 +432,8 @@ object WorldImplementationCodeFactoring {
               .intercept(MethodDelegation.to(mutation))
               .method(matchRecordAnnihilation)
               .intercept(MethodDelegation.to(recordAnnihilation))
+              .method(matchInvariantCheck)
+              .intercept(MethodDelegation.to(checkInvariant))
         }
 
         val item = proxyFactory.constructFrom(id)
@@ -524,8 +464,7 @@ object WorldImplementationCodeFactoring {
       }
     }
 
-    def annihilateItemFor[Item <: Identified: TypeTag](id: Item#Id,
-                                                       when: Instant): Unit = {
+    def annihilateItemFor[Item: TypeTag](id: Any, when: Instant): Unit = {
       idToItemsMultiMap.get(id) match {
         case Some(items) =>
           assert(items.nonEmpty)
@@ -553,13 +492,13 @@ object WorldImplementationCodeFactoring {
       }
     }
 
-    def itemsFor[Item <: Identified: TypeTag](id: Item#Id): Stream[Item] = {
+    def itemsFor[Item: TypeTag](id: Any): Stream[Item] = {
       val items = idToItemsMultiMap.getOrElse(id, Set.empty[Item])
 
       IdentifiedItemsScope.yieldOnlyItemsOfType(items)
     }
 
-    def allItems[Item <: Identified: TypeTag](): Stream[Item] =
+    def allItems[Item: TypeTag](): Stream[Item] =
       IdentifiedItemsScope.yieldOnlyItemsOfType(
         idToItemsMultiMap.values.flatten)
   }
@@ -568,18 +507,18 @@ object WorldImplementationCodeFactoring {
     val identifiedItemsScope: IdentifiedItemsScope
 
     object itemCache extends ItemCache {
-      override def itemsFor[Item <: Identified: TypeTag](
-          id: Item#Id): Stream[Item] = identifiedItemsScope.itemsFor(id)
+      override def itemsFor[Item: TypeTag](id: Any): Stream[Item] =
+        identifiedItemsScope.itemsFor(id)
 
-      override def allItems[Item <: Identified: TypeTag](): Stream[Item] =
+      override def allItems[Item: TypeTag](): Stream[Item] =
         identifiedItemsScope.allItems()
-      }
+    }
 
     override def render[Item](bitemporal: Bitemporal[Item]): Stream[Item] =
       itemCache.render(bitemporal)
 
-    override def numberOf[Item <: Identified: TypeTag](id: Item#Id): Int =
-      itemCache.numberOf(id)
+    override def numberOf[Item](bitemporal: Bitemporal[Item]): Int =
+      itemCache.numberOf(bitemporal)
   }
 }
 

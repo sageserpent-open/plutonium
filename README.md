@@ -30,7 +30,7 @@ Add this to your _build.sbt_:
 
     resolvers += Resolver.jcenterRepo
 
-    libraryDependencies += "com.sageserpent" %% "open-plutonium" % "1.2.1"
+    libraryDependencies += "com.sageserpent" %% "open-plutonium" % "1.3.0"
     
 #### Gradle ####
 Add this to your _build.gradle_:
@@ -40,7 +40,7 @@ Add this to your _build.gradle_:
     }
 
     dependencies {
-        compile 'com.sageserpent:open-plutonium_2.12:1.2.1'
+        compile 'com.sageserpent:open-plutonium_2.12:1.3.0'
     }
     
 [release history here](https://github.com/sageserpent-open/open-plutonium/blob/master/releaseHistory.md)

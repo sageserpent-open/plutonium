@@ -22,7 +22,7 @@ trait ItemStateStorage[EventId] { itemStateStorage =>
     // that snapshots for the same item are always recorded with the same runtime type of object.
     def recordSnapshotsForEvent(eventId: EventId,
                                 when: Unbounded[Instant],
-                                items: Seq[_ <: Identified]): Unit = ???
+                                items: Seq[_]): Unit = ???
 
     def annulEvent(eventId: EventId) =
       blobStorageRevisionBuilder.annulEvent(eventId)
@@ -37,20 +37,19 @@ trait ItemStateStorage[EventId] { itemStateStorage =>
       blobStorageTimeslice: BlobStorage[EventId]#Timeslice)
       extends ItemCache {
 
-    override def itemsFor[Item <: Identified: TypeTag](
-        id: Item#Id): Stream[Item] =
+    override def itemsFor[Item: TypeTag](id: Any): Stream[Item] =
       for {
         uniqueItemSpecification <- blobStorageTimeslice.uniqueItemQueriesFor(id)
       } yield itemFor(uniqueItemSpecification)
 
-    override def allItems[Item <: Identified: TypeTag](): Stream[Item] =
+    override def allItems[Item: TypeTag](): Stream[Item] =
       for {
         uniqueItemSpecification <- blobStorageTimeslice
           .uniqueItemQueriesFor[Item]
       } yield itemFor(uniqueItemSpecification)
 
     // This has a precondition that the type tag must pick out precisely one item - zero or multiple is not permitted.
-    protected def itemFor[Item <: Identified](
+    protected def itemFor[Item](
         uniqueItemSpecification: UniqueItemSpecification[Item]): Item = ???
   }
 

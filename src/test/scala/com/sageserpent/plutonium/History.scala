@@ -1,8 +1,10 @@
 package com.sageserpent.plutonium
 
-abstract class History extends Identified {
-  override def checkInvariant(): Unit = {
-    super.checkInvariant()
+abstract class History {
+  type Id
+  val id: Id
+
+  def checkInvariant(): Unit = {
     if (invariantBreakageScheduled) {
       // NOTE: breakage of a bitemporal invariant is *not* a logic error; we expect
       // to be asked to try to record events that could potentially make the world

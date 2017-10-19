@@ -8,8 +8,8 @@ import scala.collection.mutable
 import scala.reflect.runtime.universe.TypeTag
 
 object BlobStorage {
-  type UniqueItemSpecification[Item <: Identified] =
-    (Item#Id, TypeTag[Item])
+  type UniqueItemSpecification[Item] =
+    (Any, TypeTag[Item])
 
   type SnapshotBlob = Array[Byte]
 }
@@ -25,8 +25,7 @@ trait BlobStorage[EventId] { blobStorage =>
     def recordSnapshotBlobsForEvent(
         eventId: EventId,
         when: Unbounded[Instant],
-        snapshotBlobs: Map[UniqueItemSpecification[_ <: Identified],
-                           SnapshotBlob]): Unit
+        snapshotBlobs: Map[UniqueItemSpecification[_], SnapshotBlob]): Unit
 
     def annulEvent(eventId: EventId)
 
@@ -40,8 +39,7 @@ trait BlobStorage[EventId] { blobStorage =>
     abstract override def recordSnapshotBlobsForEvent(
         eventId: EventId,
         when: Unbounded[Instant],
-        snapshotBlobs: Map[UniqueItemSpecification[_ <: Identified],
-                           SnapshotBlob]): Unit = {
+        snapshotBlobs: Map[UniqueItemSpecification[_], SnapshotBlob]): Unit = {
       require(!eventIds.contains(eventId))
       eventIds += eventId
       super.recordSnapshotBlobsForEvent(eventId, when, snapshotBlobs)
@@ -57,17 +55,17 @@ trait BlobStorage[EventId] { blobStorage =>
   def openRevision(): RevisionBuilder
 
   trait Timeslice {
-    def uniqueItemQueriesFor[Item <: Identified: TypeTag]
+    def uniqueItemQueriesFor[Item: TypeTag]
       : Stream[UniqueItemSpecification[_ <: Item]]
-    def uniqueItemQueriesFor[Item <: Identified: TypeTag](
-        id: Item#Id): Stream[UniqueItemSpecification[_ <: Item]]
+    def uniqueItemQueriesFor[Item: TypeTag](
+        id: Any): Stream[UniqueItemSpecification[_ <: Item]]
 
-    def snapshotBlobFor[Item <: Identified](
+    def snapshotBlobFor[Item](
         uniqueItemSpecification: UniqueItemSpecification[Item]): SnapshotBlob
   }
 
   trait TimesliceContracts extends Timeslice {
-    abstract override def snapshotBlobFor[Item <: Identified](
+    abstract override def snapshotBlobFor[Item](
         uniqueItemSpecification: UniqueItemSpecification[Item])
       : SnapshotBlob = {
       require(

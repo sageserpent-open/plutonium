@@ -113,48 +113,48 @@ trait WorldStateSharingBehaviours
          seed)
       check(
         Prop.forAllNoShrink(testCaseGenerator) {
-        case (worldSharingCommonStateFactoryResource,
-              recordingsGroupedById,
-              bigShuffledHistoryOverLotsOfThings,
-              asOfs,
-              queryWhen,
-              seed) =>
-          worldSharingCommonStateFactoryResource acquireAndGet {
-            worldFactory =>
-              val demultiplexingWorld =
-                new DemultiplexingWorld(worldFactory, seed)
+          case (worldSharingCommonStateFactoryResource,
+                recordingsGroupedById,
+                bigShuffledHistoryOverLotsOfThings,
+                asOfs,
+                queryWhen,
+                seed) =>
+            worldSharingCommonStateFactoryResource acquireAndGet {
+              worldFactory =>
+                val demultiplexingWorld =
+                  new DemultiplexingWorld(worldFactory, seed)
 
-              recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
-                                  asOfs,
-                                  demultiplexingWorld)
+                recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
+                                    asOfs,
+                                    demultiplexingWorld)
 
-              val scope =
-                demultiplexingWorld.scopeFor(queryWhen,
-                                             demultiplexingWorld.nextRevision)
+                val scope =
+                  demultiplexingWorld.scopeFor(queryWhen,
+                                               demultiplexingWorld.nextRevision)
 
-              val checks = for {
-                RecordingsNoLaterThan(
-                  historyId,
-                  historiesFrom,
-                  pertinentRecordings,
-                  _,
-                  _) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
-                  queryWhen))
-                Seq(history) = historiesFrom(scope)
+                val checks = for {
+                  RecordingsNoLaterThan(
+                    historyId,
+                    historiesFrom,
+                    pertinentRecordings,
+                    _,
+                    _) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
+                    queryWhen))
+                  Seq(history) = historiesFrom(scope)
                 } yield
                   (historyId, history.datums, pertinentRecordings.map(_._1))
 
-              checks.nonEmpty ==>
-                Prop.all(checks.map {
-                  case (historyId, actualHistory, expectedHistory) =>
-                    ((actualHistory.length == expectedHistory.length) :| s"${actualHistory.length} == expectedHistory.length") &&
-                      Prop.all(
-                        (actualHistory zip expectedHistory zipWithIndex) map {
-                          case ((actual, expected), step) =>
-                            (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}"
-                        }: _*)
-                }: _*)
-          }
+                checks.nonEmpty ==>
+                  Prop.all(checks.map {
+                    case (historyId, actualHistory, expectedHistory) =>
+                      ((actualHistory.length == expectedHistory.length) :| s"${actualHistory.length} == expectedHistory.length") &&
+                        Prop.all(
+                          (actualHistory zip expectedHistory zipWithIndex) map {
+                            case ((actual, expected), step) =>
+                              (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}"
+                          }: _*)
+                  }: _*)
+            }
         },
         testParameters
       )
@@ -458,9 +458,8 @@ trait WorldStateSharingBehaviours
   }
 }
 
-abstract class Item extends Identified {
-  type Id = Integer
-
+abstract class Item {
+  val id: Int
   var property: Int = 0
 }
 

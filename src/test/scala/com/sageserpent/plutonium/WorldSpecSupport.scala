@@ -338,11 +338,11 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
        Annihilation(_: Instant, historyId),
        if (headsItIs)
          if (anotherRoundOfHeadsItIs)
-         Change.forOneItem(_: Unbounded[Instant])(historyId,
-                                                  (item: AHistory) => {
-                                                    // A useless event: nothing changes!
-                                                  })
-       else
+           Change.forOneItem(_: Unbounded[Instant])(historyId,
+                                                    (item: AHistory) => {
+                                                      // A useless event: nothing changes!
+                                                    })
+         else
            Change.forOneItem(_: Unbounded[Instant])(historyId,
                                                     (item: History) => {
                                                       // A useless event: nothing changes - and the event refers to the item type abstractly to boot.
@@ -396,7 +396,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
   class RecordingsForAPhoenixId(
       override val historyId: Any,
       override val historiesFrom: Scope => Seq[History],
-      annihilationFor: Instant => Annihilation[_ <: Identified],
+      annihilationFor: Instant => Annihilation[_],
       ineffectiveEventFor: Unbounded[Instant] => Event,
       dataSamplesGroupedForLifespans: Stream[
         Traversable[(Int, Any, (Unbounded[Instant], Boolean) => Event)]],
@@ -595,7 +595,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
         (Any,
          Scope => Seq[History],
          List[(Int, Any, (Unbounded[Instant], Boolean) => Event)],
-         Instant => Annihilation[_ <: Identified],
+         Instant => Annihilation[_],
          Unbounded[Instant] => Event)],
       forbidAnnihilations: Boolean = false,
       forbidMeasurements: Boolean = false) = {

@@ -27,14 +27,12 @@ case class PointBitemporalResult[Item](item: Item) extends Bitemporal[Item]
 
 case class NoneBitemporalResult[Item]() extends Bitemporal[Item]
 
-case class IdentifiedItemsBitemporalResult[Item <: Identified: TypeTag](
-    id: Item#Id)
+case class IdentifiedItemsBitemporalResult[Item: TypeTag](id: Any)
     extends Bitemporal[Item] {
   val capturedTypeTag = typeTag[Item]
 }
 
-case class WildcardBitemporalResult[Item <: Identified: TypeTag]()
-    extends Bitemporal[Item] {
+case class WildcardBitemporalResult[Item: TypeTag]() extends Bitemporal[Item] {
   val capturedTypeTag = typeTag[Item]
 }
 
@@ -43,10 +41,10 @@ case class WildcardBitemporalResult[Item <: Identified: TypeTag]()
 object Bitemporal {
   def apply[Item](item: Item) = PointBitemporalResult(item)
 
-  def withId[Item <: Identified: TypeTag](id: Item#Id): Bitemporal[Item] =
+  def withId[Item: TypeTag](id: Any): Bitemporal[Item] =
     IdentifiedItemsBitemporalResult(id)
 
-  def wildcard[Item <: Identified: TypeTag](): Bitemporal[Item] =
+  def wildcard[Item: TypeTag](): Bitemporal[Item] =
     WildcardBitemporalResult[Item]
 
   def none[Item]: Bitemporal[Item] = NoneBitemporalResult[Item]

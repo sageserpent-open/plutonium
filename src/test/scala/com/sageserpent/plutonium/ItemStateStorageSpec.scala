@@ -60,9 +60,7 @@ class ItemStateStorageSpec extends FlatSpec with Matchers with Checkers {
       val revisionBuilder = emptyItemStateStorage.openRevision()
 
       // TODO - vary the event id and time of booking. Consider multiple revisions too...
-      revisionBuilder.recordSnapshotsForEvent(0,
-                                              NegativeInfinity(),
-                                              graphNodes)
+      revisionBuilder.recordSnapshotsForEvent(0, NegativeInfinity(), graphNodes)
 
       val itemStateStorage = revisionBuilder.build()
 
@@ -96,7 +94,11 @@ class ItemStateStorageSpec extends FlatSpec with Matchers with Checkers {
     })
 }
 
-trait GraphNode extends Identified {
+trait GraphNode {
+  type Id
+
+  val id: Id
+
   private var _referencedNodes = Set.empty[GraphNode]
 
   def referencedNodes: Set[GraphNode] = _referencedNodes
@@ -104,6 +106,8 @@ trait GraphNode extends Identified {
     _referencedNodes = value
     checkInvariant()
   }
+
+  def checkInvariant(): Unit
 
   private var _mark: Int = 0
 
@@ -136,7 +140,6 @@ class OddGraphNode(override val id: OddGraphNode#Id) extends GraphNode {
   override def mark: Int = id.toInt
 
   override def checkInvariant(): Unit = {
-    super.checkInvariant()
     require(!mark.isEven)
     require(referencedNodes forall (_.mark.isEven))
   }
@@ -150,7 +153,6 @@ class EvenGraphNode(override val id: EvenGraphNode#Id) extends GraphNode {
   override def mark: Int = id
 
   override def checkInvariant(): Unit = {
-    super.checkInvariant()
     require(mark.isEven)
     require(referencedNodes forall (!_.mark.isEven))
   }

@@ -1,9 +1,6 @@
 package com.sageserpent.plutonium.javaApi.examples;
 
-import com.sageserpent.plutonium.Identified;
-
-
-public abstract class PackageItem extends Identified {
+public abstract class PackageItem {
     private PackageHolder holder;
     private String intendedDestination;
     private String actualDestination;
@@ -11,13 +8,9 @@ public abstract class PackageItem extends Identified {
     private double valuePaid = 0.0;
     private boolean isWrongItem = false;
 
-    @Override
     public abstract String id();
 
-    @Override
     public void checkInvariant() {
-        super.checkInvariant();
-
         if (isHeld() && !holder.packageItems().contains(this)) {
             throw new RuntimeException(
                     "Holder does not know it is holding this package item.");

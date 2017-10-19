@@ -29,7 +29,7 @@ trait WorldBehaviours
     fail("If I am not supposed to exist, why is something asking for me?")
   }
 
-  abstract class NonExistentIdentified extends Identified {
+  abstract class NonExistentHistory extends History {
     override type Id = NonExistentId
   }
 
@@ -43,7 +43,7 @@ trait WorldBehaviours
         worldResource.acquireAndGet(world =>
           world.scopeFor(when = when, asOf = asOf))
       check(Prop.forAllNoShrink(scopeGenerator)((scope: Scope) => {
-        val exampleBitemporal = Bitemporal.wildcard[NonExistentIdentified]()
+        val exampleBitemporal = Bitemporal.wildcard[NonExistentHistory]()
 
         scope.render(exampleBitemporal).isEmpty
       }))
@@ -201,67 +201,67 @@ trait WorldBehaviours
               random) =>
           worldResource acquireAndGet {
             world =>
-            val revisions = recordEventsInWorld(
-              liftRecordings(bigShuffledHistoryOverLotsOfThings),
-              asOfs,
-              world)
+              val revisions = recordEventsInWorld(
+                liftRecordings(bigShuffledHistoryOverLotsOfThings),
+                asOfs,
+                world)
 
-            val asOfComingAfterTheLastRevision = asOfs.last.plusSeconds(10L)
+              val asOfComingAfterTheLastRevision = asOfs.last.plusSeconds(10L)
 
-            val asOfPairs = asOfs
-              .scanRight((asOfComingAfterTheLastRevision,
-                          asOfComingAfterTheLastRevision)) {
-                case (asOf, (laterAsOf, _)) => (asOf, laterAsOf)
-              } init
+              val asOfPairs = asOfs
+                .scanRight((asOfComingAfterTheLastRevision,
+                            asOfComingAfterTheLastRevision)) {
+                  case (asOf, (laterAsOf, _)) => (asOf, laterAsOf)
+                } init
 
-            val asOfsAndSharedRevisionTriples = (for {
-              ((earlierAsOfCorrespondingToRevision,
-                laterAsOfComingNoLaterThanAnySucceedingRevision),
-               revision) <- asOfPairs zip revisions
-              laterAsOfSharingTheSameRevisionAsTheEarlierOne = earlierAsOfCorrespondingToRevision plusSeconds random
-                .chooseAnyNumberFromZeroToOneLessThan(
-                  earlierAsOfCorrespondingToRevision.until(
-                    laterAsOfComingNoLaterThanAnySucceedingRevision,
-                    ChronoUnit.SECONDS))
-            } yield
-              (earlierAsOfCorrespondingToRevision,
-               laterAsOfSharingTheSameRevisionAsTheEarlierOne,
-               revision)) filter (PartialFunction.cond(_) {
-              case (earlierAsOfCorrespondingToRevision,
-                    laterAsOfSharingTheSameRevisionAsTheEarlierOne,
-                    _) =>
-                earlierAsOfCorrespondingToRevision isBefore laterAsOfSharingTheSameRevisionAsTheEarlierOne
-            })
+              val asOfsAndSharedRevisionTriples = (for {
+                ((earlierAsOfCorrespondingToRevision,
+                  laterAsOfComingNoLaterThanAnySucceedingRevision),
+                 revision) <- asOfPairs zip revisions
+                laterAsOfSharingTheSameRevisionAsTheEarlierOne = earlierAsOfCorrespondingToRevision plusSeconds random
+                  .chooseAnyNumberFromZeroToOneLessThan(
+                    earlierAsOfCorrespondingToRevision.until(
+                      laterAsOfComingNoLaterThanAnySucceedingRevision,
+                      ChronoUnit.SECONDS))
+              } yield
+                (earlierAsOfCorrespondingToRevision,
+                 laterAsOfSharingTheSameRevisionAsTheEarlierOne,
+                 revision)) filter (PartialFunction.cond(_) {
+                case (earlierAsOfCorrespondingToRevision,
+                      laterAsOfSharingTheSameRevisionAsTheEarlierOne,
+                      _) =>
+                  earlierAsOfCorrespondingToRevision isBefore laterAsOfSharingTheSameRevisionAsTheEarlierOne
+              })
 
               val checks =
                 for {
-              (earlierAsOfCorrespondingToRevision,
-               laterAsOfSharingTheSameRevisionAsTheEarlierOne,
-               revision) <- asOfsAndSharedRevisionTriples
-              baselineScope = world
-                .scopeFor(queryWhen, earlierAsOfCorrespondingToRevision)
-              scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne = world
-                .scopeFor(queryWhen,
-                          laterAsOfSharingTheSameRevisionAsTheEarlierOne)
-              NonExistentRecordings(historyId, historiesFrom, _) <- recordingsGroupedById flatMap (_.doesNotExistAt(
-                queryWhen))
-              if (historiesFrom(baselineScope).isEmpty) // It might not be, because we may be at an 'asOf' before the annihilation was introduced.
-            } yield
-              (historyId,
-               historiesFrom,
-               baselineScope,
-               scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne)
+                  (earlierAsOfCorrespondingToRevision,
+                   laterAsOfSharingTheSameRevisionAsTheEarlierOne,
+                   revision) <- asOfsAndSharedRevisionTriples
+                  baselineScope = world
+                    .scopeFor(queryWhen, earlierAsOfCorrespondingToRevision)
+                  scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne = world
+                    .scopeFor(queryWhen,
+                              laterAsOfSharingTheSameRevisionAsTheEarlierOne)
+                  NonExistentRecordings(historyId, historiesFrom, _) <- recordingsGroupedById flatMap (_.doesNotExistAt(
+                    queryWhen))
+                  if (historiesFrom(baselineScope).isEmpty) // It might not be, because we may be at an 'asOf' before the annihilation was introduced.
+                } yield
+                  (historyId,
+                   historiesFrom,
+                   baselineScope,
+                   scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne)
 
               if (checks.nonEmpty)
-              Prop.all(checks.map {
+                Prop.all(checks.map {
                   case (
                       historyId,
                       historiesFrom,
                       baselineScope,
                       scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne) =>
-                  (historiesFrom(
-                    scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne).isEmpty) :| s"For ${historyId}, neither scope should yield a history."
-              }: _*)
+                    (historiesFrom(
+                      scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne).isEmpty) :| s"For ${historyId}, neither scope should yield a history."
+                }: _*)
               else Prop.undecided
           }
       })
@@ -720,6 +720,7 @@ trait WorldBehaviours
                   scope) if referringHistory.referencedDatums.contains(
                   referencedHistoryId) && !referringHistory
                   .referencedHistories(referencedHistoryId)
+                  .asInstanceOf[ItemExtensionApi]
                   .isGhost
               } yield
                 (referringHistoryId,
@@ -806,6 +807,7 @@ trait WorldBehaviours
                   scope) if referringHistory.referencedDatums.contains(
                   referencedHistoryId) && !referringHistory
                   .referencedHistories(referencedHistoryId)
+                  .asInstanceOf[ItemExtensionApi]
                   .isGhost
               } yield (referringHistoryId, referencedHistoryId)
 
@@ -981,50 +983,51 @@ trait WorldBehaviours
          queryWhen)
       check(
         Prop.forAllNoShrink(testCaseGenerator) {
-        case (worldResource,
-              referencedHistoryRecordingsGroupedById,
-              referringHistoryRecordingsGroupedById,
-              bigShuffledHistoryOverLotsOfThings,
-              asOfs,
-              queryWhen) =>
-          worldResource acquireAndGet {
-            world =>
-              recordEventsInWorld(
-                liftRecordings(bigShuffledHistoryOverLotsOfThings),
+          case (worldResource,
+                referencedHistoryRecordingsGroupedById,
+                referringHistoryRecordingsGroupedById,
+                bigShuffledHistoryOverLotsOfThings,
                 asOfs,
-                world)
+                queryWhen) =>
+            worldResource acquireAndGet {
+              world =>
+                recordEventsInWorld(
+                  liftRecordings(bigShuffledHistoryOverLotsOfThings),
+                  asOfs,
+                  world)
 
-              val scope = world.scopeFor(queryWhen, world.nextRevision)
+                val scope = world.scopeFor(queryWhen, world.nextRevision)
 
-              val checks: List[(Any, History)] =
-                for {
-                  RecordingsNoLaterThan(
-                    referringHistoryId,
-                    referringHistoriesFrom,
-                    _,
-                    _,
-                    _) <- referringHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(
-                    queryWhen))
-                  NonExistentRecordings(
-                    referencedHistoryId,
-                    referencedHistoriesFrom,
-                    _) <- referencedHistoryRecordingsGroupedById flatMap (_.doesNotExistAt(
-                    queryWhen))
-                  Seq(referringHistory: ReferringHistory) = referringHistoriesFrom(
-                    scope) if referringHistory.referencedDatums.contains(
-                    referencedHistoryId) && !referringHistory
-                    .referencedHistories(referencedHistoryId)
-                    .isGhost
-                  Seq(referencedHistory) = referencedHistoriesFrom(scope)
-                } yield (referencedHistoryId, referencedHistory)
+                val checks: List[(Any, History)] =
+                  for {
+                    RecordingsNoLaterThan(
+                      referringHistoryId,
+                      referringHistoriesFrom,
+                      _,
+                      _,
+                      _) <- referringHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(
+                      queryWhen))
+                    NonExistentRecordings(
+                      referencedHistoryId,
+                      referencedHistoriesFrom,
+                      _) <- referencedHistoryRecordingsGroupedById flatMap (_.doesNotExistAt(
+                      queryWhen))
+                    Seq(referringHistory: ReferringHistory) = referringHistoriesFrom(
+                      scope) if referringHistory.referencedDatums.contains(
+                      referencedHistoryId) && !referringHistory
+                      .referencedHistories(referencedHistoryId)
+                      .asInstanceOf[ItemExtensionApi]
+                      .isGhost
+                    Seq(referencedHistory) = referencedHistoriesFrom(scope)
+                  } yield (referencedHistoryId, referencedHistory)
 
                 if (checks.nonEmpty)
-              Prop.all(checks.map {
-                case (historyId, actualHistory) =>
-                  (actualHistory.datums.isEmpty :| s"For ${historyId}, the datums: ${actualHistory.datums} was supposed to be empty")
-              }: _*)
+                  Prop.all(checks.map {
+                    case (historyId, actualHistory) =>
+                      (actualHistory.datums.isEmpty :| s"For ${historyId}, the datums: ${actualHistory.datums} was supposed to be empty")
+                  }: _*)
                 else Prop.undecided
-          }
+            }
         },
         minSuccessful(12),
         maxSize(5)
@@ -1290,8 +1293,10 @@ trait WorldBehaviours
                     Bitemporal.withId[ReferringHistory](theReferrerId))
                   val ghostItem =
                     referringHistory.referencedHistories(referencedHistoryId)
-                  val idOfGhost  = ghostItem.id      // It's OK to ask a ghost what its name is.
-                  val itIsAGhost = ghostItem.isGhost // It's OK to ask a ghost to prove its ghostliness.
+                  val idOfGhost = ghostItem.id // It's OK to ask a ghost what its name is.
+                  val itIsAGhost = ghostItem
+                    .asInstanceOf[ItemExtensionApi]
+                    .isGhost // It's OK to ask a ghost to prove its ghostliness.
                   intercept[RuntimeException] {
                     ghostItem.datums // It's not OK to ask any other questions - it will just go 'Whooh' at you.
                   }

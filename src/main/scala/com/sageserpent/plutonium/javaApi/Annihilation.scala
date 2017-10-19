@@ -3,14 +3,13 @@ package com.sageserpent.plutonium.javaApi
 import java.time.Instant
 
 import com.sageserpent.plutonium.{
-  Annihilation => ScalaAnnihilation,
-  Identified,
-  typeTagForClass
+  typeTagForClass,
+  Annihilation => ScalaAnnihilation
 }
 
 object Annihilation {
-  def apply[Item <: Identified](definiteWhen: Instant,
-                                id: Item#Id,
+  def apply[Item](definiteWhen: Instant,
+                  id: Any,
                                 clazz: Class[Item]): ScalaAnnihilation[Item] =
     ScalaAnnihilation(definiteWhen, id)(typeTagForClass(clazz))
 }

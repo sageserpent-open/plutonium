@@ -43,8 +43,8 @@ class WorldEfficientInMemoryImplementation[EventId]
     override def render[Item](bitemporal: Bitemporal[Item]): Stream[Item] =
       itemCache().render(bitemporal)
 
-    override def numberOf[Item <: Identified: TypeTag](id: Item#Id): Revision =
-      itemCache().numberOf(id)
+    override def numberOf[Item](bitemporal: Bitemporal[Item]): Revision =
+      itemCache().numberOf(bitemporal)
   }
 
   override def scopeFor(when: Unbounded[Instant],
