@@ -26,13 +26,9 @@ import scala.reflect.runtime.universe
 import scala.reflect.runtime.universe._
 import scala.util.Random
 
-trait IdentifiedByAnInteger {
-  val id: Int // TODO - do we need this?
-}
+trait OneKindOfThing
 
-trait IdentifiedByAString {
-  val id: String // TODO - do we need this?
-}
+trait AnotherKindOfThing
 
 class BlobStorageSpec
     extends FlatSpec
@@ -42,11 +38,15 @@ class BlobStorageSpec
     with NoShrinking {
   type EventId = Int
 
+  def mixedIdGenerator(disambiguation: Int) =
+    Gen.oneOf(integerIdGenerator map (disambiguation + 2 * _),
+              stringIdGenerator map (_ + s"_$disambiguation"))
+
   val uniqueItemSpecificationGenerator =
     Gen.oneOf(
-      integerIdGenerator map (_ -> typeTag[IdentifiedByAnInteger]) map (_.asInstanceOf[
+      mixedIdGenerator(0) map (_ -> typeTag[OneKindOfThing]) map (_.asInstanceOf[
         UniqueItemSpecification[_]]),
-      stringIdGenerator map (_ -> typeTag[IdentifiedByAString]) map (_.asInstanceOf[
+      mixedIdGenerator(1) map (_ -> typeTag[AnotherKindOfThing]) map (_.asInstanceOf[
         UniqueItemSpecification[_]])
     )
 
