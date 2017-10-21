@@ -1,22 +1,16 @@
 package com.sageserpent.plutonium.javaApi.examples;
 
-import com.sageserpent.plutonium.Identified;
-
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
-public abstract class PackageHolder extends Identified {
+public abstract class PackageHolder {
     private Set<PackageItem> packageItems = new HashSet<>();
     private String location;
 
-    @Override
     public abstract String id();
 
-    @Override
     public void checkInvariant() {
-        super.checkInvariant();
-
         for (PackageItem packageItem : packageItems()) {
             final PackageHolder holder = packageItem.holder();
             if (holder != this) {

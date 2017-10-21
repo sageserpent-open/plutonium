@@ -32,7 +32,7 @@ trait WorldBehaviours
     fail("If I am not supposed to exist, why is something asking for me?")
   }
 
-  abstract class NonExistentIdentified extends Identified {
+  abstract class NonExistentHistory extends History {
     override type Id = NonExistentId
   }
 
@@ -46,7 +46,7 @@ trait WorldBehaviours
         worldResource.acquireAndGet(world =>
           world.scopeFor(when = when, asOf = asOf))
       check(Prop.forAllNoShrink(scopeGenerator)((scope: Scope) => {
-        val exampleBitemporal = Bitemporal.wildcard[NonExistentIdentified]()
+        val exampleBitemporal = Bitemporal.wildcard[NonExistentHistory]()
 
         scope.render(exampleBitemporal).isEmpty
       }))
@@ -723,6 +723,7 @@ trait WorldBehaviours
                   scope) if referringHistory.referencedDatums.contains(
                   referencedHistoryId) && !referringHistory
                   .referencedHistories(referencedHistoryId)
+                  .asInstanceOf[ItemExtensionApi]
                   .isGhost
               } yield
                 (referringHistoryId,
@@ -809,6 +810,7 @@ trait WorldBehaviours
                   scope) if referringHistory.referencedDatums.contains(
                   referencedHistoryId) && !referringHistory
                   .referencedHistories(referencedHistoryId)
+                  .asInstanceOf[ItemExtensionApi]
                   .isGhost
               } yield (referringHistoryId, referencedHistoryId)
 
@@ -1017,6 +1019,7 @@ trait WorldBehaviours
                       scope) if referringHistory.referencedDatums.contains(
                       referencedHistoryId) && !referringHistory
                       .referencedHistories(referencedHistoryId)
+                      .asInstanceOf[ItemExtensionApi]
                       .isGhost
                     Seq(referencedHistory) = referencedHistoriesFrom(scope)
                   } yield (referencedHistoryId, referencedHistory)
@@ -1293,8 +1296,10 @@ trait WorldBehaviours
                     Bitemporal.withId[ReferringHistory](theReferrerId))
                   val ghostItem =
                     referringHistory.referencedHistories(referencedHistoryId)
-                  val idOfGhost  = ghostItem.id      // It's OK to ask a ghost what its name is.
-                  val itIsAGhost = ghostItem.isGhost // It's OK to ask a ghost to prove its ghostliness.
+                  val idOfGhost = ghostItem.id // It's OK to ask a ghost what its name is.
+                  val itIsAGhost = ghostItem
+                    .asInstanceOf[ItemExtensionApi]
+                    .isGhost // It's OK to ask a ghost to prove its ghostliness.
                   intercept[RuntimeException] {
                     ghostItem.datums // It's not OK to ask any other questions - it will just go 'Whooh' at you.
                   }

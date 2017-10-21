@@ -22,17 +22,12 @@ The package holder is modelled as bidirectional many-to-one association from pac
 
 Finally, there is an optional invariant on its state that captures business logic constraints that we don't want to break in a correct system too. We don't have to define this if there are no rules to model (or we don't care if they are broken).
 
-The superclass `Identified` confers the notion of an id and an invariant on `PackageItem` - apart from that, there is no other intrusion of Plutonium into the client code.
-
 Note how `id` is left abstract (and therefore so is `PackageItem`) - other then defining the type of the id, there is no need to implement it; Plutonium will take care of that for us.
 
 ```java
 package com.sageserpent.plutonium.javaApi.examples;
 
-import com.sageserpent.plutonium.Identified;
-
-
-public abstract class PackageItem extends Identified {
+public abstract class PackageItem {
     private PackageHolder holder;
     private String intendedDestination;
     private String actualDestination;
@@ -40,13 +35,9 @@ public abstract class PackageItem extends Identified {
     private double valuePaid = 0.0;
     private boolean isWrongItem = false;
 
-    @Override
     public abstract String id();
 
-    @Override
     public void checkInvariant() {
-        super.checkInvariant();
-
         if (isHeld() && !holder.packageItems().contains(this)) {
             throw new RuntimeException(
                     "Holder does not know it is holding this package item.");
@@ -172,28 +163,22 @@ public abstract class PackageItem extends Identified {
 #### Domain model: _`PackageHolder`_ ####
 This represents things such as warehouses and delivery vans, where package items are held. If you looked carefully at the previous `PackageItem`, you would have seen that once a package item is delivered, it is no longer considered to be held. This reflects the fact that from the point of view of the business selling the item, once it has been sold and delivered, there is no resposibility for tracking where it is - the packaging will hopefully be recycled and the contents will be the property of the customer, to be used / consumed / presented as a gift / sold on according to their whim. `PackageItem` does have a delivery address property though, which is handy if the item needs be picked up for return in case of refund.
 
-It too has `Identified` as a superclass and defines an id (again, left abstract) and invariant.
+It too defines an id (again, left abstract) and invariant.
 
 ```java
 package com.sageserpent.plutonium.javaApi.examples;
-
-import com.sageserpent.plutonium.Identified;
 
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
-public abstract class PackageHolder extends Identified {
+public abstract class PackageHolder {
     private Set<PackageItem> packageItems = new HashSet<>();
     private String location;
 
-    @Override
     public abstract String id();
 
-    @Override
     public void checkInvariant() {
-        super.checkInvariant();
-
         for (PackageItem packageItem : packageItems()) {
             final PackageHolder holder = packageItem.holder();
             if (holder != this) {
@@ -237,7 +222,6 @@ package com.sageserpent.plutonium.javaApi.examples;
 
 import com.google.common.collect.ImmutableMap;
 import com.lambdaworks.redis.RedisClient;
-import com.sageserpent.americium.Finite;
 import com.sageserpent.americium.NegativeInfinity;
 import com.sageserpent.americium.PositiveInfinity;
 import com.sageserpent.plutonium.*;
@@ -272,7 +256,7 @@ public class DeliveringPackages {
                     world.scopeFor(PositiveInfinity.apply(), Instant.now()
                                    /*As-of time that picks out the revision
                                    .*/);
-            assert scope.render(Bitemporal.wildcard(Identified.class))
+            assert scope.render(Bitemporal.wildcard(Object.class))
                     .isEmpty();
         }
 
@@ -285,11 +269,10 @@ public class DeliveringPackages {
         {
             world.revise("Define warehouse",
                          Change.forOneItem(warehouseName, PackageHolder.class,
-                                           warehouse -> {
-                                               warehouse.setLocation(
-                                                       "Big warehouse by " +
-                                                               "motorway");
-                                           }), Instant.now() /*As-of time
+                                           warehouse -> warehouse.setLocation(
+                                                   "Big warehouse by " +
+                                                           "motorway")),
+                         Instant.now() /*As-of time
                                            for the revision.*/);
 
             {
@@ -299,7 +282,7 @@ public class DeliveringPackages {
                                 .now() /*As-of time that picks out the
                                 revision.*/);
                 assert "Big warehouse by motorway".equals(scope.render(
-                        Bitemporal.singleOneOf(warehouseName,
+                        Bitemporal.withId(warehouseName,
                                                PackageHolder.class)).head()
                                                                   .getLocation());
             }
@@ -329,15 +312,15 @@ public class DeliveringPackages {
         {
             // Make a query at the point in time when the event took place...
             final Scope scope = world.scopeFor(
-                    Finite.apply(Instant.parse("2016-12-03T00:00:00Z")),
+                    Instant.parse("2016-12-03T00:00:00Z"),
                     Instant.now() /*As-of time that picks out the revision
                     .*/);
             assert "Big warehouse by motorway".equals(scope.render(
-                    Bitemporal.singleOneOf(
+                    Bitemporal.withId(
                             warehouseName,
                             PackageHolder.class)).head().getLocation());
             assert "SuperTron HiPlasmatic Telly".equals(scope.render(
-                    Bitemporal.singleOneOf("Package #1", PackageItem.class))
+                    Bitemporal.withId("Package #1", PackageItem.class))
                                                                 .head()
                                                                 .getContents());
         }
@@ -437,15 +420,15 @@ public class DeliveringPackages {
         {
             // Make a query at the point in time when the event took place...
             final Scope scope = world.scopeFor(
-                    Finite.apply(Instant.parse("2016-12-03T00:00:00Z")),
+                    Instant.parse("2016-12-03T00:00:00Z"),
                     Instant.now() /*As-of time that picks out the revision
                     .*/);
             assert "Big warehouse by motorway".equals(scope.render(
-                    Bitemporal.singleOneOf(
+                    Bitemporal.withId(
                             warehouseName,
                             PackageHolder.class)).head().getLocation());
             assert "Krasster kipper ties".equals(scope.render(
-                    Bitemporal.singleOneOf("Package #1", PackageItem.class))
+                    Bitemporal.withId("Package #1", PackageItem.class))
                                                          .head()
                                                          .getContents());
         }
@@ -461,7 +444,7 @@ public class DeliveringPackages {
         // order of time, we'll do this here to add more information to our
         // record of past events. Also note that events in a revision can
         // occur at different times - a revision of the world is a revision
-        // of our *knowledge* about its entire historical record, not just 
+        // of our *knowledge* about its entire historical record, not just
         // a log entry for a single event.
 
         {
@@ -527,11 +510,11 @@ public class DeliveringPackages {
 
         {
             final Scope scope = world.scopeFor(
-                    Finite.apply(Instant.parse("2016-12-09T01:00:00Z")),
+                    Instant.parse("2016-12-09T01:00:00Z"),
                     Instant.now() /*As-of time that picks out the revision
                     .*/);
             assert "JA10 PIE".equals(scope.render(
-                    Bitemporal.singleOneOf("Package #3", PackageItem.class))
+                    Bitemporal.withId("Package #3", PackageItem.class))
                                              .head().holder().id());
         }
 
@@ -540,11 +523,11 @@ public class DeliveringPackages {
 
         {
             final Scope scope = world.scopeFor(
-                    Finite.apply(Instant.parse("2016-12-09T01:00:00Z")),
+                    Instant.parse("2016-12-09T01:00:00Z"),
                     Instant.now() /*As-of time that picks out the revision
                     .*/);
             assert warehouseName.equals(scope.render(
-                    Bitemporal.singleOneOf("Package #3", PackageItem.class))
+                    Bitemporal.withId("Package #3", PackageItem.class))
                                                 .head().holder().id());
         }
 
@@ -552,11 +535,11 @@ public class DeliveringPackages {
         /*
             Resulting console output:-
 
-            Location for: Package #3 is:-
+            Location for: Package #3(SuperTron Connoisseur Music System.) is:-
             Big warehouse by motorway
-            Location for: Package #2 is:-
+            Location for: Package #2(SuperTron HiPlasmatic Telly) is:-
             Big warehouse by motorway
-            Location for: Package #1 is:-
+            Location for: Package #1(Krasster kipper ties) is:-
             Big warehouse by motorway
             Payments received for items awaiting delivery is: 1100.0
         */
@@ -565,7 +548,7 @@ public class DeliveringPackages {
             // Use the revision-based overload here to make a scope that
             // will include the latest revision of the world.
             final Scope scope = world.scopeFor(
-                    Finite.apply(Instant.parse("2016-12-10T07:00:00Z")),
+                    Instant.parse("2016-12-10T07:00:00Z"),
                     world.nextRevision());
 
             // Where are the items now?
@@ -577,7 +560,8 @@ public class DeliveringPackages {
             for (PackageItem packageItem : scope
                     .renderAsIterable(packageItemsBitemporal)) {
                 System.out.println(
-                        "Location for: " + packageItem.id() + " is:-");
+                        "Location for: " + packageItem.id() + "(" +
+                                packageItem.getContents() + ") is:-");
                 if (packageItem.hasBeenDelivered()) {
                     System.out.println(packageItem.actualDestination());
                 } else {
@@ -669,9 +653,9 @@ Now that second question isn't going to be swept under the carpet so easily - I 
 
 The answer is that Plutonium will ensure that the runtime type will always be the right sort for the event's lambda to work with without causing a runtime type violation, and it will do so in such a way that _no information is lost_. In other words, it won't feed a Superclass instance to an earlier event and then perform a C++-style 'slice' on the result, passing a SubClass instance to the following event with the potential loss of state. In fact, it will ensure that all of the events referring to an object will when executed all get to see the same runtime type of the object that is a greatest lower bound of all the types used to refer to it across the events - in this case, SubClass. That doesn't mean to say that it will re-run all of these events in succession though, or even that those that execute will work on the same instance in memory. But the runtime type will be the best possible fit that accomodates all of the events in the _object's entire timeline_.
 
-This is one of the reasons why events use ids - they can refer to objects in the world without forcing client code to worry about managing an explicit object lifecycle or about exact runtime types. Instead, the id serves as a placeholder, stitching together the relevant events that help define the object and when it exists in the world's timeline. All objects referred in events (and in basic queries) have to have an id, this is enforced in the API by having the object types as subclasses of `Identified`, which defined an abstract `id` getter method.
+This is one of the reasons why events use ids - they can refer to objects in the world without forcing client code to worry about managing an explicit object lifecycle or about exact runtime types. Instead, the id serves as a placeholder, stitching together the relevant events that help define the object and when it exists in the world's timeline. Each object referred to in an event (and in a basic query) is associated with an id. Furthermore, if the object's class defines an abstract `id` getter method, then Plutonium will obligingly arrange for calls to that `id` method on that object to yield the associated id.
 
-Any concrete class directly extending `Identified` has to provide an implementation of `Identified.id` and is free to refine the type of the id to be a string, integer, or whatever makes sense. The id must be established by a one-argument constructor, and cannot be subsequently changed.
+Note that if the `id` method is declared (which we generally expect to be the case), then the type of the id may be declared to be a string, integer, or whatever makes sense. Client code may not set this value; there is no setter.
 
 Up above, I mentioned that an event is free to call any public mutative method on the objects passed to its lambda. What do I mean when I say 'mutative'? The common-sense answer is 'a method that makes a state change', but what does that really mean? Suppose client code calls a query method that does an expensive computation on an object - the object's implementing class might cache the result in the object, thus causing a change in the memory area used by the object; or maybe a change in a privately-referenced related object, such as a hash-map used as a cache. These aren't really state changes in the sense of real-world objects changing, and we would not want these to be considered as such by Plutonium.
 
