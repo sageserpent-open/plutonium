@@ -53,7 +53,11 @@ class ItemStateStorageSpec extends FlatSpec with Matchers with Checkers {
     Prop.forAllNoShrink(markMapGenerator) { markMap =>
       val graphNodes: Seq[GraphNode] = buildGraphFrom(markMap)
 
-      println(graphNodes.toList)
+      println(graphNodes.map(_.toString).mkString("\n"))
+
+      println("---------------------------")
+
+      Prop.proved
 
       val emptyItemStateStorage = new ItemStateStorage
 
@@ -79,7 +83,7 @@ class ItemStateStorageSpec extends FlatSpec with Matchers with Checkers {
       val nodesHaveTheSameStructure =
         Prop.all(graphNodes zip individuallyReconstitutedGraphNodes map {
           case (original, reconstituted) =>
-            (original.toString == reconstituted) :| s"Reconstituted node: $reconstituted should have the same structure as original node: $original."
+            (original.toString == reconstituted.toString) :| s"Reconstituted node: $reconstituted should have the same structure as original node: $original."
         }: _*)
 
       val nodesReachableFromReconstitutedNodesGroupedByMark = individuallyReconstitutedGraphNodes flatMap (_.reachableNodes()) groupBy (_.mark)
@@ -121,8 +125,8 @@ trait GraphNode {
         (((alreadyVisited + this) -> Seq.empty[String]) /: referencedNodes)(
           (accumulated, graphNodeItem) =>
             graphNodeItem.traverseGraph(accumulated))
-      (visited + this) ->
-        (prefixOfResult :+ s"mark: $mark referred: (${texts.mkString(",")})")
+      visited ->
+        (prefixOfResult :+ s"mark: $mark refers to: (${texts.mkString(",")})")
     } else alreadyVisited -> (prefixOfResult :+ s"mark: $mark ALREADY SEEN")
   }
 
