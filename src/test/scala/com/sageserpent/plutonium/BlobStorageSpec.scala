@@ -20,9 +20,7 @@ import org.scalatest.LoneElement._
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{FlatSpec, Matchers}
 
-import scala.collection.immutable
 import scala.math.Ordering.ordered
-import scala.reflect.runtime.universe
 import scala.reflect.runtime.universe._
 import scala.util.Random
 
@@ -42,13 +40,9 @@ class BlobStorageSpec
     Gen.oneOf(integerIdGenerator map (disambiguation + 2 * _),
               stringIdGenerator map (_ + s"_$disambiguation"))
 
-  val uniqueItemSpecificationGenerator =
-    Gen.oneOf(
-      mixedIdGenerator(0) map (_ -> typeTag[OneKindOfThing]) map (_.asInstanceOf[
-        UniqueItemSpecification[_]]),
-      mixedIdGenerator(1) map (_ -> typeTag[AnotherKindOfThing]) map (_.asInstanceOf[
-        UniqueItemSpecification[_]])
-    )
+  val uniqueItemSpecificationGenerator: Gen[UniqueItemSpecification] =
+    Gen.oneOf(mixedIdGenerator(0) map (_ -> typeTag[OneKindOfThing]),
+              mixedIdGenerator(1) map (_ -> typeTag[AnotherKindOfThing]))
 
   val blobGenerator: Gen[SnapshotBlob] =
     Gen.containerOf[Array, Byte](Arbitrary.arbByte.arbitrary)
@@ -56,7 +50,7 @@ class BlobStorageSpec
   val blobsGenerator: Gen[List[SnapshotBlob]] =
     Gen.nonEmptyListOf(blobGenerator)
 
-  case class TimeSeries(uniqueItemSpecification: UniqueItemSpecification[_],
+  case class TimeSeries(uniqueItemSpecification: UniqueItemSpecification,
                         snapshots: Seq[(Unbounded[Instant], SnapshotBlob)],
                         queryTimes: Seq[Unbounded[Instant]]) {
     require(queryTimes zip snapshots.init.map(_._1) forall {
@@ -125,8 +119,7 @@ class BlobStorageSpec
         .fill(rightPaddingAmount)(PositiveInfinity[Instant])
   }
 
-  def timeSeriesGeneratorFor(
-      uniqueItemSpecification: UniqueItemSpecification[_]) =
+  def timeSeriesGeneratorFor(uniqueItemSpecification: UniqueItemSpecification) =
     for {
       snapshotBlobs <- blobsGenerator
       twiceTheNumberOfSnapshots = 2 * snapshotBlobs.size
@@ -145,7 +138,7 @@ class BlobStorageSpec
 
   val lotsOfTimeSeriesGenerator: Gen[Seq[TimeSeries]] =
     Gen
-      .nonEmptyContainerOf[Set, UniqueItemSpecification[_]](
+      .nonEmptyContainerOf[Set, UniqueItemSpecification](
         uniqueItemSpecificationGenerator) map (_.toSeq) flatMap (
         uniqueItemSpecifications =>
           Gen.sequence[Seq[TimeSeries], TimeSeries](
@@ -155,7 +148,7 @@ class BlobStorageSpec
       randomBehaviour: Random,
       lotsOfTimeSeries: Seq[TimeSeries],
       forceUseOfAnOverlappingType: Boolean = false): Seq[
-    (Unbounded[Instant], Seq[(UniqueItemSpecification[_], SnapshotBlob)])] = {
+    (Unbounded[Instant], Seq[(UniqueItemSpecification, SnapshotBlob)])] = {
     val lotsOfTimeSeriesWithoutTheQueryTimeCruft = lotsOfTimeSeries map {
       case TimeSeries(uniqueItemSpecification, snapshots, _) =>
         uniqueItemSpecification -> snapshots
@@ -175,8 +168,8 @@ class BlobStorageSpec
 
     // Put the duplicating time series first, as these are the ones that we want the
     // sut to disregard on account of them being booked in first at the same time.
-    val lotsOfTimeSeriesWithSomeDuplicates: Seq[
-      (UniqueItemSpecification[_], Seq[(Unbounded[Instant], Array[Byte])])] =
+    val lotsOfTimeSeriesWithSomeDuplicates
+      : Seq[(UniqueItemSpecification, Seq[(Unbounded[Instant], Array[Byte])])] =
       timeSeriesWhoseSnapshotsWillCollide ++ lotsOfTimeSeriesWithoutTheQueryTimeCruft
 
     val forceUseOfAnOverlappingTypeDecisions = {
@@ -203,15 +196,10 @@ class BlobStorageSpec
           }
           snapshots zip decisionsToForceOverlappingType map {
             case (snapshot, decision) =>
-              def wildcardCaptureWorkaround[Something](
-                  uniqueItemSpecification: UniqueItemSpecification[Something]) =
-                if (decision)
-                  uniqueItemSpecification
-                    .copy(_2 = typeTag[Any])
-                    .asInstanceOf[UniqueItemSpecification[Something]]
-                else uniqueItemSpecification
-
-              wildcardCaptureWorkaround(uniqueItemSpecification) -> snapshot
+              (if (decision)
+                 uniqueItemSpecification
+                   .copy(_2 = typeTag[Any])
+               else uniqueItemSpecification) -> snapshot
           }
       }
 
@@ -231,7 +219,7 @@ class BlobStorageSpec
 
   private type ScalaFmtWorkaround =
     Seq[(Option[(Unbounded[Instant],
-                 Seq[(UniqueItemSpecification[_], SnapshotBlob)])],
+                 Seq[(UniqueItemSpecification, SnapshotBlob)])],
          EventId)]
 
   def blobStorageFrom(revisions: Seq[ScalaFmtWorkaround]) =
@@ -283,26 +271,25 @@ class BlobStorageSpec
         } {
           val timeSlice = blobStorage.timeSlice(queryTime)
 
-          def checkExpectations[PreciseType: TypeTag](
-              uniqueItemSpecification: UniqueItemSpecification[PreciseType]) = {
+          def checkExpectations(
+              uniqueItemSpecification: UniqueItemSpecification) = {
             val id              = uniqueItemSpecification._1
             val explicitTypeTag = uniqueItemSpecification._2
 
             val allRetrievedUniqueItemSpecifications =
-              timeSlice.uniqueItemQueriesFor[PreciseType](explicitTypeTag)
+              timeSlice.uniqueItemQueriesFor(explicitTypeTag)
 
             allRetrievedUniqueItemSpecifications map (_._1) should contain(id)
 
             val retrievedUniqueItemSpecifications =
-              timeSlice.uniqueItemQueriesFor[PreciseType](id)(explicitTypeTag)
+              timeSlice.uniqueItemQueriesFor(id)(explicitTypeTag)
 
             retrievedUniqueItemSpecifications.loneElement._1 shouldBe id
 
             assert(
               retrievedUniqueItemSpecifications.loneElement._2.tpe <:< explicitTypeTag.tpe)
 
-            val theRetrievedUniqueItemSpecification
-              : UniqueItemSpecification[_ <: PreciseType] =
+            val theRetrievedUniqueItemSpecification: UniqueItemSpecification =
               retrievedUniqueItemSpecifications.head
 
             val retrievedSnapshotBlob: SnapshotBlob =
@@ -315,7 +302,7 @@ class BlobStorageSpec
 
           checkExpectations(
             (uniqueItemSpecification._1 -> typeTag[Any])
-              .asInstanceOf[UniqueItemSpecification[Any]])
+              .asInstanceOf[UniqueItemSpecification])
         }
     }
   }

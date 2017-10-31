@@ -118,22 +118,23 @@ object BlobStorageInMemory {
     new BlobStorageInMemory[EventId](
       revision = 0,
       eventRevisions = Map.empty[EventId, Revision],
-      lifecycles = Map.empty[UniqueItemSpecification[_], Lifecycle[EventId]]
+      lifecycles = Map.empty[UniqueItemSpecification, Lifecycle[EventId]]
     )
 }
 
 case class BlobStorageInMemory[EventId] private (
     val revision: BlobStorageInMemory.Revision,
     val eventRevisions: Map[EventId, BlobStorageInMemory.Revision],
-    val lifecycles: Map[UniqueItemSpecification[_],
+    val lifecycles: Map[UniqueItemSpecification,
                         BlobStorageInMemory.Lifecycle[EventId]])
     extends BlobStorage[EventId] {
   thisBlobStorage =>
+  import BlobStorage._
 
   override def timeSlice(when: Unbounded[Instant]): Timeslice = {
     trait TimesliceImplementation extends Timeslice {
       override def uniqueItemQueriesFor[Item: TypeTag]
-        : Stream[UniqueItemSpecification[_ <: Item]] =
+        : Stream[UniqueItemSpecification] =
         lifecycles
           .filter {
             case ((_, itemTypeTag), lifecycle) =>
@@ -142,10 +143,10 @@ case class BlobStorageInMemory[EventId] private (
           }
           .keys
           .toStream
-          .asInstanceOf[Stream[UniqueItemSpecification[_ <: Item]]]
+          .asInstanceOf[Stream[UniqueItemSpecification]]
 
       override def uniqueItemQueriesFor[Item: TypeTag](
-          id: Any): Stream[UniqueItemSpecification[_ <: Item]] =
+          id: Any): Stream[UniqueItemSpecification] =
         lifecycles
           .filter {
             case ((itemId, itemTypeTag), lifecycle) =>
@@ -155,11 +156,10 @@ case class BlobStorageInMemory[EventId] private (
           }
           .keys
           .toStream
-          .asInstanceOf[Stream[UniqueItemSpecification[_ <: Item]]]
+          .asInstanceOf[Stream[UniqueItemSpecification]]
 
-      override def snapshotBlobFor[Item](
-          uniqueItemSpecification: UniqueItemSpecification[Item])
-        : SnapshotBlob =
+      override def snapshotBlobFor(
+          uniqueItemSpecification: UniqueItemSpecification): SnapshotBlob =
         lifecycles(uniqueItemSpecification)
           .snapshotBlobFor(when, eventRevisions.apply)
     }
@@ -171,8 +171,8 @@ case class BlobStorageInMemory[EventId] private (
     trait RevisionBuilderImplementation extends RevisionBuilder {
       type Event =
         (EventId,
-         Option[(Unbounded[Instant],
-                 Map[UniqueItemSpecification[_], SnapshotBlob])])
+         Option[
+           (Unbounded[Instant], Map[UniqueItemSpecification, SnapshotBlob])])
 
       val events = mutable.MutableList.empty[Event]
 
@@ -183,8 +183,7 @@ case class BlobStorageInMemory[EventId] private (
       override def recordSnapshotBlobsForEvent(
           eventId: EventId,
           when: Unbounded[Instant],
-          snapshotBlobs: Map[UniqueItemSpecification[_], SnapshotBlob])
-        : Unit = {
+          snapshotBlobs: Map[UniqueItemSpecification, SnapshotBlob]): Unit = {
         events += eventId -> Some(when -> snapshotBlobs)
       }
 

@@ -8,10 +8,29 @@ import scala.collection.mutable
 import scala.reflect.runtime.universe.TypeTag
 
 object BlobStorage {
-  type UniqueItemSpecification[Item] =
-    (Any, TypeTag[Item])
+  type UniqueItemSpecification =
+    (Any, TypeTag[_ <: Any])
 
   type SnapshotBlob = Array[Byte]
+
+  trait Timeslice {
+    def uniqueItemQueriesFor[Item: TypeTag]: Stream[UniqueItemSpecification]
+    def uniqueItemQueriesFor[Item: TypeTag](
+        id: Any): Stream[UniqueItemSpecification]
+
+    def snapshotBlobFor(
+        uniqueItemSpecification: UniqueItemSpecification): SnapshotBlob
+  }
+
+  trait TimesliceContracts extends Timeslice {
+    abstract override def snapshotBlobFor(
+        uniqueItemSpecification: UniqueItemSpecification): SnapshotBlob = {
+      require(
+        uniqueItemQueriesFor(uniqueItemSpecification._1)(
+          uniqueItemSpecification._2).nonEmpty)
+      super.snapshotBlobFor(uniqueItemSpecification)
+    }
+  }
 }
 
 trait BlobStorage[EventId] { blobStorage =>
@@ -25,7 +44,7 @@ trait BlobStorage[EventId] { blobStorage =>
     def recordSnapshotBlobsForEvent(
         eventId: EventId,
         when: Unbounded[Instant],
-        snapshotBlobs: Map[UniqueItemSpecification[_], SnapshotBlob]): Unit
+        snapshotBlobs: Map[UniqueItemSpecification, SnapshotBlob]): Unit
 
     def annulEvent(eventId: EventId)
 
@@ -39,7 +58,7 @@ trait BlobStorage[EventId] { blobStorage =>
     abstract override def recordSnapshotBlobsForEvent(
         eventId: EventId,
         when: Unbounded[Instant],
-        snapshotBlobs: Map[UniqueItemSpecification[_], SnapshotBlob]): Unit = {
+        snapshotBlobs: Map[UniqueItemSpecification, SnapshotBlob]): Unit = {
       require(!eventIds.contains(eventId))
       eventIds += eventId
       super.recordSnapshotBlobsForEvent(eventId, when, snapshotBlobs)
@@ -53,27 +72,6 @@ trait BlobStorage[EventId] { blobStorage =>
   }
 
   def openRevision(): RevisionBuilder
-
-  trait Timeslice {
-    def uniqueItemQueriesFor[Item: TypeTag]
-      : Stream[UniqueItemSpecification[_ <: Item]]
-    def uniqueItemQueriesFor[Item: TypeTag](
-        id: Any): Stream[UniqueItemSpecification[_ <: Item]]
-
-    def snapshotBlobFor[Item](
-        uniqueItemSpecification: UniqueItemSpecification[Item]): SnapshotBlob
-  }
-
-  trait TimesliceContracts extends Timeslice {
-    abstract override def snapshotBlobFor[Item](
-        uniqueItemSpecification: UniqueItemSpecification[Item])
-      : SnapshotBlob = {
-      require(
-        uniqueItemQueriesFor(uniqueItemSpecification._1)(
-          uniqueItemSpecification._2).nonEmpty)
-      super.snapshotBlobFor(uniqueItemSpecification)
-    }
-  }
 
   def timeSlice(when: Unbounded[Instant]): Timeslice
 }

@@ -1,13 +1,15 @@
 package com.sageserpent.plutonium
 
-import com.sageserpent.americium.NegativeInfinity
+import com.sageserpent.plutonium.BlobStorage.{
+  SnapshotBlob,
+  UniqueItemSpecification
+}
+import org.scalacheck.Prop.BooleanOperators
 import org.scalacheck.{Gen, Prop}
-import Prop.BooleanOperators
 import org.scalatest.prop.Checkers
 import org.scalatest.{FlatSpec, Matchers}
-import com.sageserpent.plutonium.{
-  ItemStateStorage => IncompleteItemStateStorage
-}
+
+import scala.reflect.runtime.universe._
 
 object MarkSyntax {
   implicit class MarkEnrichment(mark: Int) {
@@ -43,10 +45,6 @@ class ItemStateStorageSpec extends FlatSpec with Matchers with Checkers {
     nodes.values.toSeq
   }
 
-  class ItemStateStorage extends IncompleteItemStateStorage[Int] {
-    val blobStorage: BlobStorage[Int] = ???
-  }
-
   // TODO - 'allItems' versus 'itemsFor'.
 
   "An item" should "be capable of being roundtripped by reconstituting its snapshot" in check(
@@ -55,21 +53,30 @@ class ItemStateStorageSpec extends FlatSpec with Matchers with Checkers {
 
       println(graphNodes.map(_.toString).mkString("\n"))
 
-      println("---------------------------")
+      val snapshotBlobs: Map[UniqueItemSpecification, SnapshotBlob] =
+        graphNodes map (node =>
+          (node.id match {
+            case oddId: String => oddId   -> typeTag[OddGraphNode]
+            case eventId: Int  => eventId -> typeTag[EvenGraphNode]
+          }) -> ItemStateStorage
+            .snapshotFor(node)) toMap
 
-      Prop.proved
+      val stubTimeslice = new BlobStorage.Timeslice {
+        override def uniqueItemQueriesFor[Item: TypeTag]
+          : Stream[UniqueItemSpecification] = snapshotBlobs.keys.toStream
 
-      val emptyItemStateStorage = new ItemStateStorage
+        override def uniqueItemQueriesFor[Item: TypeTag](
+            id: Any): Stream[UniqueItemSpecification] =
+          snapshotBlobs.keys.filter(_._1 == id).toStream
 
-      val revisionBuilder = emptyItemStateStorage.openRevision()
+        override def snapshotBlobFor(
+            uniqueItemSpecification: UniqueItemSpecification): SnapshotBlob =
+          snapshotBlobs(uniqueItemSpecification)
+      }
 
-      // TODO - vary the event id and time of booking. Consider multiple revisions too...
-      revisionBuilder.recordSnapshotsForEvent(0, NegativeInfinity(), graphNodes)
-
-      val itemStateStorage = revisionBuilder.build()
-
-      val reconstitutionContext =
-        itemStateStorage.newContext(NegativeInfinity())
+      val reconstitutionContext = new ItemStateStorage.ReconstitutionContext() {
+        override val blobStorageTimeslice = stubTimeslice
+      }
 
       val individuallyReconstitutedGraphNodes = graphNodes.flatMap(_.id match {
         case oddId: String =>
