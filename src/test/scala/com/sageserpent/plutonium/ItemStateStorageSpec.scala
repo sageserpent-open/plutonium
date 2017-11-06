@@ -93,12 +93,12 @@ class ItemStateStorageSpec extends FlatSpec with Matchers with Checkers {
             (original.toString == reconstituted.toString) :| s"Reconstituted node: $reconstituted should have the same structure as original node: $original."
         }: _*)
 
-      val nodesReachableFromReconstitutedNodesGroupedByMark = individuallyReconstitutedGraphNodes flatMap (_.reachableNodes()) groupBy (_.mark)
+      val nodesReachableFromReconstitutedNodesGroupedById = individuallyReconstitutedGraphNodes flatMap (_.reachableNodes()) groupBy (_.id)
 
       val nodesShareIdentityAcrossDistinctReconstitutionCalls =
-        Prop.all((nodesReachableFromReconstitutedNodesGroupedByMark map {
-          case (mark, nodes) =>
-            (1 == nodes.distinct.size) :| s"All of: $nodes for mark: $mark should reference the same node instance - hash codes are: ${nodes map (_.hashCode())}."
+        Prop.all((nodesReachableFromReconstitutedNodesGroupedById map {
+          case (id, nodes) =>
+            (1 == nodes.distinct.size) :| s"All of: $nodes for id: $id should reference the same node instance - hash codes are: ${nodes map (_.hashCode())}."
         }).toSeq: _*)
 
       noNodesAreGainedOrLost && nodesHaveTheSameStructure && nodesShareIdentityAcrossDistinctReconstitutionCalls
@@ -133,8 +133,8 @@ trait GraphNode {
           (accumulated, graphNodeItem) =>
             graphNodeItem.traverseGraph(accumulated))
       visited ->
-        (prefixOfResult :+ s"mark: $mark refers to: (${texts.mkString(",")})")
-    } else alreadyVisited -> (prefixOfResult :+ s"mark: $mark ALREADY SEEN")
+        (prefixOfResult :+ s"id: $id refers to: (${texts.mkString(",")})")
+    } else alreadyVisited -> (prefixOfResult :+ s"id: $id ALREADY SEEN")
   }
 
   override def toString =
