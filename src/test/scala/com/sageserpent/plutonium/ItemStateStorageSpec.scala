@@ -9,6 +9,7 @@ import org.scalacheck.{Gen, Prop}
 import org.scalatest.prop.Checkers
 import org.scalatest.{FlatSpec, Matchers}
 
+import scala.collection.immutable.TreeSet
 import scala.reflect.runtime.universe._
 
 object MarkSyntax {
@@ -78,12 +79,14 @@ class ItemStateStorageSpec extends FlatSpec with Matchers with Checkers {
         override val blobStorageTimeslice = stubTimeslice
       }
 
-      val individuallyReconstitutedGraphNodes = graphNodes.flatMap(_.id match {
-        case oddId: String =>
-          reconstitutionContext.itemsFor[OddGraphNode](oddId)
-        case evenId: Int =>
-          reconstitutionContext.itemsFor[EvenGraphNode](evenId)
-      })
+      val individuallyReconstitutedGraphNodes = graphNodes
+        .flatMap(_.id match {
+          case oddId: String =>
+            reconstitutionContext.itemsFor[OddGraphNode](oddId)
+          case evenId: Int =>
+            reconstitutionContext.itemsFor[EvenGraphNode](evenId)
+        })
+        .toList
 
       val noNodesAreGainedOrLost = (individuallyReconstitutedGraphNodes.size == graphNodes.size) :| s"Expected to have: ${graphNodes.size} reconstituted nodes, but got: ${individuallyReconstitutedGraphNodes.size}."
 
@@ -105,15 +108,21 @@ class ItemStateStorageSpec extends FlatSpec with Matchers with Checkers {
     })
 }
 
+object GraphNode {
+  val noGraphNodes = TreeSet.empty[GraphNode](Ordering.by(_.mark))
+}
+
 trait GraphNode {
+  import GraphNode._
+
   type Id
 
   val id: Id
 
-  private var _referencedNodes = Set.empty[GraphNode]
+  private var _referencedNodes = noGraphNodes
 
-  def referencedNodes: Set[GraphNode] = _referencedNodes
-  def referencedNodes_=(value: Set[GraphNode]): Unit = {
+  def referencedNodes: TreeSet[GraphNode] = _referencedNodes
+  def referencedNodes_=(value: TreeSet[GraphNode]): Unit = {
     _referencedNodes = value
     checkInvariant()
   }
@@ -124,8 +133,8 @@ trait GraphNode {
 
   def mark: Int
 
-  protected def traverseGraph(accumulated: (Set[GraphNode], Seq[String]))
-    : (Set[GraphNode], Seq[String]) = {
+  protected def traverseGraph(accumulated: (TreeSet[GraphNode], Seq[String]))
+    : (TreeSet[GraphNode], Seq[String]) = {
     val (alreadyVisited, prefixOfResult) = accumulated
     if (!alreadyVisited.contains(this)) {
       val (visited, texts) =
@@ -138,9 +147,9 @@ trait GraphNode {
   }
 
   override def toString =
-    traverseGraph(Set.empty[GraphNode] -> Seq.empty)._2.head
+    traverseGraph(noGraphNodes -> Seq.empty)._2.head
 
-  def reachableNodes() = traverseGraph(Set.empty[GraphNode] -> Seq.empty)._1
+  def reachableNodes() = traverseGraph(noGraphNodes -> Seq.empty)._1
 }
 
 class OddGraphNode(override val id: OddGraphNode#Id) extends GraphNode {
