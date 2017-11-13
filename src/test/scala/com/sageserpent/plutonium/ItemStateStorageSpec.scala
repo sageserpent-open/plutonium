@@ -52,6 +52,8 @@ class ItemStateStorageSpec extends FlatSpec with Matchers with Checkers {
     Prop.forAllNoShrink(markMapGenerator) { markMap =>
       val graphNodes: Seq[GraphNode] = buildGraphFrom(markMap)
 
+      println("------------------------------------------------------")
+
       println(graphNodes.map(_.toString).mkString("\n"))
 
       val snapshotBlobs: Map[UniqueItemSpecification, SnapshotBlob] =
@@ -112,7 +114,7 @@ object GraphNode {
   val noGraphNodes = TreeSet.empty[GraphNode](Ordering.by(_.mark))
 }
 
-trait GraphNode {
+trait GraphNode extends ItemExtensionApi {
   import GraphNode._
 
   type Id
@@ -163,6 +165,8 @@ class OddGraphNode(override val id: OddGraphNode#Id) extends GraphNode {
     require(!mark.isEven)
     require(referencedNodes forall (_.mark.isEven))
   }
+
+  override def isGhost = false
 }
 
 class EvenGraphNode(override val id: EvenGraphNode#Id) extends GraphNode {
@@ -176,4 +180,6 @@ class EvenGraphNode(override val id: EvenGraphNode#Id) extends GraphNode {
     require(mark.isEven)
     require(referencedNodes forall (!_.mark.isEven))
   }
+
+  override def isGhost = false
 }
