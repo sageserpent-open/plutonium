@@ -6,7 +6,8 @@ import com.esotericsoftware.kryo.factories.{
 }
 import com.esotericsoftware.kryo.io.{Input, Output}
 import com.esotericsoftware.kryo.serializers.{FieldSerializer, JavaSerializer}
-import com.esotericsoftware.kryo.{Kryo, Serializer}
+import com.esotericsoftware.kryo.util.ListReferenceResolver
+import com.esotericsoftware.kryo.{Kryo, ReferenceResolver, Serializer}
 import com.twitter.chill.{KryoBase, KryoPool, ScalaKryoInstantiator}
 
 import scala.collection.mutable
@@ -17,7 +18,8 @@ object ItemStateStorage {
   import BlobStorage._
 
   val accessToReconstitutionContext =
-    new DynamicVariable[Option[ReconstitutionContext]](None)
+    new DynamicVariable[Option[(Option[ReconstitutionContext],
+                                ReferenceResolver)]](None)
 
   val kryoPoolForRootReferences =
     KryoPool.withByteArrayOutputStream(
@@ -27,7 +29,11 @@ object ItemStateStorage {
           val defaultSerializerFactory =
             new ReflectionSerializerFactory(classOf[FieldSerializer[_]])
 
+          val referenceResolver = reconstitutionContext._2
+
           val kryo = super.newKryo()
+
+          kryo.setReferenceResolver(referenceResolver)
 
           kryo.setDefaultSerializer(defaultSerializerFactory)
 
@@ -53,20 +59,18 @@ object ItemStateStorage {
                   val itemId =
                     kryo.readClassAndObject(input)
                   val itemTypeTag = typeTagForClass(
-                    kryo
-                      .readObject(input, classOf[Class[_]], javaSerializer))
+                    kryo.readObject(input, classOf[Class[_]], javaSerializer))
 
-                  val instance = accessToReconstitutionContext.value.get
-                    .itemFor(itemId -> itemTypeTag)
+                  val instance: ItemExtensionApi =
+                    reconstitutionContext._1.get
+                      .itemFor[ItemExtensionApi](itemId -> itemTypeTag)
                   kryo.reference(instance)
                   instance
-                } else {
-                  val instance = kryoForFallbackSerializers
+                } else
+                  kryoForFallbackSerializers
                     .getSerializer(itemType)
                     .asInstanceOf[Serializer[ItemExtensionApi]]
                     .read(kryo, input, itemType)
-                  instance
-                }
               }
 
               override def write(kryo: Kryo,
@@ -89,15 +93,18 @@ object ItemStateStorage {
 
           kryo
         }
-
-        private def reconstitutionContext[T] = {
-          accessToReconstitutionContext.value.get
-        }
       }
     )
 
+  private def reconstitutionContext = {
+    accessToReconstitutionContext.value.get
+  }
+
   def snapshotFor[Item: TypeTag](item: Item): SnapshotBlob =
-    kryoPoolForRootReferences.toBytesWithClass(item)
+    accessToReconstitutionContext.withValue(
+      Some(None -> new ListReferenceResolver)) {
+      kryoPoolForRootReferences.toBytesWithClass(item)
+    }
 
   trait ReconstitutionContext extends ItemCache {
     val blobStorageTimeslice: BlobStorage.Timeslice // NOTE: abstracting this allows the prospect of a 'moving' timeslice for use when executing an update plan.
@@ -121,9 +128,12 @@ object ItemStateStorage {
             val snapshot =
               blobStorageTimeslice.snapshotBlobFor(uniqueItemSpecification)
 
-            accessToReconstitutionContext.withValue(Some(this)) {
-              kryoPoolForRootReferences.fromBytes(snapshot)
-            }
+            if (accessToReconstitutionContext.value.isEmpty)
+              accessToReconstitutionContext.withValue(
+                Some(Some(this) -> new ListReferenceResolver)) {
+                kryoPoolForRootReferences.fromBytes(snapshot)
+              } else kryoPoolForRootReferences.fromBytes(snapshot)
+
           }
         )
         .asInstanceOf[Item]
