@@ -9,13 +9,88 @@ import org.scalacheck.{Gen, Prop}
 import org.scalatest.prop.Checkers
 import org.scalatest.{FlatSpec, Matchers}
 
-import scala.collection.immutable.TreeSet
 import scala.reflect.runtime.universe._
 
 object MarkSyntax {
   implicit class MarkEnrichment(mark: Int) {
     def isEven = 0 == mark % 2
   }
+}
+
+object GraphNode {
+  implicit val ordering = Ordering.by[GraphNode, Int](_.mark)
+  val noGraphNodes      = Set.empty[GraphNode]
+}
+
+trait GraphNode extends ItemExtensionApi {
+  import GraphNode._
+
+  type Id
+
+  val id: Id
+
+  private var _referencedNodes: Set[GraphNode] = noGraphNodes
+
+  def referencedNodes: Set[GraphNode] = _referencedNodes
+  def referencedNodes_=(value: Set[GraphNode]): Unit = {
+    _referencedNodes = value
+    checkInvariant()
+  }
+
+  def checkInvariant(): Unit
+
+  private var _mark: Int = 0
+
+  def mark: Int
+
+  protected def traverseGraph(accumulated: (Set[GraphNode], Seq[String]))
+    : (Set[GraphNode], Seq[String]) = {
+    val (alreadyVisited, prefixOfResult) = accumulated
+    if (!alreadyVisited.contains(this)) {
+      val (visited, texts) =
+        (((alreadyVisited + this) -> Seq
+          .empty[String]) /: referencedNodes.toSeq.sorted)(
+          (accumulated, graphNodeItem) =>
+            graphNodeItem.traverseGraph(accumulated))
+      visited ->
+        (prefixOfResult :+ s"id: $id refers to: (${texts.mkString(",")})")
+    } else alreadyVisited -> (prefixOfResult :+ s"id: $id ALREADY SEEN")
+  }
+
+  override def toString =
+    traverseGraph(noGraphNodes -> Seq.empty)._2.head
+
+  def reachableNodes() = traverseGraph(noGraphNodes -> Seq.empty)._1
+}
+
+class OddGraphNode(override val id: OddGraphNode#Id) extends GraphNode {
+  import MarkSyntax._
+
+  override type Id = String
+
+  override def mark: Int = id.toInt
+
+  override def checkInvariant(): Unit = {
+    require(!mark.isEven)
+    require(referencedNodes forall (_.mark.isEven))
+  }
+
+  override def isGhost = false
+}
+
+class EvenGraphNode(override val id: EvenGraphNode#Id) extends GraphNode {
+  import MarkSyntax._
+
+  override type Id = Int
+
+  override def mark: Int = id
+
+  override def checkInvariant(): Unit = {
+    require(mark.isEven)
+    require(referencedNodes forall (!_.mark.isEven))
+  }
+
+  override def isGhost = false
 }
 
 class ItemStateStorageSpec extends FlatSpec with Matchers with Checkers {
@@ -48,11 +123,15 @@ class ItemStateStorageSpec extends FlatSpec with Matchers with Checkers {
 
   // TODO - 'allItems' versus 'itemsFor'.
 
+  var count = 0
+
   "An item" should "be capable of being roundtripped by reconstituting its snapshot" in check(
     Prop.forAllNoShrink(markMapGenerator) { markMap =>
       val graphNodes: Seq[GraphNode] = buildGraphFrom(markMap)
 
       println("------------------------------------------------------")
+      println(count)
+      count += 1
 
       println(graphNodes.map(_.toString).mkString("\n"))
 
@@ -107,79 +186,7 @@ class ItemStateStorageSpec extends FlatSpec with Matchers with Checkers {
         }).toSeq: _*)
 
       noNodesAreGainedOrLost && nodesHaveTheSameStructure && nodesShareIdentityAcrossDistinctReconstitutionCalls
-    })
-}
-
-object GraphNode {
-  val noGraphNodes = TreeSet.empty[GraphNode](Ordering.by(_.mark))
-}
-
-trait GraphNode extends ItemExtensionApi {
-  import GraphNode._
-
-  type Id
-
-  val id: Id
-
-  private var _referencedNodes = noGraphNodes
-
-  def referencedNodes: TreeSet[GraphNode] = _referencedNodes
-  def referencedNodes_=(value: TreeSet[GraphNode]): Unit = {
-    _referencedNodes = value
-    checkInvariant()
-  }
-
-  def checkInvariant(): Unit
-
-  private var _mark: Int = 0
-
-  def mark: Int
-
-  protected def traverseGraph(accumulated: (TreeSet[GraphNode], Seq[String]))
-    : (TreeSet[GraphNode], Seq[String]) = {
-    val (alreadyVisited, prefixOfResult) = accumulated
-    if (!alreadyVisited.contains(this)) {
-      val (visited, texts) =
-        (((alreadyVisited + this) -> Seq.empty[String]) /: referencedNodes)(
-          (accumulated, graphNodeItem) =>
-            graphNodeItem.traverseGraph(accumulated))
-      visited ->
-        (prefixOfResult :+ s"id: $id refers to: (${texts.mkString(",")})")
-    } else alreadyVisited -> (prefixOfResult :+ s"id: $id ALREADY SEEN")
-  }
-
-  override def toString =
-    traverseGraph(noGraphNodes -> Seq.empty)._2.head
-
-  def reachableNodes() = traverseGraph(noGraphNodes -> Seq.empty)._1
-}
-
-class OddGraphNode(override val id: OddGraphNode#Id) extends GraphNode {
-  import MarkSyntax._
-
-  override type Id = String
-
-  override def mark: Int = id.toInt
-
-  override def checkInvariant(): Unit = {
-    require(!mark.isEven)
-    require(referencedNodes forall (_.mark.isEven))
-  }
-
-  override def isGhost = false
-}
-
-class EvenGraphNode(override val id: EvenGraphNode#Id) extends GraphNode {
-  import MarkSyntax._
-
-  override type Id = Int
-
-  override def mark: Int = id
-
-  override def checkInvariant(): Unit = {
-    require(mark.isEven)
-    require(referencedNodes forall (!_.mark.isEven))
-  }
-
-  override def isGhost = false
+    },
+    MinSuccessful(100)
+  )
 }
