@@ -2,27 +2,27 @@ package com.sageserpent.plutonium
 
 import java.io.ByteArrayOutputStream
 
-import com.esotericsoftware.kryo.factories.{
-  ReflectionSerializerFactory,
-  SerializerFactory
-}
+import com.esotericsoftware.kryo.factories.ReflectionSerializerFactory
 import com.esotericsoftware.kryo.io.{Input, Output}
 import com.esotericsoftware.kryo.pool.{KryoFactory, KryoPool}
 import com.esotericsoftware.kryo.serializers.{FieldSerializer, JavaSerializer}
-import com.esotericsoftware.kryo.util.ListReferenceResolver
-import com.esotericsoftware.kryo.{Kryo, ReferenceResolver, Serializer}
+import com.esotericsoftware.kryo.{Kryo, Serializer}
 import com.twitter.chill.{KryoBase, ScalaKryoInstantiator}
-
-import scala.collection.mutable
-import scala.reflect.runtime.universe.TypeTag
-import scala.util.DynamicVariable
+import org.objenesis.instantiator.ObjectInstantiator
+import org.objenesis.strategy.InstantiatorStrategy
 import resource._
 
+import scala.collection.mutable
 import scala.reflect.runtime.universe
-import scalaz.{-\/, \/, \/-}
+import scala.reflect.runtime.universe.TypeTag
+import scala.util.DynamicVariable
 
 object ItemStateStorage {
   import BlobStorage._
+
+  implicit class KryoEnhancement(val kryo: Kryo) extends AnyVal {
+    def isDealingWithTopLevelObject = 1 == kryo.getDepth
+  }
 
   val itemDeserializationThreadContextAccess =
     new DynamicVariable[
@@ -38,8 +38,7 @@ object ItemStateStorage {
       override def read(kryo: Kryo,
                         input: Input,
                         itemType: Class[ItemExtensionApi]): ItemExtensionApi = {
-        val isForAnInterItemReference = 1 < kryo.getDepth
-        if (isForAnInterItemReference) {
+        if (!kryo.isDealingWithTopLevelObject) {
           val itemId =
             kryo.readClassAndObject(input)
           val itemTypeTag = typeTagForClass(
@@ -47,12 +46,7 @@ object ItemStateStorage {
 
           val instance: ItemExtensionApi =
             itemFor[ItemExtensionApi](itemId -> itemTypeTag)
-          //TODO - do I need this, or is it taken care of in the recursive deserialization that uses the shared reference resolver?
-          // Come to think of it, if we store ids, how would we know if they align from completely separate serializations of several
-          // items?
-          //kryo.reference(instance)
-          // TODO - reinstate the previous line and use some kind of chaining between reference resolvers that works with separate pools of ids
-          // from distinct serializations - so there is some kind of translation of ids or sharing of the same object reference under more than one id?
+          kryo.reference(instance)
           instance
         } else
           defaultSerializerFactory
@@ -64,8 +58,7 @@ object ItemStateStorage {
       override def write(kryo: Kryo,
                          output: Output,
                          item: ItemExtensionApi): Unit = {
-        val isForAnInterItemReference = 1 < kryo.getDepth
-        if (isForAnInterItemReference) {
+        if (!kryo.isDealingWithTopLevelObject) {
           kryo.writeClassAndObject(output, item.id)
           kryo.writeObject(output, item.getClass, javaSerializer)
         } else
@@ -77,6 +70,9 @@ object ItemStateStorage {
     }
   }
 
+  val originalInstantiatorStrategy =
+    new ScalaKryoInstantiator().newKryo().getInstantiatorStrategy
+
   val kryoInstantiator = new ScalaKryoInstantiator {
     override def newKryo(): KryoBase = {
       val kryo = super.newKryo()
@@ -84,13 +80,31 @@ object ItemStateStorage {
       kryo.addDefaultSerializer(
         classOf[ItemExtensionApi],
         serializerThatDirectlyEncodesInterItemReferences)
-      kryo.setAutoReset(false) // Prevent resets of kryo instances used by recursive deserialization, otherwise the shared reference resolver will be reset too early.
+      val instantiatorStrategy =
+        new InstantiatorStrategy {
+          override def newInstantiatorOf[T](
+              clazz: Class[T]): ObjectInstantiator[T] =
+            new ObjectInstantiator[T] {
+              val underlyingInstantiator =
+                originalInstantiatorStrategy.newInstantiatorOf[T](clazz)
+
+              override def newInstance() = {
+                val instance = underlyingInstantiator.newInstance()
+                if (kryo.isDealingWithTopLevelObject) {
+                  store(instance)
+                }
+                instance
+              }
+            }
+        }
+      kryo.setInstantiatorStrategy(instantiatorStrategy)
       kryo
     }
   }
 
   val kryoFactory: KryoFactory = () => kryoInstantiator.newKryo()
 
+  // TODO - go back to using the Chill KryoPool?
   val kryoPool = new KryoPool.Builder(kryoFactory).softReferences().build()
 
   def snapshotFor[Item: TypeTag](item: Item): SnapshotBlob =
@@ -99,10 +113,7 @@ object ItemStateStorage {
         List.empty)
       output <- makeManagedResource(new Output(stream))(_.close)(List.empty)
       kryo <- makeManagedResource {
-        val kryo = kryoPool.borrow()
-        kryo.reset()
-        kryo.setReferenceResolver(new ListReferenceResolver)
-        kryo
+        kryoPool.borrow()
       }(kryoPool.release)(List.empty)
     } yield {
       kryo.writeClassAndObject(output, item)
@@ -114,6 +125,10 @@ object ItemStateStorage {
       uniqueItemSpecification: UniqueItemSpecification): Item =
     itemDeserializationThreadContextAccess.value.get
       .itemFor(uniqueItemSpecification)
+
+  def store(item: Any) =
+    itemDeserializationThreadContextAccess.value.get
+      .store(item)
 
   trait ReconstitutionContext extends ItemCache {
     val blobStorageTimeslice: BlobStorage.Timeslice // NOTE: abstracting this allows the prospect of a 'moving' timeslice for use when executing an update plan.
@@ -137,12 +152,15 @@ object ItemStateStorage {
     }
 
     class ItemDeserializationThreadContext {
-      val referenceResolver = new ListReferenceResolver()
+      foo =>
 
-      private[ItemStateStorage] def itemFor[Item: TypeTag](
+      val uniqueItemSpecificationAccess =
+        new DynamicVariable[Option[UniqueItemSpecification]](None)
+
+      def itemFor[Item: TypeTag](
           uniqueItemSpecification: UniqueItemSpecification): Item = {
         storage
-          .getOrElseUpdate(
+          .getOrElse(
             uniqueItemSpecification, {
               val snapshot =
                 blobStorageTimeslice.snapshotBlobFor(uniqueItemSpecification)
@@ -152,20 +170,23 @@ object ItemStateStorage {
                   input <- makeManagedResource(new Input(snapshot))(_.close)(
                     List.empty)
                   kryo <- makeManagedResource {
-                    val kryo = kryoPool.borrow()
-                    kryo.reset()
-                    kryo.setReferenceResolver(referenceResolver)
-                    kryo
+                    kryoPool.borrow()
                   }(kryoPool.release)(List.empty)
-                } yield {
-                  kryo.readClassAndObject(input)
-                }).acquireAndGet(identity)
+                } yield
+                  uniqueItemSpecificationAccess.withValue(
+                    Some(uniqueItemSpecification)) {
+                    kryo.readClassAndObject(input)
+                  }).acquireAndGet(identity)
 
               itemFromSnapshot(snapshot)
             }
           )
           .asInstanceOf[Item]
       }
+
+      private[ItemStateStorage] def store(item: Any) =
+        storage.update(uniqueItemSpecificationAccess.value.get, item)
+
     }
 
     class Storage extends mutable.HashMap[UniqueItemSpecification, Any]
