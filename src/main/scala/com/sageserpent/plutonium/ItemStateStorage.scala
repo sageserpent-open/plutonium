@@ -3,6 +3,7 @@ package com.sageserpent.plutonium
 import com.esotericsoftware.kryo.factories.ReflectionSerializerFactory
 import com.esotericsoftware.kryo.io.{Input, Output}
 import com.esotericsoftware.kryo.serializers.{FieldSerializer, JavaSerializer}
+import com.esotericsoftware.kryo.util.ObjectMap
 import com.esotericsoftware.kryo.{Kryo, Serializer}
 import com.twitter.chill.{KryoBase, KryoPool, ScalaKryoInstantiator}
 import org.objenesis.instantiator.ObjectInstantiator
@@ -14,11 +15,8 @@ import scala.reflect.runtime.universe.TypeTag
 import scala.util.DynamicVariable
 
 object ItemStateStorage {
+  itemStateStorageObject =>
   import BlobStorage._
-
-  implicit class KryoEnhancement(val kryo: Kryo) extends AnyVal {
-    def isDealingWithTopLevelObject = 1 == kryo.getDepth
-  }
 
   val itemDeserializationThreadContextAccess =
     new DynamicVariable[
@@ -26,6 +24,24 @@ object ItemStateStorage {
 
   val defaultSerializerFactory =
     new ReflectionSerializerFactory(classOf[FieldSerializer[_]])
+
+  implicit class KryoEnhancement(val kryo: Kryo) extends AnyVal {
+    def isDealingWithTopLevelObject = 1 == kryo.getDepth
+
+    // NOTE: we have to cache the serializer so that it remains associated with the Kryo instance it was created with - this is because some of the Kryo serializers
+    // stash a permanent reference to the kryo instance rather than pick it up from the chain of calls resulting from an initial (de)serialization. The field
+    // and argument references *must* refer to the same Kryo instance though, otherwise things will go wrong.
+    def underlyingSerializerFor(clazz: Class[_]) = {
+      val context = kryo.getContext.asInstanceOf[ObjectMap[Any, Any]] // Ugh! This will work in practice because the type parameters to 'ObjectMap' are a lie anyway.
+      val key     = clazz -> itemStateStorageObject
+      if (context.containsKey(key)) context.get(key)
+      else {
+        val serializer = defaultSerializerFactory.makeSerializer(kryo, clazz)
+        context.put(key, serializer)
+        serializer
+      }
+    }
+  }
 
   val serializerThatDirectlyEncodesInterItemReferences = {
     new Serializer[ItemExtensionApi] {
@@ -45,8 +61,8 @@ object ItemStateStorage {
           kryo.reference(instance)
           instance
         } else
-          defaultSerializerFactory
-            .makeSerializer(kryo, itemType) // TODO - cache these serializers.
+          kryo
+            .underlyingSerializerFor(itemType)
             .asInstanceOf[Serializer[ItemExtensionApi]]
             .read(kryo, input, itemType)
       }
@@ -58,8 +74,8 @@ object ItemStateStorage {
           kryo.writeClassAndObject(output, item.id)
           kryo.writeObject(output, item.getClass, javaSerializer)
         } else
-          defaultSerializerFactory
-            .makeSerializer(kryo, item.getClass) // TODO - cache these serializers.
+          kryo
+            .underlyingSerializerFor(item.getClass)
             .asInstanceOf[Serializer[ItemExtensionApi]]
             .write(kryo, output, item)
       }
