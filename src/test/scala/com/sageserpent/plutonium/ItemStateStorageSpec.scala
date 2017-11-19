@@ -127,7 +127,7 @@ class ItemStateStorageSpec extends FlatSpec with Matchers with Checkers {
 
   "An item" should "be capable of being roundtripped by reconstituting its snapshot" in check(
     Prop.forAllNoShrink(markMapGenerator) { markMap =>
-      val graphNodes: Seq[GraphNode] = buildGraphFrom(markMap)
+      val graphNodes: Seq[GraphNode] = buildGraphFrom(markMap).sorted
 
       println("------------------------------------------------------")
       println(count)
