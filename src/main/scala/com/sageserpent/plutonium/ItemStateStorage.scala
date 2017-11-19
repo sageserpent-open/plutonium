@@ -1,16 +1,12 @@
 package com.sageserpent.plutonium
 
-import java.io.ByteArrayOutputStream
-
 import com.esotericsoftware.kryo.factories.ReflectionSerializerFactory
 import com.esotericsoftware.kryo.io.{Input, Output}
-import com.esotericsoftware.kryo.pool.{KryoFactory, KryoPool}
 import com.esotericsoftware.kryo.serializers.{FieldSerializer, JavaSerializer}
 import com.esotericsoftware.kryo.{Kryo, Serializer}
-import com.twitter.chill.{KryoBase, ScalaKryoInstantiator}
+import com.twitter.chill.{KryoBase, KryoPool, ScalaKryoInstantiator}
 import org.objenesis.instantiator.ObjectInstantiator
 import org.objenesis.strategy.InstantiatorStrategy
-import resource._
 
 import scala.collection.mutable
 import scala.reflect.runtime.universe
@@ -102,24 +98,10 @@ object ItemStateStorage {
     }
   }
 
-  val kryoFactory: KryoFactory = () => kryoInstantiator.newKryo()
-
-  // TODO - go back to using the Chill KryoPool?
-  val kryoPool = new KryoPool.Builder(kryoFactory).softReferences().build()
+  val kryoPool = KryoPool.withByteArrayOutputStream(40, kryoInstantiator)
 
   def snapshotFor[Item: TypeTag](item: Item): SnapshotBlob =
-    (for {
-      stream <- makeManagedResource(new ByteArrayOutputStream)(_.close)(
-        List.empty)
-      output <- makeManagedResource(new Output(stream))(_.close)(List.empty)
-      kryo <- makeManagedResource {
-        kryoPool.borrow()
-      }(kryoPool.release)(List.empty)
-    } yield {
-      kryo.writeClassAndObject(output, item)
-      output.flush()
-      stream.toByteArray
-    }).acquireAndGet(identity)
+    kryoPool.toBytesWithClass(item)
 
   def itemFor[Item: TypeTag](
       uniqueItemSpecification: UniqueItemSpecification): Item =
@@ -152,8 +134,6 @@ object ItemStateStorage {
     }
 
     class ItemDeserializationThreadContext {
-      foo =>
-
       val uniqueItemSpecificationAccess =
         new DynamicVariable[Option[UniqueItemSpecification]](None)
 
@@ -166,17 +146,10 @@ object ItemStateStorage {
                 blobStorageTimeslice.snapshotBlobFor(uniqueItemSpecification)
 
               def itemFromSnapshot(snapshot: SnapshotBlob) =
-                (for {
-                  input <- makeManagedResource(new Input(snapshot))(_.close)(
-                    List.empty)
-                  kryo <- makeManagedResource {
-                    kryoPool.borrow()
-                  }(kryoPool.release)(List.empty)
-                } yield
-                  uniqueItemSpecificationAccess.withValue(
-                    Some(uniqueItemSpecification)) {
-                    kryo.readClassAndObject(input)
-                  }).acquireAndGet(identity)
+                uniqueItemSpecificationAccess.withValue(
+                  Some(uniqueItemSpecification)) {
+                  kryoPool.fromBytes(snapshot)
+                }
 
               itemFromSnapshot(snapshot)
             }
