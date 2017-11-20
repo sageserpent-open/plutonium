@@ -14,7 +14,7 @@ import scala.reflect.runtime.universe
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.DynamicVariable
 
-object ItemStateStorage {
+trait ItemStateStorage {
   itemStateStorageObject =>
   import BlobStorage._
 
@@ -25,7 +25,7 @@ object ItemStateStorage {
   val defaultSerializerFactory =
     new ReflectionSerializerFactory(classOf[FieldSerializer[_]])
 
-  implicit class KryoEnhancement(val kryo: Kryo) extends AnyVal {
+  implicit def kryoEnhancement(kryo: Kryo) = new AnyRef {
     def isDealingWithTopLevelObject = 1 == kryo.getDepth
 
     // NOTE: we have to cache the serializer so that it remains associated with the Kryo instance it was created with - this is because some of the Kryo serializers
@@ -145,7 +145,7 @@ object ItemStateStorage {
         uniqueItemSpecification: (Any, universe.TypeTag[_])) = {
       itemDeserializationThreadContextAccess.withValue(
         Some(new ItemDeserializationThreadContext)) {
-        ItemStateStorage.itemFor(uniqueItemSpecification)
+        itemStateStorageObject.itemFor(uniqueItemSpecification)
       }
     }
 

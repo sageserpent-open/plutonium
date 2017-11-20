@@ -125,6 +125,8 @@ class ItemStateStorageSpec extends FlatSpec with Matchers with Checkers {
 
   var count = 0
 
+  object itemStateStorage extends ItemStateStorage
+
   "An item" should "be capable of being roundtripped by reconstituting its snapshot" in check(
     Prop.forAllNoShrink(markMapGenerator) { markMap =>
       val graphNodes: Seq[GraphNode] = buildGraphFrom(markMap).sorted
@@ -140,7 +142,7 @@ class ItemStateStorageSpec extends FlatSpec with Matchers with Checkers {
           (node.id match {
             case oddId: String => oddId   -> typeTag[OddGraphNode]
             case eventId: Int  => eventId -> typeTag[EvenGraphNode]
-          }) -> ItemStateStorage
+          }) -> itemStateStorage
             .snapshotFor(node)) toMap
 
       val stubTimeslice = new BlobStorage.Timeslice {
@@ -156,7 +158,7 @@ class ItemStateStorageSpec extends FlatSpec with Matchers with Checkers {
           snapshotBlobs(uniqueItemSpecification)
       }
 
-      val reconstitutionContext = new ItemStateStorage.ReconstitutionContext() {
+      val reconstitutionContext = new itemStateStorage.ReconstitutionContext() {
         override val blobStorageTimeslice = stubTimeslice
       }
 
