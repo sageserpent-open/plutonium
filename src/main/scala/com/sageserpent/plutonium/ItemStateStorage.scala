@@ -43,6 +43,8 @@ trait ItemStateStorage {
     }
   }
 
+  def idFrom(item: ItemExtensionApi): Any
+
   val serializerThatDirectlyEncodesInterItemReferences = {
     new Serializer[ItemExtensionApi] {
       val javaSerializer = new JavaSerializer
@@ -71,7 +73,7 @@ trait ItemStateStorage {
                          output: Output,
                          item: ItemExtensionApi): Unit = {
         if (!kryo.isDealingWithTopLevelObject) {
-          kryo.writeClassAndObject(output, item.id)
+          kryo.writeClassAndObject(output, idFrom(item))
           kryo.writeObject(output, item.getClass, javaSerializer)
         } else
           kryo

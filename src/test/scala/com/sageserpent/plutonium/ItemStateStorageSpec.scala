@@ -125,7 +125,9 @@ class ItemStateStorageSpec extends FlatSpec with Matchers with Checkers {
 
   var count = 0
 
-  object itemStateStorage extends ItemStateStorage
+  object itemStateStorage extends ItemStateStorage {
+    override def idFrom(item: ItemExtensionApi): Any = item.id
+  }
 
   "An item" should "be capable of being roundtripped by reconstituting its snapshot" in check(
     Prop.forAllNoShrink(markMapGenerator) { markMap =>
