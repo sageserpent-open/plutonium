@@ -22,7 +22,7 @@ object GraphNode {
   val noGraphNodes      = Set.empty[GraphNode]
 }
 
-trait GraphNode extends ItemExtensionApi {
+trait GraphNode {
   import GraphNode._
 
   type Id
@@ -74,8 +74,6 @@ class OddGraphNode(override val id: OddGraphNode#Id) extends GraphNode {
     require(!mark.isEven)
     require(referencedNodes forall (_.mark.isEven))
   }
-
-  override def isGhost = false
 }
 
 class EvenGraphNode(override val id: EvenGraphNode#Id) extends GraphNode {
@@ -89,8 +87,6 @@ class EvenGraphNode(override val id: EvenGraphNode#Id) extends GraphNode {
     require(mark.isEven)
     require(referencedNodes forall (!_.mark.isEven))
   }
-
-  override def isGhost = false
 }
 
 class ItemStateStorageSpec extends FlatSpec with Matchers with Checkers {
