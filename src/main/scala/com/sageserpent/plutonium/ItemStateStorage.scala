@@ -51,8 +51,6 @@ trait ItemStateStorage {
 
   val serializerThatDirectlyEncodesInterItemReferences = {
     new Serializer[ItemSuperType] {
-      val javaSerializer = new JavaSerializer
-
       override def read(kryo: Kryo,
                         input: Input,
                         itemType: Class[ItemSuperType]): ItemSuperType = {
@@ -60,7 +58,7 @@ trait ItemStateStorage {
           val itemId =
             kryo.readClassAndObject(input)
           val itemTypeTag = typeTagForClass(
-            kryo.readObject(input, classOf[Class[_]], javaSerializer))
+            kryo.readObject(input, classOf[Class[_]]))
 
           val instance: ItemSuperType =
             itemFor[ItemSuperType](itemId -> itemTypeTag)
@@ -78,7 +76,7 @@ trait ItemStateStorage {
                          item: ItemSuperType): Unit = {
         if (!kryo.isDealingWithTopLevelObject) {
           kryo.writeClassAndObject(output, idFrom(item))
-          kryo.writeObject(output, item.getClass, javaSerializer)
+          kryo.writeObject(output, item.getClass)
         } else
           kryo
             .underlyingSerializerFor(item.getClass)
