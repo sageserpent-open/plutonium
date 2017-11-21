@@ -118,11 +118,10 @@ trait ItemStateStorage {
 
   val kryoPool = KryoPool.withByteArrayOutputStream(40, kryoInstantiator)
 
-  def snapshotFor[Item: TypeTag](item: Item): SnapshotBlob =
+  def snapshotFor[Item](item: Item): SnapshotBlob =
     kryoPool.toBytesWithClass(item)
 
-  def itemFor[Item: TypeTag](
-      uniqueItemSpecification: UniqueItemSpecification): Item =
+  def itemFor[Item](uniqueItemSpecification: UniqueItemSpecification): Item =
     itemDeserializationThreadContextAccess.value.get
       .itemFor(uniqueItemSpecification)
 
@@ -135,19 +134,19 @@ trait ItemStateStorage {
     override def itemsFor[Item: TypeTag](id: Any): Stream[Item] =
       for {
         uniqueItemSpecification <- blobStorageTimeslice.uniqueItemQueriesFor(id)
-      } yield itemFor(uniqueItemSpecification)
+      } yield itemFor[Item](uniqueItemSpecification)
 
     override def allItems[Item: TypeTag](): Stream[Item] =
       for {
         uniqueItemSpecification <- blobStorageTimeslice
           .uniqueItemQueriesFor[Item]
-      } yield itemFor(uniqueItemSpecification)
+      } yield itemFor[Item](uniqueItemSpecification)
 
-    private def itemFor[Item: TypeTag](
-        uniqueItemSpecification: (Any, universe.TypeTag[_])) = {
+    private def itemFor[Item](
+        uniqueItemSpecification: UniqueItemSpecification): Item = {
       itemDeserializationThreadContextAccess.withValue(
         Some(new ItemDeserializationThreadContext)) {
-        itemStateStorageObject.itemFor(uniqueItemSpecification)
+        itemStateStorageObject.itemFor[Item](uniqueItemSpecification)
       }
     }
 
@@ -155,7 +154,7 @@ trait ItemStateStorage {
       val uniqueItemSpecificationAccess =
         new DynamicVariable[Option[UniqueItemSpecification]](None)
 
-      def itemFor[Item: TypeTag](
+      def itemFor[Item](
           uniqueItemSpecification: UniqueItemSpecification): Item = {
         storage
           .getOrElse(
@@ -163,13 +162,10 @@ trait ItemStateStorage {
               val snapshot =
                 blobStorageTimeslice.snapshotBlobFor(uniqueItemSpecification)
 
-              def itemFromSnapshot(snapshot: SnapshotBlob) =
-                uniqueItemSpecificationAccess.withValue(
-                  Some(uniqueItemSpecification)) {
-                  kryoPool.fromBytes(snapshot)
-                }
-
-              itemFromSnapshot(snapshot)
+              uniqueItemSpecificationAccess.withValue(
+                Some(uniqueItemSpecification)) {
+                kryoPool.fromBytes(snapshot)
+              }
             }
           )
           .asInstanceOf[Item]
