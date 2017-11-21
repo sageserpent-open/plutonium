@@ -122,7 +122,9 @@ class ItemStateStorageSpec extends FlatSpec with Matchers with Checkers {
   var count = 0
 
   object itemStateStorage extends ItemStateStorage {
-    override def idFrom(item: ItemExtensionApi): Any = item.id
+    override type ItemSuperType = GraphNode
+    override val clazzOfItemSuperType: Class[ItemSuperType] = classOf[GraphNode]
+    override def idFrom(item: ItemSuperType): Any           = item.id
   }
 
   "An item" should "be capable of being roundtripped by reconstituting its snapshot" in check(

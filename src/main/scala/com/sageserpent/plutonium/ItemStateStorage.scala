@@ -43,42 +43,46 @@ trait ItemStateStorage {
     }
   }
 
-  def idFrom(item: ItemExtensionApi): Any
+  type ItemSuperType
+
+  val clazzOfItemSuperType: Class[ItemSuperType]
+
+  def idFrom(item: ItemSuperType): Any
 
   val serializerThatDirectlyEncodesInterItemReferences = {
-    new Serializer[ItemExtensionApi] {
+    new Serializer[ItemSuperType] {
       val javaSerializer = new JavaSerializer
 
       override def read(kryo: Kryo,
                         input: Input,
-                        itemType: Class[ItemExtensionApi]): ItemExtensionApi = {
+                        itemType: Class[ItemSuperType]): ItemSuperType = {
         if (!kryo.isDealingWithTopLevelObject) {
           val itemId =
             kryo.readClassAndObject(input)
           val itemTypeTag = typeTagForClass(
             kryo.readObject(input, classOf[Class[_]], javaSerializer))
 
-          val instance: ItemExtensionApi =
-            itemFor[ItemExtensionApi](itemId -> itemTypeTag)
+          val instance: ItemSuperType =
+            itemFor[ItemSuperType](itemId -> itemTypeTag)
           kryo.reference(instance)
           instance
         } else
           kryo
             .underlyingSerializerFor(itemType)
-            .asInstanceOf[Serializer[ItemExtensionApi]]
+            .asInstanceOf[Serializer[ItemSuperType]]
             .read(kryo, input, itemType)
       }
 
       override def write(kryo: Kryo,
                          output: Output,
-                         item: ItemExtensionApi): Unit = {
+                         item: ItemSuperType): Unit = {
         if (!kryo.isDealingWithTopLevelObject) {
           kryo.writeClassAndObject(output, idFrom(item))
           kryo.writeObject(output, item.getClass, javaSerializer)
         } else
           kryo
             .underlyingSerializerFor(item.getClass)
-            .asInstanceOf[Serializer[ItemExtensionApi]]
+            .asInstanceOf[Serializer[ItemSuperType]]
             .write(kryo, output, item)
       }
     }
@@ -92,7 +96,7 @@ trait ItemStateStorage {
       val kryo = super.newKryo()
       kryo.setDefaultSerializer(defaultSerializerFactory)
       kryo.addDefaultSerializer(
-        classOf[ItemExtensionApi],
+        clazzOfItemSuperType,
         serializerThatDirectlyEncodesInterItemReferences)
       val instantiatorStrategy =
         new InstantiatorStrategy {
