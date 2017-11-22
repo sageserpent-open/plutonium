@@ -49,6 +49,9 @@ trait ItemStateStorage {
 
   def idFrom(item: ItemSuperType): Any
 
+  def createItemFor[Item](
+      uniqueItemSpecification: UniqueItemSpecification): Item
+
   val serializerThatDirectlyEncodesInterItemReferences = {
     new Serializer[ItemSuperType] {
       override def read(kryo: Kryo,
@@ -105,7 +108,11 @@ trait ItemStateStorage {
                 originalInstantiatorStrategy.newInstantiatorOf[T](clazz)
 
               override def newInstance() = {
-                val instance = underlyingInstantiator.newInstance()
+                val instance = if (kryo.isDealingWithTopLevelObject) {
+                  createItem[T]
+                } else {
+                  underlyingInstantiator.newInstance()
+                }
                 if (kryo.isDealingWithTopLevelObject) {
                   store(instance)
                 }
@@ -130,6 +137,9 @@ trait ItemStateStorage {
   def store(item: Any) =
     itemDeserializationThreadContextAccess.value.get
       .store(item)
+
+  def createItem[Item]: Item =
+    itemDeserializationThreadContextAccess.value.get.createItem[Item]
 
   trait ReconstitutionContext extends ItemCache {
     val blobStorageTimeslice: BlobStorage.Timeslice // NOTE: abstracting this allows the prospect of a 'moving' timeslice for use when executing an update plan.
@@ -175,6 +185,10 @@ trait ItemStateStorage {
 
       private[ItemStateStorage] def store(item: Any) =
         storage.update(uniqueItemSpecificationAccess.value.get, item)
+
+      private[ItemStateStorage] def createItem[Item]: Item =
+        itemStateStorageObject.createItemFor(
+          uniqueItemSpecificationAccess.value.get)
 
     }
 
