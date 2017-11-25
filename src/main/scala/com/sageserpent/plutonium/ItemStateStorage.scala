@@ -52,12 +52,17 @@ trait ItemStateStorage {
   def createItemFor[Item](
       uniqueItemSpecification: UniqueItemSpecification): Item
 
-  val serializerThatDirectlyEncodesInterItemReferences = {
+  val serializerThatDirectlyEncodesInterItemReferences =
     new Serializer[ItemSuperType] {
       override def read(kryo: Kryo,
                         input: Input,
                         itemType: Class[ItemSuperType]): ItemSuperType = {
-        if (!kryo.isDealingWithTopLevelObject) {
+        if (kryo.isDealingWithTopLevelObject)
+          kryo
+            .underlyingSerializerFor(itemType)
+            .asInstanceOf[Serializer[ItemSuperType]]
+            .read(kryo, input, itemType)
+        else {
           val itemId =
             kryo.readClassAndObject(input)
           val itemTypeTag = typeTagForClass(
@@ -67,27 +72,23 @@ trait ItemStateStorage {
             itemFor[ItemSuperType](itemId -> itemTypeTag)
           kryo.reference(instance)
           instance
-        } else
-          kryo
-            .underlyingSerializerFor(itemType)
-            .asInstanceOf[Serializer[ItemSuperType]]
-            .read(kryo, input, itemType)
+        }
       }
 
       override def write(kryo: Kryo,
                          output: Output,
                          item: ItemSuperType): Unit = {
-        if (!kryo.isDealingWithTopLevelObject) {
-          kryo.writeClassAndObject(output, idFrom(item))
-          kryo.writeObject(output, item.getClass)
-        } else
+        if (kryo.isDealingWithTopLevelObject)
           kryo
             .underlyingSerializerFor(item.getClass)
             .asInstanceOf[Serializer[ItemSuperType]]
             .write(kryo, output, item)
+        else {
+          kryo.writeClassAndObject(output, idFrom(item))
+          kryo.writeObject(output, item.getClass)
+        }
       }
     }
-  }
 
   val originalInstantiatorStrategy =
     new ScalaKryoInstantiator().newKryo().getInstantiatorStrategy

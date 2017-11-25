@@ -130,7 +130,8 @@ class ItemStateStorageSpec extends FlatSpec with Matchers with Checkers {
 
   object itemStateStorage extends ItemStateStorage {
     override type ItemSuperType = GraphNode
-    override val clazzOfItemSuperType: Class[ItemSuperType] = classOf[GraphNode]
+    override val clazzOfItemSuperType: Class[ItemSuperType] =
+      classOf[ItemSuperType]
 
     override def idFrom(item: ItemSuperType): Any = item.id
 
