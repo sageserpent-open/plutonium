@@ -222,7 +222,7 @@ object WorldImplementationCodeFactoring {
     trait AcquiredState extends AcquiredStateCapturingId with AnnihilationHook {
       def itemReconstitutionData: Recorder#ItemReconstitutionData[_]
 
-      def itemsAreLocked: Boolean
+      def itemIsLocked: Boolean
     }
 
     val matchRecordAnnihilation: ElementMatcher[MethodDescription] =
@@ -259,7 +259,7 @@ object WorldImplementationCodeFactoring {
                 @This target: AnyRef,
                 @SuperCall superCall: Callable[_],
                 @FieldValue("acquiredState") acquiredState: AcquiredState) = {
-        if (acquiredState.itemsAreLocked) {
+        if (acquiredState.itemIsLocked) {
           throw new UnsupportedOperationException(
             s"Attempt to write via: '$method' to an item: '$target' rendered from a bitemporal query.")
         }
@@ -342,16 +342,16 @@ object WorldImplementationCodeFactoring {
 
   class IdentifiedItemsScope { identifiedItemsScopeThis =>
 
-    var itemsAreLocked = false
+    var allItemsAreLocked = false
 
     def this(_when: Unbounded[Instant],
              _nextRevision: Revision,
              eventTimeline: Seq[Event]) = {
       this()
       for (_ <- makeManagedResource {
-             itemsAreLocked = false
+             allItemsAreLocked = false
            } { _ =>
-             itemsAreLocked = true
+             allItemsAreLocked = true
            }(List.empty)) {
         val patchRecorder = new PatchRecorderImplementation(_when)
         with PatchRecorderContracts with BestPatchSelectionImplementation
@@ -360,9 +360,9 @@ object WorldImplementationCodeFactoring {
             identifiedItemsScopeThis
           override val itemsAreLockedResource: ManagedResource[Unit] =
             makeManagedResource {
-              itemsAreLocked = true
+              allItemsAreLocked = true
             } { _ =>
-              itemsAreLocked = false
+              allItemsAreLocked = false
             }(List.empty)
         }
 
@@ -409,8 +409,8 @@ object WorldImplementationCodeFactoring {
               def itemReconstitutionData
                 : Recorder#ItemReconstitutionData[Item] = id -> typeTag[Item]
 
-              def itemsAreLocked: Boolean =
-                identifiedItemsScopeThis.itemsAreLocked
+              def itemIsLocked: Boolean =
+                identifiedItemsScopeThis.allItemsAreLocked
             }
 
           override val acquiredStateClazz = classOf[AcquiredState]

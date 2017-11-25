@@ -122,11 +122,12 @@ object BlobStorageInMemory {
     )
 }
 
+// TODO - map from *id* to a multiset of lifecycles, using the type tag as the secondary discriminator?
 case class BlobStorageInMemory[EventId] private (
-    val revision: BlobStorageInMemory.Revision,
-    val eventRevisions: Map[EventId, BlobStorageInMemory.Revision],
-    val lifecycles: Map[UniqueItemSpecification,
-                        BlobStorageInMemory.Lifecycle[EventId]])
+    revision: BlobStorageInMemory.Revision,
+    eventRevisions: Map[EventId, BlobStorageInMemory.Revision],
+    lifecycles: Map[UniqueItemSpecification,
+                    BlobStorageInMemory.Lifecycle[EventId]])
     extends BlobStorage[EventId] {
   thisBlobStorage =>
   import BlobStorage._

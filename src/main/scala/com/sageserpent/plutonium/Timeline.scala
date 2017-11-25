@@ -51,7 +51,7 @@ object itemStateStorageUsingProxies extends ItemStateStorage {
           def itemReconstitutionData: Recorder#ItemReconstitutionData[Item] =
             id -> itemTypeTag.asInstanceOf[TypeTag[Item]]
 
-          def itemsAreLocked: Boolean = true
+          def itemIsLocked: Boolean = true
         }
 
       override val acquiredStateClazz = classOf[AcquiredState]
