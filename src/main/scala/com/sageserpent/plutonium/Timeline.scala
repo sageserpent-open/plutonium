@@ -30,12 +30,12 @@ object emptyTimeline extends TimelineImplementation[Nothing]
 
 // TODO - find a home for this...
 object itemStateStorageUsingProxies extends ItemStateStorage {
-  override type ItemSuperType = ItemExtensionApi
-  override val clazzOfItemSuperType = classOf[ItemSuperType]
+  override protected type ItemSuperType = ItemExtensionApi
+  override protected val clazzOfItemSuperType = classOf[ItemSuperType]
 
-  override def idFrom(item: ItemSuperType) = item.id
+  override protected def idFrom(item: ItemSuperType) = item.id
 
-  override def createItemFor[Item](
+  override protected def createItemFor[Item](
       uniqueItemSpecification: UniqueItemSpecification) = {
     import QueryCallbackStuff._
 

@@ -18,11 +18,11 @@ trait ItemStateStorage {
   itemStateStorageObject =>
   import BlobStorage._
 
-  val itemDeserializationThreadContextAccess =
+  private val itemDeserializationThreadContextAccess =
     new DynamicVariable[
       Option[ReconstitutionContext#ItemDeserializationThreadContext]](None)
 
-  val defaultSerializerFactory =
+  private val defaultSerializerFactory =
     new ReflectionSerializerFactory(classOf[FieldSerializer[_]])
 
   implicit def kryoEnhancement(kryo: Kryo) = new AnyRef {
@@ -43,13 +43,13 @@ trait ItemStateStorage {
     }
   }
 
-  type ItemSuperType
+  protected type ItemSuperType
 
-  val clazzOfItemSuperType: Class[ItemSuperType]
+  protected val clazzOfItemSuperType: Class[ItemSuperType]
 
-  def idFrom(item: ItemSuperType): Any
+  protected def idFrom(item: ItemSuperType): Any
 
-  def createItemFor[Item](
+  protected def createItemFor[Item](
       uniqueItemSpecification: UniqueItemSpecification): Item
 
   val serializerThatDirectlyEncodesInterItemReferences =
@@ -126,20 +126,22 @@ trait ItemStateStorage {
     }
   }
 
-  val kryoPool = KryoPool.withByteArrayOutputStream(40, kryoInstantiator)
+  private val kryoPool =
+    KryoPool.withByteArrayOutputStream(40, kryoInstantiator)
 
   def snapshotFor[Item](item: Item): SnapshotBlob =
     kryoPool.toBytesWithClass(item)
 
-  def itemFor[Item](uniqueItemSpecification: UniqueItemSpecification): Item =
+  private def itemFor[Item](
+      uniqueItemSpecification: UniqueItemSpecification): Item =
     itemDeserializationThreadContextAccess.value.get
       .itemFor(uniqueItemSpecification)
 
-  def store(item: Any) =
+  private def store(item: Any) =
     itemDeserializationThreadContextAccess.value.get
       .store(item)
 
-  def createItem[Item]: Item =
+  private def createItem[Item]: Item =
     itemDeserializationThreadContextAccess.value.get.createItem[Item]
 
   trait ReconstitutionContext extends ItemCache {
