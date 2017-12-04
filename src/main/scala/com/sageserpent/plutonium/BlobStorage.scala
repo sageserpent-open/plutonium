@@ -38,13 +38,13 @@ trait BlobStorage[EventId] { blobStorage =>
   import BlobStorage._
 
   trait RevisionBuilder {
-    // TODO - what does it mean if there are no snapshots? A no-op? Analogous to 'ItemStateStorage', we could use an optional value to encode both snapshots and annihilations...
+    // TODO - what does it mean if there are no snapshots? A no-op?
     // NOTE: the unique item specification must be exact and consistent for all of an item's snapshots. This implies that snapshots from a previous revision may have to be rewritten
     // if an item's greatest lower bound type changes.
     def recordSnapshotBlobsForEvent(
         eventId: EventId,
         when: Unbounded[Instant],
-        snapshotBlobs: Map[UniqueItemSpecification, SnapshotBlob]): Unit
+        snapshotBlobs: Map[UniqueItemSpecification, Option[SnapshotBlob]]): Unit
 
     def annulEvent(eventId: EventId)
 
@@ -58,7 +58,8 @@ trait BlobStorage[EventId] { blobStorage =>
     abstract override def recordSnapshotBlobsForEvent(
         eventId: EventId,
         when: Unbounded[Instant],
-        snapshotBlobs: Map[UniqueItemSpecification, SnapshotBlob]): Unit = {
+        snapshotBlobs: Map[UniqueItemSpecification, Option[SnapshotBlob]])
+      : Unit = {
       require(!eventIds.contains(eventId))
       eventIds += eventId
       super.recordSnapshotBlobsForEvent(eventId, when, snapshotBlobs)

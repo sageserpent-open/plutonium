@@ -179,8 +179,8 @@ case class BlobStorageInMemory[EventId] private (
     trait RevisionBuilderImplementation extends RevisionBuilder {
       type Event =
         (EventId,
-         Option[
-           (Unbounded[Instant], Map[UniqueItemSpecification, SnapshotBlob])])
+         Option[(Unbounded[Instant],
+                 Map[UniqueItemSpecification, Option[SnapshotBlob]])])
 
       val events = mutable.MutableList.empty[Event]
 
@@ -191,7 +191,8 @@ case class BlobStorageInMemory[EventId] private (
       override def recordSnapshotBlobsForEvent(
           eventId: EventId,
           when: Unbounded[Instant],
-          snapshotBlobs: Map[UniqueItemSpecification, SnapshotBlob]): Unit = {
+          snapshotBlobs: Map[UniqueItemSpecification, Option[SnapshotBlob]])
+        : Unit = {
         events += eventId -> Some(when -> snapshotBlobs)
       }
 
@@ -224,7 +225,10 @@ case class BlobStorageInMemory[EventId] private (
                     lifecycle =>
                       if (itemTypeTag == lifecycle.itemTypeTag)
                         lifecycle
-                          .addSnapshotBlob(eventId, when, snapshot, newRevision)
+                          .addSnapshotBlob(eventId,
+                                           when,
+                                           snapshot.get,
+                                           newRevision)
                       else lifecycle)
               }
               lifecycles ++ updatedLifecycles

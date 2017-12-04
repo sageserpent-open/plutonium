@@ -44,15 +44,19 @@ class BlobStorageSpec
     Gen.oneOf(mixedIdGenerator(0) map (_ -> typeTag[OneKindOfThing]),
               mixedIdGenerator(1) map (_ -> typeTag[AnotherKindOfThing]))
 
-  val blobGenerator: Gen[SnapshotBlob] =
-    Gen.containerOf[Array, Byte](Arbitrary.arbByte.arbitrary)
+  val blobGenerator: Gen[Option[SnapshotBlob]] =
+    Gen.frequency(
+      5 -> (Gen
+        .containerOf[Array, Byte](Arbitrary.arbByte.arbitrary) map Some.apply),
+      1 -> Gen.const(None))
 
-  val blobsGenerator: Gen[List[SnapshotBlob]] =
+  val blobsGenerator: Gen[List[Option[SnapshotBlob]]] =
     Gen.nonEmptyListOf(blobGenerator)
 
-  case class TimeSeries(uniqueItemSpecification: UniqueItemSpecification,
-                        snapshots: Seq[(Unbounded[Instant], SnapshotBlob)],
-                        queryTimes: Seq[Unbounded[Instant]]) {
+  case class TimeSeries(
+      uniqueItemSpecification: UniqueItemSpecification,
+      snapshots: Seq[(Unbounded[Instant], Option[SnapshotBlob])],
+      queryTimes: Seq[Unbounded[Instant]]) {
     require(queryTimes zip snapshots.init.map(_._1) forall {
       case (queryTime, snapshotTime) => queryTime >= snapshotTime
     })
@@ -144,11 +148,11 @@ class BlobStorageSpec
           Gen.sequence[Seq[TimeSeries], TimeSeries](
             uniqueItemSpecifications map (timeSeriesGeneratorFor(_))))
 
-  def shuffledSnapshotBookings(
-      randomBehaviour: Random,
-      lotsOfTimeSeries: Seq[TimeSeries],
-      forceUseOfAnOverlappingType: Boolean = false): Seq[
-    (Unbounded[Instant], Seq[(UniqueItemSpecification, SnapshotBlob)])] = {
+  def shuffledSnapshotBookings(randomBehaviour: Random,
+                               lotsOfTimeSeries: Seq[TimeSeries],
+                               forceUseOfAnOverlappingType: Boolean = false)
+    : Seq[(Unbounded[Instant],
+           Seq[(UniqueItemSpecification, Option[SnapshotBlob])])] = {
     val lotsOfTimeSeriesWithoutTheQueryTimeCruft = lotsOfTimeSeries map {
       case TimeSeries(uniqueItemSpecification, snapshots, _) =>
         uniqueItemSpecification -> snapshots
@@ -162,14 +166,15 @@ class BlobStorageSpec
             .buildRandomSequenceOfDistinctCandidatesChosenFrom(snapshots)
             .map {
               case (when, snapshotBlob) =>
-                when -> snapshotBlob.sorted // An easy way to mutate the blob that usually makes it obvious that it's the intended duplicate when debugging.
+                when -> snapshotBlob.map(_.sorted) // An easy way to mutate the blob that usually makes it obvious that it's the intended duplicate when debugging.
             }
       }
 
     // Put the duplicating time series first, as these are the ones that we want the
     // sut to disregard on account of them being booked in first at the same time.
     val lotsOfTimeSeriesWithSomeDuplicates
-      : Seq[(UniqueItemSpecification, Seq[(Unbounded[Instant], Array[Byte])])] =
+      : Seq[(UniqueItemSpecification,
+             Seq[(Unbounded[Instant], Option[SnapshotBlob])])] =
       timeSeriesWhoseSnapshotsWillCollide ++ lotsOfTimeSeriesWithoutTheQueryTimeCruft
 
     val forceUseOfAnOverlappingTypeDecisions = {
@@ -219,7 +224,7 @@ class BlobStorageSpec
 
   private type ScalaFmtWorkaround =
     Seq[(Option[(Unbounded[Instant],
-                 Seq[(UniqueItemSpecification, SnapshotBlob)])],
+                 Seq[(UniqueItemSpecification, Option[SnapshotBlob])])],
          EventId)]
 
   def blobStorageFrom(revisions: Seq[ScalaFmtWorkaround]) =
@@ -264,7 +269,7 @@ class BlobStorageSpec
 
         for {
           TimeSeries(uniqueItemSpecification, snapshots, queryTimes) <- lotsOfFinalTimeSeries
-          (snapshotBlob: SnapshotBlob, snapshotTime, queryTime) <- snapshots zip queryTimes map {
+          (snapshotBlob: Option[SnapshotBlob], snapshotTime, queryTime) <- snapshots zip queryTimes map {
             case ((snapshotTime, snapshotBlob), queryTime) =>
               (snapshotBlob, snapshotTime, queryTime)
           }
@@ -279,23 +284,32 @@ class BlobStorageSpec
             val allRetrievedUniqueItemSpecifications =
               timeSlice.uniqueItemQueriesFor(explicitTypeTag)
 
-            allRetrievedUniqueItemSpecifications map (_._1) should contain(id)
-
             val retrievedUniqueItemSpecifications =
               timeSlice.uniqueItemQueriesFor(id)(explicitTypeTag)
 
-            retrievedUniqueItemSpecifications.loneElement._1 shouldBe id
+            snapshotBlob match {
+              case Some(snapshotBlob) =>
+                allRetrievedUniqueItemSpecifications map (_._1) should contain(
+                  id)
 
-            assert(
-              retrievedUniqueItemSpecifications.loneElement._2.tpe <:< explicitTypeTag.tpe)
+                retrievedUniqueItemSpecifications.loneElement._1 shouldBe id
 
-            val theRetrievedUniqueItemSpecification: UniqueItemSpecification =
-              retrievedUniqueItemSpecifications.head
+                assert(
+                  retrievedUniqueItemSpecifications.loneElement._2.tpe <:< explicitTypeTag.tpe)
 
-            val retrievedSnapshotBlob: SnapshotBlob =
-              timeSlice.snapshotBlobFor(theRetrievedUniqueItemSpecification)
+                val theRetrievedUniqueItemSpecification
+                  : UniqueItemSpecification =
+                  retrievedUniqueItemSpecifications.head
 
-            retrievedSnapshotBlob shouldBe snapshotBlob
+                val retrievedSnapshotBlob: SnapshotBlob =
+                  timeSlice.snapshotBlobFor(theRetrievedUniqueItemSpecification)
+
+                retrievedSnapshotBlob shouldBe snapshotBlob
+              case None =>
+                allRetrievedUniqueItemSpecifications shouldBe empty
+
+                retrievedUniqueItemSpecifications shouldBe empty
+            }
           }
 
           checkExpectations(uniqueItemSpecification)
