@@ -75,24 +75,24 @@ object BlobStorageInMemory {
         case (first, second) => first <= second
       }))
 
-    override def isValid(when: Unbounded[Instant],
-                         validRevisionFor: EventId => Revision): Boolean =
-      -1 != snapshotBlobs
+    private def indexOf(when: Unbounded[Instant],
+                        validRevisionFor: EventId => Revision) = {
+      snapshotBlobs
         .view(0, indexToSearchDownFromOrInsertAt(when, snapshotBlobTimes))
         .lastIndexWhere(PartialFunction.cond(_) {
           case (_, (_, eventId, blobRevision)) =>
             blobRevision == validRevisionFor(eventId)
         })
+    }
+
+    override def isValid(when: Unbounded[Instant],
+                         validRevisionFor: EventId => Revision): Boolean =
+      -1 != indexOf(when, validRevisionFor)
 
     override def snapshotBlobFor(
         when: Unbounded[Instant],
         validRevisionFor: EventId => Revision): SnapshotBlob = {
-      val index = snapshotBlobs
-        .view(0, indexToSearchDownFromOrInsertAt(when, snapshotBlobTimes))
-        .lastIndexWhere(PartialFunction.cond(_) {
-          case (_, (_, eventId, blobRevision)) =>
-            blobRevision == validRevisionFor(eventId)
-        })
+      val index = indexOf(when, validRevisionFor)
 
       assert(-1 != index)
 
