@@ -306,7 +306,7 @@ class BlobStorageSpec
 
                 retrievedSnapshotBlob shouldBe snapshotBlob
               case None =>
-                allRetrievedUniqueItemSpecifications shouldBe empty
+                allRetrievedUniqueItemSpecifications map (_._1) should not contain (id)
 
                 retrievedUniqueItemSpecifications shouldBe empty
             }
