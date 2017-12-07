@@ -22,7 +22,7 @@ object BlobStorageInMemory {
 
     def addSnapshotBlob(eventId: EventId,
                         when: Unbounded[Instant],
-                        snapshotBlob: SnapshotBlob,
+                        snapshotBlob: Option[SnapshotBlob],
                         revision: Revision): Lifecycle[EventId]
 
     val itemTypeTag: TypeTag[_ <: Any]
@@ -65,8 +65,9 @@ object BlobStorageInMemory {
   case class LifecycleImplementation[EventId](
       override val itemTypeTag: TypeTag[_ <: Any],
       snapshotBlobs: Vector[(Unbounded[Instant],
-                             (SnapshotBlob, EventId, Revision))] =
-        Vector.empty[(Unbounded[Instant], (SnapshotBlob, EventId, Revision))])
+                             (Option[SnapshotBlob], EventId, Revision))] =
+        Vector.empty[(Unbounded[Instant],
+                      (Option[SnapshotBlob], EventId, Revision))])
       extends BlobStorageInMemory.Lifecycle[EventId] {
     val snapshotBlobTimes = snapshotBlobs.view.map(_._1)
 
@@ -86,8 +87,10 @@ object BlobStorageInMemory {
     }
 
     override def isValid(when: Unbounded[Instant],
-                         validRevisionFor: EventId => Revision): Boolean =
-      -1 != indexOf(when, validRevisionFor)
+                         validRevisionFor: EventId => Revision): Boolean = {
+      val index = indexOf(when, validRevisionFor)
+      -1 != index && snapshotBlobs(index)._2._1.isDefined
+    }
 
     override def snapshotBlobFor(
         when: Unbounded[Instant],
@@ -96,13 +99,15 @@ object BlobStorageInMemory {
 
       assert(-1 != index)
 
-      snapshotBlobs(index) match { case (_, (snapshot, _, _)) => snapshot }
+      snapshotBlobs(index) match {
+        case (_, (Some(snapshot), _, _)) => snapshot
+      }
     }
 
     override def addSnapshotBlob(
         eventId: EventId,
         when: Unbounded[Instant],
-        snapshotBlob: SnapshotBlob,
+        snapshotBlob: Option[SnapshotBlob],
         revision: Revision): BlobStorageInMemory.Lifecycle[EventId] = {
       require(!snapshotBlobs.contains(when))
       val insertionPoint =
@@ -225,10 +230,7 @@ case class BlobStorageInMemory[EventId] private (
                     lifecycle =>
                       if (itemTypeTag == lifecycle.itemTypeTag)
                         lifecycle
-                          .addSnapshotBlob(eventId,
-                                           when,
-                                           snapshot.get,
-                                           newRevision)
+                          .addSnapshotBlob(eventId, when, snapshot, newRevision)
                       else lifecycle)
               }
               lifecycles ++ updatedLifecycles
