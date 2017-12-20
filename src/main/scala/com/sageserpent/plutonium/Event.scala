@@ -7,6 +7,7 @@ import com.esotericsoftware.kryo.serializers.JavaSerializer
 import com.esotericsoftware.kryo.serializers.FieldSerializer.Bind
 import com.sageserpent.americium
 import com.sageserpent.americium.{Finite, PositiveInfinity, Unbounded}
+import com.sageserpent.plutonium.BlobStorage.UniqueItemSpecification
 import com.sageserpent.plutonium.WorldImplementationCodeFactoring.{
   AcquiredStateCapturingId,
   IdentifiedItemsScope,
@@ -42,7 +43,7 @@ object capturePatches {
         .represents(classOf[Unit])
 
     trait AcquiredState extends AcquiredStateCapturingId {
-      def itemReconstitutionData: Recorder#ItemReconstitutionData[_]
+      def itemReconstitutionData: UniqueItemSpecification
 
       def capturePatch(patch: AbstractPatch): Unit
     }
@@ -105,7 +106,7 @@ object capturePatches {
           override val stateToBeAcquiredByProxy = new AcquiredState {
             val _id = id
 
-            def itemReconstitutionData: Recorder#ItemReconstitutionData[Item] =
+            def itemReconstitutionData: UniqueItemSpecification =
               id -> typeTag[Item]
 
             def capturePatch(patch: AbstractPatch) {

@@ -11,6 +11,7 @@ import com.lambdaworks.redis.RedisClient
 import com.lambdaworks.redis.api.rx.RedisReactiveCommands
 import com.lambdaworks.redis.codec.{ByteArrayCodec, RedisCodec, Utf8StringCodec}
 import com.sageserpent.americium.{PositiveInfinity, Unbounded}
+import com.sageserpent.plutonium.BlobStorage.UniqueItemSpecification
 import com.twitter.chill.{KryoPool, ScalaKryoInstantiator}
 import io.netty.handler.codec.EncoderException
 import rx.lang.scala.JavaConversions._
@@ -25,19 +26,19 @@ object WorldRedisBasedImplementation {
   val javaSerializer = new JavaSerializer
 
   class ItemReconstitutionDataSerializer[Item]
-      extends Serializer[Recorder#ItemReconstitutionData[Item]] {
+      extends Serializer[UniqueItemSpecification] {
     override def write(kryo: Kryo,
                        output: Output,
-                       data: Recorder#ItemReconstitutionData[Item]): Unit = {
+                       data: UniqueItemSpecification): Unit = {
       val (id, typeTag) = data
       kryo.writeClassAndObject(output, id)
       kryo.writeObject(output, typeTag, javaSerializer)
     }
 
-    override def read(kryo: Kryo,
-                      input: Input,
-                      dataType: Class[Recorder#ItemReconstitutionData[Item]])
-      : Recorder#ItemReconstitutionData[Item] = {
+    override def read(
+        kryo: Kryo,
+        input: Input,
+        dataType: Class[UniqueItemSpecification]): UniqueItemSpecification = {
       val id = kryo.readClassAndObject(input).asInstanceOf[Any]
       val typeTag = kryo
         .readObject[TypeTag[Item]](input,
@@ -51,10 +52,7 @@ object WorldRedisBasedImplementation {
     40,
     new ScalaKryoInstantiator().withRegistrar((kryo: Kryo) => {
       def registerSerializerForItemReconstitutionData[Item]() = {
-        // TODO - I think this is a potential bug, as 'Recorder#ItemReconstitutionData[Item]' is an alias
-        // to a tuple type instance that is erased at runtime - so all kinds of things could be passed to
-        // the special case serializer. Need to think about this, perhaps a value class wrapper will do the trick?
-        kryo.register(classOf[Recorder#ItemReconstitutionData[Item]],
+        kryo.register(classOf[UniqueItemSpecification],
                       new ItemReconstitutionDataSerializer[Item])
       }
       registerSerializerForItemReconstitutionData()

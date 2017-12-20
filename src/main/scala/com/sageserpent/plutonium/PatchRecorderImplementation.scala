@@ -9,6 +9,7 @@ import com.sageserpent.americium.{
   PositiveInfinity,
   Unbounded
 }
+import com.sageserpent.plutonium.BlobStorage.UniqueItemSpecification
 import resource.ManagedResource
 
 import scala.collection.{Map, mutable}
@@ -257,7 +258,7 @@ abstract class PatchRecorderImplementation(
     mutable.Map.empty[Any, mutable.Set[ItemState]]
 
   private type ItemReconstitutionDataToItemStateMap =
-    mutable.Map[Recorder#ItemReconstitutionData[_], ItemState]
+    mutable.Map[UniqueItemSpecification, ItemState]
 
   private val patchToItemStatesMap =
     mutable.Map.empty[AbstractPatch, ItemReconstitutionDataToItemStateMap]
@@ -301,16 +302,15 @@ abstract class PatchRecorderImplementation(
         }
       }
 
-      override def reconstitute[Item](
-          itemReconstitutionData: Recorder#ItemReconstitutionData[Item])
-        : Item = {
+      override def reconstitute(
+          itemReconstitutionData: UniqueItemSpecification): Any = {
         val id        = itemReconstitutionData._1
         val itemState = reconstitutionDataToItemStateMap(itemReconstitutionData)
 
-        itemFor_(id, itemState.lowerBoundTypeTag).asInstanceOf[Item]
+        itemFor_(id, itemState.lowerBoundTypeTag)
       }
 
-      def itemFor_[SubclassOfItem <: Item, Item](
+      def itemFor_[SubclassOfItem](
           id: Any,
           typeTag: universe.TypeTag[SubclassOfItem]): SubclassOfItem = {
         PatchRecorderImplementation.this.identifiedItemsScope
@@ -344,8 +344,7 @@ abstract class PatchRecorderImplementation(
 
   private def refineRelevantItemStatesAndYieldTarget(
       patch: AbstractPatch): ItemState = {
-    def refinedItemStateFor(
-        reconstitutionData: Recorder#ItemReconstitutionData[_]) = {
+    def refinedItemStateFor(reconstitutionData: UniqueItemSpecification) = {
       val itemState = itemStateFor(reconstitutionData)
       itemState.refineType(reconstitutionData._2)
       patchToItemStatesMap.getOrElseUpdate(patch, mutable.Map.empty) += reconstitutionData -> itemState
@@ -359,7 +358,7 @@ abstract class PatchRecorderImplementation(
   }
 
   private def itemStateFor(
-      itemReconstitutionData: Recorder#ItemReconstitutionData[_]): ItemState = {
+      itemReconstitutionData: UniqueItemSpecification): ItemState = {
     val (id, typeTag) = itemReconstitutionData
 
     val (itemStatesFromPreviousLifecycles, itemStates) = idToItemStatesMap

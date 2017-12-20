@@ -49,7 +49,7 @@ object itemStateStorageUsingProxies extends ItemStateStorage {
         new AcquiredState {
           val _id = id
 
-          def itemReconstitutionData: Recorder#ItemReconstitutionData[Item] =
+          def itemReconstitutionData: UniqueItemSpecification =
             id -> itemTypeTag.asInstanceOf[TypeTag[Item]]
 
           def itemIsLocked: Boolean = true
