@@ -38,7 +38,7 @@ object Patch {
 }
 
 class Patch(methodPieces: MethodPieces,
-            override val targetReconstitutionData: UniqueItemSpecification,
+            override val targetItemSpecification: UniqueItemSpecification,
             wrappedArguments: Array[Patch.WrappedArgument])
     extends AbstractPatch {
   import Patch._
@@ -46,7 +46,7 @@ class Patch(methodPieces: MethodPieces,
   @transient
   override lazy val method = methodPieces.method
 
-  override val argumentReconstitutionDatums: Seq[UniqueItemSpecification] =
+  override val argumentItemSpecifications: Seq[UniqueItemSpecification] =
     wrappedArguments collect {
       case \/-(uniqueItemSpecification) => uniqueItemSpecification
     }
@@ -59,7 +59,7 @@ class Patch(methodPieces: MethodPieces,
 
   def apply(identifiedItemAccess: IdentifiedItemAccess): Unit = {
     val targetBeingPatched =
-      identifiedItemAccess.reconstitute(targetReconstitutionData)
+      identifiedItemAccess.reconstitute(targetItemSpecification)
     try {
       method.invoke(targetBeingPatched,
                     wrappedArguments map unwrap(identifiedItemAccess): _*)
@@ -71,7 +71,7 @@ class Patch(methodPieces: MethodPieces,
 
   def checkInvariant(identifiedItemAccess: IdentifiedItemAccess): Unit = {
     identifiedItemAccess
-      .reconstitute(targetReconstitutionData)
+      .reconstitute(targetItemSpecification)
       .asInstanceOf[ItemExtensionApi]
       .checkInvariant()
   }

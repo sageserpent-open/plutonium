@@ -50,10 +50,10 @@ class PatchRecorderSpec
           extends AbstractPatch {
         override val method = expectedMethod
 
-        override val targetReconstitutionData
+        override val targetItemSpecification
           : UniqueItemSpecification = id -> typeTag[FooHistory]
 
-        override val argumentReconstitutionDatums = Seq.empty
+        override val argumentItemSpecifications = Seq.empty
       }
 
       mock[WorkaroundToMakeAbstractPatchMockable]
