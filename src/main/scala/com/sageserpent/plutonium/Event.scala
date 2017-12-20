@@ -26,7 +26,7 @@ import scala.reflect.runtime.universe.{This => _, _}
 // NOTE: if 'when' is 'NegativeInfinity', the event is taken to be 'at the beginning of time' - this is a way of introducing
 // timeless events, although it permits following events to modify the outcome, which may be quite handy. For now, there is
 // no such corresponding use for 'PositiveInfinity' - that results in a precondition failure.
-sealed abstract class Event {
+sealed trait Event {
   val when: Unbounded[Instant]
   require(when < PositiveInfinity())
 }

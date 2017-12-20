@@ -18,7 +18,8 @@ class WorldEfficientInMemoryImplementation[EventId]
                       asOf: Instant): Revision = {
     val resultCapturedBeforeMutation = nextRevision
 
-    val baseTimeline = timelines.lastOption map (_._2) getOrElse emptyTimeline
+    val baseTimeline
+      : Timeline[EventId] = timelines.lastOption map (_._2) getOrElse emptyTimeline()
 
     val newTimeline = baseTimeline.revise(events)
 
@@ -35,7 +36,7 @@ class WorldEfficientInMemoryImplementation[EventId]
 
   trait ScopeUsingStorage extends com.sageserpent.plutonium.Scope {
     private def itemCache(): ItemCache = {
-      val timeline = timelines.get(nextRevision) map (_._2) getOrElse emptyTimeline
+      val timeline = timelines.get(nextRevision) map (_._2) getOrElse emptyTimeline()
 
       timeline.itemCacheAt(when)
     }
