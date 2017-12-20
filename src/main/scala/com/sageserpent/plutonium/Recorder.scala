@@ -1,8 +1,6 @@
 package com.sageserpent.plutonium
-import scala.reflect.runtime.universe._
+import com.sageserpent.plutonium.BlobStorage.UniqueItemSpecification
 
 protected[plutonium] trait Recorder {
-  type ItemReconstitutionData[Item2] = (Any, TypeTag[Item2])
-
-  def itemReconstitutionData: ItemReconstitutionData[_]
+  def uniqueItemSpecification: UniqueItemSpecification
 }

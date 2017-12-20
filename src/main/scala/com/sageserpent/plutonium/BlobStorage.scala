@@ -8,6 +8,7 @@ import scala.collection.mutable
 import scala.reflect.runtime.universe.TypeTag
 
 object BlobStorage {
+  // TODO - find a better home for this type alias.
   type UniqueItemSpecification =
     (Any, TypeTag[_ <: Any])
 

@@ -7,6 +7,7 @@ import com.esotericsoftware.kryo.serializers.JavaSerializer
 import com.esotericsoftware.kryo.serializers.FieldSerializer.Bind
 import com.sageserpent.americium
 import com.sageserpent.americium.{Finite, PositiveInfinity, Unbounded}
+import com.sageserpent.plutonium.BlobStorage.UniqueItemSpecification
 import com.sageserpent.plutonium.WorldImplementationCodeFactoring.{
   AcquiredStateCapturingId,
   IdentifiedItemsScope,
@@ -42,7 +43,7 @@ object capturePatches {
         .represents(classOf[Unit])
 
     trait AcquiredState extends AcquiredStateCapturingId {
-      def itemReconstitutionData: Recorder#ItemReconstitutionData[_]
+      def uniqueItemSpecification: UniqueItemSpecification
 
       def capturePatch(patch: AbstractPatch): Unit
     }
@@ -50,11 +51,11 @@ object capturePatches {
     val matchMutation: ElementMatcher[MethodDescription] = methodDescription =>
       methodDescription.getReturnType.represents(classOf[Unit])
 
-    val matchItemReconstitutionData: ElementMatcher[MethodDescription] =
+    val matchUniqueItemSpecification: ElementMatcher[MethodDescription] =
       methodDescription =>
         firstMethodIsOverrideCompatibleWithSecond(
           methodDescription,
-          IdentifiedItemsScope.itemReconstitutionDataProperty)
+          IdentifiedItemsScope.uniqueItemSpecificationProperty)
 
     val matchForbiddenReadAccess: ElementMatcher[MethodDescription] =
       methodDescription =>
@@ -76,10 +77,10 @@ object capturePatches {
       }
     }
 
-    object itemReconstitutionData {
+    object uniqueItemSpecification {
       @RuntimeType
       def apply(@FieldValue("acquiredState") acquiredState: AcquiredState) =
-        acquiredState.itemReconstitutionData
+        acquiredState.uniqueItemSpecification
     }
 
     object forbiddenReadAccess {
@@ -105,7 +106,7 @@ object capturePatches {
           override val stateToBeAcquiredByProxy = new AcquiredState {
             val _id = id
 
-            def itemReconstitutionData: Recorder#ItemReconstitutionData[Item] =
+            def uniqueItemSpecification: UniqueItemSpecification =
               id -> typeTag[Item]
 
             def capturePatch(patch: AbstractPatch) {
@@ -126,8 +127,8 @@ object capturePatches {
             builder
               .method(matchForbiddenReadAccess)
               .intercept(MethodDelegation.to(forbiddenReadAccess))
-              .method(matchItemReconstitutionData)
-              .intercept(MethodDelegation.to(itemReconstitutionData))
+              .method(matchUniqueItemSpecification)
+              .intercept(MethodDelegation.to(uniqueItemSpecification))
               .method(matchMutation)
               .intercept(MethodDelegation.to(mutation))
         }

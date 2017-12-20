@@ -2,6 +2,8 @@ package com.sageserpent.plutonium
 
 import java.lang.reflect.Method
 
+import com.sageserpent.plutonium.BlobStorage.UniqueItemSpecification
+
 object AbstractPatch {
   def patchesAreRelated(lhs: AbstractPatch, rhs: AbstractPatch): Boolean = {
     val bothReferToTheSameItem = lhs.targetId == rhs.targetId && (lhs.targetTypeTag.tpe <:< rhs.targetTypeTag.tpe || rhs.targetTypeTag.tpe <:< lhs.targetTypeTag.tpe)
@@ -15,8 +17,8 @@ object AbstractPatch {
 
 abstract class AbstractPatch {
   val method: Method
-  val targetReconstitutionData: Recorder#ItemReconstitutionData[_]
-  val argumentReconstitutionDatums: Seq[Recorder#ItemReconstitutionData[_]]
+  val targetReconstitutionData: UniqueItemSpecification
+  val argumentReconstitutionDatums: Seq[UniqueItemSpecification]
   lazy val (targetId, targetTypeTag) = targetReconstitutionData
   def apply(identifiedItemAccess: IdentifiedItemAccess): Unit
   def checkInvariant(identifiedItemAccess: IdentifiedItemAccess): Unit

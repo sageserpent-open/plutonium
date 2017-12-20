@@ -55,7 +55,7 @@ object itemStateStorageUsingProxies extends ItemStateStorage {
         new AcquiredState {
           val _id = id
 
-          def itemReconstitutionData: Recorder#ItemReconstitutionData[Item] =
+          def uniqueItemSpecification: UniqueItemSpecification =
             id -> itemTypeTag.asInstanceOf[TypeTag[Item]]
 
           def itemIsLocked: Boolean = true
@@ -152,11 +152,8 @@ class TimelineImplementation[EventId](
 
       private val storage: Storage = new Storage
 
-      override def reconstitute[Item](
-          itemReconstitutionData: Recorder#ItemReconstitutionData[Item])
-        : Item = {
-        val uniqueItemSpecification: UniqueItemSpecification =
-          itemReconstitutionData
+      override def reconstitute(
+          uniqueItemSpecification: UniqueItemSpecification) =
         storage
           .getOrElseUpdate(
             uniqueItemSpecification, {
@@ -168,8 +165,6 @@ class TimelineImplementation[EventId](
                   uniqueItemSpecification))
             }
           )
-          .asInstanceOf[Item]
-      }
     }
 
     for {

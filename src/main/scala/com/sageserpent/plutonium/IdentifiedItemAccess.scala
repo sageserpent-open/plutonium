@@ -1,6 +1,7 @@
 package com.sageserpent.plutonium
 
+import com.sageserpent.plutonium.BlobStorage.UniqueItemSpecification
+
 trait IdentifiedItemAccess {
-  def reconstitute[Item](
-      itemReconstitutionData: Recorder#ItemReconstitutionData[Item]): Item
+  def reconstitute(uniqueItemSpecification: UniqueItemSpecification): Any
 }

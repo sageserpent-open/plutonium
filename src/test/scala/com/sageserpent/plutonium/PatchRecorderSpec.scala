@@ -5,6 +5,7 @@ import java.time.Instant
 
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.{Finite, Unbounded}
+import com.sageserpent.plutonium.BlobStorage.UniqueItemSpecification
 import com.sageserpent.plutonium.WorldImplementationCodeFactoring.IdentifiedItemsScope
 import org.scalacheck.Prop.BooleanOperators
 import org.scalacheck.{Gen, Prop, Test}
@@ -50,8 +51,7 @@ class PatchRecorderSpec
         override val method = expectedMethod
 
         override val targetReconstitutionData
-          : Recorder#ItemReconstitutionData[FooHistory] = id -> typeTag[
-          FooHistory]
+          : UniqueItemSpecification = id -> typeTag[FooHistory]
 
         override val argumentReconstitutionDatums = Seq.empty
       }
@@ -158,8 +158,7 @@ class PatchRecorderSpec
                           when,
                           masterSequenceIndex,
                           sequenceIndicesFromAppliedPatches)
-                        patchRecorder.recordPatchFromChange(Finite(when),
-                                                            patch)
+                        patchRecorder.recordPatchFromChange(Finite(when), patch)
                       }
 
                       def recordingMeasurement(patch: AbstractPatch)(

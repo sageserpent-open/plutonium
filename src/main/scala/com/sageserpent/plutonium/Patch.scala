@@ -2,17 +2,18 @@ package com.sageserpent.plutonium
 
 import java.lang.reflect.{InvocationTargetException, Method}
 
+import com.sageserpent.plutonium.BlobStorage.UniqueItemSpecification
 import com.sageserpent.plutonium.Patch.MethodPieces
 
 import scalaz.{-\/, \/, \/-}
 
 object Patch {
   type WrappedArgument =
-    \/[AnyRef, Recorder#ItemReconstitutionData[_]]
+    \/[AnyRef, UniqueItemSpecification]
 
   def wrap(argument: AnyRef): WrappedArgument = argument match {
     case argumentRecorder: Recorder =>
-      \/-(argumentRecorder.itemReconstitutionData)
+      \/-(argumentRecorder.uniqueItemSpecification)
     case _ => -\/(argument)
   }
 
@@ -20,10 +21,10 @@ object Patch {
             method: Method,
             arguments: Array[AnyRef]) = {
     val methodPieces = MethodPieces(method.getDeclaringClass,
-      method.getName,
-      method.getParameterTypes)
+                                    method.getName,
+                                    method.getParameterTypes)
     new Patch(methodPieces,
-              targetRecorder.itemReconstitutionData,
+              targetRecorder.uniqueItemSpecification,
               arguments map wrap)
   }
 
@@ -36,20 +37,18 @@ object Patch {
 
 }
 
-class Patch(
-    methodPieces: MethodPieces,
-    override val targetReconstitutionData: Recorder#ItemReconstitutionData[_],
-    wrappedArguments: Array[Patch.WrappedArgument])
+class Patch(methodPieces: MethodPieces,
+            override val targetReconstitutionData: UniqueItemSpecification,
+            wrappedArguments: Array[Patch.WrappedArgument])
     extends AbstractPatch {
   import Patch._
 
   @transient
   override lazy val method = methodPieces.method
 
-  override val argumentReconstitutionDatums
-    : Seq[Recorder#ItemReconstitutionData[_]] =
+  override val argumentReconstitutionDatums: Seq[UniqueItemSpecification] =
     wrappedArguments collect {
-      case \/-(itemReconstitutionData) => itemReconstitutionData
+      case \/-(uniqueItemSpecification) => uniqueItemSpecification
     }
 
   def unwrap(identifiedItemAccess: IdentifiedItemAccess)(
