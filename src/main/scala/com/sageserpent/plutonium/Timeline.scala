@@ -17,8 +17,7 @@ import scala.reflect.runtime.universe
 import scala.reflect.runtime.universe.{Super => _, This => _, _}
 
 trait Timeline[EventId] {
-  def revise[NewEventId >: EventId](
-      events: Map[NewEventId, Option[Event]]): Timeline[NewEventId]
+  def revise(events: Map[EventId, Option[Event]]): Timeline[EventId]
 
   def retainUpTo(when: Unbounded[Instant]): Timeline[EventId]
 
@@ -26,7 +25,9 @@ trait Timeline[EventId] {
 }
 
 // TODO - given that we have 'emptyItemCache', I'm not sure if we need this too - let's see how it pans out...
-object emptyTimeline extends TimelineImplementation[Nothing]
+object emptyTimeline {
+  def apply[EventId]() = new TimelineImplementation[EventId]
+}
 
 // TODO - find a home for this...
 object itemStateStorageUsingProxies extends ItemStateStorage {
@@ -81,18 +82,17 @@ object itemStateStorageUsingProxies extends ItemStateStorage {
   }
 }
 
-class TimelineImplementation[EventId](events: Map[EventId, Event] = Map.empty,
-                                      blobStorage: BlobStorage[EventId] =
-                                        BlobStorageInMemory.apply[EventId]())
+class TimelineImplementation[EventId](
+    events: Map[EventId, Event] = Map.empty[EventId, Event],
+    blobStorage: BlobStorage[EventId] = BlobStorageInMemory.apply[EventId]())
     extends Timeline[EventId] {
-  override def revise[NewEventId >: EventId](
-      events: Map[NewEventId, Option[Event]]) = {
+  override def revise(events: Map[EventId, Option[Event]]) = {
 
     // PLAN: need to create a new blob storage and the mysterious high-level lifecycle set with incremental patch application abstraction.
 
     new TimelineImplementation(
       events = (this.events
-        .asInstanceOf[Map[NewEventId, Event]] /: events) {
+        .asInstanceOf[Map[EventId, Event]] /: events) {
         case (events, (eventId, Some(event))) => events + (eventId -> event)
         case (events, (eventId, None))        => events - eventId
       }
