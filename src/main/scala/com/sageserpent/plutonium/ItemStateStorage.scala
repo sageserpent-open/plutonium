@@ -145,7 +145,8 @@ trait ItemStateStorage {
     itemDeserializationThreadContextAccess.value.get.createItem[Item]
 
   trait ReconstitutionContext extends ItemCache {
-    val blobStorageTimeslice: BlobStorage.Timeslice // NOTE: abstracting this allows the prospect of a 'moving' timeslice for use when executing an update plan.
+    def blobStorageTimeslice
+      : BlobStorage.Timeslice // NOTE: abstracting this allows the prospect of a 'moving' timeslice for use when executing an update plan.
     override def itemsFor[Item: TypeTag](id: Any): Stream[Item] =
       for {
         uniqueItemSpecification <- blobStorageTimeslice.uniqueItemQueriesFor(id)
