@@ -13,7 +13,7 @@ object Patch {
 
   def wrap(argument: AnyRef): WrappedArgument = argument match {
     case argumentRecorder: Recorder =>
-      \/-(argumentRecorder.itemReconstitutionData)
+      \/-(argumentRecorder.uniqueItemSpecification)
     case _ => -\/(argument)
   }
 
@@ -24,7 +24,7 @@ object Patch {
                                     method.getName,
                                     method.getParameterTypes)
     new Patch(methodPieces,
-              targetRecorder.itemReconstitutionData,
+              targetRecorder.uniqueItemSpecification,
               arguments map wrap)
   }
 
@@ -48,7 +48,7 @@ class Patch(methodPieces: MethodPieces,
 
   override val argumentReconstitutionDatums: Seq[UniqueItemSpecification] =
     wrappedArguments collect {
-      case \/-(itemReconstitutionData) => itemReconstitutionData
+      case \/-(uniqueItemSpecification) => uniqueItemSpecification
     }
 
   def unwrap(identifiedItemAccess: IdentifiedItemAccess)(

@@ -25,7 +25,7 @@ object WorldRedisBasedImplementation {
 
   val javaSerializer = new JavaSerializer
 
-  class ItemReconstitutionDataSerializer[Item]
+  class UniqueItemSpecificationSerializer[Item]
       extends Serializer[UniqueItemSpecification] {
     override def write(kryo: Kryo,
                        output: Output,
@@ -51,11 +51,11 @@ object WorldRedisBasedImplementation {
   val kryoPool = KryoPool.withByteArrayOutputStream(
     40,
     new ScalaKryoInstantiator().withRegistrar((kryo: Kryo) => {
-      def registerSerializerForItemReconstitutionData[Item]() = {
+      def registerSerializerForUniqueItemSpecification[Item]() = {
         kryo.register(classOf[UniqueItemSpecification],
-                      new ItemReconstitutionDataSerializer[Item])
+                      new UniqueItemSpecificationSerializer[Item])
       }
-      registerSerializerForItemReconstitutionData()
+      registerSerializerForUniqueItemSpecification()
     })
   )
 

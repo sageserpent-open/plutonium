@@ -88,8 +88,8 @@ object WorldImplementationCodeFactoring {
     val nonMutableMembersThatCanAlwaysBeReadFrom = (classOf[ItemExtensionApi].getMethods ++ classOf[
       AnyRef].getMethods) map (new MethodDescription.ForLoadedMethod(_))
 
-    val itemReconstitutionDataProperty = new MethodDescription.ForLoadedMethod(
-      classOf[Recorder].getMethod("itemReconstitutionData"))
+    val uniqueItemSpecificationProperty = new MethodDescription.ForLoadedMethod(
+      classOf[Recorder].getMethod("uniqueItemSpecification"))
 
     val isGhostProperty = new MethodDescription.ForLoadedMethod(
       classOf[ItemExtensionApi].getMethod("isGhost"))
@@ -221,7 +221,7 @@ object WorldImplementationCodeFactoring {
         .empty[universe.Type, (universe.MethodMirror, Class[_])]
 
     trait AcquiredState extends AcquiredStateCapturingId with AnnihilationHook {
-      def itemReconstitutionData: UniqueItemSpecification
+      def uniqueItemSpecification: UniqueItemSpecification
 
       def itemIsLocked: Boolean
     }
@@ -266,9 +266,9 @@ object WorldImplementationCodeFactoring {
         }
 
         if (acquiredState.isGhost) {
-          val itemReconstitutionData = acquiredState.itemReconstitutionData
+          val uniqueItemSpecification = acquiredState.uniqueItemSpecification
           throw new UnsupportedOperationException(
-            s"Attempt to write via: '$method' to a ghost item of id: '${itemReconstitutionData._1}' and type '${itemReconstitutionData._2}'.")
+            s"Attempt to write via: '$method' to a ghost item of id: '${uniqueItemSpecification._1}' and type '${uniqueItemSpecification._2}'.")
         }
 
         superCall.call()
@@ -287,9 +287,9 @@ object WorldImplementationCodeFactoring {
                 @SuperCall superCall: Callable[_],
                 @FieldValue("acquiredState") acquiredState: AcquiredState) = {
         if (acquiredState.isGhost) {
-          val itemReconstitutionData = acquiredState.itemReconstitutionData
+          val uniqueItemSpecification = acquiredState.uniqueItemSpecification
           throw new UnsupportedOperationException(
-            s"Attempt to read via: '$method' from a ghost item of id: '${itemReconstitutionData._1}' and type '${itemReconstitutionData._2}'.")
+            s"Attempt to read via: '$method' from a ghost item of id: '${uniqueItemSpecification._1}' and type '${uniqueItemSpecification._2}'.")
         }
 
         superCall.call()
@@ -407,7 +407,7 @@ object WorldImplementationCodeFactoring {
             new AcquiredState {
               val _id = id
 
-              def itemReconstitutionData: UniqueItemSpecification =
+              def uniqueItemSpecification: UniqueItemSpecification =
                 id -> typeTag[Item]
 
               def itemIsLocked: Boolean =

@@ -257,11 +257,11 @@ abstract class PatchRecorderImplementation(
   private val idToItemStatesMap =
     mutable.Map.empty[Any, mutable.Set[ItemState]]
 
-  private type ItemReconstitutionDataToItemStateMap =
+  private type UniqueItemSpecificationToItemStateMap =
     mutable.Map[UniqueItemSpecification, ItemState]
 
   private val patchToItemStatesMap =
-    mutable.Map.empty[AbstractPatch, ItemReconstitutionDataToItemStateMap]
+    mutable.Map.empty[AbstractPatch, UniqueItemSpecificationToItemStateMap]
 
   private var _nextSequenceIndex: SequenceIndex = initialSequenceIndex
 
@@ -303,9 +303,10 @@ abstract class PatchRecorderImplementation(
       }
 
       override def reconstitute(
-          itemReconstitutionData: UniqueItemSpecification): Any = {
-        val id        = itemReconstitutionData._1
-        val itemState = reconstitutionDataToItemStateMap(itemReconstitutionData)
+          uniqueItemSpecification: UniqueItemSpecification): Any = {
+        val id = uniqueItemSpecification._1
+        val itemState = reconstitutionDataToItemStateMap(
+          uniqueItemSpecification)
 
         itemFor_(id, itemState.lowerBoundTypeTag)
       }
@@ -358,8 +359,8 @@ abstract class PatchRecorderImplementation(
   }
 
   private def itemStateFor(
-      itemReconstitutionData: UniqueItemSpecification): ItemState = {
-    val (id, typeTag) = itemReconstitutionData
+      uniqueItemSpecification: UniqueItemSpecification): ItemState = {
+    val (id, typeTag) = uniqueItemSpecification
 
     val (itemStatesFromPreviousLifecycles, itemStates) = idToItemStatesMap
       .get(id)
