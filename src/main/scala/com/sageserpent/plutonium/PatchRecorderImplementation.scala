@@ -352,10 +352,10 @@ abstract class PatchRecorderImplementation(
       itemState
     }
 
-    for (argumentReconstitutionData <- patch.argumentReconstitutionDatums) {
+    for (argumentReconstitutionData <- patch.argumentItemSpecifications) {
       refinedItemStateFor(argumentReconstitutionData)
     }
-    refinedItemStateFor(patch.targetReconstitutionData)
+    refinedItemStateFor(patch.targetItemSpecification)
   }
 
   private def itemStateFor(

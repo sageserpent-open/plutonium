@@ -187,13 +187,13 @@ class TimelineImplementation[EventId](
             case ItemStatePatch(patch) =>
               patch(identifiedItemAccess)
 
-              val target = patch.targetReconstitutionData -> identifiedItemAccess
-                .reconstitute(patch.targetReconstitutionData)
+              val target = patch.targetItemSpecification -> identifiedItemAccess
+                .reconstitute(patch.targetItemSpecification)
 
-              val arguments = patch.argumentReconstitutionDatums map (
-                  itemReconstitutionData =>
-                    itemReconstitutionData -> identifiedItemAccess.reconstitute(
-                      itemReconstitutionData))
+              val arguments = patch.argumentItemSpecifications map (
+                  uniqueItemSpecification =>
+                    uniqueItemSpecification -> identifiedItemAccess
+                      .reconstitute(uniqueItemSpecification))
 
               snapshotBlobs ++= (target +: arguments map {
                 case (uniqueItemSpecification, item) =>
