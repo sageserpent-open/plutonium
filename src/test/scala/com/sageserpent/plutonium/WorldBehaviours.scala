@@ -1352,14 +1352,14 @@ trait WorldBehaviours
                   Finite(definiteQueryWhen)))
                 histories = historiesFrom(scope)
               } yield {
-                intercept[RuntimeException](recordEventsInWorld(
-                  Stream(List(Some(Finite(definiteQueryWhen),
-                                   Annihilation[IntegerHistory](
-                                     definiteQueryWhen,
-                                     historyId.asInstanceOf[String])) -> -1)),
-                  List(asOfs.last),
-                  world
-                ))
+                intercept[RuntimeException] {
+                  val eventIdForAnnihilation = -1
+                  world.revise(eventIdForAnnihilation,
+                               Annihilation[IntegerHistory](
+                                 definiteQueryWhen,
+                                 historyId.asInstanceOf[String]),
+                               asOfs.last)
+                }
                 Prop.proved
               } :| s"Should have rejected the attempt to annihilate an item that didn't exist at the query time."): _*)
           }
@@ -2057,19 +2057,19 @@ trait WorldBehaviours
             shuffledObsoleteRecordings)
           asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
                                instantGenerator) map (_.sorted)
-          whenInconsistentEventsOccur <- unboundedInstantGenerator
+          whenAnInconsistentEventOccurs <- unboundedInstantGenerator
         } yield
           (worldResource,
            recordingsGroupedById,
            bigShuffledHistoryOverLotsOfThings,
            asOfs,
-           whenInconsistentEventsOccur)
+           whenAnInconsistentEventOccurs)
         check(Prop.forAllNoShrink(testCaseGenerator) {
           case (worldResource,
                 recordingsGroupedById,
                 bigShuffledHistoryOverLotsOfThings,
                 asOfs,
-                whenInconsistentEventsOccur) =>
+                whenAnInconsistentEventOccurs) =>
             worldResource acquireAndGet {
               world =>
                 var numberOfEvents = bigShuffledHistoryOverLotsOfThings.size
@@ -2084,7 +2084,7 @@ trait WorldBehaviours
 
                 val atTheEndOfTime = PositiveInfinity[Instant]
 
-                val queryScope = world.scopeFor(whenInconsistentEventsOccur,
+                val queryScope = world.scopeFor(whenAnInconsistentEventOccurs,
                                                 world.nextRevision)
 
                 val eventIdForExtraConsistentChange  = -1
@@ -2109,7 +2109,7 @@ trait WorldBehaviours
                       })
                     val inconsistentlyTypedChange =
                       Change.forOneItem[AnotherSpecificFooHistory](
-                        whenInconsistentEventsOccur)(
+                        whenAnInconsistentEventOccurs)(
                         fooHistoryId
                           .asInstanceOf[AnotherSpecificFooHistory#Id], {
                           anotherSpecificFooHistory: AnotherSpecificFooHistory =>
@@ -2193,6 +2193,31 @@ trait WorldBehaviours
              .apply(
                implementingHistoryId,
                (implementingHistory: ImplementingHistory) => {
+                 // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
+                 assert(implementingHistoryId == implementingHistory.id)
+                 assertThrows[UnsupportedOperationException](
+                   implementingHistory.datums)
+                 assertThrows[UnsupportedOperationException](
+                   implementingHistory.property)
+
+                 if (faulty) implementingHistory.forceInvariantBreakage() // Modelling breakage of the bitemporal invariant.
+
+                 implementingHistory.property = data
+               }
+           ))
+
+    def negatingImplementingHistoryNegativeIntegerDataSampleGenerator(
+        faulty: Boolean) =
+      for { data <- Gen.negNum[Int] } yield
+        (data,
+         (when: americium.Unbounded[Instant],
+          makeAChange: Boolean,
+          implementingHistoryId: NegatingImplementingHistory#Id) =>
+           eventConstructorReferringToOneItem[NegatingImplementingHistory](
+             makeAChange)(when)
+             .apply(
+               implementingHistoryId,
+               (implementingHistory: NegatingImplementingHistory) => {
                  // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
                  assert(implementingHistoryId == implementingHistory.id)
                  assertThrows[UnsupportedOperationException](
@@ -2475,6 +2500,89 @@ trait WorldBehaviours
               }
 
               Prop.proved
+            }
+        })
+      }
+    }
+
+    it should "take into account the precise type of the item referenced by an annihilation when other events refer to the same item via looser types" in {
+      {
+        val testCaseGenerator = for {
+          worldResource <- worldResourceGenerator
+          recordingsGroupedById <- recordingsGroupedByIdGenerator_(
+            mixedAbstractedAndImplementingDataSamplesForAnIdGenerator,
+            forbidAnnihilations = true,
+            forbidMeasurements = false)
+          obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
+          seed                          <- seedGenerator
+          random = new Random(seed)
+          shuffledRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+            random,
+            recordingsGroupedById)
+          shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+            random,
+            obsoleteRecordingsGroupedById)
+          bigShuffledHistoryOverLotsOfThings = intersperseObsoleteEvents(
+            random,
+            shuffledRecordings,
+            shuffledObsoleteRecordings)
+          asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
+                               instantGenerator) map (_.sorted)
+          whenAnAnnihilationOccurs <- instantGenerator
+        } yield
+          (worldResource,
+           recordingsGroupedById,
+           bigShuffledHistoryOverLotsOfThings,
+           asOfs,
+           whenAnAnnihilationOccurs)
+        check(Prop.forAllNoShrink(testCaseGenerator) {
+          case (worldResource,
+                recordingsGroupedById,
+                bigShuffledHistoryOverLotsOfThings,
+                asOfs,
+                whenAnAnnihilationOccurs) =>
+            worldResource acquireAndGet {
+              world =>
+                recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
+                                    asOfs,
+                                    world)
+
+                val scope =
+                  world.scopeFor(whenAnAnnihilationOccurs, world.nextRevision)
+
+                val checks = for {
+                  RecordingsNoLaterThan(
+                    historyId,
+                    historiesFrom,
+                    pertinentRecordings,
+                    _,
+                    _) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
+                    Finite(whenAnAnnihilationOccurs)))
+                  Seq(history) = historiesFrom(scope)
+                } yield
+                  (historyId, history.datums, pertinentRecordings.map(_._1))
+
+                for (((historyId, _, _), negatedEventIdForAnnihilation) <- checks zipWithIndex) {
+                  world.revise(-negatedEventIdForAnnihilation,
+                               Annihilation[NegatingImplementingHistory](
+                                 whenAnAnnihilationOccurs,
+                                 historyId.asInstanceOf[String]),
+                               asOfs.last)
+                }
+
+                if (checks.nonEmpty)
+                  Prop.all(checks.map {
+                    case (historyId, actualHistory, expectedHistory) =>
+                      ((actualHistory.length == expectedHistory.length) :| s"For ${historyId}, ${actualHistory.length} == expectedHistory.length") &&
+                        Prop.all(
+                          (actualHistory zip expectedHistory zipWithIndex) map {
+                            case ((actual, expected), step) =>
+                              val negatedExpectedValue =
+                                -expected.asInstanceOf[Int]
+                              (actual == negatedExpectedValue) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}"
+                          }: _*)
+                  }: _*)
+                else Prop.undecided
             }
         })
       }
