@@ -2511,7 +2511,7 @@ trait WorldBehaviours
           worldResource <- worldResourceGenerator
           recordingsGroupedById <- recordingsGroupedByIdGenerator_(
             mixedAbstractedAndImplementingDataSamplesForAnIdGenerator,
-            forbidAnnihilations = false,
+            forbidAnnihilations = true,
             forbidMeasurements = false)
           obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
           seed                          <- seedGenerator
@@ -2529,18 +2529,22 @@ trait WorldBehaviours
           asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
                                instantGenerator) map (_.sorted)
           whenAnAnnihilationOccurs <- instantGenerator
+          queryWhen                <- instantGenerator
+          if queryWhen isBefore whenAnAnnihilationOccurs
         } yield
           (worldResource,
            recordingsGroupedById,
            bigShuffledHistoryOverLotsOfThings,
            asOfs,
-           whenAnAnnihilationOccurs)
+           whenAnAnnihilationOccurs,
+           queryWhen)
         check(Prop.forAllNoShrink(testCaseGenerator) {
           case (worldResource,
                 recordingsGroupedById,
                 bigShuffledHistoryOverLotsOfThings,
                 asOfs,
-                whenAnAnnihilationOccurs) =>
+                whenAnAnnihilationOccurs,
+                queryWhen) =>
             worldResource acquireAndGet { world =>
               try {
                 recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
@@ -2550,7 +2554,7 @@ trait WorldBehaviours
                 for {
                   (RecordingsNoLaterThan(historyId, _, _, _, _),
                    negativeOfEventIdForAnnihilation) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
-                    Finite(whenAnAnnihilationOccurs))) zipWithIndex
+                    Finite(queryWhen))) zipWithIndex
                 } {
                   val eventIdForAnnihilation =
                     -negativeOfEventIdForAnnihilation
@@ -2562,12 +2566,12 @@ trait WorldBehaviours
                 }
 
                 val scopeThatShouldPickOutNegatingImplementingHistories =
-                  world.scopeFor(whenAnAnnihilationOccurs, world.nextRevision)
+                  world.scopeFor(Finite(queryWhen), world.nextRevision)
 
                 for {
                   (RecordingsNoLaterThan(historyId, _, _, _, _),
                    negativeOfEventIdForAnnihilation) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
-                    Finite(whenAnAnnihilationOccurs))) zipWithIndex
+                    Finite(queryWhen))) zipWithIndex
                 } {
                   val eventIdForAnnihilation =
                     -negativeOfEventIdForAnnihilation
@@ -2579,11 +2583,11 @@ trait WorldBehaviours
                 }
 
                 val scopeThatShouldPickOutImplementingHistories =
-                  world.scopeFor(whenAnAnnihilationOccurs, world.nextRevision)
+                  world.scopeFor(Finite(queryWhen), world.nextRevision)
 
                 val checks = for {
                   RecordingsNoLaterThan(historyId, historiesFrom, _, _, _) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
-                    Finite(whenAnAnnihilationOccurs)))
+                    Finite(queryWhen)))
                   Seq(negatedHistory) = historiesFrom(
                     scopeThatShouldPickOutNegatingImplementingHistories)
                   Seq(history) = historiesFrom(
