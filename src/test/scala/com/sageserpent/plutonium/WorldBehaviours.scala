@@ -2511,7 +2511,7 @@ trait WorldBehaviours
           worldResource <- worldResourceGenerator
           recordingsGroupedById <- recordingsGroupedByIdGenerator_(
             mixedAbstractedAndImplementingDataSamplesForAnIdGenerator,
-            forbidAnnihilations = true,
+            forbidAnnihilations = false,
             forbidMeasurements = false)
           obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
           seed                          <- seedGenerator
@@ -2541,48 +2541,71 @@ trait WorldBehaviours
                 bigShuffledHistoryOverLotsOfThings,
                 asOfs,
                 whenAnAnnihilationOccurs) =>
-            worldResource acquireAndGet {
-              world =>
+            worldResource acquireAndGet { world =>
+              try {
                 recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
                                     asOfs,
                                     world)
 
-                val scope =
-                  world.scopeFor(whenAnAnnihilationOccurs, world.nextRevision)
-
-                val checks = for {
-                  RecordingsNoLaterThan(
-                    historyId,
-                    historiesFrom,
-                    pertinentRecordings,
-                    _,
-                    _) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
-                    Finite(whenAnAnnihilationOccurs)))
-                  Seq(history) = historiesFrom(scope)
-                } yield
-                  (historyId, history.datums, pertinentRecordings.map(_._1))
-
-                for (((historyId, _, _), negatedEventIdForAnnihilation) <- checks zipWithIndex) {
-                  world.revise(-negatedEventIdForAnnihilation,
+                for {
+                  (RecordingsNoLaterThan(historyId, _, _, _, _),
+                   negativeOfEventIdForAnnihilation) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
+                    Finite(whenAnAnnihilationOccurs))) zipWithIndex
+                } {
+                  val eventIdForAnnihilation =
+                    -negativeOfEventIdForAnnihilation
+                  world.revise(eventIdForAnnihilation,
                                Annihilation[NegatingImplementingHistory](
                                  whenAnAnnihilationOccurs,
                                  historyId.asInstanceOf[String]),
-                               asOfs.last)
+                               world.revisionAsOfs.last)
                 }
+
+                val scopeThatShouldPickOutNegatingImplementingHistories =
+                  world.scopeFor(whenAnAnnihilationOccurs, world.nextRevision)
+
+                for {
+                  (RecordingsNoLaterThan(historyId, _, _, _, _),
+                   negativeOfEventIdForAnnihilation) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
+                    Finite(whenAnAnnihilationOccurs))) zipWithIndex
+                } {
+                  val eventIdForAnnihilation =
+                    -negativeOfEventIdForAnnihilation
+                  world.revise(eventIdForAnnihilation,
+                               Annihilation[ImplementingHistory](
+                                 whenAnAnnihilationOccurs,
+                                 historyId.asInstanceOf[String]),
+                               world.revisionAsOfs.last)
+                }
+
+                val scopeThatShouldPickOutImplementingHistories =
+                  world.scopeFor(whenAnAnnihilationOccurs, world.nextRevision)
+
+                val checks = for {
+                  RecordingsNoLaterThan(historyId, historiesFrom, _, _, _) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
+                    Finite(whenAnAnnihilationOccurs)))
+                  Seq(negatedHistory) = historiesFrom(
+                    scopeThatShouldPickOutNegatingImplementingHistories)
+                  Seq(history) = historiesFrom(
+                    scopeThatShouldPickOutImplementingHistories)
+                } yield (historyId, negatedHistory.datums, history.datums)
 
                 if (checks.nonEmpty)
                   Prop.all(checks.map {
-                    case (historyId, actualHistory, expectedHistory) =>
-                      ((actualHistory.length == expectedHistory.length) :| s"For ${historyId}, ${actualHistory.length} == expectedHistory.length") &&
+                    case (historyId, negatedHistory, expectedHistory) =>
+                      ((negatedHistory.length == expectedHistory.length) :| s"For ${historyId}, ${negatedHistory.length} == expectedHistory.length") &&
                         Prop.all(
-                          (actualHistory zip expectedHistory zipWithIndex) map {
+                          (negatedHistory zip expectedHistory zipWithIndex) map {
                             case ((actual, expected), step) =>
                               val negatedExpectedValue =
                                 -expected.asInstanceOf[Int]
-                              (actual == negatedExpectedValue) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}"
+                              (actual == negatedExpectedValue) :| s"For ${historyId}, @step ${step}, ${actual} == ${negatedExpectedValue}"
                           }: _*)
                   }: _*)
                 else Prop.undecided
+              } catch {
+                case _: UnsupportedOperationException => Prop.undecided
+              }
             }
         })
       }
