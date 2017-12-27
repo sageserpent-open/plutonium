@@ -91,6 +91,7 @@ abstract class PatchRecorderImplementation(
 
         if (compatibleItemStates.nonEmpty) {
           for (itemState <- compatibleItemStates) {
+            itemState.refineType(expectedTypeTag)
             itemState.submitCandidatePatches()
             itemState.noteAnnihilation(_sequenceIndex)
           }
@@ -189,7 +190,7 @@ abstract class PatchRecorderImplementation(
       this._lowerBoundTypeTag.tpe <:< typeTag.tpe || typeTag.tpe <:< this._lowerBoundTypeTag.tpe
 
     def canBeAnnihilatedAs(typeTag: TypeTag[_]) =
-      this._lowerBoundTypeTag.tpe <:< typeTag.tpe
+      isFusibleWith(typeTag)
 
     def addPatch(when: Unbounded[Instant], patch: AbstractPatch) = {
       val candidatePatchTuple = (nextSequenceIndex(), patch, when)
