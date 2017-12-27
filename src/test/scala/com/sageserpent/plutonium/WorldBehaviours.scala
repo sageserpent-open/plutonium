@@ -2552,11 +2552,9 @@ trait WorldBehaviours
 
                 for {
                   (RecordingsNoLaterThan(historyId, _, _, _, _),
-                   negativeOfEventIdForAnnihilation) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
-                    Finite(queryWhen))) zipWithIndex
+                   eventIdForAnnihilation) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
+                    Finite(queryWhen))) zip Stream.from(-1, -1)
                 } {
-                  val eventIdForAnnihilation =
-                    -negativeOfEventIdForAnnihilation
                   world.revise(eventIdForAnnihilation,
                                Annihilation[NegatingImplementingHistory](
                                  whenAnAnnihilationOccurs,
@@ -2569,11 +2567,9 @@ trait WorldBehaviours
 
                 for {
                   (RecordingsNoLaterThan(historyId, _, _, _, _),
-                   negativeOfEventIdForAnnihilation) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
-                    Finite(queryWhen))) zipWithIndex
+                   eventIdForAnnihilation) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
+                    Finite(queryWhen))) zip Stream.from(-1, -1)
                 } {
-                  val eventIdForAnnihilation =
-                    -negativeOfEventIdForAnnihilation
                   world.revise(eventIdForAnnihilation,
                                Annihilation[ImplementingHistory](
                                  whenAnAnnihilationOccurs,
