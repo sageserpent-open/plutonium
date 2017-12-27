@@ -2528,16 +2528,15 @@ trait WorldBehaviours
             shuffledObsoleteRecordings)
           asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
                                instantGenerator) map (_.sorted)
-          whenAnAnnihilationOccurs <- instantGenerator
-          queryWhen                <- instantGenerator
-          if queryWhen isBefore whenAnAnnihilationOccurs
+          whenAnAnnihilationOccurs     <- instantGenerator
+          queryWhenLeadsAnnihilationBy <- Gen.posNum[Int]
         } yield
           (worldResource,
            recordingsGroupedById,
            bigShuffledHistoryOverLotsOfThings,
            asOfs,
            whenAnAnnihilationOccurs,
-           queryWhen)
+           whenAnAnnihilationOccurs minusMillis queryWhenLeadsAnnihilationBy)
         check(Prop.forAllNoShrink(testCaseGenerator) {
           case (worldResource,
                 recordingsGroupedById,
