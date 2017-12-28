@@ -306,6 +306,32 @@ object WorldImplementationCodeFactoring {
         superCall.call()
       }
     }
+
+    object proxyFactory extends ProxyFactory[AcquiredState] {
+      val isForRecordingOnly = false
+
+      override val acquiredStateClazz = classOf[AcquiredState]
+
+      override val additionalInterfaces: Array[Class[_]] =
+        QueryCallbackStuff.additionalInterfaces
+      override val cachedProxyConstructors
+        : mutable.Map[universe.Type, (universe.MethodMirror, Class[_])] =
+        QueryCallbackStuff.cachedProxyConstructors
+
+      override protected def configureInterceptions(
+          builder: Builder[_]): Builder[_] =
+        builder
+          .method(matchCheckedReadAccess)
+          .intercept(MethodDelegation.to(checkedReadAccess))
+          .method(matchIsGhost)
+          .intercept(MethodDelegation.to(isGhost))
+          .method(matchMutation)
+          .intercept(MethodDelegation.to(mutation))
+          .method(matchRecordAnnihilation)
+          .intercept(MethodDelegation.to(recordAnnihilation))
+          .method(matchInvariantCheck)
+          .intercept(MethodDelegation.to(checkInvariant))
+    }
   }
 
   def firstMethodIsOverrideCompatibleWithSecond(
@@ -396,32 +422,6 @@ object WorldImplementationCodeFactoring {
     def itemFor[Item: TypeTag](id: Any): Item = {
       def constructAndCacheItem(): Item = {
         import QueryCallbackStuff._
-
-        val proxyFactory = new ProxyFactory[AcquiredState] {
-          val isForRecordingOnly = false
-
-          override val acquiredStateClazz = classOf[AcquiredState]
-
-          override val additionalInterfaces: Array[Class[_]] =
-            QueryCallbackStuff.additionalInterfaces
-          override val cachedProxyConstructors
-            : mutable.Map[universe.Type, (universe.MethodMirror, Class[_])] =
-            QueryCallbackStuff.cachedProxyConstructors
-
-          override protected def configureInterceptions(
-              builder: Builder[_]): Builder[_] =
-            builder
-              .method(matchCheckedReadAccess)
-              .intercept(MethodDelegation.to(checkedReadAccess))
-              .method(matchIsGhost)
-              .intercept(MethodDelegation.to(isGhost))
-              .method(matchMutation)
-              .intercept(MethodDelegation.to(mutation))
-              .method(matchRecordAnnihilation)
-              .intercept(MethodDelegation.to(recordAnnihilation))
-              .method(matchInvariantCheck)
-              .intercept(MethodDelegation.to(checkInvariant))
-        }
 
         val stateToBeAcquiredByProxy: AcquiredState =
           new AcquiredState {

@@ -92,6 +92,28 @@ object capturePatches {
           s"Attempt to call method: '$method' with a non-unit return type on a recorder proxy: '$target' while capturing a change or measurement.")
       }
     }
+
+    object proxyFactory extends ProxyFactory[AcquiredState] {
+      val isForRecordingOnly = true
+
+      override val acquiredStateClazz = classOf[AcquiredState]
+
+      override val additionalInterfaces: Array[Class[_]] =
+        RecordingCallbackStuff.additionalInterfaces
+      override val cachedProxyConstructors
+        : mutable.Map[Type, (universe.MethodMirror, Class[_])] =
+        RecordingCallbackStuff.cachedProxyConstructors
+
+      override protected def configureInterceptions(
+          builder: Builder[_]): Builder[_] =
+        builder
+          .method(matchForbiddenReadAccess)
+          .intercept(MethodDelegation.to(forbiddenReadAccess))
+          .method(matchItemReconstitutionData)
+          .intercept(MethodDelegation.to(itemReconstitutionData))
+          .method(matchMutation)
+          .intercept(MethodDelegation.to(mutation))
+    }
   }
 
   def apply(update: RecorderFactory => Unit): Seq[AbstractPatch] = {
@@ -101,28 +123,6 @@ object capturePatches {
     class LocalRecorderFactory extends RecorderFactory {
       override def apply[Item: TypeTag](id: Any): Item = {
         import RecordingCallbackStuff._
-
-        val proxyFactory = new ProxyFactory[AcquiredState] {
-          val isForRecordingOnly = true
-
-          override val acquiredStateClazz = classOf[AcquiredState]
-
-          override val additionalInterfaces: Array[Class[_]] =
-            RecordingCallbackStuff.additionalInterfaces
-          override val cachedProxyConstructors
-            : mutable.Map[Type, (universe.MethodMirror, Class[_])] =
-            RecordingCallbackStuff.cachedProxyConstructors
-
-          override protected def configureInterceptions(
-              builder: Builder[_]): Builder[_] =
-            builder
-              .method(matchForbiddenReadAccess)
-              .intercept(MethodDelegation.to(forbiddenReadAccess))
-              .method(matchItemReconstitutionData)
-              .intercept(MethodDelegation.to(itemReconstitutionData))
-              .method(matchMutation)
-              .intercept(MethodDelegation.to(mutation))
-        }
 
         val stateToBeAcquiredByProxy = new AcquiredState {
           val _id = id
