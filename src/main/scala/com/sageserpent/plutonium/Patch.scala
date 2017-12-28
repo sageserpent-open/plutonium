@@ -73,10 +73,20 @@ class Patch(
     }
   }
 
-  def checkInvariant(identifiedItemAccess: IdentifiedItemAccess): Unit = {
+  def checkInvariants(identifiedItemAccess: IdentifiedItemAccess): Unit = {
     identifiedItemAccess
       .reconstitute(targetReconstitutionData)
       .asInstanceOf[ItemExtensionApi]
       .checkInvariant()
+
+    def wildcardCapture[Item](
+        itemReconstitutionData: Recorder#ItemReconstitutionData[Item]) =
+      identifiedItemAccess.reconstitute(itemReconstitutionData)
+
+    for (argumentReconstitutionDatum <- argumentReconstitutionDatums) {
+      wildcardCapture(argumentReconstitutionDatum)
+        .asInstanceOf[ItemExtensionApi]
+        .checkInvariant()
+    }
   }
 }
