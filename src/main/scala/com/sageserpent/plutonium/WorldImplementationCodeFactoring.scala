@@ -128,8 +128,6 @@ object WorldImplementationCodeFactoring {
   trait ProxyFactory[AcquiredState <: AcquiredStateCapturingId] {
     val isForRecordingOnly: Boolean
 
-    val stateToBeAcquiredByProxy: AcquiredState
-
     val acquiredStateClazz: Class[_ <: AcquiredState]
 
     private def createProxyClass(clazz: Class[_]): Class[_] = {
@@ -173,7 +171,8 @@ object WorldImplementationCodeFactoring {
       classMirror.reflectConstructor(constructor.asMethod) -> clazz
     }
 
-    def constructFrom[Item: TypeTag](id: Any) = {
+    def constructFrom[Item: TypeTag](
+        stateToBeAcquiredByProxy: AcquiredState) = {
       // NOTE: this returns items that are proxies to 'Item' rather than direct instances of 'Item' itself. Depending on the
       // context (using a scope created by a client from a world, as opposed to while building up that scope from patches),
       // the items may forbid certain operations on them - e.g. for rendering from a client's scope, the items should be
@@ -194,7 +193,7 @@ object WorldImplementationCodeFactoring {
               "id" != method.getName && Modifier.isAbstract(
                 method.getModifiers))) {
         throw new UnsupportedOperationException(
-          s"Attempt to create an instance of an abstract class '$clazz' for id: '$id'.")
+          s"Attempt to create an instance of an abstract class '$clazz' for id: '${stateToBeAcquiredByProxy._id}'.")
       }
       val proxy = constructor().asInstanceOf[Item]
 
@@ -307,6 +306,32 @@ object WorldImplementationCodeFactoring {
         superCall.call()
       }
     }
+
+    object proxyFactory extends ProxyFactory[AcquiredState] {
+      val isForRecordingOnly = false
+
+      override val acquiredStateClazz = classOf[AcquiredState]
+
+      override val additionalInterfaces: Array[Class[_]] =
+        QueryCallbackStuff.additionalInterfaces
+      override val cachedProxyConstructors
+        : mutable.Map[universe.Type, (universe.MethodMirror, Class[_])] =
+        QueryCallbackStuff.cachedProxyConstructors
+
+      override protected def configureInterceptions(
+          builder: Builder[_]): Builder[_] =
+        builder
+          .method(matchCheckedReadAccess)
+          .intercept(MethodDelegation.to(checkedReadAccess))
+          .method(matchIsGhost)
+          .intercept(MethodDelegation.to(isGhost))
+          .method(matchMutation)
+          .intercept(MethodDelegation.to(mutation))
+          .method(matchRecordAnnihilation)
+          .intercept(MethodDelegation.to(recordAnnihilation))
+          .method(matchInvariantCheck)
+          .intercept(MethodDelegation.to(checkInvariant))
+    }
   }
 
   def firstMethodIsOverrideCompatibleWithSecond(
@@ -398,45 +423,18 @@ object WorldImplementationCodeFactoring {
       def constructAndCacheItem(): Item = {
         import QueryCallbackStuff._
 
-        val proxyFactory = new ProxyFactory[AcquiredState] {
-          val isForRecordingOnly = false
+        val stateToBeAcquiredByProxy: AcquiredState =
+          new AcquiredState {
+            val _id = id
 
-          override val stateToBeAcquiredByProxy: AcquiredState =
-            new AcquiredState {
-              val _id = id
+            def itemReconstitutionData: Recorder#ItemReconstitutionData[Item] =
+              id -> typeTag[Item]
 
-              def itemReconstitutionData
-                : Recorder#ItemReconstitutionData[Item] =
-                id -> typeTag[Item]
+            def itemsAreLocked: Boolean =
+              identifiedItemsScopeThis.itemsAreLocked
+          }
 
-              def itemsAreLocked: Boolean =
-                identifiedItemsScopeThis.itemsAreLocked
-            }
-
-          override val acquiredStateClazz = classOf[AcquiredState]
-
-          override val additionalInterfaces: Array[Class[_]] =
-            QueryCallbackStuff.additionalInterfaces
-          override val cachedProxyConstructors
-            : mutable.Map[universe.Type, (universe.MethodMirror, Class[_])] =
-            QueryCallbackStuff.cachedProxyConstructors
-
-          override protected def configureInterceptions(
-              builder: Builder[_]): Builder[_] =
-            builder
-              .method(matchCheckedReadAccess)
-              .intercept(MethodDelegation.to(checkedReadAccess))
-              .method(matchIsGhost)
-              .intercept(MethodDelegation.to(isGhost))
-              .method(matchMutation)
-              .intercept(MethodDelegation.to(mutation))
-              .method(matchRecordAnnihilation)
-              .intercept(MethodDelegation.to(recordAnnihilation))
-              .method(matchInvariantCheck)
-              .intercept(MethodDelegation.to(checkInvariant))
-        }
-
-        val item = proxyFactory.constructFrom(id)
+        val item = proxyFactory.constructFrom(stateToBeAcquiredByProxy)
         idToItemsMultiMap.addBinding(id, item)
         item
       }
