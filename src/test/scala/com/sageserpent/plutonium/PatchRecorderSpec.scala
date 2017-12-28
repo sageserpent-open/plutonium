@@ -139,10 +139,10 @@ class PatchRecorderSpec
                                   sequenceIndicesFromAppliedPatches += sequenceIndexOfPatchStandIn: Unit
                                 }
                                 .once
-                              (patch.checkInvariant _).expects(*).once
+                              (patch.checkInvariants _).expects(*).once
                             } else {
                               (patch.apply _).expects(*).never
-                              (patch.checkInvariant _).expects(*).never
+                              (patch.checkInvariants _).expects(*).never
                             }
                         }
                       }

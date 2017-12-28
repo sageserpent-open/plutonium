@@ -69,10 +69,14 @@ class Patch(methodPieces: MethodPieces,
     }
   }
 
-  def checkInvariant(identifiedItemAccess: IdentifiedItemAccess): Unit = {
+  def checkInvariants(identifiedItemAccess: IdentifiedItemAccess): Unit = {
     identifiedItemAccess
       .reconstitute(targetItemSpecification)
       .asInstanceOf[ItemExtensionApi]
       .checkInvariant()
+
+    for (argument <- argumentItemSpecifications map identifiedItemAccess.reconstitute) {
+      argument.asInstanceOf[ItemExtensionApi].checkInvariant()
+    }
   }
 }
