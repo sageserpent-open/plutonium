@@ -49,9 +49,6 @@ trait ItemStateStorage {
 
   protected def idFrom(item: ItemSuperType): Any
 
-  protected def createItemFor[Item](
-      uniqueItemSpecification: UniqueItemSpecification): Item
-
   val serializerThatDirectlyEncodesInterItemReferences =
     new Serializer[ItemSuperType] {
       override def read(kryo: Kryo,
@@ -191,10 +188,11 @@ trait ItemStateStorage {
         storage.update(uniqueItemSpecificationAccess.value.get, item)
 
       private[ItemStateStorage] def createItem[Item]: Item =
-        itemStateStorageObject.createItemFor(
-          uniqueItemSpecificationAccess.value.get)
-
+        createItemFor(uniqueItemSpecificationAccess.value.get)
     }
+
+    protected def createItemFor[Item](
+        uniqueItemSpecification: UniqueItemSpecification): Item
 
     class Storage extends mutable.HashMap[UniqueItemSpecification, Any]
 

@@ -134,18 +134,6 @@ class ItemStateStorageSpec extends FlatSpec with Matchers with Checkers {
       classOf[ItemSuperType]
 
     override protected def idFrom(item: ItemSuperType): Any = item.id
-
-    // The following implementation is the epitome of hokeyness. Well, it's just test code... Hmmm.
-    override protected def createItemFor[Item](
-        uniqueItemSpecification: UniqueItemSpecification): Item =
-      (uniqueItemSpecification match {
-        case (id: OddGraphNode#Id, itemTypeTag)
-            if itemTypeTag == typeTag[OddGraphNode] =>
-          new OddGraphNode(id)
-        case (id: EvenGraphNode#Id, itemTypeTag)
-            if itemTypeTag == typeTag[EvenGraphNode] =>
-          new EvenGraphNode(id)
-      }).asInstanceOf[Item]
   }
 
   "An item" should "be capable of being roundtripped by reconstituting its snapshot" in check(
@@ -181,6 +169,18 @@ class ItemStateStorageSpec extends FlatSpec with Matchers with Checkers {
 
       val reconstitutionContext = new itemStateStorage.ReconstitutionContext() {
         override val blobStorageTimeslice = stubTimeslice
+
+        // The following implementation is the epitome of hokeyness. Well, it's just test code... Hmmm.
+        override protected def createItemFor[Item](
+            uniqueItemSpecification: UniqueItemSpecification): Item =
+          (uniqueItemSpecification match {
+            case (id: OddGraphNode#Id, itemTypeTag)
+                if itemTypeTag == typeTag[OddGraphNode] =>
+              new OddGraphNode(id)
+            case (id: EvenGraphNode#Id, itemTypeTag)
+                if itemTypeTag == typeTag[EvenGraphNode] =>
+              new EvenGraphNode(id)
+          }).asInstanceOf[Item]
       }
 
       val individuallyReconstitutedGraphNodes = graphNodes

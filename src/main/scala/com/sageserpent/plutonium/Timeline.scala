@@ -40,25 +40,6 @@ object itemStateStorageUsingProxies extends ItemStateStorage {
   override protected val clazzOfItemSuperType = classOf[ItemSuperType]
 
   override protected def idFrom(item: ItemSuperType) = item.id
-
-  override def createItemFor[Item](
-      uniqueItemSpecification: UniqueItemSpecification) = {
-    import QueryCallbackStuff._
-
-    val (id, itemTypeTag) = uniqueItemSpecification
-
-    val stateToBeAcquiredByProxy: AcquiredState =
-      new AcquiredState {
-        val _id = id
-
-        def uniqueItemSpecification: UniqueItemSpecification =
-          id -> itemTypeTag.asInstanceOf[TypeTag[Item]]
-
-        def itemIsLocked: Boolean = true
-      }
-
-    proxyFactory.constructFrom(stateToBeAcquiredByProxy)
-  }
 }
 
 class TimelineImplementation[EventId](
@@ -117,6 +98,27 @@ class TimelineImplementation[EventId](
 
         override def blobStorageTimeslice: BlobStorage.Timeslice =
           blobStorageTimeSlice
+
+        // TODO - either fuse this back with the other code duplicate below or make it its own thing.
+        override def createItemFor[Item](
+            uniqueItemSpecification: UniqueItemSpecification) = {
+          import QueryCallbackStuff._
+
+          val (id, itemTypeTag) = uniqueItemSpecification
+
+          val stateToBeAcquiredByProxy: AcquiredState =
+            new AcquiredState {
+              val _id = id
+
+              def uniqueItemSpecification: UniqueItemSpecification =
+                id -> itemTypeTag.asInstanceOf[TypeTag[Item]]
+
+              // TODO - make this refer to a shared 'all items are locked' variable that is unlocked when a patch is applied.
+              def itemIsLocked: Boolean = false
+            }
+
+          proxyFactory.constructFrom(stateToBeAcquiredByProxy)
+        }
       }
 
     val identifiedItemAccess = new IdentifiedItemAccess {
@@ -134,8 +136,8 @@ class TimelineImplementation[EventId](
                 .itemsFor(uniqueItemSpecification._1)(
                   uniqueItemSpecification._2)
                 .headOption
-                .getOrElse(itemStateStorageUsingProxies.createItemFor(
-                  uniqueItemSpecification))
+                .getOrElse(
+                  reconstitutionContext.createItemFor(uniqueItemSpecification))
             }
           )
     }
@@ -195,6 +197,26 @@ class TimelineImplementation[EventId](
     new itemStateStorageUsingProxies.ReconstitutionContext {
       override val blobStorageTimeslice: BlobStorage.Timeslice =
         blobStorage.timeSlice(when)
+
+      // TODO - either fuse this back with the other code duplicate above or make it its own thing. Do we really need the 'itemIsLocked'? If we do, then let's fuse...
+      override def createItemFor[Item](
+          uniqueItemSpecification: UniqueItemSpecification) = {
+        import QueryCallbackStuff._
+
+        val (id, itemTypeTag) = uniqueItemSpecification
+
+        val stateToBeAcquiredByProxy: AcquiredState =
+          new AcquiredState {
+            val _id = id
+
+            def uniqueItemSpecification: UniqueItemSpecification =
+              id -> itemTypeTag.asInstanceOf[TypeTag[Item]]
+
+            def itemIsLocked: Boolean = true
+          }
+
+        proxyFactory.constructFrom(stateToBeAcquiredByProxy)
+      }
     }
 
   private def updateBlobStorage(updatePlan: UpdatePlan): BlobStorage[EventId] =
