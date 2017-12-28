@@ -90,29 +90,9 @@ object capturePatches {
           s"Attempt to call method: '$method' with a non-unit return type on a recorder proxy: '$target' while capturing a change or measurement.")
       }
     }
-  }
 
-  def apply(update: RecorderFactory => Unit): Seq[AbstractPatch] = {
-    val capturedPatches =
-      mutable.MutableList.empty[AbstractPatch]
-
-    class LocalRecorderFactory extends RecorderFactory {
-      override def apply[Item: TypeTag](id: Any): Item = {
-        import RecordingCallbackStuff._
-
-        val proxyFactory = new ProxyFactory[AcquiredState] {
+    object proxyFactory extends ProxyFactory[AcquiredState] {
           val isForRecordingOnly = true
-
-          override val stateToBeAcquiredByProxy = new AcquiredState {
-            val _id = id
-
-            def uniqueItemSpecification: UniqueItemSpecification =
-              id -> typeTag[Item]
-
-            def capturePatch(patch: AbstractPatch) {
-              capturedPatches += patch
-            }
-          }
 
           override val acquiredStateClazz = classOf[AcquiredState]
 
@@ -132,8 +112,28 @@ object capturePatches {
               .method(matchMutation)
               .intercept(MethodDelegation.to(mutation))
         }
+  }
 
-        proxyFactory.constructFrom[Item](id)
+  def apply(update: RecorderFactory => Unit): Seq[AbstractPatch] = {
+    val capturedPatches =
+      mutable.MutableList.empty[AbstractPatch]
+
+    class LocalRecorderFactory extends RecorderFactory {
+      override def apply[Item: TypeTag](id: Any): Item = {
+        import RecordingCallbackStuff._
+
+        val stateToBeAcquiredByProxy = new AcquiredState {
+          val _id = id
+
+          def uniqueItemSpecification: UniqueItemSpecification =
+            id -> typeTag[Item]
+
+          def capturePatch(patch: AbstractPatch) {
+            capturedPatches += patch
+      }
+    }
+
+        proxyFactory.constructFrom[Item](stateToBeAcquiredByProxy)
       }
     }
 

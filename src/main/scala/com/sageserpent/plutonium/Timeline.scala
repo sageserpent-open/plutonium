@@ -35,7 +35,6 @@ object emptyTimeline {
   def apply[EventId]() = new TimelineImplementation[EventId]
 }
 
-// TODO - find a home for this...
 object itemStateStorageUsingProxies extends ItemStateStorage {
   override protected type ItemSuperType = ItemExtensionApi
   override protected val clazzOfItemSuperType = classOf[ItemSuperType]
@@ -48,43 +47,17 @@ object itemStateStorageUsingProxies extends ItemStateStorage {
 
     val (id, itemTypeTag) = uniqueItemSpecification
 
-    val proxyFactory = new ProxyFactory[AcquiredState] {
-      override val isForRecordingOnly = false
+    val stateToBeAcquiredByProxy: AcquiredState =
+      new AcquiredState {
+        val _id = id
 
-      override val stateToBeAcquiredByProxy: AcquiredState =
-        new AcquiredState {
-          val _id = id
+        def uniqueItemSpecification: UniqueItemSpecification =
+          id -> itemTypeTag.asInstanceOf[TypeTag[Item]]
 
-          def uniqueItemSpecification: UniqueItemSpecification =
-            id -> itemTypeTag.asInstanceOf[TypeTag[Item]]
+        def itemIsLocked: Boolean = true
+      }
 
-          def itemIsLocked: Boolean = true
-        }
-
-      override val acquiredStateClazz = classOf[AcquiredState]
-
-      override val additionalInterfaces: Array[Class[_]] =
-        QueryCallbackStuff.additionalInterfaces
-      override val cachedProxyConstructors
-        : mutable.Map[universe.Type, (universe.MethodMirror, Class[_])] =
-        QueryCallbackStuff.cachedProxyConstructors
-
-      override protected def configureInterceptions(
-          builder: Builder[_]): Builder[_] =
-        builder
-          .method(matchCheckedReadAccess)
-          .intercept(MethodDelegation.to(checkedReadAccess))
-          .method(matchIsGhost)
-          .intercept(MethodDelegation.to(isGhost))
-          .method(matchMutation)
-          .intercept(MethodDelegation.to(mutation))
-          .method(matchRecordAnnihilation)
-          .intercept(MethodDelegation.to(recordAnnihilation))
-          .method(matchInvariantCheck)
-          .intercept(MethodDelegation.to(checkInvariant))
-    }
-
-    proxyFactory.constructFrom(id)
+    proxyFactory.constructFrom(stateToBeAcquiredByProxy)
   }
 }
 
