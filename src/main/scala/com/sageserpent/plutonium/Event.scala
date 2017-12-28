@@ -105,17 +105,6 @@ object capturePatches {
         val proxyFactory = new ProxyFactory[AcquiredState] {
           val isForRecordingOnly = true
 
-          override val stateToBeAcquiredByProxy = new AcquiredState {
-            val _id = id
-
-            def itemReconstitutionData: Recorder#ItemReconstitutionData[Item] =
-              id -> typeTag[Item]
-
-            def capturePatch(patch: AbstractPatch) {
-              capturedPatches += patch
-            }
-          }
-
           override val acquiredStateClazz = classOf[AcquiredState]
 
           override val additionalInterfaces: Array[Class[_]] =
@@ -135,7 +124,18 @@ object capturePatches {
               .intercept(MethodDelegation.to(mutation))
         }
 
-        proxyFactory.constructFrom[Item](id)
+        val stateToBeAcquiredByProxy = new AcquiredState {
+          val _id = id
+
+          def itemReconstitutionData: Recorder#ItemReconstitutionData[Item] =
+            id -> typeTag[Item]
+
+          def capturePatch(patch: AbstractPatch) {
+            capturedPatches += patch
+          }
+        }
+
+        proxyFactory.constructFrom[Item](stateToBeAcquiredByProxy)
       }
     }
 
