@@ -334,7 +334,7 @@ abstract class PatchRecorderImplementation(
       override def perform() {
         bestPatch(identifiedItemAccess)
         for (_ <- itemsAreLockedResource) {
-          bestPatch.checkInvariant(identifiedItemAccess)
+          bestPatch.checkInvariants(identifiedItemAccess)
         }
       }
       override def canProceed() =
