@@ -106,15 +106,11 @@ trait ItemStateStorage {
                 originalInstantiatorStrategy.newInstantiatorOf[T](clazz)
 
               override def newInstance() = {
-                val instance = if (kryo.isDealingWithTopLevelObject) {
+                if (kryo.isDealingWithTopLevelObject) {
                   createItem[T]
                 } else {
                   underlyingInstantiator.newInstance()
                 }
-                if (kryo.isDealingWithTopLevelObject) {
-                  store(instance)
-                }
-                instance
               }
             }
         }
@@ -133,10 +129,6 @@ trait ItemStateStorage {
       uniqueItemSpecification: UniqueItemSpecification): Item =
     itemDeserializationThreadContextAccess.value.get
       .itemFor(uniqueItemSpecification)
-
-  private def store(item: Any) =
-    itemDeserializationThreadContextAccess.value.get
-      .store(item)
 
   private def createItem[Item]: Item =
     itemDeserializationThreadContextAccess.value.get.createItem[Item]
@@ -187,8 +179,11 @@ trait ItemStateStorage {
       private[ItemStateStorage] def store(item: Any) =
         storage.update(uniqueItemSpecificationAccess.value.get, item)
 
-      private[ItemStateStorage] def createItem[Item]: Item =
-        createItemFor(uniqueItemSpecificationAccess.value.get)
+      private[ItemStateStorage] def createItem[Item]: Item = {
+        val item: Item = createItemFor(uniqueItemSpecificationAccess.value.get)
+        store(item)
+        item
+      }
     }
 
     protected def createItemFor[Item](
