@@ -43,7 +43,8 @@ trait ItemStateStorage {
     }
   }
 
-  protected type ItemSuperType
+  protected type ItemSuperType // TODO - ideally this would be a type bound for all the 'Item' generic type paremeter references. The problem is the Kryo instantiator needs
+  // to call into this generic API, and it knows nothing of type bounds as its types are defined in third party code.
 
   protected val clazzOfItemSuperType: Class[ItemSuperType]
 
@@ -176,14 +177,15 @@ trait ItemStateStorage {
           .asInstanceOf[Item]
       }
 
-      private[ItemStateStorage] def store(item: Any) =
-        storage.update(uniqueItemSpecificationAccess.value.get, item)
+      private[ItemStateStorage] def createItem[Item]: Item =
+        createAndStoreItem(uniqueItemSpecificationAccess.value.get)
+    }
 
-      private[ItemStateStorage] def createItem[Item]: Item = {
-        val item: Item = createItemFor(uniqueItemSpecificationAccess.value.get)
-        store(item)
-        item
-      }
+    def createAndStoreItem[Item](
+        uniqueItemSpecification: UniqueItemSpecification): Item = {
+      val item: Item = createItemFor(uniqueItemSpecification)
+      storage.update(uniqueItemSpecification, item)
+      item
     }
 
     protected def createItemFor[Item](

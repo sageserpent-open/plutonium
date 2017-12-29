@@ -100,7 +100,7 @@ class TimelineImplementation[EventId](
           blobStorageTimeSlice
 
         // TODO - either fuse this back with the other code duplicate below or make it its own thing.
-        override def createItemFor[Item](
+        override protected def createItemFor[Item](
             uniqueItemSpecification: UniqueItemSpecification) = {
           import QueryCallbackStuff._
 
@@ -136,8 +136,8 @@ class TimelineImplementation[EventId](
                 .itemsFor(uniqueItemSpecification._1)(
                   uniqueItemSpecification._2)
                 .headOption
-                .getOrElse(
-                  reconstitutionContext.createItemFor(uniqueItemSpecification))
+                .getOrElse(reconstitutionContext.createAndStoreItem(
+                  uniqueItemSpecification))
             }
           )
     }
@@ -199,7 +199,7 @@ class TimelineImplementation[EventId](
         blobStorage.timeSlice(when)
 
       // TODO - either fuse this back with the other code duplicate above or make it its own thing. Do we really need the 'itemIsLocked'? If we do, then let's fuse...
-      override def createItemFor[Item](
+      override protected def createItemFor[Item](
           uniqueItemSpecification: UniqueItemSpecification) = {
         import QueryCallbackStuff._
 
