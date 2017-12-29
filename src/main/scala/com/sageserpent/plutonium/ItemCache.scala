@@ -1,6 +1,5 @@
 package com.sageserpent.plutonium
 
-import scala.reflect.runtime.universe
 import scala.reflect.runtime.universe.{Super => _, This => _, _}
 
 trait ItemCache {
