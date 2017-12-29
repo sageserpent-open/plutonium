@@ -249,6 +249,7 @@ object Measurement {
 // NOTE: it is OK to have annihilations and other events occurring at the same time: the documentation of 'World.revise'
 // covers how coincident events are resolved. So an item referred to by an id may be changed, then annihilated, then
 // recreated and so on all at the same time.
+// TODO: will need to be able to lower the typetag somehow if we are going to build an update plan with these.
 case class Annihilation[Item: TypeTag](definiteWhen: Instant, id: Any)
     extends Event {
   val when = Finite(definiteWhen)

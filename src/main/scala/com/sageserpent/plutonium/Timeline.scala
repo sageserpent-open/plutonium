@@ -3,24 +3,16 @@ package com.sageserpent.plutonium
 import java.time.Instant
 
 import com.sageserpent.americium.{NegativeInfinity, Unbounded}
-import com.sageserpent.plutonium.BlobStorage.{
-  SnapshotBlob,
-  UniqueItemSpecification
-}
-import com.sageserpent.plutonium.WorldImplementationCodeFactoring.{
-  ProxyFactory,
-  QueryCallbackStuff
-}
-import net.bytebuddy.dynamic.DynamicType.Builder
-import net.bytebuddy.implementation.MethodDelegation
+import com.sageserpent.plutonium.BlobStorage.{SnapshotBlob, UniqueItemSpecification}
+import com.sageserpent.plutonium.WorldImplementationCodeFactoring.QueryCallbackStuff
+import resource._
 
 import scala.collection.immutable.{Map, SortedMap}
-import scala.collection.{immutable, mutable}
-import scala.reflect.runtime.universe
+import scala.collection.mutable
 import scala.reflect.runtime.universe.{Super => _, This => _, _}
-import scalaz.{-\/, \/-}
-import scalaz.syntax.monadPlus._
 import scalaz.std.list._
+import scalaz.syntax.monadPlus._
+import scalaz.{-\/, \/-}
 
 trait Timeline[EventId] {
   def revise(events: Map[EventId, Option[Event]]): Timeline[EventId]
@@ -54,9 +46,12 @@ class TimelineImplementation[EventId](
       uniqueItemSpecification: UniqueItemSpecification)
       extends ItemStateUpdate
 
-  // INVARIANT: an event id is unique within an update plan.
-  type UpdatePlan =
-    SortedMap[Unbounded[Instant], Map[EventId, Seq[ItemStateUpdate]]]
+  trait UpdatePlan
+      extends SortedMap[Unbounded[Instant], Map[EventId, Seq[ItemStateUpdate]]] {
+    require(
+      this.values flatMap (_.keys) groupBy identity forall (1 == _._2.size),
+      "Each event id should only occur once in the update plan.")
+  }
 
   override def revise(events: Map[EventId, Option[Event]]) = {
 
@@ -87,65 +82,57 @@ class TimelineImplementation[EventId](
       revisionBuilder.annulEvent(eventId)
     }
 
-    val reconstitutionContext =
-      new itemStateStorageUsingProxies.ReconstitutionContext {
-        private var blobStorageTimeSlice =
-          blobStorage.timeSlice(NegativeInfinity())
-
-        def resetTimesliceTo(when: Unbounded[Instant]) = {
-          blobStorageTimeSlice = blobStorage.timeSlice(when)
-        }
-
-        override def blobStorageTimeslice: BlobStorage.Timeslice =
-          blobStorageTimeSlice
-
-        // TODO - either fuse this back with the other code duplicate below or make it its own thing.
-        override protected def createItemFor[Item](
-            uniqueItemSpecification: UniqueItemSpecification) = {
-          import QueryCallbackStuff._
-
-          val (id, itemTypeTag) = uniqueItemSpecification
-
-          val stateToBeAcquiredByProxy: AcquiredState =
-            new AcquiredState {
-              val _id = id
-
-              def uniqueItemSpecification: UniqueItemSpecification =
-                id -> itemTypeTag.asInstanceOf[TypeTag[Item]]
-
-              // TODO - make this refer to a shared 'all items are locked' variable that is unlocked when a patch is applied.
-              def itemIsLocked: Boolean = false
-            }
-
-          proxyFactory.constructFrom(stateToBeAcquiredByProxy)
-        }
+    val identifiedItemAccess = new IdentifiedItemAccess
+    with itemStateStorageUsingProxies.ReconstitutionContext {
+      override def reconstitute(
+          uniqueItemSpecification: UniqueItemSpecification) = {
+        itemsFor(uniqueItemSpecification._1)(uniqueItemSpecification._2).headOption
+          .getOrElse(createAndStoreItem(uniqueItemSpecification))
       }
 
-    val identifiedItemAccess = new IdentifiedItemAccess {
+      private var blobStorageTimeSlice =
+        blobStorage.timeSlice(NegativeInfinity())
 
-      class Storage extends mutable.HashMap[UniqueItemSpecification, Any]
+      var allItemsAreLocked = true
 
-      private val storage: Storage = new Storage
+      def resetTimesliceTo(when: Unbounded[Instant]) = {
+        blobStorageTimeSlice = blobStorage.timeSlice(when)
+      }
 
-      override def reconstitute(
-          uniqueItemSpecification: UniqueItemSpecification) =
-        storage
-          .getOrElseUpdate(
-            uniqueItemSpecification, {
-              reconstitutionContext
-                .itemsFor(uniqueItemSpecification._1)(
-                  uniqueItemSpecification._2)
-                .headOption
-                .getOrElse(reconstitutionContext.createAndStoreItem(
-                  uniqueItemSpecification))
-            }
-          )
+      override def blobStorageTimeslice: BlobStorage.Timeslice =
+        blobStorageTimeSlice
+
+      // TODO - either fuse this back with the other code duplicate below or make it its own thing.
+      override protected def createItemFor[Item](
+          uniqueItemSpecification: UniqueItemSpecification) = {
+        import QueryCallbackStuff._
+
+        val (id, itemTypeTag) = uniqueItemSpecification
+
+        val stateToBeAcquiredByProxy: AcquiredState =
+          new AcquiredState {
+            val _id = id
+
+            def uniqueItemSpecification: UniqueItemSpecification =
+              id -> itemTypeTag.asInstanceOf[TypeTag[Item]]
+
+            def itemIsLocked: Boolean = allItemsAreLocked
+          }
+
+        proxyFactory.constructFrom(stateToBeAcquiredByProxy)
+      }
+
+      // TODO: this will also reset the state so that new snapshots can be harvested later on.
+      // TODO: try to do some snapshot comparison of 'before' versus 'after' states to identify what really changed.
+      // PROBLEM: what actually changed when the patch was run - perhaps there were *other* items reachable from either the target or the arguments that were changed?
+      // IOW, the issue of optimising snapshot production by detecting what item states have changed isn't just limited to what the patch knows about.
+      def harvestSnapshots(): Map[UniqueItemSpecification, SnapshotBlob] = ???
     }
 
     for {
       (when, itemStateUpdates) <- updatePlan
     } {
-      reconstitutionContext.resetTimesliceTo(when)
+      identifiedItemAccess.resetTimesliceTo(when)
 
       for {
         (eventId, itemStateUpdatesForEvent) <- itemStateUpdates
@@ -160,24 +147,19 @@ class TimelineImplementation[EventId](
             case ItemStateAnnihilation(uniqueItemSpecification) =>
               snapshotBlobs += (uniqueItemSpecification -> None)
             case ItemStatePatch(patch) =>
-              patch(identifiedItemAccess)
+              for (_ <- makeManagedResource {
+                     identifiedItemAccess.allItemsAreLocked = false
+                   } { _ =>
+                     identifiedItemAccess.allItemsAreLocked = true
+                   }(List.empty)) {
+                patch(identifiedItemAccess)
+              }
 
-              val target = patch.targetItemSpecification -> identifiedItemAccess
-                .reconstitute(patch.targetItemSpecification)
+              patch.checkInvariants(identifiedItemAccess)
 
-              val arguments = patch.argumentItemSpecifications map (
-                  uniqueItemSpecification =>
-                    uniqueItemSpecification -> identifiedItemAccess
-                      .reconstitute(uniqueItemSpecification))
-
-              snapshotBlobs ++= (target +: arguments map {
-                case (uniqueItemSpecification, item) =>
-                  uniqueItemSpecification -> Some(
-                    itemStateStorageUsingProxies.snapshotFor(
-                      uniqueItemSpecification))
-              })
-
-            // TODO: did the item states really change compared with what was there before?
+              snapshotBlobs ++= identifiedItemAccess
+                .harvestSnapshots()
+                .mapValues(Some.apply)
           }
         }
 

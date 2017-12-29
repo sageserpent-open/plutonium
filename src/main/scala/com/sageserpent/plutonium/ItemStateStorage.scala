@@ -181,7 +181,7 @@ trait ItemStateStorage {
         createAndStoreItem(uniqueItemSpecificationAccess.value.get)
     }
 
-    def createAndStoreItem[Item](
+    protected def createAndStoreItem[Item](
         uniqueItemSpecification: UniqueItemSpecification): Item = {
       val item: Item = createItemFor(uniqueItemSpecification)
       storage.update(uniqueItemSpecification, item)
