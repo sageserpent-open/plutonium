@@ -158,11 +158,12 @@ trait ItemStateStorage {
               val snapshot =
                 blobStorageTimeslice.snapshotBlobFor(uniqueItemSpecification)
 
-              uniqueItemSpecificationAccess.withValue(
-                Some(uniqueItemSpecification)) {
-                snapshot.fold { fallbackItemFor(uniqueItemSpecification) }(
-                  kryoPool.fromBytes)
-              }
+              uniqueItemSpecificationAccess
+                .withValue(Some(uniqueItemSpecification)) {
+                  snapshot.fold[Any] {
+                    fallbackItemFor[Item](uniqueItemSpecification)
+                  }(kryoPool.fromBytes)
+                }
             }
           )
           .asInstanceOf[Item]

@@ -131,7 +131,7 @@ class TimelineImplementation[EventId](
       def harvestSnapshots(): Map[UniqueItemSpecification, SnapshotBlob] = ???
 
       override def fallbackItemFor[Item](
-          uniqueItemSpecification: (Any, universe.TypeTag[_])): Item =
+          uniqueItemSpecification: UniqueItemSpecification): Item =
         createAndStoreItem(uniqueItemSpecification)
     }
 

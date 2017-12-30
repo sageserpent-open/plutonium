@@ -4,6 +4,7 @@ import com.sageserpent.plutonium.BlobStorage.{
   SnapshotBlob,
   UniqueItemSpecification
 }
+import com.sageserpent.americium.randomEnrichment._
 import org.scalacheck.Prop.BooleanOperators
 import org.scalacheck.{Gen, Prop}
 import org.scalatest.prop.Checkers
@@ -11,6 +12,7 @@ import org.scalatest.{FlatSpec, Matchers}
 
 import scala.reflect.runtime.universe
 import scala.reflect.runtime.universe._
+import scala.util.Random
 
 object MarkSyntax {
   implicit class MarkEnrichment(mark: Int) {
@@ -96,7 +98,11 @@ class EvenGraphNode(@transient override val id: EvenGraphNode#Id)
   }
 }
 
-class ItemStateStorageSpec extends FlatSpec with Matchers with Checkers {
+class ItemStateStorageSpec
+    extends FlatSpec
+    with Matchers
+    with Checkers
+    with SharedGenerators {
   import MarkSyntax._
 
   val maximumMark = 9
@@ -124,8 +130,6 @@ class ItemStateStorageSpec extends FlatSpec with Matchers with Checkers {
     nodes.values.toSeq
   }
 
-  // TODO - 'allItems' versus 'itemsFor'.
-
   var count = 0
 
   object itemStateStorage extends ItemStateStorage {
@@ -137,7 +141,7 @@ class ItemStateStorageSpec extends FlatSpec with Matchers with Checkers {
   }
 
   "An item" should "be capable of being roundtripped by reconstituting its snapshot" in check(
-    Prop.forAllNoShrink(markMapGenerator) { markMap =>
+    Prop.forAllNoShrink(markMapGenerator, seedGenerator) { (markMap, seed) =>
       val graphNodes: Seq[GraphNode] = buildGraphFrom(markMap).sorted
 
       println("------------------------------------------------------")
@@ -146,8 +150,26 @@ class ItemStateStorageSpec extends FlatSpec with Matchers with Checkers {
 
       println(graphNodes.map(_.toString).mkString("\n"))
 
+      val randomBehaviour = new Random(seed)
+
+      val terminalGraphNodes = graphNodes.filter(_.referencedNodes.isEmpty)
+
+      val sampleSize =
+        randomBehaviour.chooseAnyNumberFromZeroToOneLessThan(terminalGraphNodes.size)
+
+      val nodesThatAreNotToBeRoundtripped = randomBehaviour
+        .chooseSeveralOf(terminalGraphNodes, sampleSize)
+        .toSet
+
+      val nodesThatAreToBeRoundtripped = graphNodes filterNot nodesThatAreNotToBeRoundtripped.contains
+
+      println(
+        s"To be roundtripped: ${nodesThatAreToBeRoundtripped.map(_.id).toList}")
+      println(
+        s"Not to be roundtripped: ${nodesThatAreNotToBeRoundtripped.map(_.id).toList}")
+
       val snapshotBlobs: Map[UniqueItemSpecification, SnapshotBlob] =
-        graphNodes map (node =>
+        nodesThatAreToBeRoundtripped map (node =>
           (node.id match {
             case oddId: String => oddId   -> typeTag[OddGraphNode]
             case eventId: Int  => eventId -> typeTag[EvenGraphNode]
@@ -171,8 +193,13 @@ class ItemStateStorageSpec extends FlatSpec with Matchers with Checkers {
       val reconstitutionContext = new itemStateStorage.ReconstitutionContext() {
         override val blobStorageTimeslice = stubTimeslice
 
+        // The following implementation is also the epitome of hokeyness. Can there be more than epitome?
+        val idToFallbackItemMap = nodesThatAreNotToBeRoundtripped map (item =>
+          (item.id: Any) -> item) toMap
+
         override def fallbackItemFor[Item](
-            uniqueItemSpecification: UniqueItemSpecification): Item = ???
+            uniqueItemSpecification: UniqueItemSpecification): Item =
+          idToFallbackItemMap(uniqueItemSpecification._1).asInstanceOf[Item]
 
         // The following implementation is the epitome of hokeyness. Well, it's just test code... Hmmm.
         override protected def createItemFor[Item](
@@ -190,9 +217,11 @@ class ItemStateStorageSpec extends FlatSpec with Matchers with Checkers {
       val individuallyReconstitutedGraphNodes = graphNodes
         .map(_.id match {
           case oddId: String =>
-            reconstitutionContext.itemFor[OddGraphNode](oddId -> typeTag[OddGraphNode])
+            reconstitutionContext.itemFor[OddGraphNode](
+              oddId -> typeTag[OddGraphNode])
           case evenId: Int =>
-            reconstitutionContext.itemFor[EvenGraphNode](evenId -> typeTag[EvenGraphNode])
+            reconstitutionContext.itemFor[EvenGraphNode](
+              evenId -> typeTag[EvenGraphNode])
         })
         .toList
 
