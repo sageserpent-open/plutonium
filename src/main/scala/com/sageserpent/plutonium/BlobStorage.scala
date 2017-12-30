@@ -27,8 +27,8 @@ object BlobStorage {
     abstract override def snapshotBlobFor(
         uniqueItemSpecification: UniqueItemSpecification): SnapshotBlob = {
       require(
-        uniqueItemQueriesFor(uniqueItemSpecification._1)(
-          uniqueItemSpecification._2).nonEmpty)
+        1 == uniqueItemQueriesFor(uniqueItemSpecification._1)(
+          uniqueItemSpecification._2).size)
       super.snapshotBlobFor(uniqueItemSpecification)
     }
   }
