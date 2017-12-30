@@ -9,6 +9,7 @@ import resource._
 
 import scala.collection.immutable.{Map, SortedMap}
 import scala.collection.mutable
+import scala.reflect.runtime.universe
 import scala.reflect.runtime.universe.{Super => _, This => _, _}
 import scalaz.std.list._
 import scalaz.syntax.monadPlus._
@@ -127,6 +128,8 @@ class TimelineImplementation[EventId](
       // PROBLEM: what actually changed when the patch was run - perhaps there were *other* items reachable from either the target or the arguments that were changed?
       // IOW, the issue of optimising snapshot production by detecting what item states have changed isn't just limited to what the patch knows about.
       def harvestSnapshots(): Map[UniqueItemSpecification, SnapshotBlob] = ???
+
+      override def fallbackItemFor[Item](uniqueItemSpecification: (Any, universe.TypeTag[_])): Item = ???
     }
 
     for {
@@ -179,6 +182,11 @@ class TimelineImplementation[EventId](
     new itemStateStorageUsingProxies.ReconstitutionContext {
       override val blobStorageTimeslice: BlobStorage.Timeslice =
         blobStorage.timeSlice(when)
+
+      override def fallbackItemFor[Item](
+          uniqueItemSpecification: UniqueItemSpecification): Item =
+        throw new RuntimeException(
+          s"Snapshot does not exist for: $uniqueItemSpecification at: $when.")
 
       // TODO - either fuse this back with the other code duplicate above or make it its own thing. Do we really need the 'itemIsLocked'? If we do, then let's fuse...
       override protected def createItemFor[Item](

@@ -28,6 +28,8 @@ trait OneKindOfThing
 
 trait AnotherKindOfThing
 
+trait NoKindOfThing
+
 class BlobStorageSpec
     extends FlatSpec
     with Matchers
@@ -301,14 +303,19 @@ class BlobStorageSpec
                   : UniqueItemSpecification =
                   retrievedUniqueItemSpecifications.head
 
-                val retrievedSnapshotBlob: SnapshotBlob =
+                val retrievedSnapshotBlob: Option[SnapshotBlob] =
                   timeSlice.snapshotBlobFor(theRetrievedUniqueItemSpecification)
 
-                retrievedSnapshotBlob shouldBe snapshotBlob
+                retrievedSnapshotBlob shouldBe Some(snapshotBlob)
               case None =>
                 allRetrievedUniqueItemSpecifications map (_._1) should not contain (id)
 
                 retrievedUniqueItemSpecifications shouldBe empty
+
+                val retrievedSnapshotBlob: Option[SnapshotBlob] =
+                  timeSlice.snapshotBlobFor(id -> typeTag[Any])
+
+                retrievedSnapshotBlob shouldBe None
             }
           }
 
@@ -317,6 +324,25 @@ class BlobStorageSpec
           checkExpectations(
             (uniqueItemSpecification._1 -> typeTag[Any])
               .asInstanceOf[UniqueItemSpecification])
+
+          val allRetrievedUniqueItemSpecifications =
+            timeSlice.uniqueItemQueriesFor(typeTag[NoKindOfThing])
+
+          def checkExpectationsForNonExistence[Item: TypeTag](id: Any): Any = {
+            val retrievedUniqueItemSpecifications =
+              timeSlice.uniqueItemQueriesFor(id)
+
+            allRetrievedUniqueItemSpecifications shouldBe empty
+
+            retrievedUniqueItemSpecifications shouldBe empty
+          }
+
+          checkExpectationsForNonExistence(uniqueItemSpecification._1)(
+            typeTag[NoKindOfThing])
+
+          val nonExistentItemId = "I do not exist."
+
+          checkExpectationsForNonExistence(nonExistentItemId)(typeTag[Any])
         }
     }
   }

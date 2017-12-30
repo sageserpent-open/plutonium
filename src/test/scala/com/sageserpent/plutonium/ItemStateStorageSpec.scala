@@ -163,12 +163,16 @@ class ItemStateStorageSpec extends FlatSpec with Matchers with Checkers {
           snapshotBlobs.keys.filter(_._1 == id).toStream
 
         override def snapshotBlobFor(
-            uniqueItemSpecification: UniqueItemSpecification): SnapshotBlob =
-          snapshotBlobs(uniqueItemSpecification)
+            uniqueItemSpecification: UniqueItemSpecification)
+          : Option[SnapshotBlob] =
+          snapshotBlobs.get(uniqueItemSpecification)
       }
 
       val reconstitutionContext = new itemStateStorage.ReconstitutionContext() {
         override val blobStorageTimeslice = stubTimeslice
+
+        override def fallbackItemFor[Item](
+            uniqueItemSpecification: UniqueItemSpecification): Item = ???
 
         // The following implementation is the epitome of hokeyness. Well, it's just test code... Hmmm.
         override protected def createItemFor[Item](

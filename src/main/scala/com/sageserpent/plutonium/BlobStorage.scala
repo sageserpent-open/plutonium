@@ -20,15 +20,19 @@ object BlobStorage {
         id: Any): Stream[UniqueItemSpecification]
 
     def snapshotBlobFor(
-        uniqueItemSpecification: UniqueItemSpecification): SnapshotBlob
+        uniqueItemSpecification: UniqueItemSpecification): Option[SnapshotBlob]
   }
 
   trait TimesliceContracts extends Timeslice {
     abstract override def snapshotBlobFor(
-        uniqueItemSpecification: UniqueItemSpecification): SnapshotBlob = {
+        uniqueItemSpecification: UniqueItemSpecification)
+      : Option[SnapshotBlob] = {
+      val uniqueItemSpecifications = uniqueItemQueriesFor(
+        uniqueItemSpecification._1)(uniqueItemSpecification._2)
       require(
-        1 == uniqueItemQueriesFor(uniqueItemSpecification._1)(
-          uniqueItemSpecification._2).size)
+        1 >= uniqueItemSpecifications.size,
+        s"The item specification: '$uniqueItemSpecification', should pick out a unique item, these match it: ${uniqueItemSpecifications.toList}."
+      )
       super.snapshotBlobFor(uniqueItemSpecification)
     }
   }

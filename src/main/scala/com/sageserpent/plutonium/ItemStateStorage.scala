@@ -170,7 +170,8 @@ trait ItemStateStorage {
 
               uniqueItemSpecificationAccess.withValue(
                 Some(uniqueItemSpecification)) {
-                kryoPool.fromBytes(snapshot)
+                snapshot.fold { fallbackItemFor(uniqueItemSpecification) }(
+                  kryoPool.fromBytes)
               }
             }
           )
@@ -187,6 +188,9 @@ trait ItemStateStorage {
       storage.update(uniqueItemSpecification, item)
       item
     }
+
+    def fallbackItemFor[Item](
+        uniqueItemSpecification: UniqueItemSpecification): Item
 
     protected def createItemFor[Item](
         uniqueItemSpecification: UniqueItemSpecification): Item
