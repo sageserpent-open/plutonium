@@ -188,11 +188,11 @@ class ItemStateStorageSpec extends FlatSpec with Matchers with Checkers {
       }
 
       val individuallyReconstitutedGraphNodes = graphNodes
-        .flatMap(_.id match {
+        .map(_.id match {
           case oddId: String =>
-            reconstitutionContext.itemsFor[OddGraphNode](oddId)
+            reconstitutionContext.itemFor[OddGraphNode](oddId -> typeTag[OddGraphNode])
           case evenId: Int =>
-            reconstitutionContext.itemsFor[EvenGraphNode](evenId)
+            reconstitutionContext.itemFor[EvenGraphNode](evenId -> typeTag[EvenGraphNode])
         })
         .toList
 

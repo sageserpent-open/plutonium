@@ -3,7 +3,10 @@ package com.sageserpent.plutonium
 import java.time.Instant
 
 import com.sageserpent.americium.{NegativeInfinity, Unbounded}
-import com.sageserpent.plutonium.BlobStorage.{SnapshotBlob, UniqueItemSpecification}
+import com.sageserpent.plutonium.BlobStorage.{
+  SnapshotBlob,
+  UniqueItemSpecification
+}
 import com.sageserpent.plutonium.WorldImplementationCodeFactoring.QueryCallbackStuff
 import resource._
 
@@ -86,10 +89,8 @@ class TimelineImplementation[EventId](
     val identifiedItemAccess = new IdentifiedItemAccess
     with itemStateStorageUsingProxies.ReconstitutionContext {
       override def reconstitute(
-          uniqueItemSpecification: UniqueItemSpecification) = {
-        itemsFor(uniqueItemSpecification._1)(uniqueItemSpecification._2).headOption
-          .getOrElse(createAndStoreItem(uniqueItemSpecification))
-      }
+          uniqueItemSpecification: UniqueItemSpecification) =
+        itemFor(uniqueItemSpecification)
 
       private var blobStorageTimeSlice =
         blobStorage.timeSlice(NegativeInfinity())
@@ -129,7 +130,9 @@ class TimelineImplementation[EventId](
       // IOW, the issue of optimising snapshot production by detecting what item states have changed isn't just limited to what the patch knows about.
       def harvestSnapshots(): Map[UniqueItemSpecification, SnapshotBlob] = ???
 
-      override def fallbackItemFor[Item](uniqueItemSpecification: (Any, universe.TypeTag[_])): Item = ???
+      override def fallbackItemFor[Item](
+          uniqueItemSpecification: (Any, universe.TypeTag[_])): Item =
+        createAndStoreItem(uniqueItemSpecification)
     }
 
     for {
@@ -179,7 +182,19 @@ class TimelineImplementation[EventId](
     ??? // TODO - support experimental worlds.
 
   override def itemCacheAt(when: Unbounded[Instant]) =
-    new itemStateStorageUsingProxies.ReconstitutionContext {
+    new ItemCache with itemStateStorageUsingProxies.ReconstitutionContext {
+      override def itemsFor[Item: TypeTag](id: Any): Stream[Item] =
+        for {
+          uniqueItemSpecification <- blobStorageTimeslice.uniqueItemQueriesFor(
+            id)
+        } yield itemFor[Item](uniqueItemSpecification)
+
+      override def allItems[Item: TypeTag](): Stream[Item] =
+        for {
+          uniqueItemSpecification <- blobStorageTimeslice
+            .uniqueItemQueriesFor[Item]
+        } yield itemFor[Item](uniqueItemSpecification)
+
       override val blobStorageTimeslice: BlobStorage.Timeslice =
         blobStorage.timeSlice(when)
 
