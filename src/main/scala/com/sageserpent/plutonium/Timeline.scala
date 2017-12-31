@@ -37,20 +37,18 @@ object itemStateStorageUsingProxies extends ItemStateStorage {
   override protected def idFrom(item: ItemSuperType) = item.id
 
   override protected def createItemFor[Item](
-      uniqueItemSpecification: UniqueItemSpecification) = {
+      _uniqueItemSpecification: UniqueItemSpecification) = {
     import QueryCallbackStuff._
-
-    val (id, itemTypeTag) = uniqueItemSpecification
 
     val proxyFactory = new ProxyFactory[AcquiredState] {
       override val isForRecordingOnly = false
 
       override val stateToBeAcquiredByProxy: AcquiredState =
         new AcquiredState {
-          val _id = id
+          val _id = _uniqueItemSpecification._1
 
           def uniqueItemSpecification: UniqueItemSpecification =
-            id -> itemTypeTag.asInstanceOf[TypeTag[Item]]
+            _uniqueItemSpecification
 
           def itemIsLocked: Boolean = true
         }
@@ -76,9 +74,11 @@ object itemStateStorageUsingProxies extends ItemStateStorage {
           .intercept(MethodDelegation.to(recordAnnihilation))
           .method(matchInvariantCheck)
           .intercept(MethodDelegation.to(checkInvariant))
+          .method(matchUniqueItemSpecification)
+          .intercept(MethodDelegation.to(uniqueItemSpecification))
     }
 
-    proxyFactory.constructFrom(id)
+    proxyFactory.constructFrom(_uniqueItemSpecification._1)
   }
 }
 

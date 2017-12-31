@@ -246,6 +246,10 @@ object WorldImplementationCodeFactoring {
     val matchInvariantCheck: ElementMatcher[MethodDescription] =
       WorldImplementationCodeFactoring.isInvariantCheck(_)
 
+    val matchUniqueItemSpecification:ElementMatcher[MethodDescription] = firstMethodIsOverrideCompatibleWithSecond(
+      _,
+      IdentifiedItemsScope.uniqueItemSpecificationProperty)
+
     object recordAnnihilation {
       @RuntimeType
       def apply(@FieldValue("acquiredState") acquiredState: AcquiredState) = {
@@ -309,6 +313,12 @@ object WorldImplementationCodeFactoring {
         apply(thiz)
         superCall.call()
       }
+    }
+
+    object uniqueItemSpecification {
+      @RuntimeType
+      def apply(@FieldValue("acquiredState") acquiredState: AcquiredState) =
+        acquiredState.uniqueItemSpecification
     }
   }
 
@@ -435,6 +445,7 @@ object WorldImplementationCodeFactoring {
               .intercept(MethodDelegation.to(recordAnnihilation))
               .method(matchInvariantCheck)
               .intercept(MethodDelegation.to(checkInvariant))
+              .method(matchUniqueItemSpecification).intercept(MethodDelegation.to(uniqueItemSpecification))
         }
 
         val item = proxyFactory.constructFrom(id)
