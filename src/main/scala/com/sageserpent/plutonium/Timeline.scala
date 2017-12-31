@@ -2,20 +2,14 @@ package com.sageserpent.plutonium
 
 import java.time.Instant
 
-import com.sageserpent.americium.Unbounded
-import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
-import com.sageserpent.plutonium.WorldImplementationCodeFactoring.{
-  ProxyFactory,
-  QueryCallbackStuff
-}
 import com.sageserpent.americium.{NegativeInfinity, Unbounded}
-import com.sageserpent.plutonium.BlobStorage.{SnapshotBlob}
+import com.sageserpent.plutonium.BlobStorage.SnapshotBlob
+import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.WorldImplementationCodeFactoring.QueryCallbackStuff
 import resource._
 
 import scala.collection.immutable.{Map, SortedMap}
 import scala.collection.mutable
-import scala.reflect.runtime.universe
 import scala.reflect.runtime.universe.{Super => _, This => _, _}
 import scalaz.std.list._
 import scalaz.syntax.monadPlus._
@@ -68,8 +62,42 @@ class TimelineImplementation[EventId](
       case (eventId, None)        => -\/(eventId)
     }).separate
 
-    val updatePlan
-      : UpdatePlan = ??? // TODO - and where does this come from? Hint: 'newEvents'.
+    val stub =
+      SortedMap.empty[Unbounded[Instant], Map[EventId, Seq[ItemStateUpdate]]]
+
+    val updatePlan: UpdatePlan = new UpdatePlan {
+      override implicit def ordering: Ordering[Unbounded[Instant]] =
+        stub.ordering
+
+      override def rangeImpl(from: Option[Unbounded[Instant]],
+                             until: Option[Unbounded[Instant]])
+        : SortedMap[Unbounded[Instant], Map[EventId, Seq[ItemStateUpdate]]] =
+        stub.rangeImpl(from, until)
+
+      override def iteratorFrom(start: Unbounded[Instant])
+        : Iterator[(Unbounded[Instant], Map[EventId, Seq[ItemStateUpdate]])] =
+        stub.iteratorFrom(start)
+
+      override def valuesIteratorFrom(start: Unbounded[Instant])
+        : Iterator[Map[EventId, Seq[ItemStateUpdate]]] =
+        stub.valuesIteratorFrom(start)
+
+      override def keysIteratorFrom(
+          start: Unbounded[Instant]): Iterator[Unbounded[Instant]] =
+        stub.keysIteratorFrom(start)
+
+      override def get(
+          key: Unbounded[Instant]): Option[Map[EventId, Seq[ItemStateUpdate]]] =
+        stub.get(key)
+
+      override def iterator
+        : Iterator[(Unbounded[Instant], Map[EventId, Seq[ItemStateUpdate]])] =
+        stub.iterator
+
+      override def -(key: Unbounded[Instant])
+        : SortedMap[Unbounded[Instant], Map[EventId, Seq[ItemStateUpdate]]] =
+        ???
+    } // TODO - and where does this come from? Hint: 'newEvents'.
 
     new TimelineImplementation(
       events = this.events
@@ -200,7 +228,7 @@ class TimelineImplementation[EventId](
   }
 
   override def retainUpTo(when: Unbounded[Instant]) =
-    ??? // TODO - support experimental worlds.
+    this // TODO - support experimental worlds.
 
   override def itemCacheAt(when: Unbounded[Instant]) =
     new ItemCache with itemStateStorageUsingProxies.ReconstitutionContext {
