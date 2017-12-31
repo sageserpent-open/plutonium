@@ -9,7 +9,7 @@ import com.sageserpent.americium.{
   PositiveInfinity,
   Unbounded
 }
-import com.sageserpent.plutonium.BlobStorage.UniqueItemSpecification
+import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import resource.ManagedResource
 
 import scala.collection.{Map, mutable}

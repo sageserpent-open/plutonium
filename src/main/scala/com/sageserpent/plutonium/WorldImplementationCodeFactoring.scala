@@ -6,7 +6,7 @@ import java.util.Optional
 import java.util.concurrent.Callable
 
 import com.sageserpent.americium.{Finite, NegativeInfinity, Unbounded}
-import com.sageserpent.plutonium.BlobStorage.UniqueItemSpecification
+import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.World.Revision
 import net.bytebuddy.ByteBuddy
 import net.bytebuddy.description.`type`.TypeDescription
@@ -245,6 +245,11 @@ object WorldImplementationCodeFactoring {
     val matchInvariantCheck: ElementMatcher[MethodDescription] =
       WorldImplementationCodeFactoring.isInvariantCheck(_)
 
+    val matchUniqueItemSpecification: ElementMatcher[MethodDescription] =
+      firstMethodIsOverrideCompatibleWithSecond(
+        _,
+        IdentifiedItemsScope.uniqueItemSpecificationProperty)
+
     object recordAnnihilation {
       @RuntimeType
       def apply(@FieldValue("acquiredState") acquiredState: AcquiredState) = {
@@ -310,6 +315,11 @@ object WorldImplementationCodeFactoring {
       }
     }
 
+    object uniqueItemSpecification {
+      @RuntimeType
+      def apply(@FieldValue("acquiredState") acquiredState: AcquiredState) =
+        acquiredState.uniqueItemSpecification
+    }
     object proxyFactory extends ProxyFactory[AcquiredState] {
       override val isForRecordingOnly = false
 
@@ -334,6 +344,8 @@ object WorldImplementationCodeFactoring {
           .intercept(MethodDelegation.to(recordAnnihilation))
           .method(matchInvariantCheck)
           .intercept(MethodDelegation.to(checkInvariant))
+          .method(matchUniqueItemSpecification)
+          .intercept(MethodDelegation.to(uniqueItemSpecification))
     }
   }
 

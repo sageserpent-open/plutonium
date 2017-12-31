@@ -2,11 +2,14 @@ package com.sageserpent.plutonium
 
 import java.time.Instant
 
-import com.sageserpent.americium.{NegativeInfinity, Unbounded}
-import com.sageserpent.plutonium.BlobStorage.{
-  SnapshotBlob,
-  UniqueItemSpecification
+import com.sageserpent.americium.Unbounded
+import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
+import com.sageserpent.plutonium.WorldImplementationCodeFactoring.{
+  ProxyFactory,
+  QueryCallbackStuff
 }
+import com.sageserpent.americium.{NegativeInfinity, Unbounded}
+import com.sageserpent.plutonium.BlobStorage.{SnapshotBlob}
 import com.sageserpent.plutonium.WorldImplementationCodeFactoring.QueryCallbackStuff
 import resource._
 
@@ -35,7 +38,9 @@ object itemStateStorageUsingProxies extends ItemStateStorage {
   override protected type ItemSuperType = ItemExtensionApi
   override protected val clazzOfItemSuperType = classOf[ItemSuperType]
 
-  override protected def idFrom(item: ItemSuperType) = item.id
+  override protected def uniqueItemSpecification(
+      item: ItemSuperType): UniqueItemSpecification =
+    item.uniqueItemSpecification
 }
 
 class TimelineImplementation[EventId](
@@ -108,17 +113,15 @@ class TimelineImplementation[EventId](
 
       // TODO - need to close over mutable state that tracks which items have been updated, used when harvesting snapshots.
       override protected def createItemFor[Item](
-          uniqueItemSpecification: UniqueItemSpecification) = {
+          _uniqueItemSpecification: UniqueItemSpecification) = {
         import QueryCallbackStuff._
-
-        val (id, itemTypeTag) = uniqueItemSpecification
 
         val stateToBeAcquiredByProxy: AcquiredState =
           new AcquiredState {
-            val _id = id
+            val _id = _uniqueItemSpecification._1
 
             def uniqueItemSpecification: UniqueItemSpecification =
-              id -> itemTypeTag.asInstanceOf[TypeTag[Item]]
+              _uniqueItemSpecification
 
             def itemIsLocked: Boolean = allItemsAreLocked
           }
@@ -222,17 +225,15 @@ class TimelineImplementation[EventId](
 
       // TODO - either fuse this back with the other code duplicate above or make it its own thing. Do we really need the 'itemIsLocked'? If we do, then let's fuse...
       override protected def createItemFor[Item](
-          uniqueItemSpecification: UniqueItemSpecification) = {
+          _uniqueItemSpecification: UniqueItemSpecification) = {
         import QueryCallbackStuff._
-
-        val (id, itemTypeTag) = uniqueItemSpecification
 
         val stateToBeAcquiredByProxy: AcquiredState =
           new AcquiredState {
-            val _id = id
+            val _id = _uniqueItemSpecification._1
 
             def uniqueItemSpecification: UniqueItemSpecification =
-              id -> itemTypeTag.asInstanceOf[TypeTag[Item]]
+              _uniqueItemSpecification
 
             def itemIsLocked: Boolean = true
           }

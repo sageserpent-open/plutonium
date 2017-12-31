@@ -2,7 +2,7 @@ package com.sageserpent.plutonium
 
 import java.lang.reflect.{InvocationTargetException, Method}
 
-import com.sageserpent.plutonium.BlobStorage.UniqueItemSpecification
+import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.Patch.MethodPieces
 
 import scalaz.{-\/, \/, \/-}
@@ -77,6 +77,6 @@ class Patch(methodPieces: MethodPieces,
 
     for (argument <- argumentItemSpecifications map identifiedItemAccess.reconstitute) {
       argument.asInstanceOf[ItemExtensionApi].checkInvariant()
-    }
   }
+}
 }

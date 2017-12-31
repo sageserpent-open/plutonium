@@ -2,9 +2,11 @@ package com.sageserpent.plutonium
 
 import com.esotericsoftware.kryo.factories.ReflectionSerializerFactory
 import com.esotericsoftware.kryo.io.{Input, Output}
-import com.esotericsoftware.kryo.serializers.{FieldSerializer, JavaSerializer}
+import com.esotericsoftware.kryo.serializers.FieldSerializer
 import com.esotericsoftware.kryo.util.ObjectMap
 import com.esotericsoftware.kryo.{Kryo, Serializer}
+import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
+import com.sageserpent.plutonium.UniqueItemSpecificationSerializationSupport.SpecialSerializer
 import com.twitter.chill.{KryoBase, KryoPool, ScalaKryoInstantiator}
 import org.objenesis.instantiator.ObjectInstantiator
 import org.objenesis.strategy.InstantiatorStrategy
@@ -48,7 +50,8 @@ trait ItemStateStorage {
 
   protected val clazzOfItemSuperType: Class[ItemSuperType]
 
-  protected def idFrom(item: ItemSuperType): Any
+  protected def uniqueItemSpecification(
+      item: ItemSuperType): UniqueItemSpecification
 
   val serializerThatDirectlyEncodesInterItemReferences =
     new Serializer[ItemSuperType] {
@@ -61,13 +64,11 @@ trait ItemStateStorage {
             .asInstanceOf[Serializer[ItemSuperType]]
             .read(kryo, input, itemType)
         else {
-          val itemId =
-            kryo.readClassAndObject(input)
-          val itemTypeTag = typeTagForClass(
-            kryo.readObject(input, classOf[Class[_]]))
+          val uniqueItemSpecifiction: UniqueItemSpecification =
+            kryo.readClassAndObject(input).asInstanceOf[UniqueItemSpecification]
 
           val instance: ItemSuperType =
-            itemFor[ItemSuperType](itemId -> itemTypeTag)
+            itemFor[ItemSuperType](uniqueItemSpecifiction)
           kryo.reference(instance)
           instance
         }
@@ -81,12 +82,9 @@ trait ItemStateStorage {
             .underlyingSerializerFor(item.getClass)
             .asInstanceOf[Serializer[ItemSuperType]]
             .write(kryo, output, item)
-        else {
-          kryo.writeClassAndObject(output, idFrom(item))
-          kryo.writeObject(output, item.getClass)
+        else kryo.writeClassAndObject(output, uniqueItemSpecification(item))
         }
       }
-    }
 
   val originalInstantiatorStrategy =
     new ScalaKryoInstantiator().newKryo().getInstantiatorStrategy
@@ -112,13 +110,19 @@ trait ItemStateStorage {
                 } else {
                   underlyingInstantiator.newInstance()
                 }
-                }
               }
             }
+        }
       kryo.setInstantiatorStrategy(instantiatorStrategy)
       kryo
     }
+  }.withRegistrar((kryo: Kryo) => {
+    def registerSerializerForUniqueItemSpecification[Item]() = {
+      kryo.register(classOf[UniqueItemSpecification],
+                    new SpecialSerializer[Item])
   }
+    registerSerializerForUniqueItemSpecification()
+  })
 
   private val kryoPool =
     KryoPool.withByteArrayOutputStream(40, kryoInstantiator)
@@ -163,7 +167,7 @@ trait ItemStateStorage {
                   snapshot.fold[Any] {
                     fallbackItemFor[Item](uniqueItemSpecification)
                   }(kryoPool.fromBytes)
-              }
+                }
             }
           )
           .asInstanceOf[Item]

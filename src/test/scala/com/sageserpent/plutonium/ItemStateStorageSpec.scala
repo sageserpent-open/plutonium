@@ -1,9 +1,8 @@
 package com.sageserpent.plutonium
 
-import com.sageserpent.plutonium.BlobStorage.{
-  SnapshotBlob,
-  UniqueItemSpecification
-}
+import com.sageserpent.plutonium.BlobStorage.SnapshotBlob
+import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
+import com.sageserpent.plutonium.BlobStorage.{SnapshotBlob}
 import com.sageserpent.americium.randomEnrichment._
 import org.scalacheck.Prop.BooleanOperators
 import org.scalacheck.{Gen, Prop}
@@ -137,7 +136,12 @@ class ItemStateStorageSpec
     override protected val clazzOfItemSuperType: Class[ItemSuperType] =
       classOf[ItemSuperType]
 
-    override protected def idFrom(item: ItemSuperType): Any = item.id
+    override protected def uniqueItemSpecification(
+        item: ItemSuperType): UniqueItemSpecification =
+      item.id match {
+        case oddId: String => oddId   -> typeTag[OddGraphNode]
+        case eventId: Int  => eventId -> typeTag[EvenGraphNode]
+      }
   }
 
   "An item" should "be capable of being roundtripped by reconstituting its snapshot" in check(
@@ -155,7 +159,8 @@ class ItemStateStorageSpec
       val terminalGraphNodes = graphNodes.filter(_.referencedNodes.isEmpty)
 
       val sampleSize =
-        randomBehaviour.chooseAnyNumberFromZeroToOneLessThan(terminalGraphNodes.size)
+        randomBehaviour.chooseAnyNumberFromZeroToOneLessThan(
+          terminalGraphNodes.size)
 
       val nodesThatAreNotToBeRoundtripped = randomBehaviour
         .chooseSeveralOf(terminalGraphNodes, sampleSize)

@@ -4,56 +4,31 @@ import java.nio.ByteBuffer
 import java.time.Instant
 import java.util.{NoSuchElementException, UUID}
 
-import com.esotericsoftware.kryo.io.{Input, Output}
-import com.esotericsoftware.kryo.serializers.JavaSerializer
-import com.esotericsoftware.kryo.{Kryo, Serializer}
+import com.esotericsoftware.kryo.Kryo
 import com.lambdaworks.redis.RedisClient
 import com.lambdaworks.redis.api.rx.RedisReactiveCommands
 import com.lambdaworks.redis.codec.{ByteArrayCodec, RedisCodec, Utf8StringCodec}
 import com.sageserpent.americium.{PositiveInfinity, Unbounded}
-import com.sageserpent.plutonium.BlobStorage.UniqueItemSpecification
+import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.twitter.chill.{KryoPool, ScalaKryoInstantiator}
 import io.netty.handler.codec.EncoderException
 import rx.lang.scala.JavaConversions._
 import rx.lang.scala.Observable
 
 import scala.Ordering.Implicits._
-import scala.reflect.runtime.universe._
+
 
 object WorldRedisBasedImplementation {
+  import UniqueItemSpecificationSerializationSupport.SpecialSerializer
+
   val redisNamespaceComponentSeparator = ":"
-
-  val javaSerializer = new JavaSerializer
-
-  class UniqueItemSpecificationSerializer[Item]
-      extends Serializer[UniqueItemSpecification] {
-    override def write(kryo: Kryo,
-                       output: Output,
-                       data: UniqueItemSpecification): Unit = {
-      val (id, typeTag) = data
-      kryo.writeClassAndObject(output, id)
-      kryo.writeObject(output, typeTag, javaSerializer)
-    }
-
-    override def read(
-        kryo: Kryo,
-        input: Input,
-        dataType: Class[UniqueItemSpecification]): UniqueItemSpecification = {
-      val id = kryo.readClassAndObject(input).asInstanceOf[Any]
-      val typeTag = kryo
-        .readObject[TypeTag[Item]](input,
-                                   classOf[TypeTag[Item]],
-                                   javaSerializer)
-      id -> typeTag
-    }
-  }
 
   val kryoPool = KryoPool.withByteArrayOutputStream(
     40,
     new ScalaKryoInstantiator().withRegistrar((kryo: Kryo) => {
       def registerSerializerForUniqueItemSpecification[Item]() = {
         kryo.register(classOf[UniqueItemSpecification],
-                      new UniqueItemSpecificationSerializer[Item])
+                      new SpecialSerializer[Item])
       }
       registerSerializerForUniqueItemSpecification()
     })

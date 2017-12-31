@@ -3,15 +3,12 @@ package com.sageserpent.plutonium
 import java.time.Instant
 
 import com.sageserpent.americium.Unbounded
+import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 
 import scala.collection.mutable
 import scala.reflect.runtime.universe.TypeTag
 
 object BlobStorage {
-  // TODO - find a better home for this type alias.
-  type UniqueItemSpecification =
-    (Any, TypeTag[_ <: Any])
-
   type SnapshotBlob = Array[Byte]
 
   trait Timeslice {
