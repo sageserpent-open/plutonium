@@ -4,10 +4,7 @@ import java.time.Instant
 
 import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
-import com.sageserpent.plutonium.WorldImplementationCodeFactoring.{
-  ProxyFactory,
-  QueryCallbackStuff
-}
+import com.sageserpent.plutonium.WorldImplementationCodeFactoring.{ProxyFactory, QueryCallbackStuff}
 import net.bytebuddy.dynamic.DynamicType.Builder
 import net.bytebuddy.implementation.MethodDelegation
 
@@ -34,7 +31,7 @@ object itemStateStorageUsingProxies extends ItemStateStorage {
   override protected type ItemSuperType = ItemExtensionApi
   override protected val clazzOfItemSuperType = classOf[ItemSuperType]
 
-  override protected def idFrom(item: ItemSuperType) = item.id
+  override protected def uniqueItemSpecification(item: ItemSuperType): UniqueItemSpecification = item.uniqueItemSpecification
 
   override protected def createItemFor[Item](
       _uniqueItemSpecification: UniqueItemSpecification) = {
@@ -75,7 +72,7 @@ object itemStateStorageUsingProxies extends ItemStateStorage {
           .method(matchInvariantCheck)
           .intercept(MethodDelegation.to(checkInvariant))
           .method(matchUniqueItemSpecification)
-          .intercept(MethodDelegation.to(uniqueItemSpecification))
+          .intercept(MethodDelegation.to(QueryCallbackStuff.uniqueItemSpecification))
     }
 
     proxyFactory.constructFrom(_uniqueItemSpecification._1)

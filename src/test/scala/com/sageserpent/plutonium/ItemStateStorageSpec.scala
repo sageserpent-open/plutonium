@@ -131,7 +131,12 @@ class ItemStateStorageSpec extends FlatSpec with Matchers with Checkers {
     override protected val clazzOfItemSuperType: Class[ItemSuperType] =
       classOf[ItemSuperType]
 
-    override protected def idFrom(item: ItemSuperType): Any = item.id
+    override protected def uniqueItemSpecification(
+        item: ItemSuperType): UniqueItemSpecification =
+      item.id match {
+        case oddId: String => oddId   -> typeTag[OddGraphNode]
+        case eventId: Int  => eventId -> typeTag[EvenGraphNode]
+      }
 
     // The following implementation is the epitome of hokeyness. Well, it's just test code... Hmmm.
     override protected def createItemFor[Item](

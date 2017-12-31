@@ -20,13 +20,10 @@ import rx.lang.scala.Observable
 import scala.Ordering.Implicits._
 import scala.reflect.runtime.universe._
 
-object WorldRedisBasedImplementation {
-  val redisNamespaceComponentSeparator = ":"
-
+object UniqueItemSpecificationSerializationSupport {
   val javaSerializer = new JavaSerializer
 
-  class UniqueItemSpecificationSerializer[Item]
-      extends Serializer[UniqueItemSpecification] {
+  class SpecialSerializer[Item] extends Serializer[UniqueItemSpecification] {
     override def write(kryo: Kryo,
                        output: Output,
                        data: UniqueItemSpecification): Unit = {
@@ -47,13 +44,19 @@ object WorldRedisBasedImplementation {
       id -> typeTag
     }
   }
+}
+
+object WorldRedisBasedImplementation {
+  import UniqueItemSpecificationSerializationSupport.SpecialSerializer
+
+  val redisNamespaceComponentSeparator = ":"
 
   val kryoPool = KryoPool.withByteArrayOutputStream(
     40,
     new ScalaKryoInstantiator().withRegistrar((kryo: Kryo) => {
       def registerSerializerForUniqueItemSpecification[Item]() = {
         kryo.register(classOf[UniqueItemSpecification],
-                      new UniqueItemSpecificationSerializer[Item])
+                      new SpecialSerializer[Item])
       }
       registerSerializerForUniqueItemSpecification()
     })
