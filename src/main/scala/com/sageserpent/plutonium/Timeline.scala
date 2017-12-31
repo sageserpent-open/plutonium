@@ -3,7 +3,7 @@ package com.sageserpent.plutonium
 import java.time.Instant
 
 import com.sageserpent.americium.Unbounded
-import com.sageserpent.plutonium.BlobStorage.UniqueItemSpecification
+import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.WorldImplementationCodeFactoring.{
   ProxyFactory,
   QueryCallbackStuff

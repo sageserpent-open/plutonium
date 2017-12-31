@@ -1,9 +1,7 @@
 package com.sageserpent.plutonium
 
-import com.sageserpent.plutonium.BlobStorage.{
-  SnapshotBlob,
-  UniqueItemSpecification
-}
+import com.sageserpent.plutonium.BlobStorage.SnapshotBlob
+import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import org.scalacheck.Prop.BooleanOperators
 import org.scalacheck.{Gen, Prop}
 import org.scalatest.prop.Checkers

@@ -4,6 +4,7 @@ import java.time.Instant
 
 import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.BlobStorage.SnapshotBlob
+import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 
 import scala.collection.Searching._
 import scala.collection.generic.IsSeqLike

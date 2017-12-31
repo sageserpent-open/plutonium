@@ -6,7 +6,7 @@ import java.util.Optional
 import java.util.concurrent.Callable
 
 import com.sageserpent.americium.{Finite, NegativeInfinity, Unbounded}
-import com.sageserpent.plutonium.BlobStorage.UniqueItemSpecification
+import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.World.Revision
 import net.bytebuddy.ByteBuddy
 import net.bytebuddy.description.`type`.TypeDescription

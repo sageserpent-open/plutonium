@@ -1,7 +1,18 @@
 package com.sageserpent.plutonium
 
+import scala.reflect.runtime.universe.TypeTag
+
+object ItemExtensionApi {
+  type UniqueItemSpecification =
+    (Any, TypeTag[_ <: Any])
+}
+
 trait ItemExtensionApi {
+  import ItemExtensionApi._
+
   val id: Any
+
+  val uniqueItemSpecification: UniqueItemSpecification
 
   def checkInvariant(): Unit
 

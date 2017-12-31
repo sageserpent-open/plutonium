@@ -11,7 +11,7 @@ import com.lambdaworks.redis.RedisClient
 import com.lambdaworks.redis.api.rx.RedisReactiveCommands
 import com.lambdaworks.redis.codec.{ByteArrayCodec, RedisCodec, Utf8StringCodec}
 import com.sageserpent.americium.{PositiveInfinity, Unbounded}
-import com.sageserpent.plutonium.BlobStorage.UniqueItemSpecification
+import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.twitter.chill.{KryoPool, ScalaKryoInstantiator}
 import io.netty.handler.codec.EncoderException
 import rx.lang.scala.JavaConversions._

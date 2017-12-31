@@ -2,7 +2,7 @@ package com.sageserpent.plutonium
 
 import java.lang.reflect.Method
 
-import com.sageserpent.plutonium.BlobStorage.UniqueItemSpecification
+import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 
 object AbstractPatch {
   def patchesAreRelated(lhs: AbstractPatch, rhs: AbstractPatch): Boolean = {

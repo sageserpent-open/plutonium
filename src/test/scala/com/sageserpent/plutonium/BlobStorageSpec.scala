@@ -11,10 +11,8 @@ import com.sageserpent.americium.{
   PositiveInfinity,
   Unbounded
 }
-import com.sageserpent.plutonium.BlobStorage.{
-  SnapshotBlob,
-  UniqueItemSpecification
-}
+import com.sageserpent.plutonium.BlobStorage.SnapshotBlob
+import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import org.scalacheck.{Arbitrary, Gen, ShrinkLowPriority => NoShrinking}
 import org.scalatest.LoneElement._
 import org.scalatest.prop.GeneratorDrivenPropertyChecks

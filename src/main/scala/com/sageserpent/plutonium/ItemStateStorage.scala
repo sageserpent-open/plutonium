@@ -2,15 +2,15 @@ package com.sageserpent.plutonium
 
 import com.esotericsoftware.kryo.factories.ReflectionSerializerFactory
 import com.esotericsoftware.kryo.io.{Input, Output}
-import com.esotericsoftware.kryo.serializers.{FieldSerializer, JavaSerializer}
+import com.esotericsoftware.kryo.serializers.FieldSerializer
 import com.esotericsoftware.kryo.util.ObjectMap
 import com.esotericsoftware.kryo.{Kryo, Serializer}
+import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.twitter.chill.{KryoBase, KryoPool, ScalaKryoInstantiator}
 import org.objenesis.instantiator.ObjectInstantiator
 import org.objenesis.strategy.InstantiatorStrategy
 
 import scala.collection.mutable
-import scala.reflect.runtime.universe
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.DynamicVariable
 
