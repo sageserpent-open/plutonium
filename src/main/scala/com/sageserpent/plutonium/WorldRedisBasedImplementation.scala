@@ -4,9 +4,7 @@ import java.nio.ByteBuffer
 import java.time.Instant
 import java.util.{NoSuchElementException, UUID}
 
-import com.esotericsoftware.kryo.io.{Input, Output}
-import com.esotericsoftware.kryo.serializers.JavaSerializer
-import com.esotericsoftware.kryo.{Kryo, Serializer}
+import com.esotericsoftware.kryo.Kryo
 import com.lambdaworks.redis.RedisClient
 import com.lambdaworks.redis.api.rx.RedisReactiveCommands
 import com.lambdaworks.redis.codec.{ByteArrayCodec, RedisCodec, Utf8StringCodec}
@@ -18,33 +16,7 @@ import rx.lang.scala.JavaConversions._
 import rx.lang.scala.Observable
 
 import scala.Ordering.Implicits._
-import scala.reflect.runtime.universe._
 
-object UniqueItemSpecificationSerializationSupport {
-  val javaSerializer = new JavaSerializer
-
-  class SpecialSerializer[Item] extends Serializer[UniqueItemSpecification] {
-    override def write(kryo: Kryo,
-                       output: Output,
-                       data: UniqueItemSpecification): Unit = {
-      val (id, typeTag) = data
-      kryo.writeClassAndObject(output, id)
-      kryo.writeObject(output, typeTag, javaSerializer)
-    }
-
-    override def read(
-        kryo: Kryo,
-        input: Input,
-        dataType: Class[UniqueItemSpecification]): UniqueItemSpecification = {
-      val id = kryo.readClassAndObject(input).asInstanceOf[Any]
-      val typeTag = kryo
-        .readObject[TypeTag[Item]](input,
-                                   classOf[TypeTag[Item]],
-                                   javaSerializer)
-      id -> typeTag
-    }
-  }
-}
 
 object WorldRedisBasedImplementation {
   import UniqueItemSpecificationSerializationSupport.SpecialSerializer
