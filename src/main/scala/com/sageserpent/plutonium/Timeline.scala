@@ -97,6 +97,8 @@ class TimelineImplementation[EventId](
 
       var allItemsAreLocked = true
 
+      private val itemsMutatedSinceLastSnapshotHarvest = mutable.Set.empty[Any]
+
       def resetTimesliceTo(when: Unbounded[Instant]) = {
         blobStorageTimeSlice = blobStorage.timeSlice(when)
       }
@@ -104,7 +106,7 @@ class TimelineImplementation[EventId](
       override def blobStorageTimeslice: BlobStorage.Timeslice =
         blobStorageTimeSlice
 
-      // TODO - either fuse this back with the other code duplicate below or make it its own thing.
+      // TODO - need to close over mutable state that tracks which items have been updated, used when harvesting snapshots.
       override protected def createItemFor[Item](
           uniqueItemSpecification: UniqueItemSpecification) = {
         import QueryCallbackStuff._
@@ -124,11 +126,26 @@ class TimelineImplementation[EventId](
         proxyFactory.constructFrom(stateToBeAcquiredByProxy)
       }
 
-      // TODO: this will also reset the state so that new snapshots can be harvested later on.
       // TODO: try to do some snapshot comparison of 'before' versus 'after' states to identify what really changed.
       // PROBLEM: what actually changed when the patch was run - perhaps there were *other* items reachable from either the target or the arguments that were changed?
       // IOW, the issue of optimising snapshot production by detecting what item states have changed isn't just limited to what the patch knows about.
-      def harvestSnapshots(): Map[UniqueItemSpecification, SnapshotBlob] = ???
+      def harvestSnapshots(): Map[UniqueItemSpecification, SnapshotBlob] = {
+        val result = itemsMutatedSinceLastSnapshotHarvest map { item =>
+          // TODO - we have the unique item specification already in the item's acquired state - merge in direct access to it later.
+          val id          = item.asInstanceOf[ItemExtensionApi].id
+          val itemTypeTag = typeTagForClass(item.getClass)
+          val uniqueItemSpecification
+            : UniqueItemSpecification = id -> itemTypeTag
+
+          val snapshotBlob = itemStateStorageUsingProxies.snapshotFor(item)
+
+          uniqueItemSpecification -> snapshotBlob
+        } toMap
+
+        itemsMutatedSinceLastSnapshotHarvest.clear()
+
+        result
+      }
 
       override def fallbackItemFor[Item](
           uniqueItemSpecification: UniqueItemSpecification): Item =
@@ -223,7 +240,4 @@ class TimelineImplementation[EventId](
         proxyFactory.constructFrom(stateToBeAcquiredByProxy)
       }
     }
-
-  private def updateBlobStorage(updatePlan: UpdatePlan): BlobStorage[EventId] =
-    ???
 }
