@@ -219,10 +219,13 @@ object WorldImplementationCodeFactoring {
       mutable.Map
         .empty[universe.Type, (universe.MethodMirror, Class[_])]
 
+    // TODO - split this and the handling of mutation, there should be two distinct kinds of proxies for building a revision and for use in a scope.
     trait AcquiredState extends AcquiredStateCapturingId with AnnihilationHook {
       def uniqueItemSpecification: UniqueItemSpecification
 
       def itemIsLocked: Boolean
+
+      def recordMutation(item: ItemExtensionApi) = {}
     }
 
     val matchRecordAnnihilation: ElementMatcher[MethodDescription] =
@@ -261,7 +264,7 @@ object WorldImplementationCodeFactoring {
     object mutation {
       @RuntimeType
       def apply(@Origin method: Method,
-                @This target: AnyRef,
+                @This target: ItemExtensionApi,
                 @SuperCall superCall: Callable[_],
                 @FieldValue("acquiredState") acquiredState: AcquiredState) = {
         if (acquiredState.itemIsLocked) {
@@ -276,6 +279,8 @@ object WorldImplementationCodeFactoring {
         }
 
         superCall.call()
+
+        acquiredState.recordMutation(target)
       }
     }
 
@@ -320,6 +325,7 @@ object WorldImplementationCodeFactoring {
       def apply(@FieldValue("acquiredState") acquiredState: AcquiredState) =
         acquiredState.uniqueItemSpecification
     }
+
     object proxyFactory extends ProxyFactory[AcquiredState] {
       override val isForRecordingOnly = false
 

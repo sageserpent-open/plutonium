@@ -63,9 +63,6 @@ class TimelineImplementation[EventId](
   }
 
   override def revise(events: Map[EventId, Option[Event]]) = {
-
-    // PLAN: need to create a new blob storage and the mysterious high-level lifecycle set with incremental patch application abstraction.
-
     val (annulledEvents, newEvents) = (events.toList map {
       case (eventId, Some(event)) => \/-(eventId -> event)
       case (eventId, None)        => -\/(eventId)
@@ -102,7 +99,8 @@ class TimelineImplementation[EventId](
 
       var allItemsAreLocked = true
 
-      private val itemsMutatedSinceLastSnapshotHarvest = mutable.Set.empty[Any]
+      private val itemsMutatedSinceLastSnapshotHarvest =
+        mutable.Map.empty[UniqueItemSpecification, ItemExtensionApi]
 
       def resetTimesliceTo(when: Unbounded[Instant]) = {
         blobStorageTimeSlice = blobStorage.timeSlice(when)
@@ -111,7 +109,6 @@ class TimelineImplementation[EventId](
       override def blobStorageTimeslice: BlobStorage.Timeslice =
         blobStorageTimeSlice
 
-      // TODO - need to close over mutable state that tracks which items have been updated, used when harvesting snapshots.
       override protected def createItemFor[Item](
           _uniqueItemSpecification: UniqueItemSpecification) = {
         import QueryCallbackStuff._
@@ -124,25 +121,29 @@ class TimelineImplementation[EventId](
               _uniqueItemSpecification
 
             def itemIsLocked: Boolean = allItemsAreLocked
+
+            override def recordMutation(item: ItemExtensionApi) =
+              itemsMutatedSinceLastSnapshotHarvest.update(
+                item.uniqueItemSpecification,
+                item)
           }
 
         proxyFactory.constructFrom(stateToBeAcquiredByProxy)
       }
 
-      // TODO: try to do some snapshot comparison of 'before' versus 'after' states to identify what really changed.
-      // PROBLEM: what actually changed when the patch was run - perhaps there were *other* items reachable from either the target or the arguments that were changed?
-      // IOW, the issue of optimising snapshot production by detecting what item states have changed isn't just limited to what the patch knows about.
       def harvestSnapshots(): Map[UniqueItemSpecification, SnapshotBlob] = {
-        val result = itemsMutatedSinceLastSnapshotHarvest map { item =>
-          // TODO - we have the unique item specification already in the item's acquired state - merge in direct access to it later.
-          val id          = item.asInstanceOf[ItemExtensionApi].id
-          val itemTypeTag = typeTagForClass(item.getClass)
-          val uniqueItemSpecification
-            : UniqueItemSpecification = id -> itemTypeTag
+        val result = itemsMutatedSinceLastSnapshotHarvest map {
+          case (uniqueItemSpecification, item) =>
+            val snapshotBlob = itemStateStorageUsingProxies.snapshotFor(item)
 
-          val snapshotBlob = itemStateStorageUsingProxies.snapshotFor(item)
-
-          uniqueItemSpecification -> snapshotBlob
+            uniqueItemSpecification -> snapshotBlob
+        } filter {
+          case (uniqueItemSpecification, snapshot) =>
+            blobStorageTimeSlice.snapshotBlobFor(uniqueItemSpecification) match {
+              case Some(snapshotFromLastRevision) =>
+                snapshot != snapshotFromLastRevision
+              case None => true
+            }
         } toMap
 
         itemsMutatedSinceLastSnapshotHarvest.clear()
