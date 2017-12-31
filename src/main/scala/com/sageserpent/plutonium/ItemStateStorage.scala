@@ -112,9 +112,9 @@ trait ItemStateStorage {
                 } else {
                   underlyingInstantiator.newInstance()
                 }
+                }
               }
             }
-        }
       kryo.setInstantiatorStrategy(instantiatorStrategy)
       kryo
     }
@@ -123,7 +123,7 @@ trait ItemStateStorage {
   private val kryoPool =
     KryoPool.withByteArrayOutputStream(40, kryoInstantiator)
 
-  def snapshotFor[Item](item: Item): SnapshotBlob =
+  def snapshotFor(item: Any): SnapshotBlob =
     kryoPool.toBytesWithClass(item)
 
   private def itemFor[Item](
@@ -163,7 +163,7 @@ trait ItemStateStorage {
                   snapshot.fold[Any] {
                     fallbackItemFor[Item](uniqueItemSpecification)
                   }(kryoPool.fromBytes)
-                }
+              }
             }
           )
           .asInstanceOf[Item]
