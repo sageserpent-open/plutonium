@@ -23,7 +23,7 @@ abstract class WorldInefficientImplementationCodeFactoring[EventId]
   override def scopeFor(when: Unbounded[Instant], asOf: Instant): Scope =
     new ScopeBasedOnAsOf(when, asOf) with SelfPopulatedScope
 
-  protected def eventTimeline(nextRevision: Revision): Seq[Event]
+  protected def eventTimeline(nextRevision: Revision): Seq[(Event, EventId)]
 
   def revise(events: Map[EventId, Option[Event]], asOf: Instant): Revision = {
     def newEventDatumsFor(nextRevisionPriorToUpdate: Revision)
@@ -39,8 +39,8 @@ abstract class WorldInefficientImplementationCodeFactoring[EventId]
     }
 
     def buildAndValidateEventTimelineForProposedNewRevision(
-        newEventDatums: Seq[AbstractEventData],
-        pertinentEventDatumsExcludingTheNewRevision: Seq[AbstractEventData])
+        newEventDatums: Seq[(EventId, AbstractEventData)],
+        pertinentEventDatumsExcludingTheNewRevision: Seq[(EventId, AbstractEventData)])
       : Unit = {
       val eventTimelineIncludingNewRevision = eventTimelineFrom(
         pertinentEventDatumsExcludingTheNewRevision union newEventDatums)
@@ -61,8 +61,8 @@ abstract class WorldInefficientImplementationCodeFactoring[EventId]
       asOf: Instant,
       newEventDatumsFor: Revision => Map[EventId, AbstractEventData],
       buildAndValidateEventTimelineForProposedNewRevision: (
-          Seq[AbstractEventData],
-          Seq[AbstractEventData]) => Unit): Revision
+        Seq[(EventId, AbstractEventData)],
+          Seq[(EventId, AbstractEventData)]) => Unit): Revision
 
   protected def checkRevisionPrecondition(asOf: Instant,
                                           revisionAsOfs: Seq[Instant]): Unit = {
