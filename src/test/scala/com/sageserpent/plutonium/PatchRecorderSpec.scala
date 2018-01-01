@@ -30,11 +30,15 @@ class PatchRecorderSpec
 
   type LifecyclesForAnId = Seq[RecordingActionFactory]
 
+  type EventId = Int
+
   type RecordingAction =
-    (PatchRecorder[Int], Int, scala.collection.mutable.ListBuffer[Int]) => Unit
+    (PatchRecorder[EventId],
+     Int,
+     scala.collection.mutable.ListBuffer[Int]) => Unit
 
   case class TestCase(recordingActions: Seq[RecordingAction],
-                      updateConsumer: UpdateConsumer,
+                      updateConsumer: UpdateConsumer[EventId],
                       bestPatchSelection: BestPatchSelection,
                       eventsHaveEffectNoLaterThan: Unbounded[Instant])
 
@@ -60,7 +64,7 @@ class PatchRecorderSpec
 
   def recordingActionFactoriesGenerator(
       seed: Long,
-      updateConsumer: UpdateConsumer,
+      updateConsumer: UpdateConsumer[EventId],
       bestPatchSelection: BestPatchSelection,
       eventsHaveEffectNoLaterThan: Unbounded[Instant])
     : Gen[Seq[RecordingActionFactory]] = inAnyOrder {
@@ -141,20 +145,22 @@ class PatchRecorderSpec
                                 }
                                 .once
                               (updateConsumer.capturePatch _)
-                                .expects(patch)
-                                .onCall { (_: AbstractPatch) =>
+                                .expects(sequenceIndexOfPatchStandIn, patch)
+                                .onCall { (_: EventId, _: AbstractPatch) =>
                                   sequenceIndicesFromAppliedPatches += sequenceIndexOfPatchStandIn: Unit
                                 }
                                 .once
                             } else {
                               (patch.rewriteItemTypeTags _).expects(*).never
-                              (updateConsumer.capturePatch _).expects(*).never
+                              (updateConsumer.capturePatch _)
+                                .expects(*, *)
+                                .never
                             }
                         }
                       }
 
                       def recordingChange(patch: AbstractPatch)(when: Instant)(
-                          patchRecorder: PatchRecorder[Int],
+                          patchRecorder: PatchRecorder[EventId],
                           masterSequenceIndex: Int,
                           sequenceIndicesFromAppliedPatches: scala.collection.mutable.ListBuffer[
                             Int]): Unit = {
@@ -171,7 +177,7 @@ class PatchRecorderSpec
 
                       def recordingMeasurement(patch: AbstractPatch)(
                           when: Instant)(
-                          patchRecorder: PatchRecorder[Int],
+                          patchRecorder: PatchRecorder[EventId],
                           masterSequenceIndex: Int,
                           sequenceIndicesFromAppliedPatches: scala.collection.mutable.ListBuffer[
                             Int]): Unit = {
@@ -184,7 +190,7 @@ class PatchRecorderSpec
                         patchRecorder.recordPatchFromMeasurement(
                           masterSequenceIndex,
                           Finite(when),
-                                                                 patch)
+                          patch)
                       }
                       if (makeAChange) recordingChange(patch) _
                       else recordingMeasurement(patch) _
@@ -214,7 +220,7 @@ class PatchRecorderSpec
             recordingActionFactories <- lifecycleForAnIdGenerator(id)
           } yield {
             def recordingFinalAnnihilation(when: Instant)(
-                patchRecorder: PatchRecorder[Int],
+                patchRecorder: PatchRecorder[EventId],
                 masterSequenceIndex: Int,
                 sequenceIndicesFromAppliedPatches: scala.collection.mutable.ListBuffer[
                   Int]): Unit = {
@@ -222,9 +228,9 @@ class PatchRecorderSpec
 
               if (patchApplicationDoesNotBreachTheCutoff) {
                 (updateConsumer
-                  .captureAnnihilation(_: UniqueItemSpecification))
-                  .expects(id -> typeTag[FooHistory])
-                  .onCall { (_: UniqueItemSpecification) =>
+                  .captureAnnihilation(_: EventId, _: UniqueItemSpecification))
+                  .expects(masterSequenceIndex, id -> typeTag[FooHistory])
+                  .onCall { (_: EventId, _: UniqueItemSpecification) =>
                     (sequenceIndicesFromAppliedPatches += masterSequenceIndex): Unit
                   }
                   .once
@@ -270,7 +276,7 @@ class PatchRecorderSpec
   val testCaseGenerator: Gen[TestCase] = inSequence {
     for {
       seed <- seedGenerator
-      updateConsumer     = mock[UpdateConsumer]
+      updateConsumer     = mock[UpdateConsumer[EventId]]
       bestPatchSelection = mock[BestPatchSelection]
       eventsHaveEffectNoLaterThan <- unboundedInstantGenerator
       recordingActionFactories <- recordingActionFactoriesGenerator(
@@ -316,7 +322,7 @@ class PatchRecorderSpec
             with BestPatchSelectionContracts {
               override val itemsAreLockedResource: ManagedResource[Unit] =
                 makeManagedResource(())(Unit => ())(List.empty)
-              override val updateConsumer: UpdateConsumer =
+              override val updateConsumer: UpdateConsumer[EventId] =
                 updateConsumerFromTestCase
             }
 

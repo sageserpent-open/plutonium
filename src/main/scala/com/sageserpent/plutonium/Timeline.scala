@@ -246,7 +246,7 @@ class TimelineImplementation[EventId](
   private def createUpdatePlan(newEvents: Seq[(EventId, Event)],
                                annulledEvents: Seq[EventId]): UpdatePlan = {
 
-    val patchRecorder: PatchRecorder = ???
+    val patchRecorder: PatchRecorder[EventId] = ???
 
     WorldImplementationCodeFactoring.recordPatches(???, patchRecorder)
 

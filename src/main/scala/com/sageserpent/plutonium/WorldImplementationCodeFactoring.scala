@@ -409,25 +409,28 @@ object WorldImplementationCodeFactoring {
             } { _ =>
               allItemsAreLocked = false
             }(List.empty)
-          override val updateConsumer: UpdateConsumer = new UpdateConsumer {
-            val identifiedItemAccess = new IdentifiedItemAccess {
-              override def reconstitute(
-                  uniqueItemSpecification: UniqueItemSpecification): Any =
-                identifiedItemsScopeThis.itemFor(uniqueItemSpecification._1)(
-                  uniqueItemSpecification._2)
-            }
-            override def captureAnnihilation(
-                uniqueItemSpecification: UniqueItemSpecification): Unit =
-              identifiedItemsScopeThis.annihilateItemFor(
-                uniqueItemSpecification._1)(uniqueItemSpecification._2)
+          override val updateConsumer: UpdateConsumer[EventId] =
+            new UpdateConsumer[EventId] {
+              val identifiedItemAccess = new IdentifiedItemAccess {
+                override def reconstitute(
+                    uniqueItemSpecification: UniqueItemSpecification): Any =
+                  identifiedItemsScopeThis.itemFor(uniqueItemSpecification._1)(
+                    uniqueItemSpecification._2)
+              }
+              override def captureAnnihilation(
+                  eventId: EventId,
+                  uniqueItemSpecification: UniqueItemSpecification): Unit =
+                identifiedItemsScopeThis.annihilateItemFor(
+                  uniqueItemSpecification._1)(uniqueItemSpecification._2)
 
-            override def capturePatch(patch: AbstractPatch): Unit = {
-              patch(identifiedItemAccess)
-              for (_ <- itemsAreLockedResource) {
-                patch.checkInvariants(identifiedItemAccess)
+              override def capturePatch(eventId: EventId,
+                                        patch: AbstractPatch): Unit = {
+                patch(identifiedItemAccess)
+                for (_ <- itemsAreLockedResource) {
+                  patch.checkInvariants(identifiedItemAccess)
+                }
               }
             }
-          }
         }
 
         recordPatches(eventTimeline, patchRecorder)

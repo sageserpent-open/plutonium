@@ -16,11 +16,12 @@ object PatchRecorderImplementation {
   val initialSequenceIndex: SequenceIndex = 0L
 }
 
-trait UpdateConsumer {
+trait UpdateConsumer[EventId] {
   def captureAnnihilation(
+      eventId: EventId,
       uniqueItemSpecification: UniqueItemSpecification): Unit
 
-  def capturePatch(patch: AbstractPatch): Unit
+  def capturePatch(eventId: EventId, patch: AbstractPatch): Unit
 }
 
 abstract class PatchRecorderImplementation[EventId](
@@ -31,7 +32,7 @@ abstract class PatchRecorderImplementation[EventId](
   self: BestPatchSelection =>
   import PatchRecorderImplementation._
 
-  val updateConsumer: UpdateConsumer
+  val updateConsumer: UpdateConsumer[EventId]
   val itemsAreLockedResource: ManagedResource[Unit]
 
   private var _whenEventPertainedToByLastRecordingTookPlace
@@ -68,7 +69,7 @@ abstract class PatchRecorderImplementation[EventId](
   def annihilateItemFor_[SubclassOfItem <: Item, Item](
       id: Any,
       typeTag: universe.TypeTag[SubclassOfItem]): Unit = {
-    updateConsumer.captureAnnihilation(id -> typeTag)
+    updateConsumer.captureAnnihilation(???, id -> typeTag)
   }
 
   override def recordAnnihilation[Item: TypeTag](eventId: EventId,
@@ -316,7 +317,7 @@ abstract class PatchRecorderImplementation[EventId](
       override def perform() {
         val bestPatchWithLoweredTypeTags = bestPatch.rewriteItemTypeTags(
           reconstitutionDataToItemStateMap.mapValues(_.lowerBoundTypeTag))
-        updateConsumer.capturePatch(bestPatchWithLoweredTypeTags)
+        updateConsumer.capturePatch(???, bestPatchWithLoweredTypeTags)
       }
       override def canProceed() =
         itemStatesReferencedByBestPatch.forall(_.itemAnnihilationHasBeenNoted)
