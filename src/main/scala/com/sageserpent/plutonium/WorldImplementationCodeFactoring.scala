@@ -309,7 +309,7 @@ object WorldImplementationCodeFactoring {
       def apply(@This thiz: ItemExtensionApi): Unit = {
         if (thiz.isGhost) {
           throw new RuntimeException(
-            s"Item: '$id' has been annihilated but is being referred to in an invariant.")
+            s"Item: '$thiz.id' has been annihilated but is being referred to in an invariant.")
         }
       }
 
@@ -359,16 +359,16 @@ object WorldImplementationCodeFactoring {
       firstMethod: MethodDescription,
       secondMethod: MethodDescription): Boolean =
     secondMethod.getName == firstMethod.getName &&
-      secondMethod.getReceiverType.asErasure
-        .isAssignableFrom(firstMethod.getReceiverType.asErasure) &&
-      (secondMethod.getReturnType.asErasure
-        .isAssignableFrom(firstMethod.getReturnType.asErasure) ||
-        secondMethod.getReturnType.asErasure
-          .isAssignableFrom(firstMethod.getReturnType.asErasure.asBoxed)) &&
-      secondMethod.getParameters.size == firstMethod.getParameters.size &&
-      secondMethod.getParameters.toSeq
-        .map(_.getType) == firstMethod.getParameters.toSeq
-        .map(_.getType) // What about contravariance? Hmmm...
+    secondMethod.getReceiverType.asErasure
+      .isAssignableFrom(firstMethod.getReceiverType.asErasure) &&
+    (secondMethod.getReturnType.asErasure
+      .isAssignableFrom(firstMethod.getReturnType.asErasure) ||
+    secondMethod.getReturnType.asErasure
+      .isAssignableFrom(firstMethod.getReturnType.asErasure.asBoxed)) &&
+    secondMethod.getParameters.size == firstMethod.getParameters.size &&
+    secondMethod.getParameters.toSeq
+      .map(_.getType) == firstMethod.getParameters.toSeq
+      .map(_.getType) // What about contravariance? Hmmm...
 
   def firstMethodIsOverrideCompatibleWithSecond(
       firstMethod: Method,
@@ -526,19 +526,19 @@ object WorldImplementationCodeFactoring {
 
     object itemCache extends ItemCache {
       override def itemsFor[Item: TypeTag](id: Any): Stream[Item] =
-        identifiedItemsScope.itemsFor(id)
+          identifiedItemsScope.itemsFor(id)
 
       override def allItems[Item: TypeTag](): Stream[Item] =
-        identifiedItemsScope.allItems()
-    }
+          identifiedItemsScope.allItems()
+      }
 
     override def render[Item](bitemporal: Bitemporal[Item]): Stream[Item] =
       itemCache.render(bitemporal)
 
     override def numberOf[Item](bitemporal: Bitemporal[Item]): Int =
       itemCache.numberOf(bitemporal)
-  }
-}
+      }
+    }
 
 abstract class WorldImplementationCodeFactoring[EventId]
     extends World[EventId] {
