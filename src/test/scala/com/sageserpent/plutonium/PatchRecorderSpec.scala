@@ -32,7 +32,7 @@ class PatchRecorderSpec
   type LifecyclesForAnId = Seq[RecordingActionFactory]
 
   type RecordingAction =
-    (PatchRecorder, Int, scala.collection.mutable.ListBuffer[Int]) => Unit
+    (PatchRecorder[Int], Int, scala.collection.mutable.ListBuffer[Int]) => Unit
 
   case class TestCase(recordingActions: Seq[RecordingAction],
                       updateConsumer: UpdateConsumer,
@@ -148,7 +148,7 @@ class PatchRecorderSpec
                       }
 
                       def recordingChange(patch: AbstractPatch)(when: Instant)(
-                          patchRecorder: PatchRecorder,
+                          patchRecorder: PatchRecorder[Int],
                           masterSequenceIndex: Int,
                           sequenceIndicesFromAppliedPatches: scala.collection.mutable.ListBuffer[
                             Int]): Unit = {
@@ -158,12 +158,14 @@ class PatchRecorderSpec
                           when,
                           masterSequenceIndex,
                           sequenceIndicesFromAppliedPatches)
-                        patchRecorder.recordPatchFromChange(Finite(when), patch)
+                        patchRecorder.recordPatchFromChange(masterSequenceIndex,
+                                                            Finite(when),
+                                                            patch)
                       }
 
                       def recordingMeasurement(patch: AbstractPatch)(
                           when: Instant)(
-                          patchRecorder: PatchRecorder,
+                          patchRecorder: PatchRecorder[Int],
                           masterSequenceIndex: Int,
                           sequenceIndicesFromAppliedPatches: scala.collection.mutable.ListBuffer[
                             Int]): Unit = {
@@ -173,8 +175,10 @@ class PatchRecorderSpec
                           when,
                           masterSequenceIndex,
                           sequenceIndicesFromAppliedPatches)
-                        patchRecorder.recordPatchFromMeasurement(Finite(when),
-                                                                 patch)
+                        patchRecorder.recordPatchFromMeasurement(
+                          masterSequenceIndex,
+                          Finite(when),
+                          patch)
                       }
                       if (makeAChange) recordingChange(patch) _
                       else recordingMeasurement(patch) _
@@ -204,7 +208,7 @@ class PatchRecorderSpec
             recordingActionFactories <- lifecycleForAnIdGenerator(id)
           } yield {
             def recordingFinalAnnihilation(when: Instant)(
-                patchRecorder: PatchRecorder,
+                patchRecorder: PatchRecorder[Int],
                 masterSequenceIndex: Int,
                 sequenceIndicesFromAppliedPatches: scala.collection.mutable.ListBuffer[
                   Int]): Unit = {
@@ -219,7 +223,8 @@ class PatchRecorderSpec
                   }
                   .once
               }
-              patchRecorder.recordAnnihilation[FooHistory](when, id)
+              patchRecorder
+                .recordAnnihilation[FooHistory](masterSequenceIndex, when, id)
             }
 
             recordingActionFactories :+ (recordingFinalAnnihilation _)
@@ -299,8 +304,8 @@ class PatchRecorderSpec
           }
 
           val patchRecorder =
-            new PatchRecorderImplementation(eventsHaveEffectNoLaterThan)
-            with PatchRecorderContracts
+            new PatchRecorderImplementation[Int](eventsHaveEffectNoLaterThan)
+            with PatchRecorderContracts[Int]
             with DelegatingBestPatchSelectionImplementation
             with BestPatchSelectionContracts {
               override val itemsAreLockedResource: ManagedResource[Unit] =

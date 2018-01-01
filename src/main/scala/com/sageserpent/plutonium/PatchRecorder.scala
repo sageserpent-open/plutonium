@@ -25,56 +25,63 @@ trait BestPatchSelectionContracts extends BestPatchSelection {
   }
 }
 
-trait PatchRecorder {
+trait PatchRecorder[EventId] {
   def whenEventPertainedToByLastRecordingTookPlace: Option[Unbounded[Instant]]
 
   def allRecordingsAreCaptured: Boolean
 
-  def recordPatchFromChange(when: Unbounded[Instant],
+  def recordPatchFromChange(eventId: EventId,
+                            when: Unbounded[Instant],
                             patch: AbstractPatch): Unit
 
-  def recordPatchFromMeasurement(when: Unbounded[Instant],
+  def recordPatchFromMeasurement(eventId: EventId,
+                                 when: Unbounded[Instant],
                                  patch: AbstractPatch): Unit
 
-  def recordAnnihilation[Item: TypeTag](when: Instant, id: Any): Unit
+  def recordAnnihilation[Item: TypeTag](eventId: EventId,
+                                        when: Instant,
+                                        id: Any): Unit
 
   def noteThatThereAreNoFollowingRecordings(): Unit
 }
 
-trait PatchRecorderContracts extends PatchRecorder {
+trait PatchRecorderContracts[EventId] extends PatchRecorder[EventId] {
   require(whenEventPertainedToByLastRecordingTookPlace.isEmpty)
   require(!allRecordingsAreCaptured)
 
-  abstract override def recordPatchFromChange(when: Unbounded[Instant],
+  abstract override def recordPatchFromChange(eventId: EventId,
+                                              when: Unbounded[Instant],
                                               patch: AbstractPatch): Unit = {
     require(
       whenEventPertainedToByLastRecordingTookPlace.cata(some = when >= _,
                                                         none = true))
     require(!allRecordingsAreCaptured)
-    val result = super.recordPatchFromChange(when, patch)
+    val result = super.recordPatchFromChange(eventId, when, patch)
     require(whenEventPertainedToByLastRecordingTookPlace == Some(when))
     result
   }
 
   abstract override def recordPatchFromMeasurement(
+      eventId: EventId,
       when: Unbounded[Instant],
       patch: AbstractPatch): Unit = {
     require(
       whenEventPertainedToByLastRecordingTookPlace.cata(some = when >= _,
                                                         none = true))
     require(!allRecordingsAreCaptured)
-    val result = super.recordPatchFromMeasurement(when, patch)
+    val result = super.recordPatchFromMeasurement(eventId, when, patch)
     require(whenEventPertainedToByLastRecordingTookPlace == Some(when))
     result
   }
 
-  abstract override def recordAnnihilation[Item: TypeTag](when: Instant,
+  abstract override def recordAnnihilation[Item: TypeTag](eventId: EventId,
+                                                          when: Instant,
                                                           id: Any): Unit = {
     require(
       whenEventPertainedToByLastRecordingTookPlace
         .cata(some = Finite(when) >= _, none = true))
     require(!allRecordingsAreCaptured)
-    val result = super.recordAnnihilation(when, id)
+    val result = super.recordAnnihilation(eventId, when, id)
     require(whenEventPertainedToByLastRecordingTookPlace.contains(Finite(when)))
     result
   }

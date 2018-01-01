@@ -23,9 +23,9 @@ trait UpdateConsumer {
   def capturePatch(patch: AbstractPatch): Unit
 }
 
-abstract class PatchRecorderImplementation(
+abstract class PatchRecorderImplementation[EventId](
     eventsHaveEffectNoLaterThan: Unbounded[Instant])
-    extends PatchRecorder {
+    extends PatchRecorder[EventId] {
   // This class makes no pretence at exception safety - it doesn't need to in the context
   // of the client 'WorldReferenceImplementation', which provides exception safety at a higher level.
   self: BestPatchSelection =>
@@ -45,7 +45,8 @@ abstract class PatchRecorderImplementation(
 
   override def allRecordingsAreCaptured: Boolean = _allRecordingsAreCaptured
 
-  override def recordPatchFromChange(when: Unbounded[Instant],
+  override def recordPatchFromChange(eventId: EventId,
+                                     when: Unbounded[Instant],
                                      patch: AbstractPatch): Unit = {
     _whenEventPertainedToByLastRecordingTookPlace = Some(when)
 
@@ -56,7 +57,8 @@ abstract class PatchRecorderImplementation(
     itemState.addPatch(when, patch)
   }
 
-  override def recordPatchFromMeasurement(when: Unbounded[Instant],
+  override def recordPatchFromMeasurement(eventId: EventId,
+                                          when: Unbounded[Instant],
                                           patch: AbstractPatch): Unit = {
     _whenEventPertainedToByLastRecordingTookPlace = Some(when)
 
@@ -69,7 +71,8 @@ abstract class PatchRecorderImplementation(
     updateConsumer.captureAnnihilation(id -> typeTag)
   }
 
-  override def recordAnnihilation[Item: TypeTag](_when: Instant,
+  override def recordAnnihilation[Item: TypeTag](eventId: EventId,
+                                                 _when: Instant,
                                                  id: Any): Unit = {
     val liftedWhen = Finite(_when)
     _whenEventPertainedToByLastRecordingTookPlace = Some(liftedWhen)

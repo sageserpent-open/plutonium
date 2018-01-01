@@ -54,10 +54,13 @@ object WorldImplementationCodeFactoring {
       (serializableEvent, introducedInRevision, eventOrderingTiebreakerIndex)
   }
 
-  def eventTimelineFrom(eventDatums: Seq[AbstractEventData]): Seq[Event] =
+  def eventTimelineFrom[EventId](
+      eventDatums: Seq[(EventId, AbstractEventData)]): Seq[(Event, EventId)] =
     (eventDatums collect {
-      case eventData: EventData => eventData
-    }).sorted.map(_.serializableEvent)
+      case (eventId, eventData: EventData) => eventId -> eventData
+    }).sortBy(_._2).map {
+      case (eventId, eventData) => eventData.serializableEvent -> eventId
+    }
 
   object IdentifiedItemsScope {
     def yieldOnlyItemsOfSupertypeOf[Item: TypeTag](items: Traversable[Any]) = {
@@ -388,7 +391,8 @@ object WorldImplementationCodeFactoring {
   class IdentifiedItemsScope { identifiedItemsScopeThis =>
     private var allItemsAreLocked = false
 
-    def populate(_when: Unbounded[Instant], eventTimeline: Seq[Event]) = {
+    def populate[EventId](_when: Unbounded[Instant],
+                          eventTimeline: Seq[(Event, EventId)]) = {
       idToItemsMultiMap.clear()
 
       for (_ <- makeManagedResource {
@@ -396,9 +400,9 @@ object WorldImplementationCodeFactoring {
            } { _ =>
              allItemsAreLocked = true
            }(List.empty)) {
-        val patchRecorder = new PatchRecorderImplementation(_when)
-        with PatchRecorderContracts with BestPatchSelectionImplementation
-        with BestPatchSelectionContracts {
+        val patchRecorder = new PatchRecorderImplementation[EventId](_when)
+        with PatchRecorderContracts[EventId]
+        with BestPatchSelectionImplementation with BestPatchSelectionContracts {
           override val itemsAreLockedResource: ManagedResource[Unit] =
             makeManagedResource {
               allItemsAreLocked = true
@@ -520,22 +524,23 @@ object WorldImplementationCodeFactoring {
         idToItemsMultiMap.values.flatten)
   }
 
-  def recordPatches(eventTimeline: Seq[Event], patchRecorder: PatchRecorder) = {
-    for (event <- eventTimeline) event match {
+  def recordPatches[EventId](eventTimeline: Seq[(Event, EventId)],
+                             patchRecorder: PatchRecorder[EventId]) = {
+    for ((event, eventId) <- eventTimeline) event match {
       case Change(when, patches) =>
         for (patch <- patches) {
-          patchRecorder.recordPatchFromChange(when, patch)
+          patchRecorder.recordPatchFromChange(eventId, when, patch)
         }
 
       case Measurement(when, patches) =>
         for (patch <- patches) {
-          patchRecorder.recordPatchFromMeasurement(when, patch)
+          patchRecorder.recordPatchFromMeasurement(eventId, when, patch)
         }
 
       case annihilation @ Annihilation(when, id) =>
         implicit val typeTag =
           annihilation.capturedTypeTag
-        patchRecorder.recordAnnihilation(when, id)
+        patchRecorder.recordAnnihilation(eventId, when, id)
     }
 
     patchRecorder.noteThatThereAreNoFollowingRecordings()

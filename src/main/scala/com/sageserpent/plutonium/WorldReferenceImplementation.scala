@@ -64,13 +64,18 @@ class MutableState[EventId] {
   def pertinentEventDatums(
       cutoffRevision: Revision,
       cutoffWhen: Unbounded[Instant],
-      eventIdInclusion: EventIdInclusion): Seq[AbstractEventData] =
-    eventIdsAndTheirDatums(cutoffRevision, cutoffWhen, eventIdInclusion)._2
+      eventIdInclusion: EventIdInclusion): Seq[(EventId, AbstractEventData)] =
+    eventIdsAndTheirDatums(cutoffRevision, cutoffWhen, eventIdInclusion)
+      .filterNot(PartialFunction.cond(_) {
+        case (_, eventData: EventData) =>
+          eventData.serializableEvent.when > cutoffWhen
+      })
+      .toStream
 
   def eventIdsAndTheirDatums(cutoffRevision: Revision,
                              cutoffWhen: Unbounded[Instant],
                              eventIdInclusion: EventIdInclusion) = {
-    val eventIdAndDataPairs = eventIdToEventCorrectionsMap collect {
+    eventIdToEventCorrectionsMap collect {
       case (eventId, eventCorrections) if eventIdInclusion(eventId) =>
         val onePastIndexOfRelevantEventCorrection =
           numberOfEventCorrectionsPriorToCutoff(eventCorrections,
@@ -82,27 +87,19 @@ class MutableState[EventId] {
         else
           None
     } collect { case Some(idAndDataPair) => idAndDataPair }
-
-    val (eventIds, eventDatums) = eventIdAndDataPairs.unzip
-
-    eventIds -> eventDatums
-      .filterNot(PartialFunction.cond(_) {
-        case eventData: EventData =>
-          eventData.serializableEvent.when > cutoffWhen
-      })
-      .toStream
   }
 
   def pertinentEventDatums(
       cutoffRevision: Revision,
-      eventIds: Iterable[EventId]): Seq[AbstractEventData] = {
+      eventIds: Iterable[EventId]): Seq[(EventId, AbstractEventData)] = {
     val eventIdsToBeExcluded = eventIds.toSet
     pertinentEventDatums(cutoffRevision,
                          PositiveInfinity(),
                          eventId => !eventIdsToBeExcluded.contains(eventId))
   }
 
-  def pertinentEventDatums(cutoffRevision: Revision): Seq[AbstractEventData] =
+  def pertinentEventDatums(
+      cutoffRevision: Revision): Seq[(EventId, AbstractEventData)] =
     pertinentEventDatums(cutoffRevision, PositiveInfinity(), _ => true)
 
   def checkInvariant() = {
@@ -134,16 +131,21 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
       override def revisionAsOfs: Array[Instant] =
         (baseMutableState.revisionAsOfs take numberOfRevisionsInCommon) ++ super.revisionAsOfs
 
-      override def pertinentEventDatums(
-          cutoffRevision: Revision,
-          cutoffWhen: Unbounded[Instant],
-          eventIdInclusion: EventIdInclusion): Seq[AbstractEventData] = {
+      override def pertinentEventDatums(cutoffRevision: Revision,
+                                        cutoffWhen: Unbounded[Instant],
+                                        eventIdInclusion: EventIdInclusion)
+        : Seq[(EventId, AbstractEventData)] = {
         val cutoffWhenForBaseWorld = cutoffWhen min cutoffWhenAfterWhichHistoriesDiverge
         if (cutoffRevision > numberOfRevisionsInCommon) {
-          val (eventIds, eventDatums) =
+          val foo =
             eventIdsAndTheirDatums(cutoffRevision, cutoffWhen, eventIdInclusion)
-          val eventIdsToBeExcluded = eventIds.toSet
-          eventDatums ++ baseMutableState.pertinentEventDatums(
+          val eventIdsToBeExcluded = foo.map(_._1).toSet
+          foo
+            .filterNot(PartialFunction.cond(_) {
+              case (_, eventData: EventData) =>
+                eventData.serializableEvent.when > cutoffWhen
+            })
+            .toStream ++ baseMutableState.pertinentEventDatums(
             numberOfRevisionsInCommon,
             cutoffWhenForBaseWorld,
             eventId =>
@@ -161,7 +163,8 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
 
   override def revisionAsOfs: Array[Instant] = mutableState.revisionAsOfs
 
-  override protected def eventTimeline(cutoffRevision: Revision): Seq[Event] = {
+  override protected def eventTimeline(
+      cutoffRevision: Revision): Seq[(Event, EventId)] = {
     val idOfThreadThatMostlyRecentlyStartedARevisionBeforehand =
       mutableState.synchronized {
         mutableState.readerThreadsThatHaveNotBeenBouncedByARevision += Thread.currentThread.getId
@@ -182,8 +185,8 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
       asOf: Instant,
       newEventDatumsFor: Revision => Map[EventId, AbstractEventData],
       buildAndValidateEventTimelineForProposedNewRevision: (
-          Seq[AbstractEventData],
-          Seq[AbstractEventData]) => Unit): Revision = {
+          Seq[(EventId, AbstractEventData)],
+          Seq[(EventId, AbstractEventData)]) => Unit): Revision = {
 
     val (newEventDatums,
          nextRevisionPriorToUpdate,
@@ -203,7 +206,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
       }
 
     buildAndValidateEventTimelineForProposedNewRevision(
-      newEventDatums.values.toSeq,
+      newEventDatums.toSeq,
       pertinentEventDatumsExcludingTheNewRevision)
 
     mutableState.synchronized {
