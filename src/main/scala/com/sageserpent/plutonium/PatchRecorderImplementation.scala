@@ -55,7 +55,7 @@ abstract class PatchRecorderImplementation[EventId](
 
     itemState.submitCandidatePatches(patch.method)
 
-    itemState.addPatch(when, patch)
+    itemState.addPatch(when, patch, eventId)
   }
 
   override def recordPatchFromMeasurement(eventId: EventId,
@@ -63,13 +63,14 @@ abstract class PatchRecorderImplementation[EventId](
                                           patch: AbstractPatch): Unit = {
     _whenEventPertainedToByLastRecordingTookPlace = Some(when)
 
-    refineRelevantItemStatesAndYieldTarget(patch).addPatch(when, patch)
+    refineRelevantItemStatesAndYieldTarget(patch).addPatch(when, patch, eventId)
   }
 
   def annihilateItemFor_[SubclassOfItem <: Item, Item](
       id: Any,
-      typeTag: universe.TypeTag[SubclassOfItem]): Unit = {
-    updateConsumer.captureAnnihilation(???, id -> typeTag)
+      typeTag: universe.TypeTag[SubclassOfItem],
+      eventId: EventId): Unit = {
+    updateConsumer.captureAnnihilation(eventId, id -> typeTag)
   }
 
   override def recordAnnihilation[Item: TypeTag](eventId: EventId,
@@ -107,7 +108,7 @@ abstract class PatchRecorderImplementation[EventId](
               for (itemStateToBeAnnihilated <- compatibleItemStates) {
                 val typeTagForSpecificItem =
                   itemStateToBeAnnihilated.lowerBoundTypeTag
-                annihilateItemFor_(id, typeTagForSpecificItem)
+                annihilateItemFor_(id, typeTagForSpecificItem, eventId)
 
                 val itemStates = idToItemStatesMap(id)
 
@@ -158,7 +159,8 @@ abstract class PatchRecorderImplementation[EventId](
            }) actionQueue.dequeue().perform()
   }
 
-  type CandidatePatchTuple = (SequenceIndex, AbstractPatch, Unbounded[Instant])
+  type CandidatePatchTuple =
+    (SequenceIndex, AbstractPatch, Unbounded[Instant], EventId)
 
   private type CandidatePatches = mutable.MutableList[CandidatePatchTuple]
 
@@ -195,8 +197,10 @@ abstract class PatchRecorderImplementation[EventId](
     def canBeAnnihilatedAs(typeTag: TypeTag[_]) =
       isFusibleWith(typeTag)
 
-    def addPatch(when: Unbounded[Instant], patch: AbstractPatch) = {
-      val candidatePatchTuple = (nextSequenceIndex(), patch, when)
+    def addPatch(when: Unbounded[Instant],
+                 patch: AbstractPatch,
+                 eventId: EventId) = {
+      val candidatePatchTuple = (nextSequenceIndex(), patch, when, eventId)
       methodAndItsCandidatePatchTuplesFor(patch.method) match {
         case (Some((exemplarMethod, candidatePatchTuples))) =>
           candidatePatchTuples += candidatePatchTuple
@@ -294,7 +298,10 @@ abstract class PatchRecorderImplementation[EventId](
 
     // The best patch has to be applied as if it occurred when the patch representing
     // the event would have taken place - so it steals the latter's sequence index.
-    val (sequenceIndexForBestPatch, _, whenTheBestPatchOccurs) =
+    val (sequenceIndexForBestPatch,
+         _,
+         whenTheBestPatchOccurs,
+         eventIdForBestPatch) =
       patchRepresentingTheEvent
 
     val reconstitutionDataToItemStateMap =
@@ -317,13 +324,14 @@ abstract class PatchRecorderImplementation[EventId](
       override def perform() {
         val bestPatchWithLoweredTypeTags = bestPatch.rewriteItemTypeTags(
           reconstitutionDataToItemStateMap.mapValues(_.lowerBoundTypeTag))
-        updateConsumer.capturePatch(???, bestPatchWithLoweredTypeTags)
+        updateConsumer.capturePatch(eventIdForBestPatch,
+                                    bestPatchWithLoweredTypeTags)
       }
       override def canProceed() =
         itemStatesReferencedByBestPatch.forall(_.itemAnnihilationHasBeenNoted)
     })
 
-    for ((sequenceIndex, _, _) <- candidatePatchTuples) {
+    for ((sequenceIndex, _, _, _) <- candidatePatchTuples) {
       outstandingSequenceIndices -= sequenceIndex
     }
   }
