@@ -296,7 +296,7 @@ object WorldImplementationCodeFactoring {
       def apply(@This thiz: ItemExtensionApi): Unit = {
         if (thiz.isGhost) {
           throw new RuntimeException(
-            s"Item: '$id' has been annihilated but is being referred to in an invariant.")
+            s"Item: '$thiz.id' has been annihilated but is being referred to in an invariant.")
         }
       }
 
