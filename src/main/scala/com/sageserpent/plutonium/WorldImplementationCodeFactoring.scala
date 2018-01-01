@@ -386,8 +386,7 @@ object WorldImplementationCodeFactoring {
     "checkInvariant" == method.getName // TODO: this is hokey.
 
   class IdentifiedItemsScope { identifiedItemsScopeThis =>
-
-    var allItemsAreLocked = false
+    private var allItemsAreLocked = false
 
     def populate(_when: Unbounded[Instant], eventTimeline: Seq[Event]) = {
       idToItemsMultiMap.clear()
@@ -400,14 +399,31 @@ object WorldImplementationCodeFactoring {
         val patchRecorder = new PatchRecorderImplementation(_when)
         with PatchRecorderContracts with BestPatchSelectionImplementation
         with BestPatchSelectionContracts {
-          override val identifiedItemsScope: IdentifiedItemsScope =
-            identifiedItemsScopeThis
           override val itemsAreLockedResource: ManagedResource[Unit] =
             makeManagedResource {
               allItemsAreLocked = true
             } { _ =>
               allItemsAreLocked = false
             }(List.empty)
+          override val updateConsumer: UpdateConsumer = new UpdateConsumer {
+            val identifiedItemAccess = new IdentifiedItemAccess {
+              override def reconstitute(
+                  uniqueItemSpecification: UniqueItemSpecification): Any =
+                identifiedItemsScopeThis.itemFor(uniqueItemSpecification._1)(
+                  uniqueItemSpecification._2)
+            }
+            override def captureAnnihilation(
+                uniqueItemSpecification: UniqueItemSpecification): Unit =
+              identifiedItemsScopeThis.annihilateItemFor(
+                uniqueItemSpecification._1)(uniqueItemSpecification._2)
+
+            override def capturePatch(patch: AbstractPatch): Unit = {
+              patch(identifiedItemAccess)
+              for (_ <- itemsAreLockedResource) {
+                patch.checkInvariants(identifiedItemAccess)
+              }
+            }
+          }
         }
 
         recordPatches(eventTimeline, patchRecorder)
@@ -465,7 +481,7 @@ object WorldImplementationCodeFactoring {
       }
     }
 
-    def annihilateItemFor[Item: TypeTag](id: Any, when: Instant): Unit = {
+    def annihilateItemFor[Item: TypeTag](id: Any): Unit = {
       idToItemsMultiMap.get(id) match {
         case Some(items) =>
           assert(items.nonEmpty)

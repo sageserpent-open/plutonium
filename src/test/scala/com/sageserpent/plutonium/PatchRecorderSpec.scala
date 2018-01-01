@@ -35,7 +35,7 @@ class PatchRecorderSpec
     (PatchRecorder, Int, scala.collection.mutable.ListBuffer[Int]) => Unit
 
   case class TestCase(recordingActions: Seq[RecordingAction],
-                      identifiedItemsScope: IdentifiedItemsScope,
+                      updateConsumer: UpdateConsumer,
                       bestPatchSelection: BestPatchSelection,
                       eventsHaveEffectNoLaterThan: Unbounded[Instant])
 
@@ -61,7 +61,7 @@ class PatchRecorderSpec
 
   def recordingActionFactoriesGenerator(
       seed: Long,
-      identifiedItemsScope: IdentifiedItemsScope,
+      updateConsumer: UpdateConsumer,
       bestPatchSelection: BestPatchSelection,
       eventsHaveEffectNoLaterThan: Unbounded[Instant])
     : Gen[Seq[RecordingActionFactory]] = inAnyOrder {
@@ -211,12 +211,11 @@ class PatchRecorderSpec
               val patchApplicationDoesNotBreachTheCutoff = Finite(when) <= eventsHaveEffectNoLaterThan
 
               if (patchApplicationDoesNotBreachTheCutoff) {
-                (identifiedItemsScope
-                  .annihilateItemFor[FooHistory](_: FooHistory#Id, _: Instant)(
-                    _: TypeTag[FooHistory]))
-                  .expects(id, when, *)
-                  .onCall { (_, _, _) =>
-                    sequenceIndicesFromAppliedPatches += masterSequenceIndex
+                (updateConsumer
+                  .captureAnnihilation(_: UniqueItemSpecification))
+                  .expects(id -> typeTag[FooHistory])
+                  .onCall { (_: UniqueItemSpecification) =>
+                    (sequenceIndicesFromAppliedPatches += masterSequenceIndex): Unit
                   }
                   .once
               }
@@ -260,12 +259,12 @@ class PatchRecorderSpec
   val testCaseGenerator: Gen[TestCase] = inSequence {
     for {
       seed <- seedGenerator
-      identifiedItemsScope = mock[IdentifiedItemsScope]
-      bestPatchSelection   = mock[BestPatchSelection]
+      updateConsumer     = mock[UpdateConsumer]
+      bestPatchSelection = mock[BestPatchSelection]
       eventsHaveEffectNoLaterThan <- unboundedInstantGenerator
       recordingActionFactories <- recordingActionFactoriesGenerator(
         seed,
-        identifiedItemsScope,
+        updateConsumer,
         bestPatchSelection,
         eventsHaveEffectNoLaterThan)
       recordingTimes <- Gen.listOfN(recordingActionFactories.size,
@@ -277,7 +276,7 @@ class PatchRecorderSpec
       }
       TestCase(
         recordingActions = recordingActions,
-        identifiedItemsScope = identifiedItemsScope,
+        updateConsumer = updateConsumer,
         bestPatchSelection = bestPatchSelection,
         eventsHaveEffectNoLaterThan = eventsHaveEffectNoLaterThan
       )
@@ -288,7 +287,7 @@ class PatchRecorderSpec
     check(
       Prop.forAllNoShrink(testCaseGenerator) {
         case TestCase(recordingActions,
-                      identifiedItemsScopeFromTestCase,
+                      updateConsumerFromTestCase,
                       bestPatchSelection,
                       eventsHaveEffectNoLaterThan) =>
           // NOTE: the reason for this local trait is to allow mocking / stubbing of best patch selection, while keeping the contracts on the API.
@@ -304,10 +303,10 @@ class PatchRecorderSpec
             with PatchRecorderContracts
             with DelegatingBestPatchSelectionImplementation
             with BestPatchSelectionContracts {
-              override val identifiedItemsScope =
-                identifiedItemsScopeFromTestCase
               override val itemsAreLockedResource: ManagedResource[Unit] =
                 makeManagedResource(())(Unit => ())(List.empty)
+              override val updateConsumer: UpdateConsumer =
+                updateConsumerFromTestCase
             }
 
           val sequenceIndicesFromAppliedPatches =

@@ -1,6 +1,7 @@
 package com.sageserpent.plutonium
 
 import java.lang.reflect.Method
+import scala.reflect.runtime.universe._
 
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 
@@ -17,6 +18,11 @@ object AbstractPatch {
 
 // TODO: will need to be able to lower the typetags for the target and arguments somehow if we are going to build an update plan with these.
 abstract class AbstractPatch {
+  def rewriteItemTypeTags(
+      uniqueItemSpecificationToTypeTagMap: collection.Map[
+        UniqueItemSpecification,
+        TypeTag[_]]): AbstractPatch
+
   val method: Method
   val targetItemSpecification: UniqueItemSpecification
   val argumentItemSpecifications: Seq[UniqueItemSpecification]

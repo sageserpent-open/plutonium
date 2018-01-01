@@ -5,6 +5,8 @@ import java.lang.reflect.{InvocationTargetException, Method}
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.Patch.MethodPieces
 
+import scala.reflect.runtime.universe
+import scala.reflect.runtime.universe._
 import scalaz.{-\/, \/, \/-}
 
 object Patch {
@@ -43,6 +45,23 @@ class Patch(methodPieces: MethodPieces,
     extends AbstractPatch {
   import Patch._
 
+  override def rewriteItemTypeTags(
+      uniqueItemSpecificationToTypeTagMap: collection.Map[
+        UniqueItemSpecification,
+        TypeTag[_]]): AbstractPatch = {
+    val rewrittenTargetItemSpecification
+      : UniqueItemSpecification = targetItemSpecification._1 -> uniqueItemSpecificationToTypeTagMap(
+      targetItemSpecification)
+    val rewrittenArguments
+      : Array[WrappedArgument] = wrappedArguments map (_.map(
+      argumentUniqueItemSpecification =>
+        argumentUniqueItemSpecification._1 -> uniqueItemSpecificationToTypeTagMap(
+          argumentUniqueItemSpecification)))
+    new Patch(methodPieces,
+              rewrittenTargetItemSpecification,
+              rewrittenArguments)
+  }
+
   @transient
   override lazy val method = methodPieces.method
 
@@ -77,6 +96,6 @@ class Patch(methodPieces: MethodPieces,
 
     for (argument <- argumentItemSpecifications map identifiedItemAccess.reconstitute) {
       argument.asInstanceOf[ItemExtensionApi].checkInvariant()
+    }
   }
-}
 }
