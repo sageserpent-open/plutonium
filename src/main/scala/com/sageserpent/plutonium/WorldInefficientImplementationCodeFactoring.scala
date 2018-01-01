@@ -11,9 +11,9 @@ abstract class WorldInefficientImplementationCodeFactoring[EventId]
   import WorldImplementationCodeFactoring._
 
   trait SelfPopulatedScope extends ScopeImplementation {
-    val identifiedItemsScope = {
-      new IdentifiedItemsScope(when, eventTimeline(nextRevision))
-    }
+    val identifiedItemsScope = new IdentifiedItemsScope
+
+    identifiedItemsScope.populate(when, eventTimeline(nextRevision))
   }
 
   override def scopeFor(when: Unbounded[Instant],
@@ -48,8 +48,8 @@ abstract class WorldInefficientImplementationCodeFactoring[EventId]
       // This does a check for consistency of the world's history as per this new revision as part of construction.
       // We then throw away the resulting history if successful, the idea being for now to rebuild it as part of
       // constructing a scope to apply queries on.
-      new IdentifiedItemsScope(PositiveInfinity[Instant],
-                               eventTimelineIncludingNewRevision)
+      (new IdentifiedItemsScope)
+        .populate(PositiveInfinity[Instant], eventTimelineIncludingNewRevision)
     }
 
     transactNewRevision(asOf,

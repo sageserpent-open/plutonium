@@ -389,8 +389,9 @@ object WorldImplementationCodeFactoring {
 
     var allItemsAreLocked = false
 
-    def this(_when: Unbounded[Instant], eventTimeline: Seq[Event]) = {
-      this()
+    def populate(_when: Unbounded[Instant], eventTimeline: Seq[Event]) = {
+      idToItemsMultiMap.clear()
+
       for (_ <- makeManagedResource {
              allItemsAreLocked = false
            } { _ =>
