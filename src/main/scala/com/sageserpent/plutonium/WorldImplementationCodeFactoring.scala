@@ -409,24 +409,7 @@ object WorldImplementationCodeFactoring {
             }(List.empty)
         }
 
-        for (event <- eventTimeline) event match {
-          case Change(when, patches) =>
-            for (patch <- patches) {
-              patchRecorder.recordPatchFromChange(when, patch)
-            }
-
-          case Measurement(when, patches) =>
-            for (patch <- patches) {
-              patchRecorder.recordPatchFromMeasurement(when, patch)
-            }
-
-          case annihilation @ Annihilation(when, id) =>
-            implicit val typeTag =
-              annihilation.capturedTypeTag
-            patchRecorder.recordAnnihilation(when, id)
-        }
-
-        patchRecorder.noteThatThereAreNoFollowingRecordings()
+        recordPatches(eventTimeline, patchRecorder)
       }
     }
 
@@ -518,6 +501,27 @@ object WorldImplementationCodeFactoring {
     def allItems[Item: TypeTag](): Stream[Item] =
       IdentifiedItemsScope.yieldOnlyItemsOfType(
         idToItemsMultiMap.values.flatten)
+  }
+
+  def recordPatches(eventTimeline: Seq[Event], patchRecorder: PatchRecorder) = {
+    for (event <- eventTimeline) event match {
+      case Change(when, patches) =>
+        for (patch <- patches) {
+          patchRecorder.recordPatchFromChange(when, patch)
+        }
+
+      case Measurement(when, patches) =>
+        for (patch <- patches) {
+          patchRecorder.recordPatchFromMeasurement(when, patch)
+        }
+
+      case annihilation @ Annihilation(when, id) =>
+        implicit val typeTag =
+          annihilation.capturedTypeTag
+        patchRecorder.recordAnnihilation(when, id)
+    }
+
+    patchRecorder.noteThatThereAreNoFollowingRecordings()
   }
 
   trait ScopeImplementation extends com.sageserpent.plutonium.Scope {

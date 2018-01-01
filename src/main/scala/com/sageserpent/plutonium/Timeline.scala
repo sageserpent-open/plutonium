@@ -65,45 +65,17 @@ class TimelineImplementation[EventId](
     val stub =
       SortedMap.empty[Unbounded[Instant], Map[EventId, Seq[ItemStateUpdate]]]
 
-    val updatePlan: UpdatePlan = new UpdatePlan {
-      override implicit def ordering: Ordering[Unbounded[Instant]] =
-        stub.ordering
+    val updatePlan = createUpdatePlan(newEvents, annulledEvents)
 
-      override def rangeImpl(from: Option[Unbounded[Instant]],
-                             until: Option[Unbounded[Instant]])
-        : SortedMap[Unbounded[Instant], Map[EventId, Seq[ItemStateUpdate]]] =
-        stub.rangeImpl(from, until)
+    val eventsForNewTimeline = this.events
+      .asInstanceOf[Map[EventId, Event]] -- annulledEvents ++ newEvents
 
-      override def iteratorFrom(start: Unbounded[Instant])
-        : Iterator[(Unbounded[Instant], Map[EventId, Seq[ItemStateUpdate]])] =
-        stub.iteratorFrom(start)
-
-      override def valuesIteratorFrom(start: Unbounded[Instant])
-        : Iterator[Map[EventId, Seq[ItemStateUpdate]]] =
-        stub.valuesIteratorFrom(start)
-
-      override def keysIteratorFrom(
-          start: Unbounded[Instant]): Iterator[Unbounded[Instant]] =
-        stub.keysIteratorFrom(start)
-
-      override def get(
-          key: Unbounded[Instant]): Option[Map[EventId, Seq[ItemStateUpdate]]] =
-        stub.get(key)
-
-      override def iterator
-        : Iterator[(Unbounded[Instant], Map[EventId, Seq[ItemStateUpdate]])] =
-        stub.iterator
-
-      override def -(key: Unbounded[Instant])
-        : SortedMap[Unbounded[Instant], Map[EventId, Seq[ItemStateUpdate]]] =
-        ???
-    } // TODO - and where does this come from? Hint: 'newEvents'.
+    val blobStorageForNewTimeline =
+      carryOutUpdatePlanInABlazeOfImperativeGlory(annulledEvents, updatePlan)
 
     new TimelineImplementation(
-      events = this.events
-        .asInstanceOf[Map[EventId, Event]] -- annulledEvents ++ newEvents,
-      blobStorage =
-        carryOutUpdatePlanInABlazeOfImperativeGlory(annulledEvents, updatePlan)
+      events = eventsForNewTimeline,
+      blobStorage = blobStorageForNewTimeline
     )
   }
 
@@ -270,4 +242,15 @@ class TimelineImplementation[EventId](
         proxyFactory.constructFrom(stateToBeAcquiredByProxy)
       }
     }
+
+  private def createUpdatePlan(newEvents: Seq[(EventId, Event)],
+                               annulledEvents: Seq[EventId]): UpdatePlan = {
+
+    val patchRecorder: PatchRecorder = ???
+
+    WorldImplementationCodeFactoring.recordPatches(???, patchRecorder)
+
+    // Make the patch recorder generate the update plan.
+    ???
+  }
 }
