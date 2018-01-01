@@ -1352,8 +1352,8 @@ trait WorldBehaviours
                 intercept[RuntimeException] {
                   val eventIdForAnnihilation = -1
                   world.revise(eventIdForAnnihilation,
-                                   Annihilation[IntegerHistory](
-                                     definiteQueryWhen,
+                               Annihilation[IntegerHistory](
+                                 definiteQueryWhen,
                                  historyId.asInstanceOf[String]),
                                asOfs.last)
                 }

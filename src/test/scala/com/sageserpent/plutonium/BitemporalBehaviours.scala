@@ -166,7 +166,7 @@ trait BitemporalBehaviours
                     case (id, group) => id -> group.size
                   } toSet
 
-                (idsInExistence == idsFromWildcardQuery) :| s"${idsInExistence} should be ${idsFromWildcardQuery}"
+                (idsFromWildcardQuery == idsInExistence) :| s"${idsFromWildcardQuery} should be ${idsInExistence}"
             }
         })
     }
@@ -788,6 +788,25 @@ trait BitemporalBehaviours
 class BitemporalSpecUsingWorldReferenceImplementation
     extends BitemporalBehaviours
     with WorldReferenceImplementationResource {
+  implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
+    PropertyCheckConfig(maxSize = 30)
+
+  "The class Bitemporal (using the world reference implementation)" should behave like bitemporalBehaviour
+
+  "A bitemporal wildcard (using the world reference implementation)" should behave like bitemporalWildcardBehaviour
+
+  "A bitemporal query using an id (using the world reference implementation)" should behave like bitemporalQueryUsingAnIdBehaviour
+
+  "The bitemporal 'numberOf' (using the world reference implementation)" should behave like bitemporalNumberOfBehaviour
+
+  "The bitemporal 'none' (using the world reference implementation)" should behave like bitemporalNoneBehaviour
+
+  "A bitemporal query (using the world reference implementation)" should behave like bitemporalQueryBehaviour
+}
+
+class BitemporalSpecUsingWorldEfficientInMemoryImplementation
+    extends BitemporalBehaviours
+    with WorldEfficientInMemoryImplementationResource {
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
     PropertyCheckConfig(maxSize = 30)
 
