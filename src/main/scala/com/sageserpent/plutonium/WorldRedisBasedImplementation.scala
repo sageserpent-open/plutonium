@@ -254,8 +254,7 @@ class WorldRedisBasedImplementation[EventId](redisClient: RedisClient,
       asOf: Instant,
       newEventDatumsFor: Revision => Map[EventId, AbstractEventData],
       buildAndValidateEventTimelineForProposedNewRevision: (
-          Map[EventId, AbstractEventData],
-          Revision,
+          Seq[AbstractEventData],
           Seq[AbstractEventData]) => Unit): Revision = {
     try {
       val revisionObservable = for {
@@ -269,8 +268,7 @@ class WorldRedisBasedImplementation[EventId](redisClient: RedisClient,
           (for (revisionAsOfs <- revisionAsOfsObservable)
             yield checkRevisionPrecondition(asOf, revisionAsOfs))
         _ = buildAndValidateEventTimelineForProposedNewRevision(
-          newEventDatums,
-          nextRevisionPriorToUpdate,
+          newEventDatums.values.toSeq,
           pertinentEventDatumsExcludingTheNewRevision)
         transactionGuid = UUID.randomUUID()
         foo <- Observable

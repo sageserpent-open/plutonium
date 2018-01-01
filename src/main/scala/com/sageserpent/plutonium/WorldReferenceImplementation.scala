@@ -185,8 +185,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
       asOf: Instant,
       newEventDatumsFor: Revision => Map[EventId, AbstractEventData],
       buildAndValidateEventTimelineForProposedNewRevision: (
-          Map[EventId, AbstractEventData],
-          Revision,
+          Seq[AbstractEventData],
           Seq[AbstractEventData]) => Unit): Revision = {
 
     val (newEventDatums,
@@ -207,8 +206,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
       }
 
     buildAndValidateEventTimelineForProposedNewRevision(
-      newEventDatums,
-      nextRevisionPriorToUpdate,
+      newEventDatums.values.toSeq,
       pertinentEventDatumsExcludingTheNewRevision)
 
     mutableState.synchronized {
