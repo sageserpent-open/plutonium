@@ -141,9 +141,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
         val cutoffWhenForBaseWorld = cutoffWhen min cutoffWhenAfterWhichHistoriesDiverge
         if (cutoffRevision > numberOfRevisionsInCommon) {
           val (eventIds, eventDatums) =
-            eventIdsAndTheirDatums(cutoffRevision,
-                                   cutoffWhen,
-                                   eventIdInclusion)
+            eventIdsAndTheirDatums(cutoffRevision, cutoffWhen, eventIdInclusion)
           val eventIdsToBeExcluded = eventIds.toSet
           eventDatums ++ baseMutableState.pertinentEventDatums(
             numberOfRevisionsInCommon,
@@ -184,8 +182,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
       asOf: Instant,
       newEventDatumsFor: Revision => Map[EventId, AbstractEventData],
       buildAndValidateEventTimelineForProposedNewRevision: (
-          Map[EventId, AbstractEventData],
-          Revision,
+          Seq[AbstractEventData],
           Seq[AbstractEventData]) => Unit): Revision = {
 
     val (newEventDatums,
@@ -206,8 +203,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
       }
 
     buildAndValidateEventTimelineForProposedNewRevision(
-      newEventDatums,
-      nextRevisionPriorToUpdate,
+      newEventDatums.values.toSeq,
       pertinentEventDatumsExcludingTheNewRevision)
 
     mutableState.synchronized {

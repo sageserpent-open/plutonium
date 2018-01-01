@@ -389,9 +389,7 @@ object WorldImplementationCodeFactoring {
 
     var allItemsAreLocked = false
 
-    def this(_when: Unbounded[Instant],
-             _nextRevision: Revision,
-             eventTimeline: Seq[Event]) = {
+    def this(_when: Unbounded[Instant], eventTimeline: Seq[Event]) = {
       this()
       for (_ <- makeManagedResource {
              allItemsAreLocked = false

@@ -12,7 +12,7 @@ abstract class WorldInefficientImplementationCodeFactoring[EventId]
 
   trait SelfPopulatedScope extends ScopeImplementation {
     val identifiedItemsScope = {
-      new IdentifiedItemsScope(when, nextRevision, eventTimeline(nextRevision))
+      new IdentifiedItemsScope(when, eventTimeline(nextRevision))
     }
   }
 
@@ -39,23 +39,16 @@ abstract class WorldInefficientImplementationCodeFactoring[EventId]
     }
 
     def buildAndValidateEventTimelineForProposedNewRevision(
-        newEventDatums: Map[EventId, AbstractEventData],
-        nextRevisionPriorToUpdate: Revision,
+        newEventDatums: Seq[AbstractEventData],
         pertinentEventDatumsExcludingTheNewRevision: Seq[AbstractEventData])
       : Unit = {
       val eventTimelineIncludingNewRevision = eventTimelineFrom(
-        pertinentEventDatumsExcludingTheNewRevision union newEventDatums.values.toStream)
-
-      val nextRevisionAfterTransactionIsCompleted = 1 + nextRevisionPriorToUpdate
-
-      // TODO - harvest snapshots here to pass to some storage, which is
-      // presumably abstracted over the in-memory and Redis implementations....
+        pertinentEventDatumsExcludingTheNewRevision union newEventDatums)
 
       // This does a check for consistency of the world's history as per this new revision as part of construction.
       // We then throw away the resulting history if successful, the idea being for now to rebuild it as part of
       // constructing a scope to apply queries on.
       new IdentifiedItemsScope(PositiveInfinity[Instant],
-                               nextRevisionAfterTransactionIsCompleted,
                                eventTimelineIncludingNewRevision)
     }
 
@@ -68,8 +61,7 @@ abstract class WorldInefficientImplementationCodeFactoring[EventId]
       asOf: Instant,
       newEventDatumsFor: Revision => Map[EventId, AbstractEventData],
       buildAndValidateEventTimelineForProposedNewRevision: (
-          Map[EventId, AbstractEventData],
-          Revision,
+          Seq[AbstractEventData],
           Seq[AbstractEventData]) => Unit): Revision
 
   protected def checkRevisionPrecondition(asOf: Instant,
