@@ -2,14 +2,16 @@ package com.sageserpent.plutonium
 
 import java.time.Instant
 
-import com.sageserpent.americium.{NegativeInfinity, Unbounded}
+import com.sageserpent.americium.{NegativeInfinity, PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.BlobStorage.SnapshotBlob
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
+import com.sageserpent.plutonium.PatchRecorder.UpdateConsumer
 import com.sageserpent.plutonium.WorldImplementationCodeFactoring.QueryCallbackStuff
 import resource._
 
-import scala.collection.immutable.{Map, SortedMap}
+import scala.collection.immutable.{Map, SortedMap, TreeMap}
 import scala.collection.mutable
+import scala.reflect.runtime.universe
 import scala.reflect.runtime.universe.{Super => _, This => _, _}
 import scalaz.std.list._
 import scalaz.syntax.monadPlus._
@@ -49,12 +51,8 @@ class TimelineImplementation[EventId](
       uniqueItemSpecification: UniqueItemSpecification)
       extends ItemStateUpdate
 
-  trait UpdatePlan
-      extends SortedMap[Unbounded[Instant], Map[EventId, Seq[ItemStateUpdate]]] {
-    require(
-      this.values flatMap (_.keys) groupBy identity forall (1 == _._2.size),
-      "Each event id should only occur once in the update plan.")
-  }
+  type UpdatePlan =
+    SortedMap[Unbounded[Instant], Map[EventId, Seq[ItemStateUpdate]]]
 
   override def revise(events: Map[EventId, Option[Event]]) = {
     val (annulledEvents, newEvents) = (events.toList map {
@@ -245,12 +243,37 @@ class TimelineImplementation[EventId](
 
   private def createUpdatePlan(newEvents: Seq[(EventId, Event)],
                                annulledEvents: Seq[EventId]): UpdatePlan = {
+    val updatePlanBuffer = mutable.SortedMap
+      .empty[Unbounded[Instant], Map[EventId, Seq[ItemStateUpdate]]]
 
-    val patchRecorder: PatchRecorder[EventId] = ???
+    val patchRecorder: PatchRecorder[EventId] =
+      new PatchRecorderImplementation[EventId](PositiveInfinity())
+      with PatchRecorderContracts[EventId] with BestPatchSelectionImplementation
+      with BestPatchSelectionContracts {
+        override val updateConsumer: UpdateConsumer[EventId] =
+          new UpdateConsumer[EventId] {
+            override def captureAnnihilation(
+                when: Unbounded[Instant],
+                eventId: EventId,
+                uniqueItemSpecification: UniqueItemSpecification): Unit = ???
+
+            override def capturePatch(when: Unbounded[Instant],
+                                      eventId: EventId,
+                                      patch: AbstractPatch): Unit = ???
+          }
+      }
 
     WorldImplementationCodeFactoring.recordPatches(???, patchRecorder)
 
-    // Make the patch recorder generate the update plan.
-    ???
+
+    require(
+      updatePlanBuffer.values flatMap (_.keys) groupBy identity forall (1 == _._2.size),
+      "Each event id should only occur once in the update plan.")
+
+    val updatePlan: UpdatePlan =
+      TreeMap[Unbounded[Instant], Map[EventId, Seq[ItemStateUpdate]]](
+        updatePlanBuffer.toSeq: _*)
+
+    updatePlan
   }
 }
