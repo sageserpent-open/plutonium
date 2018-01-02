@@ -403,7 +403,7 @@ object WorldImplementationCodeFactoring {
         val patchRecorder = new PatchRecorderImplementation[EventId](_when)
         with PatchRecorderContracts[EventId]
         with BestPatchSelectionImplementation with BestPatchSelectionContracts {
-          override val itemsAreLockedResource: ManagedResource[Unit] =
+          val itemsAreLockedResource: ManagedResource[Unit] =
             makeManagedResource {
               allItemsAreLocked = true
             } { _ =>

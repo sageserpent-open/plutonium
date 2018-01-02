@@ -33,7 +33,6 @@ abstract class PatchRecorderImplementation[EventId](
   import PatchRecorderImplementation._
 
   val updateConsumer: UpdateConsumer[EventId]
-  val itemsAreLockedResource: ManagedResource[Unit]
 
   private var _whenEventPertainedToByLastRecordingTookPlace
     : Option[Unbounded[Instant]] = None

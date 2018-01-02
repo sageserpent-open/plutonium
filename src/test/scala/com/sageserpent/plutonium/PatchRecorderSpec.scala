@@ -320,8 +320,6 @@ class PatchRecorderSpec
             with PatchRecorderContracts[Int]
             with DelegatingBestPatchSelectionImplementation
             with BestPatchSelectionContracts {
-              override val itemsAreLockedResource: ManagedResource[Unit] =
-                makeManagedResource(())(Unit => ())(List.empty)
               override val updateConsumer: UpdateConsumer[EventId] =
                 updateConsumerFromTestCase
             }
