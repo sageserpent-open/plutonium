@@ -6,7 +6,11 @@ import com.sageserpent.americium.{NegativeInfinity, PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.BlobStorage.SnapshotBlob
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.PatchRecorder.UpdateConsumer
-import com.sageserpent.plutonium.WorldImplementationCodeFactoring.QueryCallbackStuff
+import com.sageserpent.plutonium.WorldImplementationCodeFactoring.{
+  AnnulledEventData,
+  EventData,
+  QueryCallbackStuff
+}
 import resource._
 
 import scala.collection.immutable.{Map, SortedMap, TreeMap}
@@ -243,8 +247,24 @@ class TimelineImplementation[EventId](
 
   private def createUpdatePlan(newEvents: Seq[(EventId, Event)],
                                annulledEvents: Seq[EventId]): UpdatePlan = {
+    // TODO: remove this duplicate code block (it's done by the caller as well) when we cutover
+    // to doing proper incremental recalculation of the update plan. For now we just put up with it
+    // for the sake of having a method signature that implies an incremental recalculation, which is
+    // what we are heading towards.
+    val eventsForNewTimeline: Map[EventId, Event] = this.events
+      .asInstanceOf[Map[EventId, Event]] -- annulledEvents ++ newEvents
+
+    val eventIdsAndTheirDatums = eventsForNewTimeline.zipWithIndex map {
+      case ((eventId, event), tiebreakerIndex) =>
+        eventId -> EventData(event, ???, tiebreakerIndex)
+    }
+
+    val eventTimeline = WorldImplementationCodeFactoring.eventTimelineFrom(
+      eventIdsAndTheirDatums.toSeq)
+
     val updatePlanBuffer = mutable.SortedMap
-      .empty[Unbounded[Instant], Map[EventId, Seq[ItemStateUpdate]]]
+      .empty[Unbounded[Instant],
+             mutable.Map[EventId, mutable.MutableList[ItemStateUpdate]]]
 
     val patchRecorder: PatchRecorder[EventId] =
       new PatchRecorderImplementation[EventId](PositiveInfinity())
@@ -252,19 +272,35 @@ class TimelineImplementation[EventId](
       with BestPatchSelectionContracts {
         override val updateConsumer: UpdateConsumer[EventId] =
           new UpdateConsumer[EventId] {
+
+            private def itemStatesFor(when: Unbounded[Instant],
+                                      eventId: EventId) =
+              updatePlanBuffer
+                .getOrElseUpdate(
+                  when,
+                  mutable.Map
+                    .empty[EventId, mutable.MutableList[ItemStateUpdate]])
+                .getOrElseUpdate(eventId,
+                                 mutable.MutableList
+                                   .empty[ItemStateUpdate])
+
             override def captureAnnihilation(
                 when: Unbounded[Instant],
                 eventId: EventId,
-                uniqueItemSpecification: UniqueItemSpecification): Unit = ???
+                uniqueItemSpecification: UniqueItemSpecification): Unit = {
+              itemStatesFor(when, eventId) += ItemStateAnnihilation(
+                uniqueItemSpecification)
+            }
 
             override def capturePatch(when: Unbounded[Instant],
                                       eventId: EventId,
-                                      patch: AbstractPatch): Unit = ???
+                                      patch: AbstractPatch): Unit = {
+              itemStatesFor(when, eventId) += ItemStatePatch(patch)
+            }
           }
       }
 
-    WorldImplementationCodeFactoring.recordPatches(???, patchRecorder)
-
+    WorldImplementationCodeFactoring.recordPatches(eventTimeline, patchRecorder)
 
     require(
       updatePlanBuffer.values flatMap (_.keys) groupBy identity forall (1 == _._2.size),
@@ -272,7 +308,9 @@ class TimelineImplementation[EventId](
 
     val updatePlan: UpdatePlan =
       TreeMap[Unbounded[Instant], Map[EventId, Seq[ItemStateUpdate]]](
-        updatePlanBuffer.toSeq: _*)
+        updatePlanBuffer
+          .mapValues(map => Map(map.toSeq: _*))
+          .toSeq: _*) // Yuck!
 
     updatePlan
   }
