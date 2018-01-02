@@ -6,6 +6,7 @@ import java.time.Instant
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.{Finite, Unbounded}
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
+import com.sageserpent.plutonium.PatchRecorder.UpdateConsumer
 import org.scalacheck.Prop.BooleanOperators
 import org.scalacheck.{Gen, Prop, Test}
 import org.scalamock.scalatest.MockFactory

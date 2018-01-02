@@ -3,9 +3,9 @@ package com.sageserpent.plutonium
 import java.time.Instant
 
 import com.sageserpent.americium.{Finite, Unbounded}
+import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 
 import scalaz.std.option.optionSyntax._
-
 import scala.reflect.runtime.universe._
 
 trait BestPatchSelection {
@@ -25,7 +25,21 @@ trait BestPatchSelectionContracts extends BestPatchSelection {
   }
 }
 
+object PatchRecorder {
+  trait UpdateConsumer[EventId] {
+    def captureAnnihilation(
+        eventId: EventId,
+        uniqueItemSpecification: UniqueItemSpecification): Unit
+
+    def capturePatch(eventId: EventId, patch: AbstractPatch): Unit
+  }
+}
+
 trait PatchRecorder[EventId] {
+  import PatchRecorder._
+
+  val updateConsumer: UpdateConsumer[EventId]
+
   def whenEventPertainedToByLastRecordingTookPlace: Option[Unbounded[Instant]]
 
   def allRecordingsAreCaptured: Boolean

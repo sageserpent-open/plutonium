@@ -5,7 +5,6 @@ import java.time.Instant
 
 import com.sageserpent.americium.{Finite, Unbounded}
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
-import resource.ManagedResource
 
 import scala.collection.mutable
 import scala.reflect.runtime._
@@ -16,14 +15,6 @@ object PatchRecorderImplementation {
   val initialSequenceIndex: SequenceIndex = 0L
 }
 
-trait UpdateConsumer[EventId] {
-  def captureAnnihilation(
-      eventId: EventId,
-      uniqueItemSpecification: UniqueItemSpecification): Unit
-
-  def capturePatch(eventId: EventId, patch: AbstractPatch): Unit
-}
-
 abstract class PatchRecorderImplementation[EventId](
     eventsHaveEffectNoLaterThan: Unbounded[Instant])
     extends PatchRecorder[EventId] {
@@ -31,8 +22,6 @@ abstract class PatchRecorderImplementation[EventId](
   // of the client 'WorldReferenceImplementation', which provides exception safety at a higher level.
   self: BestPatchSelection =>
   import PatchRecorderImplementation._
-
-  val updateConsumer: UpdateConsumer[EventId]
 
   private var _whenEventPertainedToByLastRecordingTookPlace
     : Option[Unbounded[Instant]] = None
