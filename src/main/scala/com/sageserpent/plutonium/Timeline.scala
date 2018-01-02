@@ -7,7 +7,6 @@ import com.sageserpent.plutonium.BlobStorage.SnapshotBlob
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.PatchRecorder.UpdateConsumer
 import com.sageserpent.plutonium.WorldImplementationCodeFactoring.{
-  AnnulledEventData,
   EventData,
   QueryCallbackStuff
 }
@@ -15,7 +14,6 @@ import resource._
 
 import scala.collection.immutable.{Map, SortedMap, TreeMap}
 import scala.collection.mutable
-import scala.reflect.runtime.universe
 import scala.reflect.runtime.universe.{Super => _, This => _, _}
 import scalaz.std.list._
 import scalaz.syntax.monadPlus._
@@ -44,8 +42,10 @@ object itemStateStorageUsingProxies extends ItemStateStorage {
 }
 
 class TimelineImplementation[EventId](
-    events: Map[EventId, Event] = Map.empty[EventId, Event],
-    blobStorage: BlobStorage[EventId] = BlobStorageInMemory.apply[EventId]())
+    events: Map[EventId, (Event, World.Revision)] =
+      Map.empty[EventId, (Event, World.Revision)],
+    blobStorage: BlobStorage[EventId] = BlobStorageInMemory.apply[EventId](),
+    nextRevision: World.Revision = World.initialRevision)
     extends Timeline[EventId] {
   sealed trait ItemStateUpdate
 
@@ -59,25 +59,29 @@ class TimelineImplementation[EventId](
     SortedMap[Unbounded[Instant], Map[EventId, Seq[ItemStateUpdate]]]
 
   override def revise(events: Map[EventId, Option[Event]]) = {
-    val (annulledEvents, newEvents) = (events.toList map {
-      case (eventId, Some(event)) => \/-(eventId -> event)
-      case (eventId, None)        => -\/(eventId)
-    }).separate
+    val (annulledEvents, newEvents) =
+      (events.toList map {
+        case (eventId, Some(event)) => \/-(eventId -> event)
+        case (eventId, None)        => -\/(eventId)
+      }).separate
 
     val stub =
       SortedMap.empty[Unbounded[Instant], Map[EventId, Seq[ItemStateUpdate]]]
 
-    val updatePlan = createUpdatePlan(newEvents, annulledEvents)
+    val eventsForNewTimeline
+      : Map[EventId, (Event, World.Revision)] = this.events
+      .asInstanceOf[Map[EventId, (Event, World.Revision)]] -- annulledEvents ++ newEvents
+      .map { case (eventId, event) => eventId -> (event -> nextRevision) }
 
-    val eventsForNewTimeline = this.events
-      .asInstanceOf[Map[EventId, Event]] -- annulledEvents ++ newEvents
+    val updatePlan = createUpdatePlan(eventsForNewTimeline)
 
     val blobStorageForNewTimeline =
       carryOutUpdatePlanInABlazeOfImperativeGlory(annulledEvents, updatePlan)
 
     new TimelineImplementation(
       events = eventsForNewTimeline,
-      blobStorage = blobStorageForNewTimeline
+      blobStorage = blobStorageForNewTimeline,
+      nextRevision = 1 + nextRevision
     )
   }
 
@@ -245,18 +249,12 @@ class TimelineImplementation[EventId](
       }
     }
 
-  private def createUpdatePlan(newEvents: Seq[(EventId, Event)],
-                               annulledEvents: Seq[EventId]): UpdatePlan = {
-    // TODO: remove this duplicate code block (it's done by the caller as well) when we cutover
-    // to doing proper incremental recalculation of the update plan. For now we just put up with it
-    // for the sake of having a method signature that implies an incremental recalculation, which is
-    // what we are heading towards.
-    val eventsForNewTimeline: Map[EventId, Event] = this.events
-      .asInstanceOf[Map[EventId, Event]] -- annulledEvents ++ newEvents
-
+  private def createUpdatePlan(
+      eventsForNewTimeline: Map[EventId, (Event, World.Revision)])
+    : UpdatePlan = {
     val eventIdsAndTheirDatums = eventsForNewTimeline.zipWithIndex map {
-      case ((eventId, event), tiebreakerIndex) =>
-        eventId -> EventData(event, ???, tiebreakerIndex)
+      case ((eventId, (event, revision)), tiebreakerIndex) =>
+        eventId -> EventData(event, revision, tiebreakerIndex)
     }
 
     val eventTimeline = WorldImplementationCodeFactoring.eventTimelineFrom(
