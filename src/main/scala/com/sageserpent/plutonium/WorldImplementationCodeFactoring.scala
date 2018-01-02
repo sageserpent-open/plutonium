@@ -419,12 +419,14 @@ object WorldImplementationCodeFactoring {
                     uniqueItemSpecification._2)
               }
               override def captureAnnihilation(
+                  when: Unbounded[Instant],
                   eventId: EventId,
                   uniqueItemSpecification: UniqueItemSpecification): Unit =
                 identifiedItemsScopeThis.annihilateItemFor(
                   uniqueItemSpecification._1)(uniqueItemSpecification._2)
 
-              override def capturePatch(eventId: EventId,
+              override def capturePatch(when: Unbounded[Instant],
+                                        eventId: EventId,
                                         patch: AbstractPatch): Unit = {
                 patch(identifiedItemAccess)
                 for (_ <- itemsAreLockedResource) {

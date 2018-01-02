@@ -112,7 +112,7 @@ class PatchRecorderSpec
                 case ((clumpOfPatches, bestPatch), decisions) =>
                   // HACK: this next variable and how it is used is truly horrible...
                   var uglyWayOfCapturingStateAssociatedWithThePatchThatStandsInForTheBestPatch
-                    : Option[(Boolean, Int)] = None
+                    : Option[(Boolean, Int, Instant)] = None
 
                   clumpOfPatches zip decisions map {
                     case (patch, makeAChange) =>
@@ -127,14 +127,17 @@ class PatchRecorderSpec
                           case None =>
                             uglyWayOfCapturingStateAssociatedWithThePatchThatStandsInForTheBestPatch =
                               Some(
-                                (Finite(when) <= eventsHaveEffectNoLaterThan) -> masterSequenceIndex)
+                                (Finite(when) <= eventsHaveEffectNoLaterThan),
+                                masterSequenceIndex,
+                                when)
                           case Some(_) =>
                         }
 
                         uglyWayOfCapturingStateAssociatedWithThePatchThatStandsInForTheBestPatch match {
                           case Some(
                               (patchStandInIsNotForbiddenByEventTimeCutoff,
-                               sequenceIndexOfPatchStandIn)) =>
+                               sequenceIndexOfPatchStandIn,
+                               whenForStandIn)) =>
                             if (patchStandInIsNotForbiddenByEventTimeCutoff && bestPatches
                                   .contains(patch)) {
                               (patch.rewriteItemTypeTags _)
@@ -146,15 +149,20 @@ class PatchRecorderSpec
                                 }
                                 .once
                               (updateConsumer.capturePatch _)
-                                .expects(sequenceIndexOfPatchStandIn, patch)
-                                .onCall { (_: EventId, _: AbstractPatch) =>
-                                  sequenceIndicesFromAppliedPatches += sequenceIndexOfPatchStandIn: Unit
+                                .expects(Finite(whenForStandIn),
+                                         sequenceIndexOfPatchStandIn,
+                                         patch)
+                                .onCall {
+                                  (_: Unbounded[Instant],
+                                   _: EventId,
+                                   _: AbstractPatch) =>
+                                    sequenceIndicesFromAppliedPatches += sequenceIndexOfPatchStandIn: Unit
                                 }
                                 .once
                             } else {
                               (patch.rewriteItemTypeTags _).expects(*).never
                               (updateConsumer.capturePatch _)
-                                .expects(*, *)
+                                .expects(*, *, patch)
                                 .never
                             }
                         }
@@ -227,15 +235,18 @@ class PatchRecorderSpec
                   Int]): Unit = {
               val patchApplicationDoesNotBreachTheCutoff = Finite(when) <= eventsHaveEffectNoLaterThan
 
-              if (patchApplicationDoesNotBreachTheCutoff) {
-                (updateConsumer
-                  .captureAnnihilation(_: EventId, _: UniqueItemSpecification))
-                  .expects(masterSequenceIndex, id -> typeTag[FooHistory])
-                  .onCall { (_: EventId, _: UniqueItemSpecification) =>
-                    (sequenceIndicesFromAppliedPatches += masterSequenceIndex): Unit
+              if (patchApplicationDoesNotBreachTheCutoff)
+                (updateConsumer.captureAnnihilation _)
+                  .expects(Finite(when),
+                           masterSequenceIndex,
+                           id -> typeTag[FooHistory])
+                  .onCall {
+                    (_: Unbounded[Instant],
+                     _: EventId,
+                     _: UniqueItemSpecification) =>
+                      sequenceIndicesFromAppliedPatches += masterSequenceIndex: Unit
                   }
                   .once
-              }
               patchRecorder
                 .recordAnnihilation[FooHistory](masterSequenceIndex, when, id)
             }

@@ -28,10 +28,13 @@ trait BestPatchSelectionContracts extends BestPatchSelection {
 object PatchRecorder {
   trait UpdateConsumer[EventId] {
     def captureAnnihilation(
+        when: Unbounded[Instant],
         eventId: EventId,
         uniqueItemSpecification: UniqueItemSpecification): Unit
 
-    def capturePatch(eventId: EventId, patch: AbstractPatch): Unit
+    def capturePatch(when: Unbounded[Instant],
+                     eventId: EventId,
+                     patch: AbstractPatch): Unit
   }
 }
 

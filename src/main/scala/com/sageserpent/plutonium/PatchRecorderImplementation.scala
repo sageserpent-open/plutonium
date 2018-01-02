@@ -55,10 +55,11 @@ abstract class PatchRecorderImplementation[EventId](
   }
 
   def annihilateItemFor_[SubclassOfItem <: Item, Item](
+      when: Unbounded[Instant],
       id: Any,
       typeTag: universe.TypeTag[SubclassOfItem],
       eventId: EventId): Unit = {
-    updateConsumer.captureAnnihilation(eventId, id -> typeTag)
+    updateConsumer.captureAnnihilation(when, eventId, id -> typeTag)
   }
 
   override def recordAnnihilation[Item: TypeTag](eventId: EventId,
@@ -96,7 +97,10 @@ abstract class PatchRecorderImplementation[EventId](
               for (itemStateToBeAnnihilated <- compatibleItemStates) {
                 val typeTagForSpecificItem =
                   itemStateToBeAnnihilated.lowerBoundTypeTag
-                annihilateItemFor_(id, typeTagForSpecificItem, eventId)
+                annihilateItemFor_(liftedWhen,
+                                   id,
+                                   typeTagForSpecificItem,
+                                   eventId)
 
                 val itemStates = idToItemStatesMap(id)
 
@@ -312,7 +316,8 @@ abstract class PatchRecorderImplementation[EventId](
       override def perform() {
         val bestPatchWithLoweredTypeTags = bestPatch.rewriteItemTypeTags(
           reconstitutionDataToItemStateMap.mapValues(_.lowerBoundTypeTag))
-        updateConsumer.capturePatch(eventIdForBestPatch,
+        updateConsumer.capturePatch(whenTheBestPatchOccurs,
+                                    eventIdForBestPatch,
                                     bestPatchWithLoweredTypeTags)
       }
       override def canProceed() =
