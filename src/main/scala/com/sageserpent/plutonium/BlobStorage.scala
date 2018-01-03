@@ -25,7 +25,7 @@ object BlobStorage {
         uniqueItemSpecification: UniqueItemSpecification)
       : Option[SnapshotBlob] = {
       val uniqueItemSpecifications = uniqueItemQueriesFor(
-        uniqueItemSpecification._1)(uniqueItemSpecification._2)
+        uniqueItemSpecification.id)(uniqueItemSpecification.typeTag)
       require(
         1 >= uniqueItemSpecifications.size,
         s"The item specification: '$uniqueItemSpecification', should pick out a unique item, these match it: ${uniqueItemSpecifications.toList}."

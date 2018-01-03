@@ -54,8 +54,8 @@ class PatchRecorderSpec
           extends AbstractPatch {
         override val method = expectedMethod
 
-        override val targetItemSpecification
-          : UniqueItemSpecification = id -> typeTag[FooHistory]
+        override val targetItemSpecification: UniqueItemSpecification =
+          UniqueItemSpecification(id, typeTag[FooHistory])
 
         override val argumentItemSpecifications = Seq.empty
       }
@@ -239,7 +239,7 @@ class PatchRecorderSpec
                 (updateConsumer.captureAnnihilation _)
                   .expects(Finite(when),
                            masterSequenceIndex,
-                           id -> typeTag[FooHistory])
+                           UniqueItemSpecification(id, typeTag[FooHistory]))
                   .onCall {
                     (_: Unbounded[Instant],
                      _: EventId,

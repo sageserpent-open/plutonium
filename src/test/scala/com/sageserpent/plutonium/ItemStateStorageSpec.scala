@@ -139,8 +139,10 @@ class ItemStateStorageSpec
     override protected def uniqueItemSpecification(
         item: ItemSuperType): UniqueItemSpecification =
       item.id match {
-        case oddId: String => oddId   -> typeTag[OddGraphNode]
-        case eventId: Int  => eventId -> typeTag[EvenGraphNode]
+        case oddId: String =>
+          UniqueItemSpecification(oddId, typeTag[OddGraphNode])
+        case eventId: Int =>
+          UniqueItemSpecification(eventId, typeTag[EvenGraphNode])
       }
   }
 
@@ -176,8 +178,10 @@ class ItemStateStorageSpec
       val snapshotBlobs: Map[UniqueItemSpecification, SnapshotBlob] =
         nodesThatAreToBeRoundtripped map (node =>
           (node.id match {
-            case oddId: String => oddId   -> typeTag[OddGraphNode]
-            case eventId: Int  => eventId -> typeTag[EvenGraphNode]
+            case oddId: String =>
+              UniqueItemSpecification(oddId, typeTag[OddGraphNode])
+            case eventId: Int =>
+              UniqueItemSpecification(eventId, typeTag[EvenGraphNode])
           }) -> itemStateStorage
             .snapshotFor(node)) toMap
 
@@ -187,7 +191,7 @@ class ItemStateStorageSpec
 
         override def uniqueItemQueriesFor[Item: TypeTag](
             id: Any): Stream[UniqueItemSpecification] =
-          snapshotBlobs.keys.filter(_._1 == id).toStream
+          snapshotBlobs.keys.filter(_.id == id).toStream
 
         override def snapshotBlobFor(
             uniqueItemSpecification: UniqueItemSpecification)
@@ -204,16 +208,16 @@ class ItemStateStorageSpec
 
         override def fallbackItemFor[Item](
             uniqueItemSpecification: UniqueItemSpecification): Item =
-          idToFallbackItemMap(uniqueItemSpecification._1).asInstanceOf[Item]
+          idToFallbackItemMap(uniqueItemSpecification.id).asInstanceOf[Item]
 
         // The following implementation is the epitome of hokeyness. Well, it's just test code... Hmmm.
         override protected def createItemFor[Item](
             uniqueItemSpecification: UniqueItemSpecification): Item =
           (uniqueItemSpecification match {
-            case (id: OddGraphNode#Id, itemTypeTag)
+            case UniqueItemSpecification(id: OddGraphNode#Id, itemTypeTag)
                 if itemTypeTag == typeTag[OddGraphNode] =>
               new OddGraphNode(id)
-            case (id: EvenGraphNode#Id, itemTypeTag)
+            case UniqueItemSpecification(id: EvenGraphNode#Id, itemTypeTag)
                 if itemTypeTag == typeTag[EvenGraphNode] =>
               new EvenGraphNode(id)
           }).asInstanceOf[Item]
@@ -223,10 +227,10 @@ class ItemStateStorageSpec
         .map(_.id match {
           case oddId: String =>
             reconstitutionContext.itemFor[OddGraphNode](
-              oddId -> typeTag[OddGraphNode])
+              UniqueItemSpecification(oddId, typeTag[OddGraphNode]))
           case evenId: Int =>
             reconstitutionContext.itemFor[EvenGraphNode](
-              evenId -> typeTag[EvenGraphNode])
+              UniqueItemSpecification(evenId, typeTag[EvenGraphNode]))
         })
         .toList
 

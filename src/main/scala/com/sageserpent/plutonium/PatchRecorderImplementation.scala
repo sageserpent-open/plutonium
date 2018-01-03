@@ -61,7 +61,9 @@ abstract class PatchRecorderImplementation[EventId](
       id: Any,
       typeTag: universe.TypeTag[SubclassOfItem],
       eventId: EventId): Unit = {
-    updateConsumer.captureAnnihilation(when, eventId, id -> typeTag)
+    updateConsumer.captureAnnihilation(when,
+                                       eventId,
+                                       UniqueItemSpecification(id, typeTag))
   }
 
   override def recordAnnihilation[Item: TypeTag](eventId: EventId,
@@ -302,7 +304,7 @@ abstract class PatchRecorderImplementation[EventId](
     val reconstitutionDataToItemStateMap =
       patchToItemStatesMap.remove(bestPatch).get
 
-    for (((id, _), itemState) <- reconstitutionDataToItemStateMap) {
+    for ((UniqueItemSpecification(id, _), itemState) <- reconstitutionDataToItemStateMap) {
       if (itemState.itemWouldConflictWithEarlierLifecyclePriorTo > sequenceIndexForBestPatch) {
         throw new RuntimeException(
           s"Attempt to execute patch involving id: '$id' of type: '${itemState.lowerBoundTypeTag.tpe}' for a later lifecycle that cannot exist at time: $whenTheBestPatchOccurs, as there is at least one item from a previous lifecycle up until: ${itemState.itemWouldConflictWithEarlierLifecyclePriorTo}.")
@@ -336,7 +338,7 @@ abstract class PatchRecorderImplementation[EventId](
       patch: AbstractPatch): ItemState = {
     def refinedItemStateFor(reconstitutionData: UniqueItemSpecification) = {
       val itemState = itemStateFor(reconstitutionData)
-      itemState.refineType(reconstitutionData._2)
+      itemState.refineType(reconstitutionData.typeTag)
       patchToItemStatesMap.getOrElseUpdate(patch, mutable.Map.empty) += reconstitutionData -> itemState
       itemState
     }
@@ -349,7 +351,7 @@ abstract class PatchRecorderImplementation[EventId](
 
   private def itemStateFor(
       uniqueItemSpecification: UniqueItemSpecification): ItemState = {
-    val (id, typeTag) = uniqueItemSpecification
+    val UniqueItemSpecification(id, typeTag) = uniqueItemSpecification
 
     val (itemStatesFromPreviousLifecycles, itemStates) = idToItemStatesMap
       .get(id)

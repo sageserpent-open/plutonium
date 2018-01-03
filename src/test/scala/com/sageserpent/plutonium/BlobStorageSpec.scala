@@ -41,8 +41,12 @@ class BlobStorageSpec
               stringIdGenerator map (_ + s"_$disambiguation"))
 
   val uniqueItemSpecificationGenerator: Gen[UniqueItemSpecification] =
-    Gen.oneOf(mixedIdGenerator(0) map (_ -> typeTag[OneKindOfThing]),
-              mixedIdGenerator(1) map (_ -> typeTag[AnotherKindOfThing]))
+    Gen.oneOf(
+      mixedIdGenerator(0) map (id =>
+        UniqueItemSpecification(id, typeTag[OneKindOfThing])),
+      mixedIdGenerator(1) map (id =>
+        UniqueItemSpecification(id, typeTag[AnotherKindOfThing]))
+    )
 
   val blobGenerator: Gen[Option[SnapshotBlob]] =
     Gen.frequency(
@@ -203,7 +207,7 @@ class BlobStorageSpec
             case (snapshot, decision) =>
               (if (decision)
                  uniqueItemSpecification
-                   .copy(_2 = typeTag[Any])
+                   .copy(typeTag = typeTag[Any])
                else uniqueItemSpecification) -> snapshot
           }
       }
@@ -278,8 +282,8 @@ class BlobStorageSpec
 
           def checkExpectations(
               uniqueItemSpecification: UniqueItemSpecification) = {
-            val id              = uniqueItemSpecification._1
-            val explicitTypeTag = uniqueItemSpecification._2
+            val id              = uniqueItemSpecification.id
+            val explicitTypeTag = uniqueItemSpecification.typeTag
 
             val allRetrievedUniqueItemSpecifications =
               timeSlice.uniqueItemQueriesFor(explicitTypeTag)
@@ -289,13 +293,13 @@ class BlobStorageSpec
 
             snapshotBlob match {
               case Some(snapshotBlob) =>
-                allRetrievedUniqueItemSpecifications map (_._1) should contain(
+                allRetrievedUniqueItemSpecifications map (_.id) should contain(
                   id)
 
-                retrievedUniqueItemSpecifications.loneElement._1 shouldBe id
+                retrievedUniqueItemSpecifications.loneElement.id shouldBe id
 
                 assert(
-                  retrievedUniqueItemSpecifications.loneElement._2.tpe <:< explicitTypeTag.tpe)
+                  retrievedUniqueItemSpecifications.loneElement.typeTag.tpe <:< explicitTypeTag.tpe)
 
                 val theRetrievedUniqueItemSpecification
                   : UniqueItemSpecification =
@@ -306,12 +310,13 @@ class BlobStorageSpec
 
                 retrievedSnapshotBlob shouldBe Some(snapshotBlob)
               case None =>
-                allRetrievedUniqueItemSpecifications map (_._1) should not contain (id)
+                allRetrievedUniqueItemSpecifications map (_.id) should not contain (id)
 
                 retrievedUniqueItemSpecifications shouldBe empty
 
                 val retrievedSnapshotBlob: Option[SnapshotBlob] =
-                  timeSlice.snapshotBlobFor(id -> typeTag[Any])
+                  timeSlice.snapshotBlobFor(
+                    UniqueItemSpecification(id, typeTag[Any]))
 
                 retrievedSnapshotBlob shouldBe None
             }
@@ -320,7 +325,7 @@ class BlobStorageSpec
           checkExpectations(uniqueItemSpecification)
 
           checkExpectations(
-            (uniqueItemSpecification._1 -> typeTag[Any])
+            (uniqueItemSpecification.id -> typeTag[Any])
               .asInstanceOf[UniqueItemSpecification])
 
           val allRetrievedUniqueItemSpecifications =
@@ -335,12 +340,13 @@ class BlobStorageSpec
             retrievedUniqueItemSpecifications shouldBe empty
 
             val retrievedSnapshotBlob: Option[SnapshotBlob] =
-              timeSlice.snapshotBlobFor(id -> implicitly[TypeTag[Item]])
+              timeSlice.snapshotBlobFor(
+                UniqueItemSpecification(id, implicitly[TypeTag[Item]]))
 
             retrievedSnapshotBlob shouldBe None
           }
 
-          checkExpectationsForNonExistence(uniqueItemSpecification._1)(
+          checkExpectationsForNonExistence(uniqueItemSpecification.id)(
             typeTag[NoKindOfThing])
 
           val nonExistentItemId = "I do not exist."

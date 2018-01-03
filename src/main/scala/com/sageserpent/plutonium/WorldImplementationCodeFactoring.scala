@@ -210,12 +210,12 @@ object WorldImplementationCodeFactoring {
       val typeOfItem = typeOf[Item]
       val (constructor, clazz) =
         cachedProxyConstructors.get(typeOfItem) match {
-          case Some(cachedProxyConstructorData) => cachedProxyConstructorData
-          case None =>
-            val (constructor, clazz) = constructorFor(typeOfItem)
-            cachedProxyConstructors += (typeOfItem -> (constructor, clazz))
-            constructor                            -> clazz
-        }
+        case Some(cachedProxyConstructorData) => cachedProxyConstructorData
+        case None =>
+          val (constructor, clazz) = constructorFor(typeOfItem)
+          cachedProxyConstructors += (typeOfItem -> (constructor, clazz))
+          constructor                            -> clazz
+      }
       (constructor, clazz)
     }
 
@@ -293,7 +293,7 @@ object WorldImplementationCodeFactoring {
         if (acquiredState.isGhost) {
           val uniqueItemSpecification = acquiredState.uniqueItemSpecification
           throw new UnsupportedOperationException(
-            s"Attempt to write via: '$method' to a ghost item of id: '${uniqueItemSpecification._1}' and type '${uniqueItemSpecification._2}'.")
+            s"Attempt to write via: '$method' to a ghost item of id: '${uniqueItemSpecification.id}' and type '${uniqueItemSpecification.typeTag}'.")
         }
 
         superCall.call()
@@ -316,7 +316,7 @@ object WorldImplementationCodeFactoring {
         if (acquiredState.isGhost) {
           val uniqueItemSpecification = acquiredState.uniqueItemSpecification
           throw new UnsupportedOperationException(
-            s"Attempt to read via: '$method' from a ghost item of id: '${uniqueItemSpecification._1}' and type '${uniqueItemSpecification._2}'.")
+            s"Attempt to read via: '$method' from a ghost item of id: '${uniqueItemSpecification.id}' and type '${uniqueItemSpecification.typeTag}'.")
         }
 
         superCall.call()
@@ -430,15 +430,15 @@ object WorldImplementationCodeFactoring {
               val identifiedItemAccess = new IdentifiedItemAccess {
                 override def reconstitute(
                     uniqueItemSpecification: UniqueItemSpecification): Any =
-                  identifiedItemsScopeThis.itemFor(uniqueItemSpecification._1)(
-                    uniqueItemSpecification._2)
+                  identifiedItemsScopeThis.itemFor(uniqueItemSpecification.id)(
+                    uniqueItemSpecification.typeTag)
               }
               override def captureAnnihilation(
                   when: Unbounded[Instant],
                   eventId: EventId,
                   uniqueItemSpecification: UniqueItemSpecification): Unit =
                 identifiedItemsScopeThis.annihilateItemFor(
-                  uniqueItemSpecification._1)(uniqueItemSpecification._2)
+                  uniqueItemSpecification.id)(uniqueItemSpecification.typeTag)
 
               override def capturePatch(when: Unbounded[Instant],
                                         eventId: EventId,
@@ -472,7 +472,7 @@ object WorldImplementationCodeFactoring {
             val _id = id
 
             def uniqueItemSpecification: UniqueItemSpecification =
-              id -> typeTag[Item]
+              UniqueItemSpecification(id, typeTag[Item])
 
             def itemIsLocked: Boolean =
               identifiedItemsScopeThis.allItemsAreLocked

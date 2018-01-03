@@ -125,7 +125,7 @@ class TimelineImplementation[EventId](
 
         val stateToBeAcquiredByProxy: AcquiredState =
           new AcquiredState {
-            val _id = _uniqueItemSpecification._1
+            val _id = _uniqueItemSpecification.id
 
             def uniqueItemSpecification: UniqueItemSpecification =
               _uniqueItemSpecification
@@ -139,7 +139,7 @@ class TimelineImplementation[EventId](
           }
 
         implicit val typeTagForItem: TypeTag[Item] =
-          _uniqueItemSpecification._2.asInstanceOf[TypeTag[Item]]
+          _uniqueItemSpecification.typeTag.asInstanceOf[TypeTag[Item]]
 
         proxyFactory.constructFrom[Item](stateToBeAcquiredByProxy)
       }
@@ -244,7 +244,7 @@ class TimelineImplementation[EventId](
 
         val stateToBeAcquiredByProxy: AcquiredState =
           new AcquiredState {
-            val _id = _uniqueItemSpecification._1
+            val _id = _uniqueItemSpecification.id
 
             def uniqueItemSpecification: UniqueItemSpecification =
               _uniqueItemSpecification
@@ -252,6 +252,7 @@ class TimelineImplementation[EventId](
             def itemIsLocked: Boolean = true
           }
 
+        // TODO - need a type tag!
         proxyFactory.constructFrom(stateToBeAcquiredByProxy)
       }
     }

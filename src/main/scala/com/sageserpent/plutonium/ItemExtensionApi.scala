@@ -3,8 +3,7 @@ package com.sageserpent.plutonium
 import scala.reflect.runtime.universe.TypeTag
 
 object ItemExtensionApi {
-  type UniqueItemSpecification =
-    (Any, TypeTag[_ <: Any])
+  case class UniqueItemSpecification(id: Any, typeTag: TypeTag[_ <: Any])
 }
 
 trait ItemExtensionApi {
