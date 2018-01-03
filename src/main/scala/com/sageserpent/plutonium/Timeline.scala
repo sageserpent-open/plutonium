@@ -98,7 +98,7 @@ class TimelineImplementation[EventId](
     with itemStateStorageUsingProxies.ReconstitutionContext {
       override def reconstitute(
           uniqueItemSpecification: UniqueItemSpecification) =
-        itemFor(uniqueItemSpecification)
+        itemFor[Any](uniqueItemSpecification)
 
       private var blobStorageTimeSlice =
         blobStorage.timeSlice(NegativeInfinity())
@@ -134,7 +134,10 @@ class TimelineImplementation[EventId](
                 item)
           }
 
-        proxyFactory.constructFrom(stateToBeAcquiredByProxy)
+        implicit val typeTagForItem: TypeTag[Item] =
+          _uniqueItemSpecification._2.asInstanceOf[TypeTag[Item]]
+
+        proxyFactory.constructFrom[Item](stateToBeAcquiredByProxy)
       }
 
       def harvestSnapshots(): Map[UniqueItemSpecification, SnapshotBlob] = {

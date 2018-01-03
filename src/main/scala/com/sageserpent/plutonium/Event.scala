@@ -52,10 +52,9 @@ object capturePatches {
       methodDescription.getReturnType.represents(classOf[Unit])
 
     val matchUniqueItemSpecification: ElementMatcher[MethodDescription] =
-      methodDescription =>
-        firstMethodIsOverrideCompatibleWithSecond(
-          methodDescription,
-          IdentifiedItemsScope.uniqueItemSpecificationProperty)
+      firstMethodIsOverrideCompatibleWithSecond(
+        _,
+        IdentifiedItemsScope.uniqueItemSpecificationPropertyForRecording)
 
     val matchForbiddenReadAccess: ElementMatcher[MethodDescription] =
       methodDescription =>
@@ -92,26 +91,26 @@ object capturePatches {
     }
 
     object proxyFactory extends ProxyFactory[AcquiredState] {
-          val isForRecordingOnly = true
+      val isForRecordingOnly = true
 
-          override val acquiredStateClazz = classOf[AcquiredState]
+      override val acquiredStateClazz = classOf[AcquiredState]
 
-          override val additionalInterfaces: Array[Class[_]] =
-            RecordingCallbackStuff.additionalInterfaces
-          override val cachedProxyConstructors
-            : mutable.Map[Type, (universe.MethodMirror, Class[_])] =
-            RecordingCallbackStuff.cachedProxyConstructors
+      override val additionalInterfaces: Array[Class[_]] =
+        RecordingCallbackStuff.additionalInterfaces
+      override val cachedProxyConstructors
+        : mutable.Map[Type, (universe.MethodMirror, Class[_])] =
+        RecordingCallbackStuff.cachedProxyConstructors
 
-          override protected def configureInterceptions(
-              builder: Builder[_]): Builder[_] =
-            builder
-              .method(matchForbiddenReadAccess)
-              .intercept(MethodDelegation.to(forbiddenReadAccess))
-              .method(matchUniqueItemSpecification)
-              .intercept(MethodDelegation.to(uniqueItemSpecification))
-              .method(matchMutation)
-              .intercept(MethodDelegation.to(mutation))
-        }
+      override protected def configureInterceptions(
+          builder: Builder[_]): Builder[_] =
+        builder
+          .method(matchForbiddenReadAccess)
+          .intercept(MethodDelegation.to(forbiddenReadAccess))
+          .method(matchUniqueItemSpecification)
+          .intercept(MethodDelegation.to(uniqueItemSpecification))
+          .method(matchMutation)
+          .intercept(MethodDelegation.to(mutation))
+    }
   }
 
   def apply(update: RecorderFactory => Unit): Seq[AbstractPatch] = {
@@ -130,8 +129,8 @@ object capturePatches {
 
           def capturePatch(patch: AbstractPatch) {
             capturedPatches += patch
-      }
-    }
+          }
+        }
 
         proxyFactory.constructFrom[Item](stateToBeAcquiredByProxy)
       }

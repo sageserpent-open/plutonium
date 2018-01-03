@@ -30,6 +30,8 @@ import scala.collection.mutable
 import scala.reflect.runtime.universe.{Super => _, This => _, _}
 import scala.reflect.runtime.{universe, _}
 
+import net.bytebuddy.jar.asm.Opcodes
+
 object WorldImplementationCodeFactoring {
   type EventOrderingTiebreakerIndex = Int
 
@@ -92,8 +94,13 @@ object WorldImplementationCodeFactoring {
     val nonMutableMembersThatCanAlwaysBeReadFrom = (classOf[ItemExtensionApi].getMethods ++ classOf[
       AnyRef].getMethods) map (new MethodDescription.ForLoadedMethod(_))
 
-    val uniqueItemSpecificationProperty = new MethodDescription.ForLoadedMethod(
-      classOf[Recorder].getMethod("uniqueItemSpecification"))
+    val uniqueItemSpecificationPropertyForRecording =
+      new MethodDescription.ForLoadedMethod(
+        classOf[Recorder].getMethod("uniqueItemSpecification"))
+
+    val uniqueItemSpecificationPropertyForItemExtensionApi =
+      new MethodDescription.ForLoadedMethod(
+        classOf[ItemExtensionApi].getMethod("uniqueItemSpecification"))
 
     val isGhostProperty = new MethodDescription.ForLoadedMethod(
       classOf[ItemExtensionApi].getMethod("isGhost"))
@@ -134,7 +141,7 @@ object WorldImplementationCodeFactoring {
         .method(matchGetClass)
         .intercept(FixedValue.value(clazz))
         .ignoreAlso(ElementMatchers.named[MethodDescription]("_isGhost"))
-        .defineField("acquiredState", acquiredStateClazz)
+        .defineField("acquiredState", acquiredStateClazz, Opcodes.ACC_TRANSIENT)
 
       val stateAcquisitionTypeBuilder =
         TypeDescription.Generic.Builder.parameterizedType(
@@ -252,10 +259,13 @@ object WorldImplementationCodeFactoring {
     val matchInvariantCheck: ElementMatcher[MethodDescription] =
       WorldImplementationCodeFactoring.isInvariantCheck(_)
 
-    val matchUniqueItemSpecification: ElementMatcher[MethodDescription] =
+    val matchUniqueItemSpecification
+      : ElementMatcher[MethodDescription] = methodDescription =>
       firstMethodIsOverrideCompatibleWithSecond(
-        _,
-        IdentifiedItemsScope.uniqueItemSpecificationProperty)
+        methodDescription,
+        IdentifiedItemsScope.uniqueItemSpecificationPropertyForRecording) || firstMethodIsOverrideCompatibleWithSecond(
+        methodDescription,
+        IdentifiedItemsScope.uniqueItemSpecificationPropertyForItemExtensionApi)
 
     object recordAnnihilation {
       @RuntimeType
