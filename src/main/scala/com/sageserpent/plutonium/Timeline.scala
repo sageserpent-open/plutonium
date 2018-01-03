@@ -252,14 +252,17 @@ class TimelineImplementation[EventId](
             def itemIsLocked: Boolean = true
           }
 
-        // TODO - need a type tag!
-        proxyFactory.constructFrom(stateToBeAcquiredByProxy)
+        implicit val typeTagForItem: TypeTag[Item] =
+          _uniqueItemSpecification.typeTag.asInstanceOf[TypeTag[Item]]
+
+        proxyFactory.constructFrom[Item](stateToBeAcquiredByProxy)
       }
     }
 
   private def createUpdatePlan(
       eventsForNewTimeline: Map[EventId, (Event, World.Revision)])
     : UpdatePlan = {
+    // TODO: the tiebreakers here aren't right - this approh only works for events contributed from within the *same* revision.
     val eventIdsAndTheirDatums = eventsForNewTimeline.zipWithIndex map {
       case ((eventId, (event, revision)), tiebreakerIndex) =>
         eventId -> EventData(event, revision, tiebreakerIndex)
