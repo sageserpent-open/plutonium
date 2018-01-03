@@ -228,10 +228,10 @@ case class BlobStorageInMemory[EventId] private (
                           EventId]) -> 1)
                     )
                   id -> lifecyclesForId.map(lifecycle =>
-                    if (itemTypeTag == lifecycle.itemTypeTag)
-                      lifecycle
-                        .addSnapshotBlob(eventId, when, snapshot, newRevision)
-                    else lifecycle)
+                      if (itemTypeTag == lifecycle.itemTypeTag)
+                        lifecycle
+                          .addSnapshotBlob(eventId, when, snapshot, newRevision)
+                      else lifecycle)
               }
               lifecycles ++ updatedLifecycles
           }
