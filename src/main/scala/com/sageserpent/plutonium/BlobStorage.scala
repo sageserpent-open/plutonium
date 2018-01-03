@@ -25,7 +25,7 @@ object BlobStorage {
         uniqueItemSpecification: UniqueItemSpecification)
       : Option[SnapshotBlob] = {
       val uniqueItemSpecifications = uniqueItemQueriesFor(
-        uniqueItemSpecification._1)(uniqueItemSpecification._2)
+        uniqueItemSpecification.id)(uniqueItemSpecification.typeTag)
       require(
         1 >= uniqueItemSpecifications.size,
         s"The item specification: '$uniqueItemSpecification', should pick out a unique item, these match it: ${uniqueItemSpecifications.toList}."
@@ -46,7 +46,8 @@ trait BlobStorage[EventId] { blobStorage =>
     def recordSnapshotBlobsForEvent(
         eventId: EventId,
         when: Unbounded[Instant],
-        snapshotBlobs: Map[UniqueItemSpecification, Option[SnapshotBlob]]): Unit
+        snapshotBlobs: Map[UniqueItemSpecification, Option[SnapshotBlob]])
+      : Unit
 
     def annulEvent(eventId: EventId)
 

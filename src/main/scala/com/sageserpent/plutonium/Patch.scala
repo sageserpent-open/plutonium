@@ -49,14 +49,16 @@ class Patch(methodPieces: MethodPieces,
       uniqueItemSpecificationToTypeTagMap: collection.Map[
         UniqueItemSpecification,
         TypeTag[_]]): AbstractPatch = {
-    val rewrittenTargetItemSpecification
-      : UniqueItemSpecification = targetItemSpecification._1 -> uniqueItemSpecificationToTypeTagMap(
-      targetItemSpecification)
+    val rewrittenTargetItemSpecification: UniqueItemSpecification =
+      UniqueItemSpecification(
+        targetItemSpecification.id,
+        uniqueItemSpecificationToTypeTagMap(targetItemSpecification))
     val rewrittenArguments
       : Array[WrappedArgument] = wrappedArguments map (_.map(
       argumentUniqueItemSpecification =>
-        argumentUniqueItemSpecification._1 -> uniqueItemSpecificationToTypeTagMap(
-          argumentUniqueItemSpecification)))
+        UniqueItemSpecification(argumentUniqueItemSpecification.id,
+                                uniqueItemSpecificationToTypeTagMap(
+                                  argumentUniqueItemSpecification))))
     new Patch(methodPieces,
               rewrittenTargetItemSpecification,
               rewrittenArguments)

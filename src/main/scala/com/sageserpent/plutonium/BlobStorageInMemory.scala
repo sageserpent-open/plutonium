@@ -134,8 +134,7 @@ case class BlobStorageInMemory[EventId] private (
     revision: BlobStorageInMemory.Revision,
     eventRevisions: Map[EventId, BlobStorageInMemory.Revision],
     lifecycles: Map[Any, HashBag[BlobStorageInMemory.Lifecycle[EventId]]])
-    extends BlobStorage[EventId] {
-  thisBlobStorage =>
+    extends BlobStorage[EventId] { thisBlobStorage =>
   import BlobStorage._
 
   implicit val lifecycleBagConfiguration = HashedBagConfiguration
@@ -151,7 +150,7 @@ case class BlobStorageInMemory[EventId] private (
               case lifecycle
                   if lifecycle.itemTypeTag.tpe <:< typeTag[Item].tpe && lifecycle
                     .isValid(when, eventRevisions.apply) =>
-                id -> lifecycle.itemTypeTag
+                UniqueItemSpecification(id, lifecycle.itemTypeTag)
             }
         }.toStream
 
@@ -165,7 +164,7 @@ case class BlobStorageInMemory[EventId] private (
               case lifecycle
                   if lifecycle.itemTypeTag.tpe <:< typeTag[Item].tpe && lifecycle
                     .isValid(when, eventRevisions.apply) =>
-                id -> lifecycle.itemTypeTag
+                UniqueItemSpecification(id, lifecycle.itemTypeTag)
             }
           }
           .toStream
@@ -174,8 +173,8 @@ case class BlobStorageInMemory[EventId] private (
           uniqueItemSpecification: UniqueItemSpecification)
         : Option[SnapshotBlob] =
         lifecycles
-          .get(uniqueItemSpecification._1)
-          .flatMap(_.find(uniqueItemSpecification._2 == _.itemTypeTag))
+          .get(uniqueItemSpecification.typeTag)
+          .flatMap(_.find(uniqueItemSpecification.typeTag == _.itemTypeTag))
           .map(_.snapshotBlobFor(when, eventRevisions.apply))
     }
 
@@ -217,7 +216,7 @@ case class BlobStorageInMemory[EventId] private (
               lifecycles
             case (lifecycles, (eventId, Some((when, snapshots)))) =>
               val updatedLifecycles = snapshots map {
-                case ((id, itemTypeTag), snapshot) =>
+                case (UniqueItemSpecification(id, itemTypeTag), snapshot) =>
                   val lifecyclesForId
                     : HashBag[BlobStorageInMemory.Lifecycle[EventId]] =
                     lifecycles.getOrElse(
@@ -228,12 +227,11 @@ case class BlobStorageInMemory[EventId] private (
                         with BlobStorageInMemory.LifecycleContracts[EventId]: BlobStorageInMemory.Lifecycle[
                           EventId]) -> 1)
                     )
-                  id -> lifecyclesForId.map(
-                    lifecycle =>
-                      if (itemTypeTag == lifecycle.itemTypeTag)
-                        lifecycle
-                          .addSnapshotBlob(eventId, when, snapshot, newRevision)
-                      else lifecycle)
+                  id -> lifecyclesForId.map(lifecycle =>
+                    if (itemTypeTag == lifecycle.itemTypeTag)
+                      lifecycle
+                        .addSnapshotBlob(eventId, when, snapshot, newRevision)
+                    else lifecycle)
               }
               lifecycles ++ updatedLifecycles
           }

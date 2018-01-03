@@ -125,7 +125,7 @@ object capturePatches {
           val _id = id
 
           def uniqueItemSpecification: UniqueItemSpecification =
-            id -> typeTag[Item]
+            UniqueItemSpecification(id, typeTag[Item])
 
           def capturePatch(patch: AbstractPatch) {
             capturedPatches += patch

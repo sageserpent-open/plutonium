@@ -13,7 +13,7 @@ object UniqueItemSpecificationSerializationSupport {
     override def write(kryo: Kryo,
                        output: Output,
                        data: UniqueItemSpecification): Unit = {
-      val (id, typeTag) = data
+      val UniqueItemSpecification(id, typeTag) = data
       kryo.writeClassAndObject(output, id)
       kryo.writeObject(output, typeTag, javaSerializer)
     }
@@ -27,7 +27,7 @@ object UniqueItemSpecificationSerializationSupport {
         .readObject[TypeTag[Item]](input,
                                    classOf[TypeTag[Item]],
                                    javaSerializer)
-      id -> typeTag
+      UniqueItemSpecification(id, typeTag)
     }
   }
 }
