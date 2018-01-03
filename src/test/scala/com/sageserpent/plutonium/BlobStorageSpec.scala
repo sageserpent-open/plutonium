@@ -333,7 +333,12 @@ class BlobStorageSpec
             allRetrievedUniqueItemSpecifications shouldBe empty
 
             retrievedUniqueItemSpecifications shouldBe empty
-        }
+
+            val retrievedSnapshotBlob: Option[SnapshotBlob] =
+              timeSlice.snapshotBlobFor(id -> implicitly[TypeTag[Item]])
+
+            retrievedSnapshotBlob shouldBe None
+          }
 
           checkExpectationsForNonExistence(uniqueItemSpecification._1)(
             typeTag[NoKindOfThing])
@@ -341,8 +346,8 @@ class BlobStorageSpec
           val nonExistentItemId = "I do not exist."
 
           checkExpectationsForNonExistence(nonExistentItemId)(typeTag[Any])
+        }
     }
-  }
   }
 
   // I'm not certain that what this test is asserting should be the case ... why not allow disjoint types?
