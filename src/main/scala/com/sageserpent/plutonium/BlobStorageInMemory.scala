@@ -134,8 +134,7 @@ case class BlobStorageInMemory[EventId] private (
     revision: BlobStorageInMemory.Revision,
     eventRevisions: Map[EventId, BlobStorageInMemory.Revision],
     lifecycles: Map[Any, HashBag[BlobStorageInMemory.Lifecycle[EventId]]])
-    extends BlobStorage[EventId] {
-  thisBlobStorage =>
+    extends BlobStorage[EventId] { thisBlobStorage =>
   import BlobStorage._
 
   implicit val lifecycleBagConfiguration = HashedBagConfiguration
@@ -228,12 +227,11 @@ case class BlobStorageInMemory[EventId] private (
                         with BlobStorageInMemory.LifecycleContracts[EventId]: BlobStorageInMemory.Lifecycle[
                           EventId]) -> 1)
                     )
-                  id -> lifecyclesForId.map(
-                    lifecycle =>
-                      if (itemTypeTag == lifecycle.itemTypeTag)
-                        lifecycle
-                          .addSnapshotBlob(eventId, when, snapshot, newRevision)
-                      else lifecycle)
+                  id -> lifecyclesForId.map(lifecycle =>
+                    if (itemTypeTag == lifecycle.itemTypeTag)
+                      lifecycle
+                        .addSnapshotBlob(eventId, when, snapshot, newRevision)
+                    else lifecycle)
               }
               lifecycles ++ updatedLifecycles
           }

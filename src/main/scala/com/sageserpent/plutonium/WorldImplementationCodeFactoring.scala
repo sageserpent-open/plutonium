@@ -141,7 +141,9 @@ object WorldImplementationCodeFactoring {
         .method(matchGetClass)
         .intercept(FixedValue.value(clazz))
         .ignoreAlso(ElementMatchers.named[MethodDescription]("_isGhost"))
-        .defineField("acquiredState", acquiredStateClazz, Opcodes.ACC_TRANSIENT)
+        .defineField("acquiredState",
+                     acquiredStateClazz,
+                     Opcodes.ACC_TRANSIENT)
 
       val stateAcquisitionTypeBuilder =
         TypeDescription.Generic.Builder.parameterizedType(
@@ -178,8 +180,7 @@ object WorldImplementationCodeFactoring {
       classMirror.reflectConstructor(constructor.asMethod) -> clazz
     }
 
-    def constructFrom[Item: TypeTag](
-        stateToBeAcquiredByProxy: AcquiredState) = {
+    def constructFrom[Item: TypeTag](stateToBeAcquiredByProxy: AcquiredState) = {
       // NOTE: this returns items that are proxies to 'Item' rather than direct instances of 'Item' itself. Depending on the
       // context (using a scope created by a client from a world, as opposed to while building up that scope from patches),
       // the items may forbid certain operations on them - e.g. for rendering from a client's scope, the items should be
@@ -207,13 +208,14 @@ object WorldImplementationCodeFactoring {
     def constructorAndClassFor[Item: TypeTag]()
       : (universe.MethodMirror, Class[_]) = {
       val typeOfItem = typeOf[Item]
-      val (constructor, clazz) = cachedProxyConstructors.get(typeOfItem) match {
-        case Some(cachedProxyConstructorData) => cachedProxyConstructorData
-        case None =>
-          val (constructor, clazz) = constructorFor(typeOfItem)
-          cachedProxyConstructors += (typeOfItem -> (constructor, clazz))
-          constructor                            -> clazz
-      }
+      val (constructor, clazz) =
+        cachedProxyConstructors.get(typeOfItem) match {
+          case Some(cachedProxyConstructorData) => cachedProxyConstructorData
+          case None =>
+            val (constructor, clazz) = constructorFor(typeOfItem)
+            cachedProxyConstructors += (typeOfItem -> (constructor, clazz))
+            constructor                            -> clazz
+        }
       (constructor, clazz)
     }
 
@@ -231,7 +233,9 @@ object WorldImplementationCodeFactoring {
         .empty[universe.Type, (universe.MethodMirror, Class[_])]
 
     // TODO - split this and the handling of mutation, there should be two distinct kinds of proxies for building a revision and for use in a scope.
-    trait AcquiredState extends AcquiredStateCapturingId with AnnihilationHook {
+    trait AcquiredState
+        extends AcquiredStateCapturingId
+        with AnnihilationHook {
       def uniqueItemSpecification: UniqueItemSpecification
 
       def itemIsLocked: Boolean
@@ -413,7 +417,8 @@ object WorldImplementationCodeFactoring {
            }(List.empty)) {
         val patchRecorder = new PatchRecorderImplementation[EventId](_when)
         with PatchRecorderContracts[EventId]
-        with BestPatchSelectionImplementation with BestPatchSelectionContracts {
+        with BestPatchSelectionImplementation
+        with BestPatchSelectionContracts {
           val itemsAreLockedResource: ManagedResource[Unit] =
             makeManagedResource {
               allItemsAreLocked = true

@@ -16,8 +16,7 @@ import scala.reflect.runtime.universe
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.DynamicVariable
 
-trait ItemStateStorage {
-  itemStateStorageObject =>
+trait ItemStateStorage { itemStateStorageObject =>
   import BlobStorage._
 
   private val itemDeserializationThreadContextAccess =
@@ -65,7 +64,9 @@ trait ItemStateStorage {
             .read(kryo, input, itemType)
         else {
           val uniqueItemSpecifiction: UniqueItemSpecification =
-            kryo.readClassAndObject(input).asInstanceOf[UniqueItemSpecification]
+            kryo
+              .readClassAndObject(input)
+              .asInstanceOf[UniqueItemSpecification]
 
           val instance: ItemSuperType =
             itemFor[ItemSuperType](uniqueItemSpecifiction)
@@ -83,8 +84,8 @@ trait ItemStateStorage {
             .asInstanceOf[Serializer[ItemSuperType]]
             .write(kryo, output, item)
         else kryo.writeClassAndObject(output, uniqueItemSpecification(item))
-        }
       }
+    }
 
   val originalInstantiatorStrategy =
     new ScalaKryoInstantiator().newKryo().getInstantiatorStrategy
@@ -120,7 +121,7 @@ trait ItemStateStorage {
     def registerSerializerForUniqueItemSpecification[Item]() = {
       kryo.register(classOf[UniqueItemSpecification],
                     new SpecialSerializer[Item])
-  }
+    }
     registerSerializerForUniqueItemSpecification()
   })
 
@@ -142,8 +143,7 @@ trait ItemStateStorage {
     def blobStorageTimeslice
       : BlobStorage.Timeslice // NOTE: abstracting this allows the prospect of a 'moving' timeslice for use when executing an update plan.
 
-    def itemFor[Item](
-        uniqueItemSpecification: UniqueItemSpecification): Item = {
+    def itemFor[Item](uniqueItemSpecification: UniqueItemSpecification): Item = {
       itemDeserializationThreadContextAccess.withValue(
         Some(new ItemDeserializationThreadContext)) {
         itemStateStorageObject.itemFor[Item](uniqueItemSpecification)

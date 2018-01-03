@@ -12,21 +12,21 @@ import com.sageserpent.plutonium.{
 object Measurement {
   def forOneItem[Item](when: Unbounded[Instant],
                        id: Any,
-      clazz: Class[Item],
-      update: Consumer[Item]): ScalaMeasurement =
+                       clazz: Class[Item],
+                       update: Consumer[Item]): ScalaMeasurement =
     ScalaMeasurement.forOneItem(when)(id, update.accept(_: Item))(
       typeTagForClass(clazz))
 
   def forOneItem[Item](when: Instant,
                        id: Any,
-      clazz: Class[Item],
-      update: Consumer[Item]): ScalaMeasurement =
+                       clazz: Class[Item],
+                       update: Consumer[Item]): ScalaMeasurement =
     ScalaMeasurement.forOneItem(when)(id, update.accept(_: Item))(
       typeTagForClass(clazz))
 
   def forOneItem[Item](id: Any,
-      clazz: Class[Item],
-      update: Consumer[Item]): ScalaMeasurement =
+                       clazz: Class[Item],
+                       update: Consumer[Item]): ScalaMeasurement =
     ScalaMeasurement.forOneItem(id, update.accept(_: Item))(
       typeTagForClass(clazz))
 

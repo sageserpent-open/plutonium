@@ -99,7 +99,8 @@ trait PatchRecorderContracts[EventId] extends PatchRecorder[EventId] {
         .cata(some = Finite(when) >= _, none = true))
     require(!allRecordingsAreCaptured)
     val result = super.recordAnnihilation(eventId, when, id)
-    require(whenEventPertainedToByLastRecordingTookPlace.contains(Finite(when)))
+    require(
+      whenEventPertainedToByLastRecordingTookPlace.contains(Finite(when)))
     result
   }
 

@@ -2,7 +2,11 @@ package com.sageserpent.plutonium
 
 import java.time.Instant
 
-import com.sageserpent.americium.{NegativeInfinity, PositiveInfinity, Unbounded}
+import com.sageserpent.americium.{
+  NegativeInfinity,
+  PositiveInfinity,
+  Unbounded
+}
 import com.sageserpent.plutonium.BlobStorage.SnapshotBlob
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.PatchRecorder.UpdateConsumer
@@ -269,8 +273,8 @@ class TimelineImplementation[EventId](
 
     val patchRecorder: PatchRecorder[EventId] =
       new PatchRecorderImplementation[EventId](PositiveInfinity())
-      with PatchRecorderContracts[EventId] with BestPatchSelectionImplementation
-      with BestPatchSelectionContracts {
+      with PatchRecorderContracts[EventId]
+      with BestPatchSelectionImplementation with BestPatchSelectionContracts {
         override val updateConsumer: UpdateConsumer[EventId] =
           new UpdateConsumer[EventId] {
 
@@ -301,7 +305,8 @@ class TimelineImplementation[EventId](
           }
       }
 
-    WorldImplementationCodeFactoring.recordPatches(eventTimeline, patchRecorder)
+    WorldImplementationCodeFactoring.recordPatches(eventTimeline,
+                                                   patchRecorder)
 
     require(
       updatePlanBuffer.values flatMap (_.keys) groupBy identity forall (1 == _._2.size),

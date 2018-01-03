@@ -7,7 +7,11 @@ import java.util.{NoSuchElementException, UUID}
 import com.esotericsoftware.kryo.Kryo
 import com.lambdaworks.redis.RedisClient
 import com.lambdaworks.redis.api.rx.RedisReactiveCommands
-import com.lambdaworks.redis.codec.{ByteArrayCodec, RedisCodec, Utf8StringCodec}
+import com.lambdaworks.redis.codec.{
+  ByteArrayCodec,
+  RedisCodec,
+  Utf8StringCodec
+}
 import com.sageserpent.americium.{PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.twitter.chill.{KryoPool, ScalaKryoInstantiator}
@@ -236,7 +240,9 @@ class WorldRedisBasedImplementation[EventId](redisClient: RedisClient,
         nextRevisionPriorToUpdate <- nextRevisionObservable
         newEventDatums: Map[EventId, AbstractEventData] = newEventDatumsFor(
           nextRevisionPriorToUpdate)
-        (pertinentEventDatumsExcludingTheNewRevision: Seq[(EventId, AbstractEventData)], _) <- pertinentEventDatumsObservable(
+        (pertinentEventDatumsExcludingTheNewRevision: Seq[(EventId,
+         AbstractEventData)],
+         _) <- pertinentEventDatumsObservable(
           nextRevisionPriorToUpdate,
           newEventDatums.keys.toSeq).toList zip
           (for (revisionAsOfs <- revisionAsOfsObservable)

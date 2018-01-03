@@ -10,6 +10,6 @@ import com.sageserpent.plutonium.{
 object Annihilation {
   def apply[Item](definiteWhen: Instant,
                   id: Any,
-                                clazz: Class[Item]): ScalaAnnihilation[Item] =
+                  clazz: Class[Item]): ScalaAnnihilation[Item] =
     ScalaAnnihilation(definiteWhen, id)(typeTagForClass(clazz))
 }

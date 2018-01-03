@@ -40,8 +40,8 @@ abstract class WorldInefficientImplementationCodeFactoring[EventId]
 
     def buildAndValidateEventTimelineForProposedNewRevision(
         newEventDatums: Seq[(EventId, AbstractEventData)],
-        pertinentEventDatumsExcludingTheNewRevision: Seq[(EventId, AbstractEventData)])
-      : Unit = {
+        pertinentEventDatumsExcludingTheNewRevision: Seq[
+          (EventId, AbstractEventData)]): Unit = {
       val eventTimelineIncludingNewRevision = eventTimelineFrom(
         pertinentEventDatumsExcludingTheNewRevision union newEventDatums)
 
@@ -61,11 +61,12 @@ abstract class WorldInefficientImplementationCodeFactoring[EventId]
       asOf: Instant,
       newEventDatumsFor: Revision => Map[EventId, AbstractEventData],
       buildAndValidateEventTimelineForProposedNewRevision: (
-        Seq[(EventId, AbstractEventData)],
+          Seq[(EventId, AbstractEventData)],
           Seq[(EventId, AbstractEventData)]) => Unit): Revision
 
-  protected def checkRevisionPrecondition(asOf: Instant,
-                                          revisionAsOfs: Seq[Instant]): Unit = {
+  protected def checkRevisionPrecondition(
+      asOf: Instant,
+      revisionAsOfs: Seq[Instant]): Unit = {
     if (revisionAsOfs.nonEmpty && revisionAsOfs.last.isAfter(asOf))
       throw new IllegalArgumentException(
         s"'asOf': ${asOf} should be no earlier than that of the last revision: ${revisionAsOfs.last}")

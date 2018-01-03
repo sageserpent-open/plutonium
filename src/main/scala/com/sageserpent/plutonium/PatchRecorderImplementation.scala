@@ -51,7 +51,9 @@ abstract class PatchRecorderImplementation[EventId](
                                           patch: AbstractPatch): Unit = {
     _whenEventPertainedToByLastRecordingTookPlace = Some(when)
 
-    refineRelevantItemStatesAndYieldTarget(patch).addPatch(when, patch, eventId)
+    refineRelevantItemStatesAndYieldTarget(patch).addPatch(when,
+                                                           patch,
+                                                           eventId)
   }
 
   def annihilateItemFor_[SubclassOfItem <: Item, Item](
@@ -224,7 +226,8 @@ abstract class PatchRecorderImplementation[EventId](
         exemplarMethodToCandidatePatchesMap.find {
           case (exemplarMethod, _) =>
             WorldImplementationCodeFactoring
-              .firstMethodIsOverrideCompatibleWithSecond(method, exemplarMethod) ||
+              .firstMethodIsOverrideCompatibleWithSecond(method,
+                                                         exemplarMethod) ||
               WorldImplementationCodeFactoring
                 .firstMethodIsOverrideCompatibleWithSecond(exemplarMethod,
                                                            method)
