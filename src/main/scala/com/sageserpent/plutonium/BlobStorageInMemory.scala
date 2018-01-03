@@ -171,9 +171,11 @@ case class BlobStorageInMemory[EventId] private (
           .toStream
 
       override def snapshotBlobFor(
-          uniqueItemSpecification: UniqueItemSpecification): Option[SnapshotBlob] =
-        lifecycles(uniqueItemSpecification._1)
-          .find(uniqueItemSpecification._2 == _.itemTypeTag)
+          uniqueItemSpecification: UniqueItemSpecification)
+        : Option[SnapshotBlob] =
+        lifecycles
+          .get(uniqueItemSpecification._1)
+          .flatMap(_.find(uniqueItemSpecification._2 == _.itemTypeTag))
           .map(_.snapshotBlobFor(when, eventRevisions.apply))
     }
 
