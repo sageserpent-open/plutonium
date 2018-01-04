@@ -325,33 +325,34 @@ class BlobStorageSpec
           checkExpectations(uniqueItemSpecification)
 
           checkExpectations(
-            (uniqueItemSpecification.id -> typeTag[Any])
-              .asInstanceOf[UniqueItemSpecification])
+            UniqueItemSpecification(uniqueItemSpecification.id, typeTag[Any]))
 
           val allRetrievedUniqueItemSpecifications =
             timeSlice.uniqueItemQueriesFor(typeTag[NoKindOfThing])
 
-          def checkExpectationsForNonExistence[Item: TypeTag](id: Any): Any = {
+          def checkExpectationsForNonExistence(
+              uniqueItemSpecification: UniqueItemSpecification): Any = {
             val retrievedUniqueItemSpecifications =
-              timeSlice.uniqueItemQueriesFor(id)
+              timeSlice.uniqueItemQueriesFor(uniqueItemSpecification.id)
 
             allRetrievedUniqueItemSpecifications shouldBe empty
 
             retrievedUniqueItemSpecifications shouldBe empty
 
             val retrievedSnapshotBlob: Option[SnapshotBlob] =
-              timeSlice.snapshotBlobFor(
-                UniqueItemSpecification(id, implicitly[TypeTag[Item]]))
+              timeSlice.snapshotBlobFor(uniqueItemSpecification)
 
             retrievedSnapshotBlob shouldBe None
           }
 
-          checkExpectationsForNonExistence(uniqueItemSpecification.id)(
-            typeTag[NoKindOfThing])
+          checkExpectationsForNonExistence(
+            UniqueItemSpecification(uniqueItemSpecification.id,
+                                    typeTag[NoKindOfThing]))
 
           val nonExistentItemId = "I do not exist."
 
-          checkExpectationsForNonExistence(nonExistentItemId)(typeTag[Any])
+          checkExpectationsForNonExistence(
+            UniqueItemSpecification(nonExistentItemId, typeTag[Any]))
         }
     }
   }

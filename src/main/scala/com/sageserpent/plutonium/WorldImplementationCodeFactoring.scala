@@ -210,12 +210,12 @@ object WorldImplementationCodeFactoring {
       val typeOfItem = typeOf[Item]
       val (constructor, clazz) =
         cachedProxyConstructors.get(typeOfItem) match {
-          case Some(cachedProxyConstructorData) => cachedProxyConstructorData
-          case None =>
-            val (constructor, clazz) = constructorFor(typeOfItem)
-            cachedProxyConstructors += (typeOfItem -> (constructor, clazz))
-            constructor                            -> clazz
-        }
+        case Some(cachedProxyConstructorData) => cachedProxyConstructorData
+        case None =>
+          val (constructor, clazz) = constructorFor(typeOfItem)
+          cachedProxyConstructors += (typeOfItem -> (constructor, clazz))
+          constructor                            -> clazz
+      }
       (constructor, clazz)
     }
 

@@ -173,7 +173,7 @@ case class BlobStorageInMemory[EventId] private (
           uniqueItemSpecification: UniqueItemSpecification)
         : Option[SnapshotBlob] =
         lifecycles
-          .get(uniqueItemSpecification.typeTag)
+          .get(uniqueItemSpecification.id)
           .flatMap(_.find(uniqueItemSpecification.typeTag == _.itemTypeTag))
           .map(_.snapshotBlobFor(when, eventRevisions.apply))
     }
@@ -227,7 +227,8 @@ case class BlobStorageInMemory[EventId] private (
                         with BlobStorageInMemory.LifecycleContracts[EventId]: BlobStorageInMemory.Lifecycle[
                           EventId]) -> 1)
                     )
-                  id -> lifecyclesForId.map(lifecycle =>
+                  id -> lifecyclesForId.map(
+                    lifecycle =>
                     if (itemTypeTag == lifecycle.itemTypeTag)
                       lifecycle
                         .addSnapshotBlob(eventId, when, snapshot, newRevision)
