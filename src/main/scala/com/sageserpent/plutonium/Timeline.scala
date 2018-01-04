@@ -2,18 +2,16 @@ package com.sageserpent.plutonium
 
 import java.time.Instant
 
-import com.sageserpent.americium.{
-  NegativeInfinity,
-  PositiveInfinity,
-  Unbounded
-}
+import com.sageserpent.americium.{NegativeInfinity, PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.BlobStorage.SnapshotBlob
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.PatchRecorder.UpdateConsumer
 import com.sageserpent.plutonium.WorldImplementationCodeFactoring.{
   EventData,
+  EventOrderingTiebreakerIndex,
   QueryCallbackStuff
 }
+import World.{Revision, initialRevision}
 import resource._
 
 import scala.collection.immutable.{Map, SortedMap, TreeMap}
@@ -46,10 +44,9 @@ object itemStateStorageUsingProxies extends ItemStateStorage {
 }
 
 class TimelineImplementation[EventId](
-    events: Map[EventId, (Event, World.Revision)] =
-      Map.empty[EventId, (Event, World.Revision)],
+    events: Map[EventId, EventData] = Map.empty[EventId, EventData],
     blobStorage: BlobStorage[EventId] = BlobStorageInMemory.apply[EventId](),
-    nextRevision: World.Revision = World.initialRevision)
+    nextRevision: Revision = initialRevision)
     extends Timeline[EventId] {
   sealed trait ItemStateUpdate
 
@@ -73,9 +70,10 @@ class TimelineImplementation[EventId](
       SortedMap.empty[Unbounded[Instant], Map[EventId, Seq[ItemStateUpdate]]]
 
     val eventsForNewTimeline
-      : Map[EventId, (Event, World.Revision)] = this.events
-      .asInstanceOf[Map[EventId, (Event, World.Revision)]] -- annulledEvents ++ newEvents
-      .map { case (eventId, event) => eventId -> (event -> nextRevision) }
+      : Map[EventId, EventData] = this.events -- annulledEvents ++ newEvents.zipWithIndex.map {
+      case ((eventId, event), tiebreakerIndex) =>
+        eventId -> EventData(event, nextRevision, tiebreakerIndex)
+    }.toMap
 
     val updatePlan = createUpdatePlan(eventsForNewTimeline)
 
@@ -260,16 +258,9 @@ class TimelineImplementation[EventId](
     }
 
   private def createUpdatePlan(
-      eventsForNewTimeline: Map[EventId, (Event, World.Revision)])
-    : UpdatePlan = {
-    // TODO: the tiebreakers here aren't right - this approh only works for events contributed from within the *same* revision.
-    val eventIdsAndTheirDatums = eventsForNewTimeline.zipWithIndex map {
-      case ((eventId, (event, revision)), tiebreakerIndex) =>
-        eventId -> EventData(event, revision, tiebreakerIndex)
-    }
-
+      eventsForNewTimeline: Map[EventId, EventData]): UpdatePlan = {
     val eventTimeline = WorldImplementationCodeFactoring.eventTimelineFrom(
-      eventIdsAndTheirDatums.toSeq)
+      eventsForNewTimeline.toSeq)
 
     val updatePlanBuffer = mutable.SortedMap
       .empty[Unbounded[Instant],
@@ -277,11 +268,10 @@ class TimelineImplementation[EventId](
 
     val patchRecorder: PatchRecorder[EventId] =
       new PatchRecorderImplementation[EventId](PositiveInfinity())
-      with PatchRecorderContracts[EventId]
-      with BestPatchSelectionImplementation with BestPatchSelectionContracts {
+      with PatchRecorderContracts[EventId] with BestPatchSelectionImplementation
+      with BestPatchSelectionContracts {
         override val updateConsumer: UpdateConsumer[EventId] =
           new UpdateConsumer[EventId] {
-
             private def itemStatesFor(when: Unbounded[Instant],
                                       eventId: EventId) =
               updatePlanBuffer
@@ -309,8 +299,7 @@ class TimelineImplementation[EventId](
           }
       }
 
-    WorldImplementationCodeFactoring.recordPatches(eventTimeline,
-                                                   patchRecorder)
+    WorldImplementationCodeFactoring.recordPatches(eventTimeline, patchRecorder)
 
     require(
       updatePlanBuffer.values flatMap (_.keys) groupBy identity forall (1 == _._2.size),
