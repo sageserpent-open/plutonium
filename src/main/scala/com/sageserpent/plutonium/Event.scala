@@ -43,8 +43,6 @@ object capturePatches {
         .represents(classOf[Unit])
 
     trait AcquiredState extends AcquiredStateCapturingId {
-      def uniqueItemSpecification: UniqueItemSpecification
-
       def capturePatch(patch: AbstractPatch): Unit
     }
 
@@ -122,9 +120,7 @@ object capturePatches {
         import RecordingCallbackStuff._
 
         val stateToBeAcquiredByProxy = new AcquiredState {
-          val _id = id
-
-          def uniqueItemSpecification: UniqueItemSpecification =
+          val uniqueItemSpecification: UniqueItemSpecification =
             UniqueItemSpecification(id, typeTag[Item])
 
           def capturePatch(patch: AbstractPatch) {

@@ -122,12 +122,7 @@ class TimelineImplementation[EventId](
         import QueryCallbackStuff._
 
         val stateToBeAcquiredByProxy: AcquiredState =
-          new AcquiredState {
-            val _id = _uniqueItemSpecification.id
-
-            def uniqueItemSpecification: UniqueItemSpecification =
-              _uniqueItemSpecification
-
+          new AcquiredState(_uniqueItemSpecification) {
             def itemIsLocked: Boolean = allItemsAreLocked
 
             override def recordMutation(item: ItemExtensionApi) =
@@ -241,12 +236,7 @@ class TimelineImplementation[EventId](
         import QueryCallbackStuff._
 
         val stateToBeAcquiredByProxy: AcquiredState =
-          new AcquiredState {
-            val _id = _uniqueItemSpecification.id
-
-            def uniqueItemSpecification: UniqueItemSpecification =
-              _uniqueItemSpecification
-
+          new AcquiredState(_uniqueItemSpecification) {
             def itemIsLocked: Boolean = true
           }
 
