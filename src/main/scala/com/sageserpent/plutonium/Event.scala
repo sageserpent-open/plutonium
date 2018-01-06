@@ -35,8 +35,8 @@ sealed trait Event {
 object capturePatches {
   object RecordingCallbackStuff {
     val additionalInterfaces: Array[Class[_]] = Array(classOf[Recorder])
-    val cachedProxyConstructors =
-      mutable.Map.empty[universe.Type, (universe.MethodMirror, Class[_])]
+    val cachedProxyClasses =
+      mutable.Map.empty[universe.Type, Class[_]]
 
     def isFinalizer(methodDescription: MethodDescription): Boolean =
       methodDescription.getName == "finalize" && methodDescription.getParameters.isEmpty && methodDescription.getReturnType
@@ -95,9 +95,8 @@ object capturePatches {
 
       override val additionalInterfaces: Array[Class[_]] =
         RecordingCallbackStuff.additionalInterfaces
-      override val cachedProxyConstructors
-        : mutable.Map[Type, (universe.MethodMirror, Class[_])] =
-        RecordingCallbackStuff.cachedProxyConstructors
+      override val cachedProxyClasses: mutable.Map[Type, Class[_]] =
+        RecordingCallbackStuff.cachedProxyClasses
 
       override protected def configureInterceptions(
           builder: Builder[_]): Builder[_] =

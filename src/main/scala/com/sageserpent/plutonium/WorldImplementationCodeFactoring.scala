@@ -67,7 +67,7 @@ object WorldImplementationCodeFactoring {
     def yieldOnlyItemsOfSupertypeOf[Item: TypeTag](items: Traversable[Any]) = {
       val reflectedType = typeTag[Item].tpe
       val clazzOfItem =
-        currentMirror.runtimeClass(reflectedType).asInstanceOf[Class[Item]]
+        clazzFromType(reflectedType)
 
       items filter { item =>
         val itemClazz = item.getClass
@@ -78,7 +78,7 @@ object WorldImplementationCodeFactoring {
     def yieldOnlyItemsOfType[Item: TypeTag](items: Traversable[Any]) = {
       val reflectedType = typeTag[Item].tpe
       val clazzOfItem =
-        currentMirror.runtimeClass(reflectedType).asInstanceOf[Class[Item]]
+        clazzFromType[Item](reflectedType)
 
       items.toStream filter (clazzOfItem.isInstance(_)) map (clazzOfItem.cast(
         _))
@@ -105,6 +105,10 @@ object WorldImplementationCodeFactoring {
 
     val isRecordAnnihilationMethod = new MethodDescription.ForLoadedMethod(
       classOf[AnnihilationHook].getMethod("recordAnnihilation"))
+  }
+
+  private def clazzFromType[Item](reflectedType: universe.Type): Class[Item] = {
+    currentMirror.runtimeClass(reflectedType).asInstanceOf[Class[Item]]
   }
 
   val byteBuddy = new ByteBuddy()
@@ -161,21 +165,6 @@ object WorldImplementationCodeFactoring {
 
     protected def configureInterceptions(builder: Builder[_]): Builder[_]
 
-    private def constructorFor(
-        identifiableType: Type): (universe.MethodMirror, Class[_]) = {
-      val clazz =
-        currentMirror
-          .runtimeClass(identifiableType.typeSymbol.asClass)
-          .asInstanceOf[Class[_]]
-
-      val proxyClazz = createProxyClass(clazz)
-
-      val proxyClassSymbol = currentMirror.classSymbol(proxyClazz)
-      val classMirror      = currentMirror.reflectClass(proxyClassSymbol.asClass)
-      val constructor      = proxyClassSymbol.toType.decls.find(_.isConstructor).get
-      classMirror.reflectConstructor(constructor.asMethod) -> clazz
-    }
-
     def constructFrom[Item: TypeTag](
         stateToBeAcquiredByProxy: AcquiredState) = {
       // NOTE: this returns items that are proxies to 'Item' rather than direct instances of 'Item' itself. Depending on the
@@ -183,7 +172,9 @@ object WorldImplementationCodeFactoring {
       // the items may forbid certain operations on them - e.g. for rendering from a client's scope, the items should be
       // read-only.
 
-      val (constructor, clazz) = constructorAndClassFor()
+      val proxyClazz = proxyClassFor()
+
+      val clazz = proxyClazz.getSuperclass
 
       if (!isForRecordingOnly && clazz.getMethods.exists(
             method =>
@@ -193,7 +184,7 @@ object WorldImplementationCodeFactoring {
         throw new UnsupportedOperationException(
           s"Attempt to create an instance of an abstract class '$clazz' for id: '${stateToBeAcquiredByProxy.uniqueItemSpecification.id}'.")
       }
-      val proxy = constructor().asInstanceOf[Item]
+      val proxy = proxyClazz.newInstance().asInstanceOf[Item]
 
       proxy
         .asInstanceOf[StateAcquisition[AcquiredState]]
@@ -202,32 +193,28 @@ object WorldImplementationCodeFactoring {
       proxy
     }
 
-    def constructorAndClassFor[Item: TypeTag]()
-      : (universe.MethodMirror, Class[_]) = {
+    def proxyClassFor[Item: TypeTag](): Class[_] = {
       val typeOfItem = typeOf[Item]
-      val (constructor, clazz) =
-        cachedProxyConstructors.get(typeOfItem) match {
-          case Some(cachedProxyConstructorData) => cachedProxyConstructorData
-          case None =>
-            val (constructor, clazz) = constructorFor(typeOfItem)
-            cachedProxyConstructors += (typeOfItem -> (constructor, clazz))
-            constructor                            -> clazz
-        }
-      (constructor, clazz)
+      cachedProxyClasses.get(typeOfItem) match {
+        case Some(cachedProxyClazz) => cachedProxyClazz
+        case None =>
+          val proxyClazz = createProxyClass(clazzFromType(typeOfItem))
+          cachedProxyClasses += (typeOfItem -> proxyClazz)
+          proxyClazz
+      }
     }
 
     protected val additionalInterfaces: Array[Class[_]]
-    protected val cachedProxyConstructors: scala.collection.mutable.Map[
-      (Type),
-      (universe.MethodMirror, Class[_])]
+    protected val cachedProxyClasses: scala.collection.mutable.Map[Type,
+                                                                   Class[_]]
   }
 
   object QueryCallbackStuff {
     val additionalInterfaces: Array[Class[_]] =
       Array(classOf[ItemExtensionApi], classOf[AnnihilationHook])
-    val cachedProxyConstructors =
+    val cachedProxyClasses =
       mutable.Map
-        .empty[universe.Type, (universe.MethodMirror, Class[_])]
+        .empty[universe.Type, Class[_]]
 
     // TODO - split this and the handling of mutation, there should be two distinct kinds of proxies for building a revision and for use in a scope.
     abstract class AcquiredState(
@@ -348,9 +335,8 @@ object WorldImplementationCodeFactoring {
 
       override val additionalInterfaces: Array[Class[_]] =
         QueryCallbackStuff.additionalInterfaces
-      override val cachedProxyConstructors
-        : mutable.Map[universe.Type, (universe.MethodMirror, Class[_])] =
-        QueryCallbackStuff.cachedProxyConstructors
+      override val cachedProxyClasses: mutable.Map[universe.Type, Class[_]] =
+        QueryCallbackStuff.cachedProxyClasses
 
       override protected def configureInterceptions(
           builder: Builder[_]): Builder[_] =
