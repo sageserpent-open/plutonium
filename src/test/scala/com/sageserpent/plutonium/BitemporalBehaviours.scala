@@ -676,7 +676,7 @@ trait BitemporalBehaviours
                   MoreSpecificFooHistory#Id]) map (_.asInstanceOf[
                   MoreSpecificFooHistory#Id])).toSet
 
-              if (itemsFromWildcardQuery.nonEmpty || ids.nonEmpty) {
+              if (itemsFromWildcardQuery[History].nonEmpty || ids.nonEmpty) {
                 val wildcardProperty = Prop((itemsFromWildcardQuery[
                   MoreSpecificFooHistory] map (_.asInstanceOf[FooHistory]))
                   .subsetOf(itemsFromWildcardQuery[FooHistory])) &&
@@ -775,7 +775,7 @@ trait BitemporalBehaviours
               if (allIdsFromWildcard.nonEmpty) {
                 Prop.all(allItemsFromWildcard map isReadonly: _*) && Prop.all(
                   allIdsFromWildcard flatMap { id =>
-                    val items = scope.render(Bitemporal.withId(id))
+                    val items = scope.render(Bitemporal.withId[History](id))
                     items map isReadonly
                   }: _*)
               } else Prop.undecided
