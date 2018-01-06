@@ -122,14 +122,16 @@ class TimelineImplementation[EventId](
         import QueryCallbackStuff._
 
         val stateToBeAcquiredByProxy: AcquiredState =
-          new AcquiredState(_uniqueItemSpecification) {
-            def itemIsLocked: Boolean = allItemsAreLocked
+          new AcquiredState(
+            _uniqueItemSpecification,
+            new NonPersistedAcquiredState {
+              def itemIsLocked: Boolean = allItemsAreLocked
 
-            override def recordMutation(item: ItemExtensionApi) =
-              itemsMutatedSinceLastSnapshotHarvest.update(
-                item.uniqueItemSpecification,
-                item)
-          }
+              def recordMutation(item: ItemExtensionApi) =
+                itemsMutatedSinceLastSnapshotHarvest
+                  .update(item.uniqueItemSpecification, item)
+            }
+          )
 
         implicit val typeTagForItem: TypeTag[Item] =
           _uniqueItemSpecification.typeTag.asInstanceOf[TypeTag[Item]]
@@ -236,9 +238,13 @@ class TimelineImplementation[EventId](
         import QueryCallbackStuff._
 
         val stateToBeAcquiredByProxy: AcquiredState =
-          new AcquiredState(_uniqueItemSpecification) {
-            def itemIsLocked: Boolean = true
-          }
+          new AcquiredState(
+            _uniqueItemSpecification,
+            new NonPersistedAcquiredState {
+              override def recordMutation(item: ItemExtensionApi): Unit = {}
+
+              override def itemIsLocked: Boolean = true
+            })
 
         implicit val typeTagForItem: TypeTag[Item] =
           _uniqueItemSpecification.typeTag.asInstanceOf[TypeTag[Item]]

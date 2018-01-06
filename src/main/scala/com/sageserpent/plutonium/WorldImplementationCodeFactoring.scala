@@ -5,6 +5,7 @@ import java.time.Instant
 import java.util.Optional
 import java.util.concurrent.Callable
 
+import com.esotericsoftware.kryo.serializers.FieldSerializer
 import com.sageserpent.americium.{Finite, NegativeInfinity, Unbounded}
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.PatchRecorder.UpdateConsumer
@@ -216,14 +217,20 @@ object WorldImplementationCodeFactoring {
       mutable.Map
         .empty[universe.Type, Class[_]]
 
-    // TODO - split this and the handling of mutation, there should be two distinct kinds of proxies for building a revision and for use in a scope.
-    abstract class AcquiredState(
-        val uniqueItemSpecification: UniqueItemSpecification)
-        extends AcquiredStateCapturingId
-        with AnnihilationHook {
+    trait NonPersistedAcquiredState {
       def itemIsLocked: Boolean
 
-      def recordMutation(item: ItemExtensionApi) = {}
+      def recordMutation(item: ItemExtensionApi)
+    }
+
+    // TODO - split this and the handling of mutation, there should be two distinct kinds of proxies for building a revision and for use in a scope.
+    class AcquiredState(val uniqueItemSpecification: UniqueItemSpecification,
+                        _nonPersistedAcquiredState: NonPersistedAcquiredState)
+        extends AcquiredStateCapturingId
+        with AnnihilationHook {
+      @FieldSerializer.Optional("nonPersistedState")
+      val nonPersistedAcquiredState: NonPersistedAcquiredState =
+        _nonPersistedAcquiredState
     }
 
     val matchRecordAnnihilation: ElementMatcher[MethodDescription] =
@@ -268,7 +275,7 @@ object WorldImplementationCodeFactoring {
                 @This target: ItemExtensionApi,
                 @SuperCall superCall: Callable[_],
                 @FieldValue("acquiredState") acquiredState: AcquiredState) = {
-        if (acquiredState.itemIsLocked) {
+        if (acquiredState.nonPersistedAcquiredState.itemIsLocked) {
           throw new UnsupportedOperationException(
             s"Attempt to write via: '$method' to an item: '$target' rendered from a bitemporal query.")
         }
@@ -281,7 +288,7 @@ object WorldImplementationCodeFactoring {
 
         superCall.call()
 
-        acquiredState.recordMutation(target)
+        acquiredState.nonPersistedAcquiredState.recordMutation(target)
       }
     }
 
@@ -449,10 +456,15 @@ object WorldImplementationCodeFactoring {
         import QueryCallbackStuff._
 
         val stateToBeAcquiredByProxy: AcquiredState =
-          new AcquiredState(UniqueItemSpecification(id, typeTag[Item])) {
-            def itemIsLocked: Boolean =
-              identifiedItemsScopeThis.allItemsAreLocked
-          }
+          new AcquiredState(
+            UniqueItemSpecification(id, typeTag[Item]),
+            new NonPersistedAcquiredState {
+              override def recordMutation(item: ItemExtensionApi): Unit = {}
+
+              override def itemIsLocked: Boolean =
+                identifiedItemsScopeThis.allItemsAreLocked
+            }
+          )
 
         val item = proxyFactory.constructFrom(stateToBeAcquiredByProxy)
         idToItemsMultiMap.addBinding(id, item)
