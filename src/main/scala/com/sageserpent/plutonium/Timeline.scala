@@ -122,21 +122,22 @@ class TimelineImplementation[EventId](
         import QueryCallbackStuff._
 
         val stateToBeAcquiredByProxy: AcquiredState =
-          new AcquiredState(
-            _uniqueItemSpecification,
-            new NonPersistedAcquiredState {
-              def itemIsLocked: Boolean = allItemsAreLocked
+          new AcquiredState(_uniqueItemSpecification)
 
-              def recordMutation(item: ItemExtensionApi) =
-                itemsMutatedSinceLastSnapshotHarvest
-                  .update(item.uniqueItemSpecification, item)
-            }
-          )
+        val nonPersistentStateToBeAcquiredByProxy: MutationSupport =
+          new MutationSupport {
+            def itemIsLocked: Boolean = allItemsAreLocked
+
+            def recordMutation(item: ItemExtensionApi) =
+              itemsMutatedSinceLastSnapshotHarvest
+                .update(item.uniqueItemSpecification, item)
+          }
 
         implicit val typeTagForItem: TypeTag[Item] =
           _uniqueItemSpecification.typeTag.asInstanceOf[TypeTag[Item]]
 
-        proxyFactory.constructFrom[Item](stateToBeAcquiredByProxy)
+        proxyFactory.constructFrom[Item](stateToBeAcquiredByProxy,
+                                         nonPersistentStateToBeAcquiredByProxy)
       }
 
       def harvestSnapshots(): Map[UniqueItemSpecification, SnapshotBlob] = {
@@ -238,18 +239,18 @@ class TimelineImplementation[EventId](
         import QueryCallbackStuff._
 
         val stateToBeAcquiredByProxy: AcquiredState =
-          new AcquiredState(
-            _uniqueItemSpecification,
-            new NonPersistedAcquiredState {
-              override def recordMutation(item: ItemExtensionApi): Unit = {}
+          new AcquiredState(_uniqueItemSpecification)
 
-              override def itemIsLocked: Boolean = true
-            })
+        val nonPersistentStateToBeAcquiredByProxy: MutationSupport = new MutationSupport {
+          override def recordMutation(item: ItemExtensionApi): Unit = {}
+
+          override def itemIsLocked: Boolean = true
+        }
 
         implicit val typeTagForItem: TypeTag[Item] =
           _uniqueItemSpecification.typeTag.asInstanceOf[TypeTag[Item]]
 
-        proxyFactory.constructFrom[Item](stateToBeAcquiredByProxy)
+        proxyFactory.constructFrom[Item](stateToBeAcquiredByProxy, nonPersistentStateToBeAcquiredByProxy)
       }
     }
 
