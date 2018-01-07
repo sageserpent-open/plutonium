@@ -5,7 +5,6 @@ import java.time.Instant
 import java.util.Optional
 import java.util.concurrent.Callable
 
-import com.esotericsoftware.kryo.serializers.FieldSerializer
 import com.sageserpent.americium.{Finite, NegativeInfinity, Unbounded}
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.PatchRecorder.UpdateConsumer
@@ -117,10 +116,8 @@ object WorldImplementationCodeFactoring {
   val matchGetClass: ElementMatcher[MethodDescription] =
     ElementMatchers.is(classOf[AnyRef].getMethod("getClass"))
 
-  private[plutonium] trait StateAcquisition[
-      AcquiredState, NonPersistentAcquiredState] {
-    def acquireState(state: AcquiredState)
-    def acquireNonPersistentState(state: NonPersistentAcquiredState)
+  private[plutonium] trait StateAcquisition[AcquiredState] {
+    def acquire(acquiredState: AcquiredState)
   }
 
   trait AcquiredStateCapturingId {
@@ -134,16 +131,10 @@ object WorldImplementationCodeFactoring {
       acquiredState.uniqueItemSpecification.id
   }
 
-  trait BasicNonPersistentAcquiredState
-
-  trait ProxyFactory[
-      AcquiredState <: AcquiredStateCapturingId,
-      NonPersistentAcquiredState <: BasicNonPersistentAcquiredState] {
+  trait ProxyFactory[AcquiredState <: AcquiredStateCapturingId] {
     val isForRecordingOnly: Boolean
 
     val acquiredStateClazz: Class[_ <: AcquiredState]
-
-    val nonPersistentAcquiredStateClazz: Class[_ <: NonPersistentAcquiredState]
 
     private def createProxyClass(clazz: Class[_]): Class[_] = {
       val builder = byteBuddy
@@ -151,21 +142,17 @@ object WorldImplementationCodeFactoring {
         .implement(additionalInterfaces.toSeq)
         .ignoreAlso(ElementMatchers.named[MethodDescription]("_isGhost"))
         .defineField("acquiredState", acquiredStateClazz)
-        .defineField("nonPersistentAcquiredState",
-                     nonPersistentAcquiredStateClazz)
         .annotateField(DoNotSerializeAnnotation.annotation)
 
       val stateAcquisitionTypeBuilder =
         TypeDescription.Generic.Builder.parameterizedType(
-          classOf[StateAcquisition[AcquiredState, NonPersistentAcquiredState]],
-          Seq(acquiredStateClazz, nonPersistentAcquiredStateClazz))
+          classOf[StateAcquisition[AcquiredState]],
+          Seq(acquiredStateClazz))
 
       val builderWithInterceptions = configureInterceptions(builder)
         .implement(stateAcquisitionTypeBuilder.build)
-        .method(ElementMatchers.named("acquireState"))
+        .method(ElementMatchers.named("acquire"))
         .intercept(FieldAccessor.ofField("acquiredState"))
-        .method(ElementMatchers.named("acquireNonPersistentState"))
-        .intercept(FieldAccessor.ofField("nonPersistentAcquiredState"))
         .method(ElementMatchers.named("id"))
         .intercept(MethodDelegation.to(id))
 
@@ -178,8 +165,7 @@ object WorldImplementationCodeFactoring {
     protected def configureInterceptions(builder: Builder[_]): Builder[_]
 
     def constructFrom[Item: TypeTag](
-        stateToBeAcquiredByProxy: AcquiredState,
-        nonPersistentStateToBeAcquiredByProxy: NonPersistentAcquiredState) = {
+        stateToBeAcquiredByProxy: AcquiredState) = {
       // NOTE: this returns items that are proxies to 'Item' rather than direct instances of 'Item' itself. Depending on the
       // context (using a scope created by a client from a world, as opposed to while building up that scope from patches),
       // the items may forbid certain operations on them - e.g. for rendering from a client's scope, the items should be
@@ -199,13 +185,9 @@ object WorldImplementationCodeFactoring {
       }
       val proxy = proxyClazz.newInstance().asInstanceOf[Item]
 
-      val stateAcquisition = proxy
-        .asInstanceOf[
-          StateAcquisition[AcquiredState, NonPersistentAcquiredState]]
-      stateAcquisition
-        .acquireState(stateToBeAcquiredByProxy)
-      stateAcquisition.acquireNonPersistentState(
-        nonPersistentStateToBeAcquiredByProxy)
+      proxy
+        .asInstanceOf[StateAcquisition[AcquiredState]]
+        .acquire(stateToBeAcquiredByProxy)
 
       proxy
     }
@@ -233,14 +215,10 @@ object WorldImplementationCodeFactoring {
       mutable.Map
         .empty[universe.Type, Class[_]]
 
-    class AcquiredState(val uniqueItemSpecification: UniqueItemSpecification)
-        extends AcquiredStateCapturingId
-        with AnnihilationHook
-
-    trait MutationSupport extends BasicNonPersistentAcquiredState {
+    trait AcquiredState extends AcquiredStateCapturingId with AnnihilationHook {
       def itemIsLocked: Boolean
 
-      def recordMutation(item: ItemExtensionApi)
+      def recordMutation(item: ItemExtensionApi): Unit
     }
 
     val matchRecordAnnihilation: ElementMatcher[MethodDescription] =
@@ -281,13 +259,11 @@ object WorldImplementationCodeFactoring {
 
     object mutation {
       @RuntimeType
-      def apply(
-          @Origin method: Method,
-          @This target: ItemExtensionApi,
-          @SuperCall superCall: Callable[_],
-          @FieldValue("acquiredState") acquiredState: AcquiredState,
-          @FieldValue("nonPersistentAcquiredState") nonPersistentAcquiredState: MutationSupport) = {
-        if (nonPersistentAcquiredState.itemIsLocked) {
+      def apply(@Origin method: Method,
+                @This target: ItemExtensionApi,
+                @SuperCall superCall: Callable[_],
+                @FieldValue("acquiredState") acquiredState: AcquiredState) = {
+        if (acquiredState.itemIsLocked) {
           throw new UnsupportedOperationException(
             s"Attempt to write via: '$method' to an item: '$target' rendered from a bitemporal query.")
         }
@@ -300,7 +276,7 @@ object WorldImplementationCodeFactoring {
 
         superCall.call()
 
-        nonPersistentAcquiredState.recordMutation(target)
+        acquiredState.recordMutation(target)
       }
     }
 
@@ -347,12 +323,10 @@ object WorldImplementationCodeFactoring {
         acquiredState.uniqueItemSpecification
     }
 
-    object proxyFactory extends ProxyFactory[AcquiredState, MutationSupport] {
+    object proxyFactory extends ProxyFactory[AcquiredState] {
       override val isForRecordingOnly = false
 
       override val acquiredStateClazz = classOf[AcquiredState]
-
-      override val nonPersistentAcquiredStateClazz = classOf[MutationSupport]
 
       override val additionalInterfaces: Array[Class[_]] =
         QueryCallbackStuff.additionalInterfaces
@@ -470,19 +444,15 @@ object WorldImplementationCodeFactoring {
         import QueryCallbackStuff._
 
         val stateToBeAcquiredByProxy: AcquiredState =
-          new AcquiredState(UniqueItemSpecification(id, typeTag[Item]))
-
-        val nonPersistentStateToBeAcquiredByProxy: MutationSupport =
-          new MutationSupport {
-            override def recordMutation(item: ItemExtensionApi): Unit = {}
-
-            override def itemIsLocked: Boolean =
+          new AcquiredState {
+            val uniqueItemSpecification: UniqueItemSpecification =
+              UniqueItemSpecification(id, typeTag[Item])
+            def itemIsLocked: Boolean =
               identifiedItemsScopeThis.allItemsAreLocked
+            def recordMutation(item: ItemExtensionApi): Unit = {}
           }
 
-        val item = proxyFactory.constructFrom(
-          stateToBeAcquiredByProxy,
-          nonPersistentStateToBeAcquiredByProxy)
+        val item = proxyFactory.constructFrom(stateToBeAcquiredByProxy)
         idToItemsMultiMap.addBinding(id, item)
         item
       }

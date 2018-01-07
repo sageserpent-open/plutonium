@@ -11,7 +11,6 @@ import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.WorldImplementationCodeFactoring.{
   AcquiredStateCapturingId,
   IdentifiedItemsScope,
-  BasicNonPersistentAcquiredState,
   ProxyFactory,
   firstMethodIsOverrideCompatibleWithSecond
 }
@@ -89,14 +88,10 @@ object capturePatches {
       }
     }
 
-    object proxyFactory
-        extends ProxyFactory[AcquiredState, BasicNonPersistentAcquiredState] {
+    object proxyFactory extends ProxyFactory[AcquiredState] {
       val isForRecordingOnly = true
 
       override val acquiredStateClazz = classOf[AcquiredState]
-
-      override val nonPersistentAcquiredStateClazz =
-        classOf[BasicNonPersistentAcquiredState]
 
       override val additionalInterfaces: Array[Class[_]] =
         RecordingCallbackStuff.additionalInterfaces
@@ -115,8 +110,6 @@ object capturePatches {
     }
   }
 
-  object stubNonPersistentAcquiredState extends BasicNonPersistentAcquiredState
-
   def apply(update: RecorderFactory => Unit): Seq[AbstractPatch] = {
     val capturedPatches =
       mutable.MutableList.empty[AbstractPatch]
@@ -134,8 +127,7 @@ object capturePatches {
           }
         }
 
-        proxyFactory.constructFrom[Item](stateToBeAcquiredByProxy,
-                                         stubNonPersistentAcquiredState)
+        proxyFactory.constructFrom[Item](stateToBeAcquiredByProxy)
       }
     }
 
