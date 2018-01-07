@@ -9,7 +9,9 @@ import scala.reflect.runtime.universe._
 object UniqueItemSpecificationSerializationSupport {
   val javaSerializer = new JavaSerializer
 
-  class SpecialSerializer[Item] extends Serializer[UniqueItemSpecification] {
+  type TypeTagForUniqueItemSpecification = TypeTag[UniqueItemSpecification]
+
+  class SpecialSerializer extends Serializer[UniqueItemSpecification] {
     override def write(kryo: Kryo,
                        output: Output,
                        data: UniqueItemSpecification): Unit = {
@@ -24,9 +26,10 @@ object UniqueItemSpecificationSerializationSupport {
         dataType: Class[UniqueItemSpecification]): UniqueItemSpecification = {
       val id = kryo.readClassAndObject(input).asInstanceOf[Any]
       val typeTag = kryo
-        .readObject[TypeTag[Item]](input,
-                                   classOf[TypeTag[Item]],
-                                   javaSerializer)
+        .readObject[TypeTagForUniqueItemSpecification](
+          input,
+          classOf[TypeTagForUniqueItemSpecification],
+          javaSerializer)
       UniqueItemSpecification(id, typeTag)
     }
   }

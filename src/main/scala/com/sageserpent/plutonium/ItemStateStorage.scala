@@ -117,13 +117,9 @@ trait ItemStateStorage { itemStateStorageObject =>
       kryo.setInstantiatorStrategy(instantiatorStrategy)
       kryo
     }
-  }.withRegistrar((kryo: Kryo) => {
-    def registerSerializerForUniqueItemSpecification[Item]() = {
-      kryo.register(classOf[UniqueItemSpecification],
-                    new SpecialSerializer[Item])
-    }
-    registerSerializerForUniqueItemSpecification()
-  })
+  }.withRegistrar { (kryo: Kryo) =>
+    kryo.register(classOf[UniqueItemSpecification], new SpecialSerializer)
+  }
 
   private val kryoPool =
     KryoPool.withByteArrayOutputStream(40, kryoInstantiator)
@@ -143,7 +139,8 @@ trait ItemStateStorage { itemStateStorageObject =>
     def blobStorageTimeslice
       : BlobStorage.Timeslice // NOTE: abstracting this allows the prospect of a 'moving' timeslice for use when executing an update plan.
 
-    def itemFor[Item](uniqueItemSpecification: UniqueItemSpecification): Item = {
+    def itemFor[Item](
+        uniqueItemSpecification: UniqueItemSpecification): Item = {
       itemDeserializationThreadContextAccess.withValue(
         Some(new ItemDeserializationThreadContext)) {
         itemStateStorageObject.itemFor[Item](uniqueItemSpecification)

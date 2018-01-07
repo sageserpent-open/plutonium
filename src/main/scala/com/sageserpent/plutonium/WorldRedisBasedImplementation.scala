@@ -7,11 +7,7 @@ import java.util.{NoSuchElementException, UUID}
 import com.esotericsoftware.kryo.Kryo
 import com.lambdaworks.redis.RedisClient
 import com.lambdaworks.redis.api.rx.RedisReactiveCommands
-import com.lambdaworks.redis.codec.{
-  ByteArrayCodec,
-  RedisCodec,
-  Utf8StringCodec
-}
+import com.lambdaworks.redis.codec.{ByteArrayCodec, RedisCodec, Utf8StringCodec}
 import com.sageserpent.americium.{PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.twitter.chill.{KryoPool, ScalaKryoInstantiator}
@@ -28,13 +24,9 @@ object WorldRedisBasedImplementation {
 
   val kryoPool = KryoPool.withByteArrayOutputStream(
     40,
-    new ScalaKryoInstantiator().withRegistrar((kryo: Kryo) => {
-      def registerSerializerForUniqueItemSpecification[Item]() = {
-        kryo.register(classOf[UniqueItemSpecification],
-                      new SpecialSerializer[Item])
-      }
-      registerSerializerForUniqueItemSpecification()
-    })
+    new ScalaKryoInstantiator().withRegistrar { (kryo: Kryo) =>
+      kryo.register(classOf[UniqueItemSpecification], new SpecialSerializer)
+    }
   )
 
   object redisCodecDelegatingKeysToStandardCodec
