@@ -149,8 +149,6 @@ object WorldImplementationCodeFactoring {
       val builder = byteBuddy
         .subclass(clazz, ConstructorStrategy.Default.DEFAULT_CONSTRUCTOR)
         .implement(additionalInterfaces.toSeq)
-        .method(matchGetClass)
-        .intercept(FixedValue.value(clazz))
         .ignoreAlso(ElementMatchers.named[MethodDescription]("_isGhost"))
         .defineField("acquiredState", acquiredStateClazz)
         .defineField("nonPersistentAcquiredState",
