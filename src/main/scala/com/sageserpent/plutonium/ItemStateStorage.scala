@@ -7,7 +7,12 @@ import com.esotericsoftware.kryo.util.ObjectMap
 import com.esotericsoftware.kryo.{Kryo, Serializer}
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.UniqueItemSpecificationSerializationSupport.SpecialSerializer
-import com.twitter.chill.{KryoBase, KryoPool, ScalaKryoInstantiator}
+import com.twitter.chill.{
+  AllScalaRegistrar,
+  KryoBase,
+  KryoPool,
+  ScalaKryoInstantiator
+}
 import org.objenesis.instantiator.ObjectInstantiator
 import org.objenesis.strategy.InstantiatorStrategy
 
@@ -92,7 +97,28 @@ trait ItemStateStorage { itemStateStorageObject =>
 
   val kryoInstantiator = new ScalaKryoInstantiator {
     override def newKryo(): KryoBase = {
-      val kryo = super.newKryo()
+      val kryo = {
+        val k = new KryoBase {
+          // Workaround the bug in Chill's own workaround for the claimed Kryo bug. Sheez!
+          override def newInstantiator(
+              cls: Class[_]): ObjectInstantiator[AnyRef] =
+            getInstantiatorStrategy.newInstantiatorOf[AnyRef](
+              cls.asInstanceOf[Class[AnyRef]])
+        }
+        // The rest of this is an unavoidable cut and paste from Chill.
+        k.setRegistrationRequired(false)
+        k.setInstantiatorStrategy(
+          new org.objenesis.strategy.StdInstantiatorStrategy)
+
+        // Handle cases where we may have an odd classloader setup like with libjars
+        // for hadoop
+        val classLoader = Thread.currentThread.getContextClassLoader
+        k.setClassLoader(classLoader)
+        val reg = new AllScalaRegistrar
+        reg(k)
+        k
+      }
+
       kryo.setDefaultSerializer(defaultSerializerFactory)
       kryo.addDefaultSerializer(
         clazzOfItemSuperType,
