@@ -281,7 +281,9 @@ trait BitemporalBehaviours
                     val itemsFromSpecificQuery =
                       scope.render(Bitemporal.withId[AHistory](id)).toSet
                     itemsFromSpecificQuery
-                      .subsetOf(itemsFromWildcardQuery) :| s"itemsFromSpecificQuery.subsetOf(${itemsFromWildcardQuery})"
+                      .subsetOf(itemsFromWildcardQuery) :| s"${itemsFromSpecificQuery.map(
+                      _.asInstanceOf[ItemExtensionApi].uniqueItemSpecification)} should be a subset of: ${itemsFromWildcardQuery.map(
+                      _.asInstanceOf[ItemExtensionApi].uniqueItemSpecification)}"
                   }): _*)
                 } else Prop.undecided
               }
@@ -490,7 +492,8 @@ trait BitemporalBehaviours
                       : Bitemporal[(AHistory, AHistory)] =
                       (bitemporalQueryOne |@| bitemporalQueryTwo)(
                         (_: AHistory, _: AHistory))
-                    val numberOfItems = scope.numberOf[AHistory](id)
+                    val numberOfItems =
+                      scope.numberOf(Bitemporal.withId[AHistory](id))
                     val itemsFromAgglomeratedQuery =
                       scope.render(agglomeratedBitemporalQuery).toSet
                     val repeatedItemPairs

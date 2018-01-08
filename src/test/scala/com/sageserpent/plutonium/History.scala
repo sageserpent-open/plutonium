@@ -4,6 +4,19 @@ abstract class History {
   type Id
   val id: Id
 
+  override def hashCode(): Int = (id, datums.hashCode).hashCode()
+
+  override def equals(that: scala.Any): Boolean = {
+    val thisClazz = getClass
+    val thatClazz = that.getClass
+
+    if (thatClazz.isAssignableFrom(thisClazz)) that.equals(this)
+    else if (thisClazz.isAssignableFrom(thatClazz)) {
+      val thatHistory = that.asInstanceOf[History]
+      id == thatHistory.id && datums == thatHistory.datums
+    } else false
+  }
+
   def checkInvariant(): Unit = {
     if (invariantBreakageScheduled) {
       // NOTE: breakage of a bitemporal invariant is *not* a logic error; we expect
