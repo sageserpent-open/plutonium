@@ -149,7 +149,7 @@ class TimelineImplementation[EventId](
           case (uniqueItemSpecification, snapshot) =>
             blobStorageTimeSlice.snapshotBlobFor(uniqueItemSpecification) match {
               case Some(snapshotFromLastRevision) =>
-                snapshot != snapshotFromLastRevision
+                !(snapshot sameElements snapshotFromLastRevision)
               case None => true
             }
         } toMap
