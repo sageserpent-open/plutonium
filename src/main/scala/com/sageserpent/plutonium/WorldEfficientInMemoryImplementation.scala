@@ -6,7 +6,6 @@ import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.World.Revision
 
 import scala.collection.mutable.MutableList
-import scala.reflect.runtime.universe.{Super => _, This => _, _}
 
 class WorldEfficientInMemoryImplementation[EventId]
     extends WorldImplementationCodeFactoring[EventId] {
