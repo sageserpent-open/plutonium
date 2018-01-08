@@ -216,6 +216,15 @@ object WorldImplementationCodeFactoring {
         .empty[universe.Type, Class[_]]
 
     trait AcquiredState extends AcquiredStateCapturingId with AnnihilationHook {
+      var _isGhost = false
+
+      def recordAnnihilation(): Unit = {
+        require(!_isGhost)
+        _isGhost = true
+      }
+
+      def isGhost: Boolean = _isGhost
+
       def itemIsLocked: Boolean
 
       def recordMutation(item: ItemExtensionApi): Unit
