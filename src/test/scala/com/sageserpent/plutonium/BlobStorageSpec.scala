@@ -11,7 +11,7 @@ import com.sageserpent.americium.{
   PositiveInfinity,
   Unbounded
 }
-import com.sageserpent.plutonium.BlobStorage.SnapshotBlob
+import com.sageserpent.plutonium.BlobStorage.{SnapshotBlob, Timeslice}
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import org.scalacheck.{Arbitrary, Gen, ShrinkLowPriority => NoShrinking}
 import org.scalatest.LoneElement._
@@ -271,16 +271,26 @@ class BlobStorageSpec
         val blobStorage: BlobStorage[EventId] =
           blobStorageFrom(revisions)
 
-        for {
-          TimeSeries(uniqueItemSpecification, snapshots, queryTimes) <- lotsOfFinalTimeSeries
-          (snapshotBlob: Option[SnapshotBlob], snapshotTime, queryTime) <- snapshots zip queryTimes map {
-            case ((snapshotTime, snapshotBlob), queryTime) =>
-              (snapshotBlob, snapshotTime, queryTime)
-          }
-        } {
-          val timeSlice = blobStorage.timeSlice(queryTime)
+        for (TimeSeries(uniqueItemSpecification, snapshots, queryTimes) <- lotsOfFinalTimeSeries) {
+          def checkExpectationsForNonExistence(timeSlice: Timeslice)(
+              uniqueItemSpecification: UniqueItemSpecification): Any = {
+            val id              = uniqueItemSpecification.id
+            val explicitTypeTag = uniqueItemSpecification.typeTag
 
-          def checkExpectations(
+            val retrievedUniqueItemSpecifications =
+              timeSlice.uniqueItemQueriesFor(id)(explicitTypeTag)
+
+            retrievedUniqueItemSpecifications shouldBe empty
+
+            val retrievedSnapshotBlob: Option[SnapshotBlob] =
+              timeSlice.snapshotBlobFor(uniqueItemSpecification)
+
+            retrievedSnapshotBlob shouldBe None
+          }
+
+          def checkExpectationsForExistence(
+              timeSlice: Timeslice,
+              expectedSnapshotBlob: Option[SnapshotBlob])(
               uniqueItemSpecification: UniqueItemSpecification) = {
             val id              = uniqueItemSpecification.id
             val explicitTypeTag = uniqueItemSpecification.typeTag
@@ -291,7 +301,7 @@ class BlobStorageSpec
             val retrievedUniqueItemSpecifications =
               timeSlice.uniqueItemQueriesFor(id)(explicitTypeTag)
 
-            snapshotBlob match {
+            expectedSnapshotBlob match {
               case Some(snapshotBlob) =>
                 allRetrievedUniqueItemSpecifications map (_.id) should contain(
                   id)
@@ -322,37 +332,42 @@ class BlobStorageSpec
             }
           }
 
-          checkExpectations(uniqueItemSpecification)
+          for ((snapshotBlob: Option[SnapshotBlob], snapshotTime, queryTime) <- snapshots zip queryTimes map {
+                 case ((snapshotTime, snapshotBlob), queryTime) =>
+                   (snapshotBlob, snapshotTime, queryTime)
+               }) {
+            val timeSlice = blobStorage.timeSlice(queryTime)
 
-          checkExpectations(
-            UniqueItemSpecification(uniqueItemSpecification.id, typeTag[Any]))
+            {
+              val checkExpectations =
+                checkExpectationsForExistence(timeSlice, snapshotBlob)(_)
 
-          val allRetrievedUniqueItemSpecifications =
-            timeSlice.uniqueItemQueriesFor(typeTag[NoKindOfThing])
+              checkExpectations(uniqueItemSpecification)
 
-          def checkExpectationsForNonExistence(
-              uniqueItemSpecification: UniqueItemSpecification): Any = {
-            val retrievedUniqueItemSpecifications =
-              timeSlice.uniqueItemQueriesFor(uniqueItemSpecification.id)
+              checkExpectations(
+                UniqueItemSpecification(uniqueItemSpecification.id,
+                                        typeTag[Any]))
+            }
 
-            allRetrievedUniqueItemSpecifications shouldBe empty
+            {
+              val checkExpectations =
+                checkExpectationsForNonExistence(timeSlice)(_)
 
-            retrievedUniqueItemSpecifications shouldBe empty
+              checkExpectations(
+                UniqueItemSpecification(uniqueItemSpecification.id,
+                                        typeTag[NoKindOfThing]))
 
-            val retrievedSnapshotBlob: Option[SnapshotBlob] =
-              timeSlice.snapshotBlobFor(uniqueItemSpecification)
+              val allRetrievedUniqueItemSpecifications =
+                timeSlice.uniqueItemQueriesFor(typeTag[NoKindOfThing])
 
-            retrievedSnapshotBlob shouldBe None
+              allRetrievedUniqueItemSpecifications shouldBe empty
+
+              val nonExistentItemId = "I do not exist."
+
+              checkExpectations(
+                UniqueItemSpecification(nonExistentItemId, typeTag[Any]))
+            }
           }
-
-          checkExpectationsForNonExistence(
-            UniqueItemSpecification(uniqueItemSpecification.id,
-                                    typeTag[NoKindOfThing]))
-
-          val nonExistentItemId = "I do not exist."
-
-          checkExpectationsForNonExistence(
-            UniqueItemSpecification(nonExistentItemId, typeTag[Any]))
         }
     }
   }
