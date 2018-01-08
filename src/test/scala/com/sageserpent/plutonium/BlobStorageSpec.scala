@@ -288,6 +288,12 @@ class BlobStorageSpec
             retrievedSnapshotBlob shouldBe None
           }
 
+          if (snapshots.head._1 > NegativeInfinity()) {
+            val timeSlice = blobStorage.timeSlice(NegativeInfinity())
+
+            checkExpectationsForNonExistence(timeSlice)(uniqueItemSpecification)
+          }
+
           def checkExpectationsForExistence(
               timeSlice: Timeslice,
               expectedSnapshotBlob: Option[SnapshotBlob])(
