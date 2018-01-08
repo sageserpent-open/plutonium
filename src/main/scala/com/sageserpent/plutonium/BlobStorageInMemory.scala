@@ -18,8 +18,9 @@ object BlobStorageInMemory {
   trait Lifecycle[EventId] {
     def isValid(when: Unbounded[Instant],
                 validRevisionFor: EventId => Revision): Boolean
-    def snapshotBlobFor(when: Unbounded[Instant],
-                        validRevisionFor: EventId => Revision): SnapshotBlob
+    def snapshotBlobFor(
+        when: Unbounded[Instant],
+        validRevisionFor: EventId => Revision): Option[SnapshotBlob]
 
     def addSnapshotBlob(eventId: EventId,
                         when: Unbounded[Instant],
@@ -27,15 +28,6 @@ object BlobStorageInMemory {
                         revision: Revision): Lifecycle[EventId]
 
     val itemTypeTag: TypeTag[_ <: Any]
-  }
-
-  trait LifecycleContracts[EventId] extends Lifecycle[EventId] {
-    abstract override def snapshotBlobFor(
-        when: Unbounded[Instant],
-        validRevisionFor: EventId => Revision): SnapshotBlob = {
-      require(isValid(when, validRevisionFor))
-      super.snapshotBlobFor(when, validRevisionFor)
-    }
   }
 
   implicit val isSeqLike = new IsSeqLike[SeqView[Unbounded[Instant], Seq[_]]] {
@@ -95,14 +87,13 @@ object BlobStorageInMemory {
 
     override def snapshotBlobFor(
         when: Unbounded[Instant],
-        validRevisionFor: EventId => Revision): SnapshotBlob = {
+        validRevisionFor: EventId => Revision): Option[SnapshotBlob] = {
       val index = indexOf(when, validRevisionFor)
 
-      assert(-1 != index)
-
-      snapshotBlobs(index) match {
-        case (_, (Some(snapshot), _, _)) => snapshot
-      }
+      if (-1 != index)
+        snapshotBlobs(index) match {
+          case (_, (snapshot, _, _)) => snapshot
+        } else None
     }
 
     override def addSnapshotBlob(
@@ -115,10 +106,10 @@ object BlobStorageInMemory {
         indexToSearchDownFromOrInsertAt(when, snapshotBlobTimes)
       new LifecycleImplementation(
         itemTypeTag = this.itemTypeTag,
-        snapshotBlobs = snapshotBlobs
-          .patch(insertionPoint,
-                 Seq((when, (snapshotBlob, eventId, revision))),
-                 0)) with BlobStorageInMemory.LifecycleContracts[EventId]
+        snapshotBlobs =
+          snapshotBlobs.patch(insertionPoint,
+                              Seq((when, (snapshotBlob, eventId, revision))),
+                              0))
     }
   }
 
@@ -172,10 +163,12 @@ case class BlobStorageInMemory[EventId] private (
       override def snapshotBlobFor(
           uniqueItemSpecification: UniqueItemSpecification)
         : Option[SnapshotBlob] =
-        lifecycles
-          .get(uniqueItemSpecification.id)
-          .flatMap(_.find(uniqueItemSpecification.typeTag == _.itemTypeTag))
-          .map(_.snapshotBlobFor(when, eventRevisions.apply))
+        for {
+          lifecycles <- lifecycles.get(uniqueItemSpecification.id)
+          lifecycle <- lifecycles.find(
+            uniqueItemSpecification.typeTag == _.itemTypeTag)
+          snapshot <- lifecycle.snapshotBlobFor(when, eventRevisions.apply)
+        } yield snapshot
     }
 
     new TimesliceImplementation with TimesliceContracts
@@ -222,17 +215,16 @@ case class BlobStorageInMemory[EventId] private (
                     lifecycles.getOrElse(
                       id,
                       HashBag.from(
-                        (new BlobStorageInMemory.LifecycleImplementation[
-                          EventId](itemTypeTag = itemTypeTag)
-                        with BlobStorageInMemory.LifecycleContracts[EventId]: BlobStorageInMemory.Lifecycle[
+                        (new BlobStorageInMemory.LifecycleImplementation[EventId](
+                          itemTypeTag = itemTypeTag): BlobStorageInMemory.Lifecycle[
                           EventId]) -> 1)
                     )
                   id -> lifecyclesForId.map(
                     lifecycle =>
-                    if (itemTypeTag == lifecycle.itemTypeTag)
-                      lifecycle
-                        .addSnapshotBlob(eventId, when, snapshot, newRevision)
-                    else lifecycle)
+                      if (itemTypeTag == lifecycle.itemTypeTag)
+                        lifecycle
+                          .addSnapshotBlob(eventId, when, snapshot, newRevision)
+                      else lifecycle)
               }
               lifecycles ++ updatedLifecycles
           }
