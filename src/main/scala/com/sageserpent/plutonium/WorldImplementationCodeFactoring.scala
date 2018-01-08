@@ -517,11 +517,11 @@ object WorldImplementationCodeFactoring {
 
           val itemToBeAnnihilated = itemsSelectedForAnnihilation.head
 
+          items -= itemToBeAnnihilated
+
           itemToBeAnnihilated
             .asInstanceOf[AnnihilationHook]
             .recordAnnihilation()
-
-          items -= itemToBeAnnihilated
 
           if (items.isEmpty) {
             idToItemsMultiMap.remove(id)
