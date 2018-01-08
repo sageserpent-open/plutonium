@@ -219,6 +219,8 @@ object WorldImplementationCodeFactoring {
       def itemIsLocked: Boolean
 
       def recordMutation(item: ItemExtensionApi): Unit
+
+      var unlockFullReadAccess: Boolean = false
     }
 
     val matchRecordAnnihilation: ElementMatcher[MethodDescription] =
@@ -234,6 +236,9 @@ object WorldImplementationCodeFactoring {
       firstMethodIsOverrideCompatibleWithSecond(
         _,
         IdentifiedItemsScope.isGhostProperty)
+
+    val matchUncheckedReadAccess: ElementMatcher[MethodDescription] =
+      IdentifiedItemsScope.alwaysAllowsReadAccessTo(_)
 
     val matchCheckedReadAccess: ElementMatcher[MethodDescription] =
       !IdentifiedItemsScope.alwaysAllowsReadAccessTo(_)
@@ -291,13 +296,29 @@ object WorldImplementationCodeFactoring {
       def apply(@Origin method: Method,
                 @SuperCall superCall: Callable[_],
                 @FieldValue("acquiredState") acquiredState: AcquiredState) = {
-        if (acquiredState.isGhost) {
+        if (acquiredState.isGhost && !acquiredState.unlockFullReadAccess) {
           val uniqueItemSpecification = acquiredState.uniqueItemSpecification
           throw new UnsupportedOperationException(
             s"Attempt to read via: '$method' from a ghost item of id: '${uniqueItemSpecification.id}' and type '${uniqueItemSpecification.typeTag}'.")
         }
 
         superCall.call()
+      }
+    }
+
+    object uncheckedReadAccess {
+      @RuntimeType
+      def apply(@Origin method: Method,
+                @SuperCall superCall: Callable[_],
+                @FieldValue("acquiredState") acquiredState: AcquiredState) = {
+        for {
+          _ <- makeManagedResource { acquiredState.unlockFullReadAccess = true } {
+            _ =>
+              acquiredState.unlockFullReadAccess = false
+          }(List.empty)
+        } {
+          superCall.call()
+        }
       }
     }
 
@@ -336,6 +357,8 @@ object WorldImplementationCodeFactoring {
       override protected def configureInterceptions(
           builder: Builder[_]): Builder[_] =
         builder
+          .method(matchUncheckedReadAccess)
+          .intercept(MethodDelegation.to(uncheckedReadAccess))
           .method(matchCheckedReadAccess)
           .intercept(MethodDelegation.to(checkedReadAccess))
           .method(matchIsGhost)
