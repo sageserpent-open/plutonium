@@ -2,6 +2,7 @@ package com.sageserpent.plutonium
 
 import java.lang.reflect.Method
 import java.time.Instant
+import java.util.concurrent.Callable
 
 import com.esotericsoftware.kryo.serializers.JavaSerializer
 import com.esotericsoftware.kryo.serializers.FieldSerializer.Bind
@@ -24,6 +25,8 @@ import scala.collection.mutable
 import scala.reflect.runtime.universe
 import scala.reflect.runtime.universe.{This => _, _}
 
+import resource._
+
 // NOTE: if 'when' is 'NegativeInfinity', the event is taken to be 'at the beginning of time' - this is a way of introducing
 // timeless events, although it permits following events to modify the outcome, which may be quite handy. For now, there is
 // no such corresponding use for 'PositiveInfinity' - that results in a precondition failure.
@@ -44,6 +47,8 @@ object capturePatches {
 
     trait AcquiredState extends AcquiredStateCapturingId {
       def capturePatch(patch: AbstractPatch): Unit
+
+      var unlockFullReadAccess: Boolean = false
     }
 
     val matchMutation: ElementMatcher[MethodDescription] = methodDescription =>
@@ -60,6 +65,9 @@ object capturePatches {
           .alwaysAllowsReadAccessTo(methodDescription) && !RecordingCallbackStuff
           .isFinalizer(methodDescription) && !methodDescription.getReturnType
           .represents(classOf[Unit])
+
+    val matchPermittedReadAccess: ElementMatcher[MethodDescription] =
+      IdentifiedItemsScope.alwaysAllowsReadAccessTo(_)
 
     object mutation {
       @RuntimeType
@@ -82,10 +90,28 @@ object capturePatches {
 
     object forbiddenReadAccess {
       @RuntimeType
-      def apply(@Origin method: Method, @This target: AnyRef) = {
-        throw new UnsupportedOperationException(
-          s"Attempt to call method: '$method' with a non-unit return type on a recorder proxy: '$target' while capturing a change or measurement.")
-      }
+      def apply(@Origin method: Method,
+                @This target: AnyRef,
+                @SuperCall superCall: Callable[_],
+                @FieldValue("acquiredState") acquiredState: AcquiredState) =
+        if (!acquiredState.unlockFullReadAccess) {
+          throw new UnsupportedOperationException(
+            s"Attempt to call method: '$method' with a non-unit return type on a recorder proxy: '$target' while capturing a change or measurement.")
+        } else superCall.call()
+    }
+
+    object permittedReadAccess {
+      @RuntimeType
+      def apply(@SuperCall superCall: Callable[_],
+                @FieldValue("acquiredState") acquiredState: AcquiredState) =
+        for {
+          _ <- makeManagedResource { acquiredState.unlockFullReadAccess = true } {
+            _ =>
+              acquiredState.unlockFullReadAccess = false
+          }(List.empty)
+        } {
+          superCall.call()
+        }
     }
 
     object proxyFactory extends ProxyFactory[AcquiredState] {
@@ -101,6 +127,8 @@ object capturePatches {
       override protected def configureInterceptions(
           builder: Builder[_]): Builder[_] =
         builder
+          .method(matchPermittedReadAccess)
+          .intercept(MethodDelegation.to(permittedReadAccess))
           .method(matchForbiddenReadAccess)
           .intercept(MethodDelegation.to(forbiddenReadAccess))
           .method(matchUniqueItemSpecification)
