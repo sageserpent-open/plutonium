@@ -10,11 +10,10 @@ abstract class History {
     val thisClazz = getClass
     val thatClazz = that.getClass
 
-    if (thatClazz.isAssignableFrom(thisClazz)) that.equals(this)
-    else if (thisClazz.isAssignableFrom(thatClazz)) {
+    if (thisClazz.isAssignableFrom(thatClazz)) {
       val thatHistory = that.asInstanceOf[History]
       id == thatHistory.id && datums == thatHistory.datums
-    } else false
+    } else thatClazz.isAssignableFrom(thisClazz) && that.equals(this)
   }
 
   def checkInvariant(): Unit = {
