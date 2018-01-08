@@ -18,9 +18,8 @@ object BlobStorageInMemory {
   trait Lifecycle[EventId] {
     def isValid(when: Unbounded[Instant],
                 validRevisionFor: EventId => Revision): Boolean
-    def snapshotBlobFor(
-        when: Unbounded[Instant],
-        validRevisionFor: EventId => Revision): Option[SnapshotBlob]
+    def snapshotBlobFor(when: Unbounded[Instant],
+                        validRevisionFor: EventId => Revision): SnapshotBlob
 
     def addSnapshotBlob(eventId: EventId,
                         when: Unbounded[Instant],
@@ -87,13 +86,14 @@ object BlobStorageInMemory {
 
     override def snapshotBlobFor(
         when: Unbounded[Instant],
-        validRevisionFor: EventId => Revision): Option[SnapshotBlob] = {
+        validRevisionFor: EventId => Revision): SnapshotBlob = {
       val index = indexOf(when, validRevisionFor)
 
-      if (-1 != index)
-        snapshotBlobs(index) match {
-          case (_, (snapshot, _, _)) => snapshot
-        } else None
+      assert(-1 != index)
+
+      snapshotBlobs(index) match {
+        case (_, (Some(snapshot), _, _)) => snapshot
+      }
     }
 
     override def addSnapshotBlob(
@@ -167,8 +167,8 @@ case class BlobStorageInMemory[EventId] private (
           lifecycles <- lifecycles.get(uniqueItemSpecification.id)
           lifecycle <- lifecycles.find(
             uniqueItemSpecification.typeTag == _.itemTypeTag)
-          snapshot <- lifecycle.snapshotBlobFor(when, eventRevisions.apply)
-        } yield snapshot
+          if lifecycle.isValid(when, eventRevisions.apply)
+        } yield lifecycle.snapshotBlobFor(when, eventRevisions.apply)
     }
 
     new TimesliceImplementation with TimesliceContracts
