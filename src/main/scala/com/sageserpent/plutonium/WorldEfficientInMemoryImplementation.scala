@@ -36,7 +36,9 @@ class WorldEfficientInMemoryImplementation[EventId]
 
   trait ScopeUsingStorage extends com.sageserpent.plutonium.Scope {
     private def itemCache(): ItemCache = {
-      val timeline = timelines.get(nextRevision) map (_._2) getOrElse emptyTimeline()
+      val timeline = if (nextRevision > World.initialRevision) {
+        timelines(nextRevision - 1)._2
+      } else emptyTimeline()
 
       timeline.itemCacheAt(when)
     }
