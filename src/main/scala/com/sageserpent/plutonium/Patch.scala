@@ -45,6 +45,9 @@ class Patch(methodPieces: MethodPieces,
     extends AbstractPatch {
   import Patch._
 
+  override def toString: String =
+    s"Patch for: '$targetItemSpecification', method: '${method.getName}', arguments: '${wrappedArguments.toList}''"
+
   override def rewriteItemTypeTags(
       uniqueItemSpecificationToTypeTagMap: collection.Map[
         UniqueItemSpecification,

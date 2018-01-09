@@ -23,9 +23,6 @@ abstract class AbstractPatch {
         UniqueItemSpecification,
         TypeTag[_]]): AbstractPatch
 
-  override def toString: String =
-    s"Patch for: '$targetItemSpecification', method: '${method.getName}', arguments: '${argumentItemSpecifications.toList}''"
-
   val method: Method
   val targetItemSpecification: UniqueItemSpecification
   val argumentItemSpecifications: Seq[UniqueItemSpecification]
