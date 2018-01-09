@@ -145,13 +145,6 @@ class TimelineImplementation[EventId](
             val snapshotBlob = itemStateStorageUsingProxies.snapshotFor(item)
 
             uniqueItemSpecification -> snapshotBlob
-        } filter {
-          case (uniqueItemSpecification, snapshot) =>
-            blobStorageTimeSlice.snapshotBlobFor(uniqueItemSpecification) match {
-              case Some(snapshotFromLastRevision) =>
-                !(snapshot sameElements snapshotFromLastRevision)
-              case None => true
-            }
         } toMap
 
         itemsMutatedSinceLastSnapshotHarvest.clear()
