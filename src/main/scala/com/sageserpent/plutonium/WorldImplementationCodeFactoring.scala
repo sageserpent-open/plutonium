@@ -320,14 +320,14 @@ object WorldImplementationCodeFactoring {
       def apply(@Origin method: Method,
                 @SuperCall superCall: Callable[_],
                 @FieldValue("acquiredState") acquiredState: AcquiredState) = {
-        for {
-          _ <- makeManagedResource { acquiredState.unlockFullReadAccess = true } {
-            _ =>
-              acquiredState.unlockFullReadAccess = false
+        if (!acquiredState.unlockFullReadAccess) (for {
+          _ <- makeManagedResource {
+            acquiredState.unlockFullReadAccess = true
+          } { _ =>
+            acquiredState.unlockFullReadAccess = false
           }(List.empty)
-        } {
-          superCall.call()
-        }
+        } yield superCall.call()) acquireAndGet identity
+        else superCall.call()
       }
     }
 

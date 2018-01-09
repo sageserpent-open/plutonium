@@ -680,12 +680,20 @@ trait BitemporalBehaviours
                   MoreSpecificFooHistory#Id])).toSet
 
               if (itemsFromWildcardQuery[History].nonEmpty || ids.nonEmpty) {
-                val wildcardProperty = Prop((itemsFromWildcardQuery[
-                  MoreSpecificFooHistory] map (_.asInstanceOf[FooHistory]))
-                  .subsetOf(itemsFromWildcardQuery[FooHistory])) &&
-                  Prop(
-                    (itemsFromWildcardQuery[FooHistory] map (_.asInstanceOf[
-                      History])).subsetOf(itemsFromWildcardQuery[History]))
+                def subsetProperty[AHistory <: History](
+                    itemSubset: Set[AHistory],
+                    itemSuperset: Set[AHistory]) =
+                  itemSubset
+                    .subsetOf(itemSuperset) :| s"'$itemSubset' should be a subset of '$itemSuperset'."
+
+                val wildcardProperty = subsetProperty(
+                  (itemsFromWildcardQuery[MoreSpecificFooHistory] map (_.asInstanceOf[
+                    FooHistory])),
+                  itemsFromWildcardQuery[FooHistory]) &&
+                  subsetProperty(
+                    itemsFromWildcardQuery[FooHistory] map (_.asInstanceOf[
+                      History]),
+                    itemsFromWildcardQuery[History])
 
                 val genericQueryByIdProperty = Prop.all(ids.toSeq map (id => {
                   def itemsFromGenericQueryById[
@@ -694,13 +702,14 @@ trait BitemporalBehaviours
                       .render(Bitemporal.withId[AHistory](
                         id.asInstanceOf[AHistory#Id]))
                       .toSet
-                  Prop(
-                    (itemsFromGenericQueryById[MoreSpecificFooHistory] map (_.asInstanceOf[
-                      FooHistory]))
-                      .subsetOf(itemsFromGenericQueryById[FooHistory])) &&
-                  Prop(
-                    (itemsFromGenericQueryById[FooHistory] map (_.asInstanceOf[
-                      History])).subsetOf(itemsFromGenericQueryById[History]))
+                  subsetProperty(itemsFromGenericQueryById[
+                                   MoreSpecificFooHistory] map (_.asInstanceOf[
+                                   FooHistory]),
+                                 itemsFromGenericQueryById[FooHistory]) &&
+                  subsetProperty(
+                    itemsFromGenericQueryById[FooHistory] map (_.asInstanceOf[
+                      History]),
+                    itemsFromGenericQueryById[History])
                 }): _*)
 
                 wildcardProperty && genericQueryByIdProperty

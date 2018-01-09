@@ -104,14 +104,14 @@ object capturePatches {
       @RuntimeType
       def apply(@SuperCall superCall: Callable[_],
                 @FieldValue("acquiredState") acquiredState: AcquiredState) =
-        for {
-          _ <- makeManagedResource { acquiredState.unlockFullReadAccess = true } {
-            _ =>
-              acquiredState.unlockFullReadAccess = false
+        if (!acquiredState.unlockFullReadAccess) (for {
+          _ <- makeManagedResource {
+            acquiredState.unlockFullReadAccess = true
+          } { _ =>
+            acquiredState.unlockFullReadAccess = false
           }(List.empty)
-        } {
-          superCall.call()
-        }
+        } yield superCall.call()) acquireAndGet identity
+        else superCall.call()
     }
 
     object proxyFactory extends ProxyFactory[AcquiredState] {
