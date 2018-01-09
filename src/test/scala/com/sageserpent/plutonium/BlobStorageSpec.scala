@@ -150,7 +150,7 @@ class BlobStorageSpec
         uniqueItemSpecificationGenerator) map (_.toSeq) flatMap (
         uniqueItemSpecifications =>
           Gen.sequence[Seq[TimeSeries], TimeSeries](
-            uniqueItemSpecifications map (timeSeriesGeneratorFor(_))))
+            uniqueItemSpecifications map timeSeriesGeneratorFor))
 
   def shuffledSnapshotBookings(randomBehaviour: Random,
                                lotsOfTimeSeries: Seq[TimeSeries],
@@ -326,7 +326,7 @@ class BlobStorageSpec
 
                 retrievedSnapshotBlob shouldBe Some(snapshotBlob)
               case None =>
-                allRetrievedUniqueItemSpecifications map (_.id) should not contain (id)
+                allRetrievedUniqueItemSpecifications map (_.id) should not contain id
 
                 retrievedUniqueItemSpecifications shouldBe empty
 
