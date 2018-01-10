@@ -97,7 +97,7 @@ class TimelineImplementation[EventId](
 
       val allEventsThatNeedToBeAnnulledOrRedefined
         : Seq[EventId] = annulledEvents ++ updatePlan.values
-        .flatMap(_.map(_._1))
+        .flatMap(_.map(_._1).distinct)
 
       for (eventId <- allEventsThatNeedToBeAnnulledOrRedefined) {
         revisionBuilder.annulEvent(eventId)
