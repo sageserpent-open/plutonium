@@ -275,6 +275,7 @@ object WorldImplementationCodeFactoring {
       @RuntimeType
       def apply(@Origin method: Method,
                 @This target: ItemExtensionApi,
+                @AllArguments arguments: Array[Any],
                 @SuperCall superCall: Callable[_],
                 @FieldValue("acquiredState") acquiredState: AcquiredState) = {
         if (acquiredState.itemIsLocked) {
@@ -291,6 +292,11 @@ object WorldImplementationCodeFactoring {
         superCall.call()
 
         acquiredState.recordMutation(target)
+        for (argumentItem <- arguments collect {
+               case argumentItem: ItemExtensionApi => argumentItem
+             }) {
+          acquiredState.recordMutation(argumentItem)
+        }
       }
     }
 
