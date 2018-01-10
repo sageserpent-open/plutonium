@@ -149,8 +149,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
                // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
                assert(barHistory.id == barHistoryId)
                assertThrows[UnsupportedOperationException](barHistory.datums)
-               assertThrows[UnsupportedOperationException](
-                 barHistory.property1)
+               assertThrows[UnsupportedOperationException](barHistory.property1)
 
                barHistory.property1 = data
              }
@@ -172,8 +171,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
                // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
                assert(barHistory.id == barHistoryId)
                assertThrows[UnsupportedOperationException](barHistory.datums)
-               assertThrows[UnsupportedOperationException](
-                 barHistory.property1)
+               assertThrows[UnsupportedOperationException](barHistory.property1)
 
                barHistory.method1(data1, data2)
 
@@ -198,8 +196,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
                // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
                assert(barHistory.id == barHistoryId)
                assertThrows[UnsupportedOperationException](barHistory.datums)
-               assertThrows[UnsupportedOperationException](
-                 barHistory.property1)
+               assertThrows[UnsupportedOperationException](barHistory.property1)
 
                barHistory.method2(data1, data2, data3)
 
@@ -678,35 +675,34 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
     Gen.nonEmptyListOf(recordingsForAnIdGenerator) retryUntil idsAreNotRepeated
   }
 
+  def shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhenForAGivenItem(
+      random: Random,
+      events: List[(Unbounded[Instant], Event)]) = {
+    // NOTE: 'groupBy' actually destroys the sort order, so we have to sort after grouping. We have to do this to
+    // keep the annihilations after the events that define the lifespan of the items that get annihilated.
+    val recordingsGroupedByWhen = (events groupBy (_._1)).toSeq sortBy (_._1) map (_._2)
+
+    def groupContainsAnAnnihilation(group: List[(Unbounded[Instant], Event)]) =
+      group.exists(PartialFunction.cond(_) {
+        case (_, _: Annihilation[_]) => true
+      })
+
+    val groupedGroupsWithAnnihilationsIsolated = recordingsGroupedByWhen groupWhile {
+      case (lhs, rhs) =>
+        !(groupContainsAnAnnihilation(lhs) || groupContainsAnAnnihilation(rhs))
+    }
+
+    groupedGroupsWithAnnihilationsIsolated flatMap (random
+      .shuffle(_)) flatten
+  }
+
   def shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
       random: Random,
       recordingsGroupedById: List[RecordingsForAnId]) = {
     // PLAN: shuffle each lots of events on a per-id basis, keeping the annihilations out of the way. Then merge the results using random picking.
-    def shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
-        random: Random,
-        events: List[(Unbounded[Instant], Event)]) = {
-      // NOTE: 'groupBy' actually destroys the sort order, so we have to sort after grouping. We have to do this to
-      // keep the annihilations after the events that define the lifespan of the items that get annihilated.
-      val recordingsGroupedByWhen = (events groupBy (_._1)).toSeq sortBy (_._1) map (_._2)
-
-      def groupContainsAnAnnihilation(
-          group: List[(Unbounded[Instant], Event)]) =
-        group.exists(PartialFunction.cond(_) {
-          case (_, _: Annihilation[_]) => true
-        })
-
-      val groupedGroupsWithAnnihilationsIsolated = recordingsGroupedByWhen groupWhile {
-        case (lhs, rhs) =>
-          !(groupContainsAnAnnihilation(lhs) || groupContainsAnAnnihilation(
-            rhs))
-      }
-
-      groupedGroupsWithAnnihilationsIsolated flatMap (random
-        .shuffle(_)) flatten
-    }
 
     random.pickAlternatelyFrom(
-      recordingsGroupedById map (_.events) map (shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+      recordingsGroupedById map (_.events) map (shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhenForAGivenItem(
         random,
         _)))
   }
