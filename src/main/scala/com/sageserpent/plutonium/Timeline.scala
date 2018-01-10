@@ -57,7 +57,7 @@ class TimelineImplementation[EventId](
       extends ItemStateUpdate
 
   type UpdatePlan =
-    SortedMap[Unbounded[Instant], Map[EventId, Seq[ItemStateUpdate]]]
+    SortedMap[Unbounded[Instant], Seq[(EventId, ItemStateUpdate)]]
 
   override def revise(events: Map[EventId, Option[Event]]) = {
     val (annulledEvents, newEvents) =
@@ -92,6 +92,20 @@ class TimelineImplementation[EventId](
       updatePlan: UpdatePlan): BlobStorage[EventId] = {
     val revisionBuilder = blobStorage.openRevision()
 
+    val sourceBlobStorage = {
+      val revisionBuilder = blobStorage.openRevision()
+
+      val allEventsThatNeedToBeAnnulledOrRedefined
+        : Seq[EventId] = annulledEvents ++ updatePlan.values
+        .flatMap(_.map(_._1))
+
+      for (eventId <- allEventsThatNeedToBeAnnulledOrRedefined) {
+        revisionBuilder.annulEvent(eventId)
+      }
+
+      revisionBuilder.build()
+    }
+
     for (eventId <- annulledEvents) {
       revisionBuilder.annulEvent(eventId)
     }
@@ -103,15 +117,15 @@ class TimelineImplementation[EventId](
         itemFor[Any](uniqueItemSpecification)
 
       private var blobStorageTimeSlice =
-        blobStorage.timeSlice(NegativeInfinity())
+        sourceBlobStorage.timeSlice(NegativeInfinity())
 
       var allItemsAreLocked = true
 
       private val itemsMutatedSinceLastSnapshotHarvest =
         mutable.Map.empty[UniqueItemSpecification, ItemExtensionApi]
 
-      def resetTimesliceTo(when: Unbounded[Instant]) = {
-        blobStorageTimeSlice = blobStorage.timeSlice(when)
+      def resetSourceTimesliceTo(when: Unbounded[Instant]) = {
+        blobStorageTimeSlice = sourceBlobStorage.timeSlice(when)
       }
 
       override def blobStorageTimeslice: BlobStorage.Timeslice =
@@ -158,12 +172,22 @@ class TimelineImplementation[EventId](
     }
 
     for {
-      (when, itemStateUpdates) <- updatePlan
+      (when, itemStateUpdates: Seq[(EventId, ItemStateUpdate)]) <- updatePlan
     } {
-      identifiedItemAccess.resetTimesliceTo(when)
+      identifiedItemAccess.resetSourceTimesliceTo(when)
+
+      val itemStateUpdatesStablyGroupedByEventId
+        : Seq[(EventId, Seq[ItemStateUpdate])] = (itemStateUpdates.zipWithIndex groupBy {
+        case ((eventId, _), _) => eventId
+      }).toSeq sortBy {
+        case (_, group: Seq[((EventId, ItemStateUpdate), Revision)]) =>
+          group.head._2
+      } map {
+        case (eventId, group) => eventId -> group.map(_._1._2)
+      }
 
       for {
-        (eventId, itemStateUpdatesForEvent) <- itemStateUpdates
+        (eventId, itemStateUpdatesForEvent) <- itemStateUpdatesStablyGroupedByEventId
       } {
         val snapshotBlobs =
           mutable.Map.empty[UniqueItemSpecification, Option[SnapshotBlob]]
@@ -252,7 +276,7 @@ class TimelineImplementation[EventId](
 
     val updatePlanBuffer = mutable.SortedMap
       .empty[Unbounded[Instant],
-             mutable.Map[EventId, mutable.MutableList[ItemStateUpdate]]]
+             mutable.MutableList[(EventId, ItemStateUpdate)]]
 
     val patchRecorder: PatchRecorder[EventId] =
       new PatchRecorderImplementation[EventId](PositiveInfinity())
@@ -260,44 +284,33 @@ class TimelineImplementation[EventId](
       with BestPatchSelectionContracts {
         override val updateConsumer: UpdateConsumer[EventId] =
           new UpdateConsumer[EventId] {
-            private def itemStatesFor(when: Unbounded[Instant],
-                                      eventId: EventId) =
+            private def itemStatesFor(when: Unbounded[Instant]) =
               updatePlanBuffer
-                .getOrElseUpdate(
-                  when,
-                  mutable.Map
-                    .empty[EventId, mutable.MutableList[ItemStateUpdate]])
-                .getOrElseUpdate(eventId,
+                .getOrElseUpdate(when,
                                  mutable.MutableList
-                                   .empty[ItemStateUpdate])
+                                   .empty[(EventId, ItemStateUpdate)])
 
             override def captureAnnihilation(
                 when: Unbounded[Instant],
                 eventId: EventId,
                 uniqueItemSpecification: UniqueItemSpecification): Unit = {
-              itemStatesFor(when, eventId) += ItemStateAnnihilation(
+              itemStatesFor(when) += eventId -> ItemStateAnnihilation(
                 uniqueItemSpecification)
             }
 
             override def capturePatch(when: Unbounded[Instant],
                                       eventId: EventId,
                                       patch: AbstractPatch): Unit = {
-              itemStatesFor(when, eventId) += ItemStatePatch(patch)
+              itemStatesFor(when) += eventId -> ItemStatePatch(patch)
             }
           }
       }
 
     WorldImplementationCodeFactoring.recordPatches(eventTimeline, patchRecorder)
 
-    require(
-      updatePlanBuffer.values flatMap (_.keys) groupBy identity forall (1 == _._2.size),
-      "Each event id should only occur once in the update plan.")
-
     val updatePlan: UpdatePlan =
-      TreeMap[Unbounded[Instant], Map[EventId, Seq[ItemStateUpdate]]](
-        updatePlanBuffer
-          .mapValues(map => Map(map.toSeq: _*))
-          .toSeq: _*) // Yuck!
+      TreeMap[Unbounded[Instant], Seq[(EventId, ItemStateUpdate)]](
+        updatePlanBuffer.toSeq: _*)
 
     updatePlan
   }
