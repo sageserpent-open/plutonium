@@ -37,6 +37,9 @@ class WorldSpecUsingWorldReferenceImplementation
 class WorldSpecUsingWorldEfficientInMemoryImplementation
     extends WorldBehaviours
     with WorldEfficientInMemoryImplementationResource {
+  implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
+    PropertyCheckConfig(maxSize = 15)
+
   "A world with no history (using the world efficient in-memory implementation)" should behave like worldWithNoHistoryBehaviour
 
   "A world with history added in order of increasing event time (using the world efficient in-memory implementation)" should behave like worldWithHistoryAddedInOrderOfIncreasingEventTimeBehaviour
