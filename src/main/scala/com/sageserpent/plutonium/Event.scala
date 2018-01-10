@@ -100,6 +100,13 @@ object capturePatches {
         } else superCall.call()
     }
 
+    object forbiddenAbstractReadAccess {
+      @RuntimeType
+      def apply(@Origin method: Method, @This target: AnyRef) =
+        throw new UnsupportedOperationException(
+          s"Attempt to call abstract method: '$method' with a non-unit return type on a recorder proxy: '$target' while capturing a change or measurement.")
+    }
+
     object permittedReadAccess {
       @RuntimeType
       def apply(@SuperCall superCall: Callable[_],
@@ -131,6 +138,9 @@ object capturePatches {
           .intercept(MethodDelegation.to(permittedReadAccess))
           .method(matchForbiddenReadAccess)
           .intercept(MethodDelegation.to(forbiddenReadAccess))
+          .method(matchForbiddenReadAccess) // NOTE: using the same matcher as the previous one is *not* a typo
+          // - we do this because 'forbiddenReadAccess' needs a super-invocation, so it won't match abstract methods.
+          .intercept(MethodDelegation.to(forbiddenAbstractReadAccess))
           .method(matchUniqueItemSpecification)
           .intercept(MethodDelegation.to(uniqueItemSpecification))
           .method(matchMutation)
