@@ -51,7 +51,6 @@ trait BlobStorage[EventId] { blobStorage =>
 
     def annulEvent(eventId: EventId)
 
-    // Once this has been called, the receiver will throw precondition failures on subsequent use.
     def build(): BlobStorage[EventId]
   }
 
