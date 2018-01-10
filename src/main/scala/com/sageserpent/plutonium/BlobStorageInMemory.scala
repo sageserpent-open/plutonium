@@ -8,7 +8,6 @@ import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 
 import scala.collection.Searching._
 import scala.collection.generic.IsSeqLike
-import scala.collection.immutable.{HashBag, HashedBagConfiguration}
 import scala.collection.{SeqLike, SeqView, mutable}
 import scala.reflect.runtime.universe._
 
@@ -124,12 +123,9 @@ object BlobStorageInMemory {
 case class BlobStorageInMemory[EventId] private (
     revision: BlobStorageInMemory.Revision,
     eventRevisions: Map[EventId, BlobStorageInMemory.Revision],
-    lifecycles: Map[Any, HashBag[BlobStorageInMemory.Lifecycle[EventId]]])
+    lifecycles: Map[Any, Set[BlobStorageInMemory.Lifecycle[EventId]]])
     extends BlobStorage[EventId] { thisBlobStorage =>
   import BlobStorage._
-
-  implicit val lifecycleBagConfiguration = HashedBagConfiguration
-    .keepAll[BlobStorageInMemory.Lifecycle[EventId]]
 
   override def timeSlice(when: Unbounded[Instant]): Timeslice = {
     trait TimesliceImplementation extends Timeslice {
@@ -211,20 +207,20 @@ case class BlobStorageInMemory[EventId] private (
               val updatedLifecycles = snapshots map {
                 case (UniqueItemSpecification(id, itemTypeTag), snapshot) =>
                   val lifecyclesForId
-                    : HashBag[BlobStorageInMemory.Lifecycle[EventId]] =
+                    : Set[BlobStorageInMemory.Lifecycle[EventId]] =
                     lifecycles.getOrElse(
                       id,
-                      HashBag.from(
-                        (new BlobStorageInMemory.LifecycleImplementation[EventId](
-                          itemTypeTag = itemTypeTag): BlobStorageInMemory.Lifecycle[
-                          EventId]) -> 1)
+                      Set.empty[BlobStorageInMemory.Lifecycle[EventId]]
                     )
-                  id -> lifecyclesForId.map(
-                    lifecycle =>
-                      if (itemTypeTag == lifecycle.itemTypeTag)
-                        lifecycle
-                          .addSnapshotBlob(eventId, when, snapshot, newRevision)
-                      else lifecycle)
+                  id -> {
+                    val lifecycleForSnapshot: BlobStorageInMemory.Lifecycle[
+                      EventId] = lifecyclesForId find (itemTypeTag == _.itemTypeTag) getOrElse (new BlobStorageInMemory.LifecycleImplementation[
+                      EventId](itemTypeTag = itemTypeTag): BlobStorageInMemory.Lifecycle[
+                      EventId])
+
+                    lifecyclesForId - lifecycleForSnapshot + lifecycleForSnapshot
+                      .addSnapshotBlob(eventId, when, snapshot, newRevision)
+                  }
               }
               lifecycles ++ updatedLifecycles
           }
