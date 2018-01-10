@@ -59,6 +59,11 @@ object capturePatches {
         _,
         IdentifiedItemsScope.uniqueItemSpecificationPropertyForRecording)
 
+    val matchAbstractForbiddenReadAccess: ElementMatcher[MethodDescription] =
+      methodDescription =>
+        methodDescription.isAbstract && matchForbiddenReadAccess.matches(
+          methodDescription)
+
     val matchForbiddenReadAccess: ElementMatcher[MethodDescription] =
       methodDescription =>
         !IdentifiedItemsScope
@@ -88,6 +93,13 @@ object capturePatches {
         acquiredState.uniqueItemSpecification
     }
 
+    object forbiddenAbstractReadAccess {
+      @RuntimeType
+      def apply(@Origin method: Method, @This target: AnyRef) =
+        throw new UnsupportedOperationException(
+          s"Attempt to call abstract method: '$method' with a non-unit return type on a recorder proxy: '$target' while capturing a change or measurement.")
+    }
+
     object forbiddenReadAccess {
       @RuntimeType
       def apply(@Origin method: Method,
@@ -98,13 +110,6 @@ object capturePatches {
           throw new UnsupportedOperationException(
             s"Attempt to call method: '$method' with a non-unit return type on a recorder proxy: '$target' while capturing a change or measurement.")
         } else superCall.call()
-    }
-
-    object forbiddenAbstractReadAccess {
-      @RuntimeType
-      def apply(@Origin method: Method, @This target: AnyRef) =
-        throw new UnsupportedOperationException(
-          s"Attempt to call abstract method: '$method' with a non-unit return type on a recorder proxy: '$target' while capturing a change or measurement.")
     }
 
     object permittedReadAccess {
@@ -138,8 +143,7 @@ object capturePatches {
           .intercept(MethodDelegation.to(permittedReadAccess))
           .method(matchForbiddenReadAccess)
           .intercept(MethodDelegation.to(forbiddenReadAccess))
-          .method(matchForbiddenReadAccess) // NOTE: using the same matcher as the previous one is *not* a typo
-          // - we do this because 'forbiddenReadAccess' needs a super-invocation, so it won't match abstract methods.
+          .method(matchAbstractForbiddenReadAccess)
           .intercept(MethodDelegation.to(forbiddenAbstractReadAccess))
           .method(matchUniqueItemSpecification)
           .intercept(MethodDelegation.to(uniqueItemSpecification))
