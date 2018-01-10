@@ -20,7 +20,7 @@ import scalaz.syntax.applicativePlus._
 
 
 trait WorldBehaviours
-    extends FlatSpec
+  extends FlatSpec
     with Matchers
     with Checkers
     with WorldSpecSupport { this: WorldResource =>
@@ -53,13 +53,13 @@ trait WorldBehaviours
       check(Prop.forAllNoShrink(worldResourceGenerator)(worldResource =>
         worldResource acquireAndGet { world =>
           (World.initialRevision == world.nextRevision) :| s"Initial revision of a world ${world.nextRevision} should be: ${World.initialRevision}."
-      }))
+        }))
     }
   }
 
   val faultyRecordingsGroupedByIdGenerator =
     mixedRecordingsGroupedByIdGenerator(faulty = true,
-                                        forbidAnnihilations = false)
+      forbidAnnihilations = false)
 
   def eventWhenFrom(recording: ((Unbounded[Instant], Event), Int)) =
     recording match {
@@ -67,10 +67,10 @@ trait WorldBehaviours
     }
 
   val chunksShareTheSameEventWhens: (((Unbounded[Instant], Unbounded[Instant]),
-                                      Instant),
-                                     ((americium.Unbounded[Instant],
-                                       Unbounded[Instant]),
-                                      Instant)) => Boolean = {
+    Instant),
+    ((americium.Unbounded[Instant],
+      Unbounded[Instant]),
+      Instant)) => Boolean = {
     case (((_, trailingEventWhen), _), ((leadingEventWhen, _), _)) => true
   }
 
@@ -93,9 +93,9 @@ trait WorldBehaviours
         asOfToLatestEventWhenMap = TreeMap(
           asOfs zip (bigHistoryOverLotsOfThingsSortedInEventWhenOrder map (_.last) map eventWhenFrom): _*)
         chunksForRevisions = bigHistoryOverLotsOfThingsSortedInEventWhenOrder map (
-            recordingAndEventIdPairs =>
-              eventWhenFrom(recordingAndEventIdPairs.head) -> eventWhenFrom(
-                recordingAndEventIdPairs.last)) zip asOfs
+          recordingAndEventIdPairs =>
+            eventWhenFrom(recordingAndEventIdPairs.head) -> eventWhenFrom(
+              recordingAndEventIdPairs.last)) zip asOfs
         latestAsOfsThatMapUnambiguouslyToEventWhens = chunksForRevisions
           .groupWhile(chunksShareTheSameEventWhens) map (_.last._2)
         latestEventWhenForEarliestAsOf = asOfToLatestEventWhenMap(
@@ -111,23 +111,23 @@ trait WorldBehaviours
               1 -> Gen.const(latestDefiniteEventWhenForEarliestAsOf))
         }
         asOfsIncludingAllEventsNoLaterThanTheQueryWhen = latestAsOfsThatMapUnambiguouslyToEventWhens takeWhile (
-            asOf => asOfToLatestEventWhenMap(asOf) <= Finite(queryWhen))
+          asOf => asOfToLatestEventWhenMap(asOf) <= Finite(queryWhen))
       } yield
         (worldResource,
-         recordingsGroupedById,
-         bigHistoryOverLotsOfThingsSortedInEventWhenOrder,
-         asOfs,
-         queryWhen,
-         asOfToLatestEventWhenMap,
-         asOfsIncludingAllEventsNoLaterThanTheQueryWhen)
+          recordingsGroupedById,
+          bigHistoryOverLotsOfThingsSortedInEventWhenOrder,
+          asOfs,
+          queryWhen,
+          asOfToLatestEventWhenMap,
+          asOfsIncludingAllEventsNoLaterThanTheQueryWhen)
       check(Prop.forAllNoShrink(testCaseGenerator) {
         case (worldResource,
-              recordingsGroupedById,
-              bigHistoryOverLotsOfThingsSortedInEventWhenOrder,
-              asOfs,
-              queryWhen,
-              asOfToLatestEventWhenMap,
-              asOfsIncludingAllEventsNoLaterThanTheQueryWhen) =>
+        recordingsGroupedById,
+        bigHistoryOverLotsOfThingsSortedInEventWhenOrder,
+        asOfs,
+        queryWhen,
+        asOfToLatestEventWhenMap,
+        asOfsIncludingAllEventsNoLaterThanTheQueryWhen) =>
           worldResource acquireAndGet { world =>
             recordEventsInWorld(
               liftRecordings(bigHistoryOverLotsOfThingsSortedInEventWhenOrder),
@@ -141,11 +141,11 @@ trait WorldBehaviours
               scope                    = world.scopeFor(Finite(queryWhen), asOf)
               eventWhenAlignedWithAsOf = asOfToLatestEventWhenMap(asOf)
               RecordingsNoLaterThan(
-                historyId,
-                historiesFrom,
-                pertinentRecordings,
-                _,
-                _) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
+              historyId,
+              historiesFrom,
+              pertinentRecordings,
+              _,
+              _) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
                 implicitly[Ordering[Unbounded[Instant]]]
                   .min(Finite(queryWhen), eventWhenAlignedWithAsOf)))
               Seq(history) = {
@@ -157,7 +157,7 @@ trait WorldBehaviours
             if (checks.nonEmpty)
               Prop.all(checks.map {
                 case (historyId, actualHistory, expectedHistory) =>
-                  ((actualHistory.length == expectedHistory.length) :| s"For ${historyId}, ${actualHistory.length} == expectedHistory.length") &&
+                  ((actualHistory.length == expectedHistory.length) :| s"For ${historyId}, got: ${actualHistory.length} datums, but expected: ${expectedHistory.length}, actual history: $actualHistory, expected history: $expectedHistory.") &&
                     Prop.all(
                       (actualHistory zip expectedHistory zipWithIndex) map {
                         case ((actual, expected), step) =>
@@ -183,22 +183,22 @@ trait WorldBehaviours
             random,
             recordingsGroupedById).zipWithIndex)
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
-                             instantGenerator) map (_.sorted)
+          instantGenerator) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
       } yield
         (worldResource,
-         recordingsGroupedById,
-         bigShuffledHistoryOverLotsOfThings,
-         asOfs,
-         queryWhen,
-         random)
+          recordingsGroupedById,
+          bigShuffledHistoryOverLotsOfThings,
+          asOfs,
+          queryWhen,
+          random)
       check(Prop.forAllNoShrink(testCaseGenerator) {
         case (worldResource,
-              recordingsGroupedById,
-              bigShuffledHistoryOverLotsOfThings,
-              asOfs,
-              queryWhen,
-              random) =>
+        recordingsGroupedById,
+        bigShuffledHistoryOverLotsOfThings,
+        asOfs,
+        queryWhen,
+        random) =>
           worldResource acquireAndGet {
             world =>
               val revisions = recordEventsInWorld(
@@ -210,14 +210,14 @@ trait WorldBehaviours
 
               val asOfPairs = asOfs
                 .scanRight((asOfComingAfterTheLastRevision,
-                            asOfComingAfterTheLastRevision)) {
+                  asOfComingAfterTheLastRevision)) {
                   case (asOf, (laterAsOf, _)) => (asOf, laterAsOf)
                 } init
 
               val asOfsAndSharedRevisionTriples = (for {
                 ((earlierAsOfCorrespondingToRevision,
-                  laterAsOfComingNoLaterThanAnySucceedingRevision),
-                 revision) <- asOfPairs zip revisions
+                laterAsOfComingNoLaterThanAnySucceedingRevision),
+                revision) <- asOfPairs zip revisions
                 laterAsOfSharingTheSameRevisionAsTheEarlierOne = earlierAsOfCorrespondingToRevision plusSeconds random
                   .chooseAnyNumberFromZeroToOneLessThan(
                     earlierAsOfCorrespondingToRevision.until(
@@ -225,40 +225,40 @@ trait WorldBehaviours
                       ChronoUnit.SECONDS))
               } yield
                 (earlierAsOfCorrespondingToRevision,
-                 laterAsOfSharingTheSameRevisionAsTheEarlierOne,
-                 revision)) filter (PartialFunction.cond(_) {
+                  laterAsOfSharingTheSameRevisionAsTheEarlierOne,
+                  revision)) filter (PartialFunction.cond(_) {
                 case (earlierAsOfCorrespondingToRevision,
-                      laterAsOfSharingTheSameRevisionAsTheEarlierOne,
-                      _) =>
+                laterAsOfSharingTheSameRevisionAsTheEarlierOne,
+                _) =>
                   earlierAsOfCorrespondingToRevision isBefore laterAsOfSharingTheSameRevisionAsTheEarlierOne
               })
 
               val checks =
                 for {
                   (earlierAsOfCorrespondingToRevision,
-                   laterAsOfSharingTheSameRevisionAsTheEarlierOne,
-                   revision) <- asOfsAndSharedRevisionTriples
+                  laterAsOfSharingTheSameRevisionAsTheEarlierOne,
+                  revision) <- asOfsAndSharedRevisionTriples
                   baselineScope = world
                     .scopeFor(queryWhen, earlierAsOfCorrespondingToRevision)
                   scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne = world
                     .scopeFor(queryWhen,
-                              laterAsOfSharingTheSameRevisionAsTheEarlierOne)
+                      laterAsOfSharingTheSameRevisionAsTheEarlierOne)
                   NonExistentRecordings(historyId, historiesFrom, _) <- recordingsGroupedById flatMap (_.doesNotExistAt(
                     queryWhen))
                   if (historiesFrom(baselineScope).isEmpty) // It might not be, because we may be at an 'asOf' before the annihilation was introduced.
                 } yield
                   (historyId,
-                   historiesFrom,
-                   baselineScope,
-                   scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne)
+                    historiesFrom,
+                    baselineScope,
+                    scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne)
 
               if (checks.nonEmpty)
                 Prop.all(checks.map {
                   case (
-                      historyId,
-                      historiesFrom,
-                      baselineScope,
-                      scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne) =>
+                    historyId,
+                    historiesFrom,
+                    baselineScope,
+                    scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne) =>
                     (historiesFrom(
                       scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne).isEmpty) :| s"For ${historyId}, neither scope should yield a history."
                 }: _*)
@@ -279,22 +279,22 @@ trait WorldBehaviours
             random,
             recordingsGroupedById).zipWithIndex)
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
-                             instantGenerator) map (_.sorted)
+          instantGenerator) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
       } yield
         (worldResource,
-         recordingsGroupedById,
-         bigShuffledHistoryOverLotsOfThings,
-         asOfs,
-         queryWhen,
-         random)
+          recordingsGroupedById,
+          bigShuffledHistoryOverLotsOfThings,
+          asOfs,
+          queryWhen,
+          random)
       check(Prop.forAllNoShrink(testCaseGenerator) {
         case (worldResource,
-              recordingsGroupedById,
-              bigShuffledHistoryOverLotsOfThings,
-              asOfs,
-              queryWhen,
-              random) =>
+        recordingsGroupedById,
+        bigShuffledHistoryOverLotsOfThings,
+        asOfs,
+        queryWhen,
+        random) =>
           worldResource acquireAndGet {
             world =>
               val revisions = recordEventsInWorld(
@@ -306,14 +306,14 @@ trait WorldBehaviours
 
               val asOfPairs = asOfs
                 .scanRight((asOfComingAfterTheLastRevision,
-                            asOfComingAfterTheLastRevision)) {
+                  asOfComingAfterTheLastRevision)) {
                   case (asOf, (laterAsOf, _)) => (asOf, laterAsOf)
                 } init
 
               val asOfsAndSharedRevisionTriples = (for {
                 ((earlierAsOfCorrespondingToRevision,
-                  laterAsOfComingNoLaterThanAnySucceedingRevision),
-                 revision) <- asOfPairs zip revisions
+                laterAsOfComingNoLaterThanAnySucceedingRevision),
+                revision) <- asOfPairs zip revisions
                 laterAsOfSharingTheSameRevisionAsTheEarlierOne = earlierAsOfCorrespondingToRevision plusSeconds random
                   .chooseAnyNumberFromZeroToOneLessThan(
                     earlierAsOfCorrespondingToRevision.until(
@@ -321,24 +321,24 @@ trait WorldBehaviours
                       ChronoUnit.SECONDS))
               } yield
                 (earlierAsOfCorrespondingToRevision,
-                 laterAsOfSharingTheSameRevisionAsTheEarlierOne,
-                 revision)) filter (PartialFunction.cond(_) {
+                  laterAsOfSharingTheSameRevisionAsTheEarlierOne,
+                  revision)) filter (PartialFunction.cond(_) {
                 case (earlierAsOfCorrespondingToRevision,
-                      laterAsOfSharingTheSameRevisionAsTheEarlierOne,
-                      _) =>
+                laterAsOfSharingTheSameRevisionAsTheEarlierOne,
+                _) =>
                   earlierAsOfCorrespondingToRevision isBefore laterAsOfSharingTheSameRevisionAsTheEarlierOne
               })
 
               val checks =
                 (for {
                   (earlierAsOfCorrespondingToRevision,
-                   laterAsOfSharingTheSameRevisionAsTheEarlierOne,
-                   revision) <- asOfsAndSharedRevisionTriples
+                  laterAsOfSharingTheSameRevisionAsTheEarlierOne,
+                  revision) <- asOfsAndSharedRevisionTriples
                   baselineScope = world
                     .scopeFor(queryWhen, earlierAsOfCorrespondingToRevision)
                   scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne = world
                     .scopeFor(queryWhen,
-                              laterAsOfSharingTheSameRevisionAsTheEarlierOne)
+                      laterAsOfSharingTheSameRevisionAsTheEarlierOne)
                   RecordingsNoLaterThan(historyId, historiesFrom, _, _, _) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
                     queryWhen)) filter (_.historiesFrom(baselineScope).nonEmpty)
                   Seq(baselineHistory) = historiesFrom(baselineScope)
@@ -371,20 +371,20 @@ trait WorldBehaviours
             random,
             recordingsGroupedById).zipWithIndex)
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
-                             instantGenerator) map (_.sorted)
+          instantGenerator) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
       } yield
         (worldResource,
-         bigShuffledHistoryOverLotsOfThings,
-         asOfs,
-         queryWhen,
-         random)
+          bigShuffledHistoryOverLotsOfThings,
+          asOfs,
+          queryWhen,
+          random)
       check(Prop.forAllNoShrink(testCaseGenerator) {
         case (worldResource,
-              bigShuffledHistoryOverLotsOfThings,
-              asOfs,
-              queryWhen,
-              random) =>
+        bigShuffledHistoryOverLotsOfThings,
+        asOfs,
+        queryWhen,
+        random) =>
           worldResource acquireAndGet { world =>
             val revisions = recordEventsInWorld(
               liftRecordings(bigShuffledHistoryOverLotsOfThings),
@@ -395,14 +395,14 @@ trait WorldBehaviours
 
             val asOfPairs = asOfs
               .scanRight((asOfComingAfterTheLastRevision,
-                          asOfComingAfterTheLastRevision)) {
+                asOfComingAfterTheLastRevision)) {
                 case (asOf, (laterAsOf, _)) => (asOf, laterAsOf)
               } init
 
             val asOfsAndSharedRevisionTriples = (for {
               ((earlierAsOfCorrespondingToRevision,
-                laterAsOfComingNoLaterThanAnySucceedingRevision),
-               revision) <- asOfPairs zip revisions
+              laterAsOfComingNoLaterThanAnySucceedingRevision),
+              revision) <- asOfPairs zip revisions
               laterAsOfSharingTheSameRevisionAsTheEarlierOne = earlierAsOfCorrespondingToRevision plusSeconds random
                 .chooseAnyNumberFromZeroToOneLessThan(
                   earlierAsOfCorrespondingToRevision.until(
@@ -410,31 +410,31 @@ trait WorldBehaviours
                     ChronoUnit.SECONDS))
             } yield
               (earlierAsOfCorrespondingToRevision,
-               laterAsOfSharingTheSameRevisionAsTheEarlierOne,
-               revision)) filter (PartialFunction.cond(_) {
+                laterAsOfSharingTheSameRevisionAsTheEarlierOne,
+                revision)) filter (PartialFunction.cond(_) {
               case (earlierAsOfCorrespondingToRevision,
-                    laterAsOfSharingTheSameRevisionAsTheEarlierOne,
-                    _) =>
+              laterAsOfSharingTheSameRevisionAsTheEarlierOne,
+              _) =>
                 earlierAsOfCorrespondingToRevision isBefore laterAsOfSharingTheSameRevisionAsTheEarlierOne
             })
 
             val checks = for {
               (earlierAsOfCorrespondingToRevision,
-               laterAsOfSharingTheSameRevisionAsTheEarlierOne,
-               revision) <- asOfsAndSharedRevisionTriples
+              laterAsOfSharingTheSameRevisionAsTheEarlierOne,
+              revision) <- asOfsAndSharedRevisionTriples
               baselineScope = world
                 .scopeFor(queryWhen, earlierAsOfCorrespondingToRevision)
               scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne = world
                 .scopeFor(queryWhen,
-                          laterAsOfSharingTheSameRevisionAsTheEarlierOne)
+                  laterAsOfSharingTheSameRevisionAsTheEarlierOne)
             } yield
               (baselineScope,
-               scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne)
+                scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne)
 
             if (checks.nonEmpty)
               Prop.all(checks.map {
                 case (baselineScope,
-                      scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne) =>
+                scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne) =>
                   (baselineScope.nextRevision === scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne.nextRevision) :| s"${baselineScope.nextRevision} === ${scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne}.nextRevision"
               }: _*)
             else Prop.undecided
@@ -454,20 +454,20 @@ trait WorldBehaviours
               random,
               faultyRecordingsGroupedById).zipWithIndex)
         asOfs <- Gen.listOfN(bigShuffledFaultyHistoryOverLotsOfThings.length,
-                             instantGenerator) map (_.sorted)
+          instantGenerator) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
       } yield
         (worldResource,
-         faultyRecordingsGroupedById,
-         bigShuffledFaultyHistoryOverLotsOfThings,
-         asOfs,
-         queryWhen)
+          faultyRecordingsGroupedById,
+          bigShuffledFaultyHistoryOverLotsOfThings,
+          asOfs,
+          queryWhen)
       check(Prop.forAllNoShrink(testCaseGenerator) {
         case (worldResource,
-              faultyRecordingsGroupedById,
-              bigShuffledFaultyHistoryOverLotsOfThings,
-              asOfs,
-              queryWhen) =>
+        faultyRecordingsGroupedById,
+        bigShuffledFaultyHistoryOverLotsOfThings,
+        asOfs,
+        queryWhen) =>
           worldResource acquireAndGet {
             world =>
               (try {
@@ -496,20 +496,20 @@ trait WorldBehaviours
             random,
             recordingsGroupedById).zipWithIndex)
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
-                             instantGenerator) map (_.sorted)
+          instantGenerator) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
       } yield
         (worldResource,
-         recordingsGroupedById,
-         bigShuffledHistoryOverLotsOfThings,
-         asOfs,
-         queryWhen)
+          recordingsGroupedById,
+          bigShuffledHistoryOverLotsOfThings,
+          asOfs,
+          queryWhen)
       check(Prop.forAllNoShrink(testCaseGenerator) {
         case (worldResource,
-              recordingsGroupedById,
-              bigShuffledHistoryOverLotsOfThings,
-              asOfs,
-              queryWhen) =>
+        recordingsGroupedById,
+        bigShuffledHistoryOverLotsOfThings,
+        asOfs,
+        queryWhen) =>
           worldResource acquireAndGet {
             world =>
               recordEventsInWorld(
@@ -521,11 +521,11 @@ trait WorldBehaviours
 
               val checks = for {
                 RecordingsNoLaterThan(
-                  historyId,
-                  historiesFrom,
-                  pertinentRecordings,
-                  _,
-                  _) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
+                historyId,
+                historiesFrom,
+                pertinentRecordings,
+                _,
+                _) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
                   queryWhen))
                 Seq(history) = historiesFrom(scope)
               } yield (historyId, history.datums, pertinentRecordings.map(_._1))
@@ -608,20 +608,20 @@ trait WorldBehaviours
             random,
             recordingsGroupedById).zipWithIndex)
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
-                             instantGenerator) map (_.sorted)
+          instantGenerator) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
       } yield
         (worldResource,
-         recordingsGroupedById,
-         bigShuffledHistoryOverLotsOfThings,
-         asOfs,
-         queryWhen)
+          recordingsGroupedById,
+          bigShuffledHistoryOverLotsOfThings,
+          asOfs,
+          queryWhen)
       check(Prop.forAllNoShrink(testCaseGenerator) {
         case (worldResource,
-              recordingsGroupedById,
-              bigShuffledHistoryOverLotsOfThings,
-              asOfs,
-              queryWhen) =>
+        recordingsGroupedById,
+        bigShuffledHistoryOverLotsOfThings,
+        asOfs,
+        queryWhen) =>
           worldResource acquireAndGet {
             world =>
               recordEventsInWorld(
@@ -661,20 +661,20 @@ trait WorldBehaviours
             random,
             recordingsGroupedById).zipWithIndex)
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
-                             instantGenerator) map (_.sorted)
+          instantGenerator) map (_.sorted)
         queryWhen <- unboundedInstantGenerator filter (_ < PositiveInfinity())
       } yield
         (worldResource,
-         recordingsGroupedById,
-         bigShuffledHistoryOverLotsOfThings,
-         asOfs,
-         queryWhen)
+          recordingsGroupedById,
+          bigShuffledHistoryOverLotsOfThings,
+          asOfs,
+          queryWhen)
       check(Prop.forAllNoShrink(testCaseGenerator) {
         case (worldResource,
-              recordingsGroupedById,
-              bigShuffledHistoryOverLotsOfThings,
-              asOfs,
-              queryWhen) =>
+        recordingsGroupedById,
+        bigShuffledHistoryOverLotsOfThings,
+        asOfs,
+        queryWhen) =>
           worldResource acquireAndGet {
             world =>
               recordEventsInWorld(
@@ -683,14 +683,14 @@ trait WorldBehaviours
                 world)
 
               for ((RecordingsNoLaterThan(
-                     historyId,
-                     _,
-                     _,
-                     ineffectiveEventFor,
-                     _)) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
-                     queryWhen))) {
+              historyId,
+              _,
+              _,
+              ineffectiveEventFor,
+              _)) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
+                queryWhen))) {
                 world.revise(Map(-1 -> Some(ineffectiveEventFor(queryWhen))),
-                             asOfs.last)
+                  asOfs.last)
               }
 
               val scope = world.scopeFor(queryWhen, world.nextRevision)
@@ -727,23 +727,23 @@ trait WorldBehaviours
             random,
             referencedHistoryRecordingsGroupedById ++ referringHistoryRecordingsGroupedById).zipWithIndex)
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
-                             instantGenerator) map (_.sorted)
+          instantGenerator) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
       } yield
         (worldResource,
-         referencedHistoryRecordingsGroupedById,
-         referringHistoryRecordingsGroupedById,
-         bigShuffledHistoryOverLotsOfThings,
-         asOfs,
-         queryWhen)
+          referencedHistoryRecordingsGroupedById,
+          referringHistoryRecordingsGroupedById,
+          bigShuffledHistoryOverLotsOfThings,
+          asOfs,
+          queryWhen)
       check(
         Prop.forAllNoShrink(testCaseGenerator) {
           case (worldResource,
-                referencedHistoryRecordingsGroupedById,
-                referringHistoryRecordingsGroupedById,
-                bigShuffledHistoryOverLotsOfThings,
-                asOfs,
-                queryWhen) =>
+          referencedHistoryRecordingsGroupedById,
+          referringHistoryRecordingsGroupedById,
+          bigShuffledHistoryOverLotsOfThings,
+          asOfs,
+          queryWhen) =>
             worldResource acquireAndGet { world =>
               recordEventsInWorld(
                 liftRecordings(bigShuffledHistoryOverLotsOfThings),
@@ -754,18 +754,18 @@ trait WorldBehaviours
 
               val checks = for {
                 RecordingsNoLaterThan(
-                  referringHistoryId,
-                  referringHistoriesFrom,
-                  _,
-                  _,
-                  _) <- referringHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(
+                referringHistoryId,
+                referringHistoriesFrom,
+                _,
+                _,
+                _) <- referringHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(
                   queryWhen))
                 RecordingsNoLaterThan(
-                  referencedHistoryId,
-                  _,
-                  pertinentRecordings,
-                  _,
-                  _) <- referencedHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(
+                referencedHistoryId,
+                _,
+                pertinentRecordings,
+                _,
+                _) <- referencedHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(
                   queryWhen))
                 Seq(referringHistory: ReferringHistory) = referringHistoriesFrom(
                   scope) if referringHistory.referencedDatums.contains(
@@ -775,16 +775,16 @@ trait WorldBehaviours
                   .isGhost
               } yield
                 (referringHistoryId,
-                 referencedHistoryId,
-                 referringHistory.referencedDatums(referencedHistoryId),
-                 pertinentRecordings.map(_._1))
+                  referencedHistoryId,
+                  referringHistory.referencedDatums(referencedHistoryId),
+                  pertinentRecordings.map(_._1))
 
               if (checks.nonEmpty)
                 Prop.all(checks.map {
                   case (referringHistoryId,
-                        referencedHistoryId,
-                        actualHistory,
-                        expectedHistory) =>
+                  referencedHistoryId,
+                  actualHistory,
+                  expectedHistory) =>
                     ((actualHistory.length == expectedHistory.length) :| s"For referring history id: ${referringHistoryId}, referenced history id: ${referencedHistoryId}, the number of datums: ${actualHistory.length} was expected to be to: ${expectedHistory.length}") &&
                       Prop.all(
                         (actualHistory zip expectedHistory zipWithIndex) map {
@@ -814,23 +814,23 @@ trait WorldBehaviours
             random,
             referencedHistoryRecordingsGroupedById ++ referringHistoryRecordingsGroupedById).zipWithIndex)
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
-                             instantGenerator) map (_.sorted)
+          instantGenerator) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
       } yield
         (worldResource,
-         referencedHistoryRecordingsGroupedById,
-         referringHistoryRecordingsGroupedById,
-         bigShuffledHistoryOverLotsOfThings,
-         asOfs,
-         queryWhen)
+          referencedHistoryRecordingsGroupedById,
+          referringHistoryRecordingsGroupedById,
+          bigShuffledHistoryOverLotsOfThings,
+          asOfs,
+          queryWhen)
       check(
         Prop.forAllNoShrink(testCaseGenerator) {
           case (worldResource,
-                referencedHistoryRecordingsGroupedById,
-                referringHistoryRecordingsGroupedById,
-                bigShuffledHistoryOverLotsOfThings,
-                asOfs,
-                queryWhen) =>
+          referencedHistoryRecordingsGroupedById,
+          referringHistoryRecordingsGroupedById,
+          bigShuffledHistoryOverLotsOfThings,
+          asOfs,
+          queryWhen) =>
             worldResource acquireAndGet { world =>
               recordEventsInWorld(
                 liftRecordings(bigShuffledHistoryOverLotsOfThings),
@@ -841,18 +841,18 @@ trait WorldBehaviours
 
               val checks = for {
                 RecordingsNoLaterThan(
-                  referringHistoryId,
-                  referringHistoriesFrom,
-                  _,
-                  _,
-                  _) <- referringHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(
+                referringHistoryId,
+                referringHistoriesFrom,
+                _,
+                _,
+                _) <- referringHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(
                   queryWhen))
                 RecordingsNoLaterThan(
-                  referencedHistoryId,
-                  referencedHistoriesFrom,
-                  pertinentRecordings,
-                  _,
-                  _) <- referencedHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(
+                referencedHistoryId,
+                referencedHistoriesFrom,
+                pertinentRecordings,
+                _,
+                _) <- referencedHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(
                   queryWhen))
                 Seq(referringHistory: ReferringHistory) = referringHistoriesFrom(
                   scope) if referringHistory.referencedDatums.contains(
@@ -869,16 +869,16 @@ trait WorldBehaviours
                       Bitemporal.withId[History](
                         referencedHistoryId.asInstanceOf[History#Id])
                     val indirectAccessBitemporalQuery
-                      : Bitemporal[History] = Bitemporal
+                    : Bitemporal[History] = Bitemporal
                       .withId[ReferringHistory](referringHistoryId.asInstanceOf[
-                        ReferringHistory#Id]) map (_.referencedHistories(
+                      ReferringHistory#Id]) map (_.referencedHistories(
                       referencedHistoryId))
                     val agglomeratedBitemporalQuery
-                      : Bitemporal[(History, History)] =
+                    : Bitemporal[(History, History)] =
                       (directAccessBitemporalQuery |@| indirectAccessBitemporalQuery)(
                         (_: History, _: History))
                     val Seq((directlyAccessedReferencedHistory: History,
-                             indirectlyAccessedReferencedHistory: History)) =
+                    indirectlyAccessedReferencedHistory: History)) =
                       scope.render(agglomeratedBitemporalQuery)
                     (directlyAccessedReferencedHistory eq indirectlyAccessedReferencedHistory) :| s"Expected item: '$indirectlyAccessedReferencedHistory' accessed indirectly via referring item of id: '$referringHistoryId' to have the same object identity as '$directlyAccessedReferencedHistory' accessed directly via id: '$referencedHistoryId'."
                 }: _*)
@@ -902,20 +902,20 @@ trait WorldBehaviours
             random,
             recordingsGroupedById).zipWithIndex)
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
-                             instantGenerator) map (_.sorted)
+          instantGenerator) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
       } yield
         (worldResource,
-         recordingsGroupedById,
-         bigShuffledHistoryOverLotsOfThings,
-         asOfs,
-         queryWhen)
+          recordingsGroupedById,
+          bigShuffledHistoryOverLotsOfThings,
+          asOfs,
+          queryWhen)
       check(Prop.forAllNoShrink(testCaseGenerator) {
         case (worldResource,
-              recordingsGroupedById,
-              bigShuffledHistoryOverLotsOfThings,
-              asOfs,
-              queryWhen) =>
+        recordingsGroupedById,
+        bigShuffledHistoryOverLotsOfThings,
+        asOfs,
+        queryWhen) =>
           worldResource acquireAndGet {
             world =>
               recordEventsInWorld(
@@ -953,22 +953,22 @@ trait WorldBehaviours
             random,
             recordingsGroupedById).zipWithIndex)
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
-                             instantGenerator) map (_.sorted)
+          instantGenerator) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
       } yield
         (worldResource,
-         recordingsGroupedById,
-         bigShuffledHistoryOverLotsOfThings,
-         asOfs,
-         queryWhen)
+          recordingsGroupedById,
+          bigShuffledHistoryOverLotsOfThings,
+          asOfs,
+          queryWhen)
       check(
         Prop
           .forAllNoShrink(testCaseGenerator) {
             case (worldResource,
-                  recordingsGroupedById,
-                  bigShuffledHistoryOverLotsOfThings,
-                  asOfs,
-                  queryWhen) =>
+            recordingsGroupedById,
+            bigShuffledHistoryOverLotsOfThings,
+            asOfs,
+            queryWhen) =>
               worldResource acquireAndGet {
                 world =>
                   recordEventsInWorld(
@@ -977,10 +977,10 @@ trait WorldBehaviours
                     world)
 
                   for ((NonExistentRecordings(
-                         historyId,
-                         _,
-                         ineffectiveEventFor)) <- recordingsGroupedById flatMap (_.doesNotExistAt(
-                         queryWhen))) {
+                  historyId,
+                  _,
+                  ineffectiveEventFor)) <- recordingsGroupedById flatMap (_.doesNotExistAt(
+                    queryWhen))) {
                     world.revise(
                       Map(-1 -> Some(ineffectiveEventFor(NegativeInfinity()))),
                       asOfs.last)
@@ -1023,23 +1023,23 @@ trait WorldBehaviours
             random,
             referencedHistoryRecordingsGroupedById ++ referringHistoryRecordingsGroupedById).zipWithIndex)
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
-                             instantGenerator) map (_.sorted)
+          instantGenerator) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
       } yield
         (worldResource,
-         referencedHistoryRecordingsGroupedById,
-         referringHistoryRecordingsGroupedById,
-         bigShuffledHistoryOverLotsOfThings,
-         asOfs,
-         queryWhen)
+          referencedHistoryRecordingsGroupedById,
+          referringHistoryRecordingsGroupedById,
+          bigShuffledHistoryOverLotsOfThings,
+          asOfs,
+          queryWhen)
       check(
         Prop.forAllNoShrink(testCaseGenerator) {
           case (worldResource,
-                referencedHistoryRecordingsGroupedById,
-                referringHistoryRecordingsGroupedById,
-                bigShuffledHistoryOverLotsOfThings,
-                asOfs,
-                queryWhen) =>
+          referencedHistoryRecordingsGroupedById,
+          referringHistoryRecordingsGroupedById,
+          bigShuffledHistoryOverLotsOfThings,
+          asOfs,
+          queryWhen) =>
             worldResource acquireAndGet {
               world =>
                 recordEventsInWorld(
@@ -1052,16 +1052,16 @@ trait WorldBehaviours
                 val checks: List[(Any, History)] =
                   for {
                     RecordingsNoLaterThan(
-                      referringHistoryId,
-                      referringHistoriesFrom,
-                      _,
-                      _,
-                      _) <- referringHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(
+                    referringHistoryId,
+                    referringHistoriesFrom,
+                    _,
+                    _,
+                    _) <- referringHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(
                       queryWhen))
                     NonExistentRecordings(
-                      referencedHistoryId,
-                      referencedHistoriesFrom,
-                      _) <- referencedHistoryRecordingsGroupedById flatMap (_.doesNotExistAt(
+                    referencedHistoryId,
+                    referencedHistoriesFrom,
+                    _) <- referencedHistoryRecordingsGroupedById flatMap (_.doesNotExistAt(
                       queryWhen))
                     Seq(referringHistory: ReferringHistory) = referringHistoriesFrom(
                       scope) if referringHistory.referencedDatums.contains(
@@ -1097,20 +1097,20 @@ trait WorldBehaviours
             random,
             referencedHistoryRecordingsGroupedById).zipWithIndex)
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
-                             instantGenerator) map (_.sorted)
+          instantGenerator) map (_.sorted)
         referencingEventWhen <- unboundedInstantGenerator
       } yield
         (worldResource,
-         referencedHistoryRecordingsGroupedById,
-         bigShuffledHistoryOverLotsOfThings,
-         asOfs,
-         referencingEventWhen)
+          referencedHistoryRecordingsGroupedById,
+          bigShuffledHistoryOverLotsOfThings,
+          asOfs,
+          referencingEventWhen)
       check(Prop.forAllNoShrink(testCaseGenerator) {
         case (worldResource,
-              referencedHistoryRecordingsGroupedById,
-              bigShuffledHistoryOverLotsOfThings,
-              asOfs,
-              referencingEventWhen) =>
+        referencedHistoryRecordingsGroupedById,
+        bigShuffledHistoryOverLotsOfThings,
+        asOfs,
+        referencingEventWhen) =>
           worldResource acquireAndGet {
             world =>
               recordEventsInWorld(
@@ -1120,11 +1120,11 @@ trait WorldBehaviours
 
               val checks = for {
                 RecordingsNoLaterThan(
-                  referencedHistoryId: History#Id,
-                  _,
-                  _,
-                  _,
-                  whenAnnihilated) <- referencedHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(
+                referencedHistoryId: History#Id,
+                _,
+                _,
+                _,
+                whenAnnihilated) <- referencedHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(
                   referencingEventWhen))
                 whenTheReferencedItemIsAnnihilated <- whenAnnihilated.toList
               } yield (referencedHistoryId, whenTheReferencedItemIsAnnihilated)
@@ -1135,7 +1135,7 @@ trait WorldBehaviours
 
               if (checks.nonEmpty) {
                 for (((referencedHistoryId, whenTheReferencedItemIsAnnihilated),
-                      index) <- checks zipWithIndex) {
+                index) <- checks zipWithIndex) {
                   val theReferrerId = s"$theReferrerIdBase - $index"
 
                   val change = Change.forTwoItems[ReferringHistory, History](
@@ -1150,20 +1150,20 @@ trait WorldBehaviours
 
                   val measurement = Measurement
                     .forTwoItems[ReferringHistory, MoreSpecificFooHistory](
-                      whenTheReferencedItemIsAnnihilated)(
-                      theReferrerId,
-                      referencedHistoryId
-                        .asInstanceOf[MoreSpecificFooHistory#Id],
-                      (referringHistory: ReferringHistory,
-                       referencedItem: MoreSpecificFooHistory) => {
-                        referringHistory.referTo(referencedItem)
-                      }
-                    )
+                    whenTheReferencedItemIsAnnihilated)(
+                    theReferrerId,
+                    referencedHistoryId
+                      .asInstanceOf[MoreSpecificFooHistory#Id],
+                    (referringHistory: ReferringHistory,
+                     referencedItem: MoreSpecificFooHistory) => {
+                      referringHistory.referTo(referencedItem)
+                    }
+                  )
 
                   intercept[RuntimeException] {
                     world.revise(Map(-1 - (2 * index)   -> Some(change),
-                                     -(2 * (index + 1)) -> Some(measurement)),
-                                 world.revisionAsOfs.last)
+                      -(2 * (index + 1)) -> Some(measurement)),
+                      world.revisionAsOfs.last)
                   }
                 }
 
@@ -1185,29 +1185,29 @@ trait WorldBehaviours
             random,
             referencedHistoryRecordingsGroupedById).zipWithIndex)
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
-                             instantGenerator) map (_.sorted)
+          instantGenerator) map (_.sorted)
         probeWhen <- unboundedInstantGenerator
       } yield
         (worldResource,
-         referencedHistoryRecordingsGroupedById,
-         bigShuffledHistoryOverLotsOfThings,
-         asOfs,
-         probeWhen)
+          referencedHistoryRecordingsGroupedById,
+          bigShuffledHistoryOverLotsOfThings,
+          asOfs,
+          probeWhen)
       check(Prop.forAllNoShrink(testCaseGenerator) {
         case (worldResource,
-              referencedHistoryRecordingsGroupedById,
-              bigShuffledHistoryOverLotsOfThings,
-              asOfs,
-              probeWhen) =>
+        referencedHistoryRecordingsGroupedById,
+        bigShuffledHistoryOverLotsOfThings,
+        asOfs,
+        probeWhen) =>
           worldResource acquireAndGet {
             world =>
               val checks = for {
                 RecordingsNoLaterThan(
-                  referencedHistoryId: History#Id,
-                  _,
-                  _,
-                  _,
-                  whenAnnihilated) <- referencedHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(
+                referencedHistoryId: History#Id,
+                _,
+                _,
+                _,
+                whenAnnihilated) <- referencedHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(
                   probeWhen))
                 whenTheReferencedItemIsAnnihilated <- whenAnnihilated.toList
               } yield (referencedHistoryId, whenTheReferencedItemIsAnnihilated)
@@ -1218,7 +1218,7 @@ trait WorldBehaviours
 
               if (checks.nonEmpty) {
                 for (((referencedHistoryId, whenTheReferencedItemIsAnnihilated),
-                      index) <- checks zipWithIndex) {
+                index) <- checks zipWithIndex) {
                   val theReferrerId = s"$theReferrerIdBase - $index"
 
                   val change =
@@ -1234,7 +1234,7 @@ trait WorldBehaviours
                     )
 
                   world.revise(Map(-1 - (2 * index) -> Some(change)),
-                               asOfs.head)
+                    asOfs.head)
                 }
 
                 recordEventsInWorld(
@@ -1243,24 +1243,24 @@ trait WorldBehaviours
                   world)
 
                 for (((referencedHistoryId, whenTheReferencedItemIsAnnihilated),
-                      index) <- checks zipWithIndex) {
+                index) <- checks zipWithIndex) {
                   val theReferrerId = s"$theReferrerIdBase - $index"
 
                   val measurement = Measurement
                     .forTwoItems[ReferringHistory, MoreSpecificFooHistory](
-                      whenTheReferencedItemIsAnnihilated)(
-                      theReferrerId,
-                      referencedHistoryId
-                        .asInstanceOf[MoreSpecificFooHistory#Id],
-                      (referringHistory: ReferringHistory,
-                       referencedItem: MoreSpecificFooHistory) => {
-                        referringHistory.referTo(referencedItem)
-                      }
-                    )
+                    whenTheReferencedItemIsAnnihilated)(
+                    theReferrerId,
+                    referencedHistoryId
+                      .asInstanceOf[MoreSpecificFooHistory#Id],
+                    (referringHistory: ReferringHistory,
+                     referencedItem: MoreSpecificFooHistory) => {
+                      referringHistory.referTo(referencedItem)
+                    }
+                  )
 
                   intercept[RuntimeException] {
                     world.revise(Map(-(2 * (index + 1)) -> Some(measurement)),
-                                 asOfs.head)
+                      asOfs.head)
                   }
                 }
 
@@ -1282,20 +1282,20 @@ trait WorldBehaviours
             random,
             referencedHistoryRecordingsGroupedById).zipWithIndex)
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
-                             instantGenerator) map (_.sorted)
+          instantGenerator) map (_.sorted)
         referencingEventWhen <- unboundedInstantGenerator
       } yield
         (worldResource,
-         referencedHistoryRecordingsGroupedById,
-         bigShuffledHistoryOverLotsOfThings,
-         asOfs,
-         referencingEventWhen)
+          referencedHistoryRecordingsGroupedById,
+          bigShuffledHistoryOverLotsOfThings,
+          asOfs,
+          referencingEventWhen)
       check(Prop.forAllNoShrink(testCaseGenerator) {
         case (worldResource,
-              referencedHistoryRecordingsGroupedById,
-              bigShuffledHistoryOverLotsOfThings,
-              asOfs,
-              referencingEventWhen) =>
+        referencedHistoryRecordingsGroupedById,
+        bigShuffledHistoryOverLotsOfThings,
+        asOfs,
+        referencingEventWhen) =>
           worldResource acquireAndGet { world =>
             recordEventsInWorld(
               liftRecordings(bigShuffledHistoryOverLotsOfThings),
@@ -1304,11 +1304,11 @@ trait WorldBehaviours
 
             val checks = for {
               RecordingsNoLaterThan(
-                referencedHistoryId: History#Id,
-                _,
-                _,
-                _,
-                whenAnnihilated) <- referencedHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(
+              referencedHistoryId: History#Id,
+              _,
+              _,
+              _,
+              whenAnnihilated) <- referencedHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(
                 referencingEventWhen))
 
               // Have to make sure the referenced item is annihilated *after* the event making the reference to it,
@@ -1325,12 +1325,12 @@ trait WorldBehaviours
                   -1 - index -> Some(
                     Change.forTwoItems[ReferringHistory, History](
                       referencingEventWhen)(theReferrerId,
-                                            referencedHistoryId,
-                                            (referringHistory: ReferringHistory,
-                                             referencedItem: History) => {
-                                              referringHistory.referTo(
-                                                referencedItem)
-                                            }))),
+                      referencedHistoryId,
+                      (referringHistory: ReferringHistory,
+                       referencedItem: History) => {
+                        referringHistory.referTo(
+                          referencedItem)
+                      }))),
                 world.revisionAsOfs.last
               )
             }
@@ -1339,7 +1339,7 @@ trait WorldBehaviours
               Prop.all(checks.map {
                 case (referencedHistoryId, laterQueryWhenAtAnnihilation) => {
                   val scope = world.scopeFor(laterQueryWhenAtAnnihilation,
-                                             world.nextRevision)
+                    world.nextRevision)
                   val Seq(referringHistory) = scope.render(
                     Bitemporal.withId[ReferringHistory](theReferrerId))
                   val ghostItem =
@@ -1371,20 +1371,20 @@ trait WorldBehaviours
             random,
             recordingsGroupedById).zipWithIndex)
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
-                             instantGenerator) map (_.sorted)
+          instantGenerator) map (_.sorted)
         definiteQueryWhen <- instantGenerator
       } yield
         (worldResource,
-         recordingsGroupedById,
-         bigShuffledHistoryOverLotsOfThings,
-         asOfs,
-         definiteQueryWhen)
+          recordingsGroupedById,
+          bigShuffledHistoryOverLotsOfThings,
+          asOfs,
+          definiteQueryWhen)
       check(Prop.forAllNoShrink(testCaseGenerator) {
         case (worldResource,
-              recordingsGroupedById,
-              bigShuffledHistoryOverLotsOfThings,
-              asOfs,
-              definiteQueryWhen) =>
+        recordingsGroupedById,
+        bigShuffledHistoryOverLotsOfThings,
+        asOfs,
+        definiteQueryWhen) =>
           worldResource acquireAndGet {
             world =>
               recordEventsInWorld(
@@ -1403,10 +1403,10 @@ trait WorldBehaviours
                 intercept[RuntimeException] {
                   val eventIdForAnnihilation = -1
                   world.revise(eventIdForAnnihilation,
-                               Annihilation[IntegerHistory](
-                                 definiteQueryWhen,
-                                 historyId.asInstanceOf[String]),
-                               asOfs.last)
+                    Annihilation[IntegerHistory](
+                      definiteQueryWhen,
+                      historyId.asInstanceOf[String]),
+                    asOfs.last)
                 }
                 Prop.proved
               } :| s"Should have rejected the attempt to annihilate an item that didn't exist at the query time."): _*)
@@ -1426,7 +1426,7 @@ trait WorldBehaviours
             random,
             recordingsGroupedById).zipWithIndex)
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
-                             instantGenerator) map (_.sorted)
+          instantGenerator) map (_.sorted)
       } yield (worldResource, bigShuffledHistoryOverLotsOfThings, asOfs)
       check(Prop.forAllNoShrink(testCaseGenerator) {
         case (worldResource, bigShuffledHistoryOverLotsOfThings, asOfs) =>
@@ -1453,7 +1453,7 @@ trait WorldBehaviours
             random,
             recordingsGroupedById).zipWithIndex)
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
-                             instantGenerator) map (_.sorted)
+          instantGenerator) map (_.sorted)
       } yield (worldResource, bigShuffledHistoryOverLotsOfThings, asOfs)
       check(Prop.forAllNoShrink(testCaseGenerator) {
         case (worldResource, bigShuffledHistoryOverLotsOfThings, asOfs) =>
@@ -1483,7 +1483,7 @@ trait WorldBehaviours
             random,
             recordingsGroupedById).zipWithIndex)
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
-                             instantGenerator) map (_.sorted)
+          instantGenerator) map (_.sorted)
       } yield (worldResource, bigShuffledHistoryOverLotsOfThings, asOfs)
       check(Prop.forAllNoShrink(testCaseGenerator) {
         case (worldResource, bigShuffledHistoryOverLotsOfThings, asOfs) =>
@@ -1513,7 +1513,7 @@ trait WorldBehaviours
             random,
             recordingsGroupedById).zipWithIndex)
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
-                             instantGenerator) map (_.sorted)
+          instantGenerator) map (_.sorted)
       } yield (worldResource, bigShuffledHistoryOverLotsOfThings, asOfs)
       check(Prop.forAllNoShrink(testCaseGenerator) {
         case (worldResource, bigShuffledHistoryOverLotsOfThings, asOfs) =>
@@ -1543,7 +1543,7 @@ trait WorldBehaviours
             random,
             recordingsGroupedById).zipWithIndex)
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
-                             instantGenerator) map (_.sorted)
+          instantGenerator) map (_.sorted)
       } yield (worldResource, bigShuffledHistoryOverLotsOfThings, asOfs)
       check(Prop.forAllNoShrink(testCaseGenerator) {
         case (worldResource, bigShuffledHistoryOverLotsOfThings, asOfs) =>
@@ -1575,9 +1575,9 @@ trait WorldBehaviours
       } yield (worldResource, bigShuffledHistoryOverLotsOfThings, asOfs, random)
       check(Prop.forAllNoShrink(testCaseGenerator) {
         case (worldResource,
-              bigShuffledHistoryOverLotsOfThings,
-              asOfs,
-              random) =>
+        bigShuffledHistoryOverLotsOfThings,
+        asOfs,
+        random) =>
           worldResource acquireAndGet {
             world =>
               val numberOfRevisions = asOfs.length
@@ -1593,7 +1593,7 @@ trait WorldBehaviours
               val asOfsWithIncorrectTransposition =
                 asOfs.splitAt(indexOfFirstAsOfBeingTransposed) match {
                   case (asOfsBeforeTransposition,
-                        Seq(first, second, asOfsAfterTransposition @ _*)) =>
+                  Seq(first, second, asOfsAfterTransposition @ _*)) =>
                     asOfsBeforeTransposition ++ Seq(second, first) ++ asOfsAfterTransposition
                 }
 
@@ -1621,15 +1621,15 @@ trait WorldBehaviours
             random,
             recordingsGroupedById).zipWithIndex)
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
-                             instantGenerator) map (_.sorted)
+          instantGenerator) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
       } yield
         (worldResource, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
       check(Prop.forAllNoShrink(testCaseGenerator) {
         case (worldResource,
-              bigShuffledHistoryOverLotsOfThings,
-              asOfs,
-              queryWhen) =>
+        bigShuffledHistoryOverLotsOfThings,
+        asOfs,
+        queryWhen) =>
           worldResource acquireAndGet {
             world =>
               recordEventsInWorld(
@@ -1641,12 +1641,12 @@ trait WorldBehaviours
                 NegativeInfinity[Instant]
 
               def asOfAndNextRevisionPairs_(
-                  nextRevisions: List[(Unbounded[Instant], (Int, Int))],
-                  asOf: Unbounded[Instant]) = nextRevisions match {
+                                             nextRevisions: List[(Unbounded[Instant], (Int, Int))],
+                                             asOf: Unbounded[Instant]) = nextRevisions match {
                 case (preceedingAsOf,
-                      (preceedingNextRevision,
-                       preceedingNextRevisionAfterFirstDuplicate)) :: tail
-                    if asOf == preceedingAsOf =>
+                (preceedingNextRevision,
+                preceedingNextRevisionAfterFirstDuplicate)) :: tail
+                  if asOf == preceedingAsOf =>
                   (asOf -> ((1 + preceedingNextRevision) -> preceedingNextRevisionAfterFirstDuplicate)) :: tail
                 case (_, (preceedingNextRevision, _)) :: _ => {
                   var nextRevision = 1 + preceedingNextRevision
@@ -1662,7 +1662,7 @@ trait WorldBehaviours
                 (
                   asOf,
                   (nextRevisionAfterDuplicates,
-                   nextRevisionAfterFirstDuplicate)) <- asOfAndNextRevisionPairs
+                  nextRevisionAfterFirstDuplicate)) <- asOfAndNextRevisionPairs
                 nextRevision                         <- nextRevisionAfterFirstDuplicate to nextRevisionAfterDuplicates
                 scopeViaNextRevision = world.scopeFor(queryWhen, nextRevision)
               } yield (asOf, nextRevision, scopeViaNextRevision)
@@ -1693,20 +1693,20 @@ trait WorldBehaviours
             random,
             recordingsGroupedById).zipWithIndex)
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
-                             instantGenerator) map (_.sorted)
+          instantGenerator) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
       } yield
         (worldResource,
-         bigShuffledHistoryOverLotsOfThings,
-         asOfs,
-         queryWhen,
-         random)
+          bigShuffledHistoryOverLotsOfThings,
+          asOfs,
+          queryWhen,
+          random)
       check(Prop.forAllNoShrink(testCaseGenerator) {
         case (worldResource,
-              bigShuffledHistoryOverLotsOfThings,
-              asOfs,
-              queryWhen,
-              random) =>
+        bigShuffledHistoryOverLotsOfThings,
+        asOfs,
+        queryWhen,
+        random) =>
           worldResource acquireAndGet { world =>
             val revisions = recordEventsInWorld(
               liftRecordings(bigShuffledHistoryOverLotsOfThings),
@@ -1717,14 +1717,14 @@ trait WorldBehaviours
 
             val asOfPairs = asOfs
               .scanRight((asOfComingAfterTheLastRevision,
-                          asOfComingAfterTheLastRevision)) {
+                asOfComingAfterTheLastRevision)) {
                 case (asOf, (laterAsOf, _)) => (asOf, laterAsOf)
               } init
 
             val asOfsAndSharedRevisionTriples = (for {
               ((earlierAsOfCorrespondingToRevision,
-                laterAsOfComingNoLaterThanAnySucceedingRevision),
-               revision) <- asOfPairs zip revisions
+              laterAsOfComingNoLaterThanAnySucceedingRevision),
+              revision) <- asOfPairs zip revisions
               laterAsOfSharingTheSameRevisionAsTheEarlierOne = earlierAsOfCorrespondingToRevision plusSeconds random
                 .chooseAnyNumberFromZeroToOneLessThan(
                   earlierAsOfCorrespondingToRevision.until(
@@ -1732,38 +1732,38 @@ trait WorldBehaviours
                     ChronoUnit.SECONDS))
             } yield
               (earlierAsOfCorrespondingToRevision,
-               laterAsOfSharingTheSameRevisionAsTheEarlierOne,
-               revision)) filter (PartialFunction.cond(_) {
+                laterAsOfSharingTheSameRevisionAsTheEarlierOne,
+                revision)) filter (PartialFunction.cond(_) {
               case (earlierAsOfCorrespondingToRevision,
-                    laterAsOfSharingTheSameRevisionAsTheEarlierOne,
-                    _) =>
+              laterAsOfSharingTheSameRevisionAsTheEarlierOne,
+              _) =>
                 earlierAsOfCorrespondingToRevision isBefore laterAsOfSharingTheSameRevisionAsTheEarlierOne
             })
 
             val checksViaAsOf = for {
               (earlierAsOfCorrespondingToRevision,
-               laterAsOfSharingTheSameRevisionAsTheEarlierOne,
-               revision) <- asOfsAndSharedRevisionTriples
+              laterAsOfSharingTheSameRevisionAsTheEarlierOne,
+              revision) <- asOfsAndSharedRevisionTriples
               scopeViaEarlierAsOfCorrespondingToRevision = world
                 .scopeFor(queryWhen, earlierAsOfCorrespondingToRevision)
               scopeViaLaterAsOfSharingTheSameRevisionAsTheEarlierOne = world
                 .scopeFor(queryWhen,
-                          laterAsOfSharingTheSameRevisionAsTheEarlierOne)
+                  laterAsOfSharingTheSameRevisionAsTheEarlierOne)
               nextRevision = 1 + revision
             } yield
               (earlierAsOfCorrespondingToRevision,
-               laterAsOfSharingTheSameRevisionAsTheEarlierOne,
-               nextRevision,
-               scopeViaEarlierAsOfCorrespondingToRevision,
-               scopeViaLaterAsOfSharingTheSameRevisionAsTheEarlierOne)
+                laterAsOfSharingTheSameRevisionAsTheEarlierOne,
+                nextRevision,
+                scopeViaEarlierAsOfCorrespondingToRevision,
+                scopeViaLaterAsOfSharingTheSameRevisionAsTheEarlierOne)
 
             if (checksViaAsOf.nonEmpty)
               Prop.all(checksViaAsOf map {
                 case (earlierAsOfCorrespondingToRevision,
-                      laterAsOfSharingTheSameRevisionAsTheEarlierOne,
-                      nextRevision,
-                      scopeViaEarlierAsOfCorrespondingToRevision,
-                      scopeViaLaterAsOfSharingTheSameRevisionAsTheEarlierOne) =>
+                laterAsOfSharingTheSameRevisionAsTheEarlierOne,
+                nextRevision,
+                scopeViaEarlierAsOfCorrespondingToRevision,
+                scopeViaLaterAsOfSharingTheSameRevisionAsTheEarlierOne) =>
                   (Finite(earlierAsOfCorrespondingToRevision) === scopeViaEarlierAsOfCorrespondingToRevision.asOf) :| s"Finite(${earlierAsOfCorrespondingToRevision}) === scopeViaEarlierAsOfCorrespondingToRevision.asOf" &&
                     (Finite(laterAsOfSharingTheSameRevisionAsTheEarlierOne) === scopeViaLaterAsOfSharingTheSameRevisionAsTheEarlierOne.asOf) :| s"Finite(${laterAsOfSharingTheSameRevisionAsTheEarlierOne}) === scopeViaLaterAsOfSharingTheSameRevisionAsTheEarlierOne.asOf" &&
                     (nextRevision === scopeViaEarlierAsOfCorrespondingToRevision.nextRevision) :| s"${nextRevision} === scopeViaEarlierAsOfCorrespondingToRevision.nextRevision" &&
@@ -1788,20 +1788,20 @@ trait WorldBehaviours
             random,
             recordingsGroupedById).zipWithIndex)
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
-                             instantGenerator) map (_.sorted)
+          instantGenerator) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
       } yield
         (worldResource,
-         recordingsGroupedById,
-         bigShuffledHistoryOverLotsOfThings,
-         asOfs,
-         queryWhen)
+          recordingsGroupedById,
+          bigShuffledHistoryOverLotsOfThings,
+          asOfs,
+          queryWhen)
       check(Prop.forAllNoShrink(testCaseGenerator) {
         case (worldResource,
-              recordingsGroupedById,
-              bigShuffledHistoryOverLotsOfThings,
-              asOfs,
-              queryWhen) =>
+        recordingsGroupedById,
+        bigShuffledHistoryOverLotsOfThings,
+        asOfs,
+        queryWhen) =>
           worldResource acquireAndGet {
             world =>
               // What's being tested is the imperative behaviour of 'World' wrt its scopes - so use imperative code.
@@ -1813,9 +1813,9 @@ trait WorldBehaviours
               val results = scala.collection.mutable.MutableList.empty[Prop]
 
               for (revisionAction <- revisionActions(
-                     liftRecordings(bigShuffledHistoryOverLotsOfThings),
-                     asOfs,
-                     world)) {
+                liftRecordings(bigShuffledHistoryOverLotsOfThings),
+                asOfs,
+                world)) {
                 val revision = revisionAction()
 
                 results += Prop.all(scopeViaRevisionToHistoryMap map {
@@ -1871,29 +1871,29 @@ trait WorldBehaviours
             })
           .force // Map with event ids over to strictly negative values to avoid collisions with the changes that are expected to work.
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
-                             instantGenerator) map (_.sorted)
+          instantGenerator) map (_.sorted)
         faultyAsOfs <- Gen.listOfN(
           bigShuffledFaultyHistoryOverLotsOfThings.length,
           instantGenerator) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
       } yield
         (utopiaResource,
-         distopiaResource,
-         recordingsGroupedById,
-         bigShuffledHistoryOverLotsOfThings,
-         bigShuffledFaultyHistoryOverLotsOfThings,
-         asOfs,
-         faultyAsOfs,
-         queryWhen)
+          distopiaResource,
+          recordingsGroupedById,
+          bigShuffledHistoryOverLotsOfThings,
+          bigShuffledFaultyHistoryOverLotsOfThings,
+          asOfs,
+          faultyAsOfs,
+          queryWhen)
       check(Prop.forAllNoShrink(testCaseGenerator) {
         case (utopiaResource,
-              distopiaResource,
-              recordingsGroupedById,
-              bigShuffledHistoryOverLotsOfThings,
-              bigShuffledFaultyHistoryOverLotsOfThings,
-              asOfs,
-              faultyAsOfs,
-              queryWhen) =>
+        distopiaResource,
+        recordingsGroupedById,
+        bigShuffledHistoryOverLotsOfThings,
+        bigShuffledFaultyHistoryOverLotsOfThings,
+        asOfs,
+        faultyAsOfs,
+        queryWhen) =>
           utopiaResource and distopiaResource acquireAndGet {
             case (utopia, distopia) =>
               // NOTE: we add some 'good' changes within the faulty revisions to make things more realistic prior to merging the faulty history with the good history...
@@ -1959,22 +1959,22 @@ trait WorldBehaviours
         queryWhen <- unboundedInstantGenerator
       } yield
         (worldOneWayResource,
-         worldAnotherWayResource,
-         recordingsGroupedById,
-         bigShuffledHistoryOverLotsOfThingsOneWay,
-         bigShuffledHistoryOverLotsOfThingsAnotherWay,
-         asOfsOneWay,
-         asOfsAnotherWay,
-         queryWhen)
+          worldAnotherWayResource,
+          recordingsGroupedById,
+          bigShuffledHistoryOverLotsOfThingsOneWay,
+          bigShuffledHistoryOverLotsOfThingsAnotherWay,
+          asOfsOneWay,
+          asOfsAnotherWay,
+          queryWhen)
       check(Prop.forAllNoShrink(testCaseGenerator) {
         case (worldOneWayResource,
-              worldAnotherWayResource,
-              recordingsGroupedById,
-              bigShuffledHistoryOverLotsOfThingsOneWay,
-              bigShuffledHistoryOverLotsOfThingsAnotherWay,
-              asOfsOneWay,
-              asOfsAnotherWay,
-              queryWhen) =>
+        worldAnotherWayResource,
+        recordingsGroupedById,
+        bigShuffledHistoryOverLotsOfThingsOneWay,
+        bigShuffledHistoryOverLotsOfThingsAnotherWay,
+        asOfsOneWay,
+        asOfsAnotherWay,
+        queryWhen) =>
           worldOneWayResource and worldAnotherWayResource acquireAndGet {
             case (worldOneWay, worldAnotherWay) =>
               recordEventsInWorld(
@@ -1990,7 +1990,7 @@ trait WorldBehaviours
                 worldOneWay.scopeFor(queryWhen, worldOneWay.nextRevision)
               val scopeAnotherWay =
                 worldAnotherWay.scopeFor(queryWhen,
-                                         worldAnotherWay.nextRevision)
+                  worldAnotherWay.nextRevision)
 
               val historyOneWay =
                 historyFrom(worldOneWay, recordingsGroupedById)(scopeOneWay)
@@ -2011,11 +2011,11 @@ trait WorldBehaviours
       dataSamplesForAnIdGenerator_[FooHistory](
         fooHistoryIdGenerator,
         Gen.oneOf(moreSpecificFooHistoryDataSampleGenerator(faulty = false),
-                  fooHistoryDataSampleGenerator1(faulty = false)))
+          fooHistoryDataSampleGenerator1(faulty = false)))
 
     val variablyTypedRecordingsGroupedByIdGenerator =
       recordingsGroupedByIdGenerator_(variablyTypedDataSamplesForAnIdGenerator,
-                                      forbidAnnihilations = true)
+        forbidAnnihilations = true)
 
     it should "allow events to vary in their view of the type of an item referenced by an id" in {
       {
@@ -2036,22 +2036,22 @@ trait WorldBehaviours
             shuffledRecordings,
             shuffledObsoleteRecordings)
           asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
-                               instantGenerator) map (_.sorted)
+            instantGenerator) map (_.sorted)
         } yield
           (worldResource,
-           recordingsGroupedById,
-           bigShuffledHistoryOverLotsOfThings,
-           asOfs)
+            recordingsGroupedById,
+            bigShuffledHistoryOverLotsOfThings,
+            asOfs)
         check(Prop.forAllNoShrink(testCaseGenerator) {
           case (worldResource,
-                recordingsGroupedById,
-                bigShuffledHistoryOverLotsOfThings,
-                asOfs) =>
+          recordingsGroupedById,
+          bigShuffledHistoryOverLotsOfThings,
+          asOfs) =>
             worldResource acquireAndGet {
               world =>
                 recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
-                                    asOfs,
-                                    world)
+                  asOfs,
+                  world)
 
                 val atTheEndOfTime = PositiveInfinity[Instant]
 
@@ -2059,11 +2059,11 @@ trait WorldBehaviours
 
                 val checks = for {
                   RecordingsNoLaterThan(
-                    historyId,
-                    historiesFrom,
-                    pertinentRecordings,
-                    _,
-                    _) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
+                  historyId,
+                  historiesFrom,
+                  pertinentRecordings,
+                  _,
+                  _) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
                     atTheEndOfTime))
                   Seq(history) = historiesFrom(scope)
                 } yield
@@ -2104,20 +2104,20 @@ trait WorldBehaviours
             shuffledRecordings,
             shuffledObsoleteRecordings)
           asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
-                               instantGenerator) map (_.sorted)
+            instantGenerator) map (_.sorted)
           whenAnInconsistentEventOccurs <- unboundedInstantGenerator
         } yield
           (worldResource,
-           recordingsGroupedById,
-           bigShuffledHistoryOverLotsOfThings,
-           asOfs,
-           whenAnInconsistentEventOccurs)
+            recordingsGroupedById,
+            bigShuffledHistoryOverLotsOfThings,
+            asOfs,
+            whenAnInconsistentEventOccurs)
         check(Prop.forAllNoShrink(testCaseGenerator) {
           case (worldResource,
-                recordingsGroupedById,
-                bigShuffledHistoryOverLotsOfThings,
-                asOfs,
-                whenAnInconsistentEventOccurs) =>
+          recordingsGroupedById,
+          bigShuffledHistoryOverLotsOfThings,
+          asOfs,
+          whenAnInconsistentEventOccurs) =>
             worldResource acquireAndGet {
               world =>
                 var numberOfEvents = bigShuffledHistoryOverLotsOfThings.size
@@ -2133,7 +2133,7 @@ trait WorldBehaviours
                 val atTheEndOfTime = PositiveInfinity[Instant]
 
                 val queryScope = world.scopeFor(whenAnInconsistentEventOccurs,
-                                                world.nextRevision)
+                  world.nextRevision)
 
                 val eventIdForExtraConsistentChange  = -1
                 val eventIdForInconsistentChangeOnly = -2
@@ -2166,9 +2166,9 @@ trait WorldBehaviours
                       )
                     world.revise(
                       Map(eventIdForExtraConsistentChange -> Some(
-                            consistentButLooselyTypedChange),
-                          eventIdForInconsistentChangeOnly -> Some(
-                            inconsistentlyTypedChange)),
+                        consistentButLooselyTypedChange),
+                        eventIdForInconsistentChangeOnly -> Some(
+                          inconsistentlyTypedChange)),
                       world.revisionAsOfs.last
                     )
                   }
@@ -2180,11 +2180,11 @@ trait WorldBehaviours
 
                 val checks = for {
                   RecordingsNoLaterThan(
-                    historyId,
-                    historiesFrom,
-                    pertinentRecordings,
-                    _,
-                    _) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
+                  historyId,
+                  historiesFrom,
+                  pertinentRecordings,
+                  _,
+                  _) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
                     atTheEndOfTime))
                   Seq(history) = historiesFrom(scope)
                 } yield
@@ -2209,75 +2209,75 @@ trait WorldBehaviours
     def abstractedHistoryPositiveIntegerDataSampleGenerator(faulty: Boolean) =
       for { data <- Gen.posNum[Int] } yield
         (data,
-         (when: americium.Unbounded[Instant],
-          makeAChange: Boolean,
-          abstractedHistoryId: AbstractedHistory#Id) =>
-           eventConstructorReferringToOneItem[AbstractedHistory](makeAChange)(
-             when)
-             .apply(
-               abstractedHistoryId,
-               (abstractedHistory: AbstractedHistory) => {
-                 // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
-                 assert(abstractedHistoryId == abstractedHistory.id)
-                 assertThrows[UnsupportedOperationException](
-                   abstractedHistory.datums)
-                 assertThrows[UnsupportedOperationException](
-                   abstractedHistory.property)
+          (when: americium.Unbounded[Instant],
+           makeAChange: Boolean,
+           abstractedHistoryId: AbstractedHistory#Id) =>
+            eventConstructorReferringToOneItem[AbstractedHistory](makeAChange)(
+              when)
+              .apply(
+                abstractedHistoryId,
+                (abstractedHistory: AbstractedHistory) => {
+                  // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
+                  assert(abstractedHistoryId == abstractedHistory.id)
+                  assertThrows[UnsupportedOperationException](
+                    abstractedHistory.datums)
+                  assertThrows[UnsupportedOperationException](
+                    abstractedHistory.property)
 
-                 if (faulty) abstractedHistory.forceInvariantBreakage() // Modelling breakage of the bitemporal invariant.
+                  if (faulty) abstractedHistory.forceInvariantBreakage() // Modelling breakage of the bitemporal invariant.
 
-                 abstractedHistory.property = data
-               }
-           ))
+                  abstractedHistory.property = data
+                }
+              ))
 
     def implementingHistoryNegativeIntegerDataSampleGenerator(faulty: Boolean) =
       for { data <- Gen.negNum[Int] } yield
         (data,
-         (when: americium.Unbounded[Instant],
-          makeAChange: Boolean,
-          implementingHistoryId: ImplementingHistory#Id) =>
-           eventConstructorReferringToOneItem[ImplementingHistory](makeAChange)(
-             when)
-             .apply(
-               implementingHistoryId,
-               (implementingHistory: ImplementingHistory) => {
-                 // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
-                 assert(implementingHistoryId == implementingHistory.id)
-                 assertThrows[UnsupportedOperationException](
-                   implementingHistory.datums)
-                 assertThrows[UnsupportedOperationException](
-                   implementingHistory.property)
+          (when: americium.Unbounded[Instant],
+           makeAChange: Boolean,
+           implementingHistoryId: ImplementingHistory#Id) =>
+            eventConstructorReferringToOneItem[ImplementingHistory](makeAChange)(
+              when)
+              .apply(
+                implementingHistoryId,
+                (implementingHistory: ImplementingHistory) => {
+                  // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
+                  assert(implementingHistoryId == implementingHistory.id)
+                  assertThrows[UnsupportedOperationException](
+                    implementingHistory.datums)
+                  assertThrows[UnsupportedOperationException](
+                    implementingHistory.property)
 
-                 if (faulty) implementingHistory.forceInvariantBreakage() // Modelling breakage of the bitemporal invariant.
+                  if (faulty) implementingHistory.forceInvariantBreakage() // Modelling breakage of the bitemporal invariant.
 
-                 implementingHistory.property = data
-               }
-           ))
+                  implementingHistory.property = data
+                }
+              ))
 
     def negatingImplementingHistoryNegativeIntegerDataSampleGenerator(
-        faulty: Boolean) =
+                                                                       faulty: Boolean) =
       for { data <- Gen.negNum[Int] } yield
         (data,
-         (when: americium.Unbounded[Instant],
-          makeAChange: Boolean,
-          implementingHistoryId: NegatingImplementingHistory#Id) =>
-           eventConstructorReferringToOneItem[NegatingImplementingHistory](
-             makeAChange)(when)
-             .apply(
-               implementingHistoryId,
-               (implementingHistory: NegatingImplementingHistory) => {
-                 // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
-                 assert(implementingHistoryId == implementingHistory.id)
-                 assertThrows[UnsupportedOperationException](
-                   implementingHistory.datums)
-                 assertThrows[UnsupportedOperationException](
-                   implementingHistory.property)
+          (when: americium.Unbounded[Instant],
+           makeAChange: Boolean,
+           implementingHistoryId: NegatingImplementingHistory#Id) =>
+            eventConstructorReferringToOneItem[NegatingImplementingHistory](
+              makeAChange)(when)
+              .apply(
+                implementingHistoryId,
+                (implementingHistory: NegatingImplementingHistory) => {
+                  // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
+                  assert(implementingHistoryId == implementingHistory.id)
+                  assertThrows[UnsupportedOperationException](
+                    implementingHistory.datums)
+                  assertThrows[UnsupportedOperationException](
+                    implementingHistory.property)
 
-                 if (faulty) implementingHistory.forceInvariantBreakage() // Modelling breakage of the bitemporal invariant.
+                  if (faulty) implementingHistory.forceInvariantBreakage() // Modelling breakage of the bitemporal invariant.
 
-                 implementingHistory.property = data
-               }
-           ))
+                  implementingHistory.property = data
+                }
+              ))
 
     val abstractedDataSamplesForAnIdGenerator =
       dataSamplesForAnIdGenerator_[AbstractedHistory](
@@ -2311,9 +2311,9 @@ trait WorldBehaviours
           sharedIds = idsForAbstractedHistories intersect idsForImplementingHistories
           if sharedIds.nonEmpty
           relevantRecordingsForAbstractedHistoriesGroupedById = recordingsForAbstractedHistoriesGroupedById filter (
-              recordings => sharedIds.contains(recordings.historyId))
+            recordings => sharedIds.contains(recordings.historyId))
           relevantRecordingsForImplementedHistoriesGroupedById = recordingsForImplementingHistoriesGroupedById filter (
-              recordings => sharedIds.contains(recordings.historyId))
+            recordings => sharedIds.contains(recordings.historyId))
           seed <- seedGenerator
           random = new Random(seed)
           shuffledRecordingsForAbstractedHistories = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
@@ -2332,18 +2332,18 @@ trait WorldBehaviours
           queryWhen <- unboundedInstantGenerator
         } yield
           (worldResource,
-           bigShuffledHistoryOverLotsOfThingsThatMakesSureThatAtLeastOneImplementingHistoryGetsBookedInFirst,
-           asOfs,
-           queryWhen)
+            bigShuffledHistoryOverLotsOfThingsThatMakesSureThatAtLeastOneImplementingHistoryGetsBookedInFirst,
+            asOfs,
+            queryWhen)
         check(Prop.forAllNoShrink(testCaseGenerator) {
           case (worldResource,
-                bigShuffledHistoryOverLotsOfThings,
-                asOfs,
-                queryWhen) =>
+          bigShuffledHistoryOverLotsOfThings,
+          asOfs,
+          queryWhen) =>
             worldResource acquireAndGet { world =>
               recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
-                                  asOfs,
-                                  world)
+                asOfs,
+                world)
 
               Prop.proved
             }
@@ -2372,9 +2372,9 @@ trait WorldBehaviours
           sharedIds = idsForAbstractedHistories intersect idsForImplementingHistories
           if sharedIds.nonEmpty
           relevantRecordingsForAbstractedHistoriesGroupedById = recordingsForAbstractedHistoriesGroupedById filter (
-              recordings => sharedIds.contains(recordings.historyId))
+            recordings => sharedIds.contains(recordings.historyId))
           relevantRecordingsForImplementedHistoriesGroupedById = recordingsForImplementingHistoriesGroupedById filter (
-              recordings => sharedIds.contains(recordings.historyId))
+            recordings => sharedIds.contains(recordings.historyId))
           seed <- seedGenerator
           random = new Random(seed)
           shuffledRecordingsForAbstractedHistories = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
@@ -2393,18 +2393,18 @@ trait WorldBehaviours
           queryWhen <- unboundedInstantGenerator
         } yield
           (worldResource,
-           bigShuffledHistoryOverLotsOfThingsThatMakesSureThatAtLeastOneImplementingHistoryGetsBookedInFirst,
-           asOfs,
-           queryWhen)
+            bigShuffledHistoryOverLotsOfThingsThatMakesSureThatAtLeastOneImplementingHistoryGetsBookedInFirst,
+            asOfs,
+            queryWhen)
         check(Prop.forAllNoShrink(testCaseGenerator) {
           case (worldResource,
-                bigShuffledHistoryOverLotsOfThings,
-                asOfs,
-                queryWhen) =>
+          bigShuffledHistoryOverLotsOfThings,
+          asOfs,
+          queryWhen) =>
             worldResource acquireAndGet { world =>
               recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
-                                  asOfs,
-                                  world)
+                asOfs,
+                world)
 
               Prop.proved
             }
@@ -2443,39 +2443,39 @@ trait WorldBehaviours
           shuffledRecordings,
           shuffledObsoleteRecordings)
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
-                             instantGenerator) map (_.sorted)
+          instantGenerator) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
       } yield
         (worldResource,
-         recordingsGroupedById,
-         bigShuffledHistoryOverLotsOfThings,
-         asOfs,
-         queryWhen,
-         seed)
+          recordingsGroupedById,
+          bigShuffledHistoryOverLotsOfThings,
+          asOfs,
+          queryWhen,
+          seed)
       check(
         Prop.forAllNoShrink(testCaseGenerator) {
           case (worldResource,
-                recordingsGroupedById,
-                bigShuffledHistoryOverLotsOfThings,
-                asOfs,
-                queryWhen,
-                seed) =>
+          recordingsGroupedById,
+          bigShuffledHistoryOverLotsOfThings,
+          asOfs,
+          queryWhen,
+          seed) =>
             worldResource acquireAndGet { world =>
               try {
                 recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
-                                    asOfs,
-                                    world)
+                  asOfs,
+                  world)
 
                 val scope =
                   world.scopeFor(queryWhen, world.nextRevision)
 
                 val checks = for {
                   RecordingsNoLaterThan(
-                    historyId,
-                    historiesFrom,
-                    pertinentRecordings,
-                    _,
-                    _) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
+                  historyId,
+                  historiesFrom,
+                  pertinentRecordings,
+                  _,
+                  _) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
                     queryWhen))
                   Seq(history) = historiesFrom(scope)
                   haveBothAnAbstractedAndAnImplementingDatumSomewhere = history.datums
@@ -2526,25 +2526,25 @@ trait WorldBehaviours
             shuffledRecordingsForAbstractedHistories,
             shuffledObsoleteRecordings)
           asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
-                               instantGenerator) map (_.sorted)
+            instantGenerator) map (_.sorted)
           queryWhen <- unboundedInstantGenerator
         } yield
           (worldResource,
-           recordingsForAbstractedHistoriesGroupedById,
-           bigShuffledHistoryOverLotsOfThings,
-           asOfs,
-           queryWhen)
+            recordingsForAbstractedHistoriesGroupedById,
+            bigShuffledHistoryOverLotsOfThings,
+            asOfs,
+            queryWhen)
         check(Prop.forAllNoShrink(testCaseGenerator) {
           case (worldResource,
-                recordingsForAbstractedHistoriesGroupedById,
-                bigShuffledHistoryOverLotsOfThings,
-                asOfs,
-                queryWhen) =>
+          recordingsForAbstractedHistoriesGroupedById,
+          bigShuffledHistoryOverLotsOfThings,
+          asOfs,
+          queryWhen) =>
             worldResource acquireAndGet { world =>
               intercept[UnsupportedOperationException] {
                 recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
-                                    asOfs,
-                                    world)
+                  asOfs,
+                  world)
               }
 
               Prop.proved
@@ -2575,39 +2575,39 @@ trait WorldBehaviours
             shuffledRecordings,
             shuffledObsoleteRecordings)
           asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
-                               instantGenerator) map (_.sorted)
+            instantGenerator) map (_.sorted)
           whenAnAnnihilationOccurs     <- instantGenerator
           queryWhenLeadsAnnihilationBy <- Gen.posNum[Int]
         } yield
           (worldResource,
-           recordingsGroupedById,
-           bigShuffledHistoryOverLotsOfThings,
-           asOfs,
-           whenAnAnnihilationOccurs,
-           whenAnAnnihilationOccurs minusMillis queryWhenLeadsAnnihilationBy)
+            recordingsGroupedById,
+            bigShuffledHistoryOverLotsOfThings,
+            asOfs,
+            whenAnAnnihilationOccurs,
+            whenAnAnnihilationOccurs minusMillis queryWhenLeadsAnnihilationBy)
         check(Prop.forAllNoShrink(testCaseGenerator) {
           case (worldResource,
-                recordingsGroupedById,
-                bigShuffledHistoryOverLotsOfThings,
-                asOfs,
-                whenAnAnnihilationOccurs,
-                queryWhen) =>
+          recordingsGroupedById,
+          bigShuffledHistoryOverLotsOfThings,
+          asOfs,
+          whenAnAnnihilationOccurs,
+          queryWhen) =>
             worldResource acquireAndGet { world =>
               try {
                 recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
-                                    asOfs,
-                                    world)
+                  asOfs,
+                  world)
 
                 for {
                   (RecordingsNoLaterThan(historyId, _, _, _, _),
-                   eventIdForAnnihilation) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
+                  eventIdForAnnihilation) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
                     Finite(queryWhen))) zip Stream.from(-1, -1)
                 } {
                   world.revise(eventIdForAnnihilation,
-                               Annihilation[NegatingImplementingHistory](
-                                 whenAnAnnihilationOccurs,
-                                 historyId.asInstanceOf[String]),
-                               world.revisionAsOfs.last)
+                    Annihilation[NegatingImplementingHistory](
+                      whenAnAnnihilationOccurs,
+                      historyId.asInstanceOf[String]),
+                    world.revisionAsOfs.last)
                 }
 
                 val scopeThatShouldPickOutNegatingImplementingHistories =
@@ -2615,14 +2615,14 @@ trait WorldBehaviours
 
                 for {
                   (RecordingsNoLaterThan(historyId, _, _, _, _),
-                   eventIdForAnnihilation) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
+                  eventIdForAnnihilation) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
                     Finite(queryWhen))) zip Stream.from(-1, -1)
                 } {
                   world.revise(eventIdForAnnihilation,
-                               Annihilation[ImplementingHistory](
-                                 whenAnAnnihilationOccurs,
-                                 historyId.asInstanceOf[String]),
-                               world.revisionAsOfs.last)
+                    Annihilation[ImplementingHistory](
+                      whenAnAnnihilationOccurs,
+                      historyId.asInstanceOf[String]),
+                    world.revisionAsOfs.last)
                 }
 
                 val scopeThatShouldPickOutImplementingHistories =
@@ -2685,26 +2685,26 @@ trait WorldBehaviours
           shuffledRecordings,
           shuffledObsoleteRecordings)
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
-                             instantGenerator) map (_.sorted)
+          instantGenerator) map (_.sorted)
       } yield
         (worldResource,
-         recordingsGroupedById,
-         bigShuffledHistoryOverLotsOfThings,
-         asOfs,
-         queryWhen,
-         idsThatEachReferToMoreThanOneItem)
+          recordingsGroupedById,
+          bigShuffledHistoryOverLotsOfThings,
+          asOfs,
+          queryWhen,
+          idsThatEachReferToMoreThanOneItem)
       check(Prop.forAllNoShrink(testCaseGenerator) {
         case (worldResource,
-              recordingsGroupedById,
-              bigShuffledHistoryOverLotsOfThings,
-              asOfs,
-              queryWhen,
-              idsThatEachReferToMoreThanOneItem) =>
+        recordingsGroupedById,
+        bigShuffledHistoryOverLotsOfThings,
+        asOfs,
+        queryWhen,
+        idsThatEachReferToMoreThanOneItem) =>
           worldResource acquireAndGet {
             world =>
               recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
-                                  asOfs,
-                                  world)
+                asOfs,
+                world)
 
               val maximumEventId =
                 bigShuffledHistoryOverLotsOfThings.flatten map (_._2) max
@@ -2713,10 +2713,10 @@ trait WorldBehaviours
                 idsThatEachReferToMoreThanOneItem.zipWithIndex map {
                   case (idThatEachRefersToMoreThanOneItem, index) =>
                     (1 + maximumEventId + index,
-                     Some(
-                       Annihilation[History](queryWhen,
-                                             idThatEachRefersToMoreThanOneItem
-                                               .asInstanceOf[History#Id])))
+                      Some(
+                        Annihilation[History](queryWhen,
+                          idThatEachRefersToMoreThanOneItem
+                            .asInstanceOf[History#Id])))
                 } toMap
 
               world.revise(annihilationEvents, asOfs.last)
@@ -2755,35 +2755,35 @@ trait WorldBehaviours
           shuffledRecordings,
           shuffledObsoleteRecordings)
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
-                             instantGenerator) map (_.sorted)
+          instantGenerator) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
       } yield
         (worldResource,
-         recordingsGroupedById,
-         bigShuffledHistoryOverLotsOfThings,
-         asOfs,
-         queryWhen)
+          recordingsGroupedById,
+          bigShuffledHistoryOverLotsOfThings,
+          asOfs,
+          queryWhen)
       check(Prop.forAllNoShrink(testCaseGenerator) {
         case (worldResource,
-              recordingsGroupedById,
-              bigShuffledHistoryOverLotsOfThings,
-              asOfs,
-              queryWhen) =>
+        recordingsGroupedById,
+        bigShuffledHistoryOverLotsOfThings,
+        asOfs,
+        queryWhen) =>
           worldResource acquireAndGet {
             world =>
               recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
-                                  asOfs,
-                                  world)
+                asOfs,
+                world)
 
               val scope = world.scopeFor(queryWhen, world.nextRevision)
 
               val checks = for {
                 RecordingsNoLaterThan(
-                  historyId,
-                  historiesFrom,
-                  pertinentRecordings,
-                  _,
-                  _) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
+                historyId,
+                historiesFrom,
+                pertinentRecordings,
+                _,
+                _) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
                   queryWhen))
                 Seq(history) = historiesFrom(scope)
               } yield (historyId, history.datums, pertinentRecordings.map(_._1))
@@ -2832,28 +2832,28 @@ trait WorldBehaviours
         historyLength    = bigShuffledHistoryOverLotsOfThings.length
         annulmentsLength = annulmentsGalore.length
         asOfs <- Gen.listOfN(2 * historyLength + annulmentsLength,
-                             instantGenerator) map (_.sorted)
+          instantGenerator) map (_.sorted)
         (asOfsForFirstHistory, remainingAsOfs)      = asOfs splitAt historyLength
         (asOfsForAnnulments, asOfsForSecondHistory) = remainingAsOfs splitAt annulmentsLength
         queryWhen <- unboundedInstantGenerator
       } yield
         (worldResource,
-         recordingsGroupedById,
-         bigShuffledHistoryOverLotsOfThings,
-         annulmentsGalore,
-         asOfsForFirstHistory,
-         asOfsForAnnulments,
-         asOfsForSecondHistory,
-         queryWhen)
+          recordingsGroupedById,
+          bigShuffledHistoryOverLotsOfThings,
+          annulmentsGalore,
+          asOfsForFirstHistory,
+          asOfsForAnnulments,
+          asOfsForSecondHistory,
+          queryWhen)
       check(Prop.forAllNoShrink(testCaseGenerator) {
         case (worldResource,
-              recordingsGroupedById,
-              bigShuffledHistoryOverLotsOfThings,
-              annulmentsGalore,
-              asOfsForFirstHistory,
-              asOfsForAnnulments,
-              asOfsForSecondHistory,
-              queryWhen) =>
+        recordingsGroupedById,
+        bigShuffledHistoryOverLotsOfThings,
+        annulmentsGalore,
+        asOfsForFirstHistory,
+        asOfsForAnnulments,
+        asOfsForSecondHistory,
+        queryWhen) =>
           worldResource acquireAndGet {
             world =>
               // Define a history the first time around...
@@ -2893,7 +2893,7 @@ trait WorldBehaviours
                 historyFrom(world, recordingsGroupedById)(scopeForSecondHistory)
 
               (historyAfterAnnulments.isEmpty :| s"${historyAfterAnnulments}.isEmpty") &&
-              ((firstHistory == secondHistory) :| s"firstHistory === ${secondHistory}")
+                ((firstHistory == secondHistory) :| s"firstHistory === ${secondHistory}")
           }
       })
     }
@@ -2925,40 +2925,40 @@ trait WorldBehaviours
         bigOverallShuffledHistoryOverLotsOfThings = bigShuffledHistoryOverLotsOfThings ++ liftRecordings(
           bigFollowingShuffledHistoryOverLotsOfThings)
         asOfs <- Gen.listOfN(bigOverallShuffledHistoryOverLotsOfThings.length,
-                             instantGenerator) map (_.sorted)
+          instantGenerator) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
         revisionOffsetToCheckAt = bigShuffledHistoryOverLotsOfThings.length
       } yield
         (worldResource,
-         recordingsGroupedById,
-         bigOverallShuffledHistoryOverLotsOfThings,
-         asOfs,
-         queryWhen,
-         revisionOffsetToCheckAt)
+          recordingsGroupedById,
+          bigOverallShuffledHistoryOverLotsOfThings,
+          asOfs,
+          queryWhen,
+          revisionOffsetToCheckAt)
       check(Prop.forAllNoShrink(testCaseGenerator) {
         case (worldResource,
-              recordingsGroupedById,
-              bigOverallShuffledHistoryOverLotsOfThings,
-              asOfs,
-              queryWhen,
-              revisionOffsetToCheckAt) =>
+        recordingsGroupedById,
+        bigOverallShuffledHistoryOverLotsOfThings,
+        asOfs,
+        queryWhen,
+        revisionOffsetToCheckAt) =>
           worldResource acquireAndGet {
             world =>
               recordEventsInWorld(bigOverallShuffledHistoryOverLotsOfThings,
-                                  asOfs,
-                                  world)
+                asOfs,
+                world)
 
               val scope =
                 world.scopeFor(queryWhen,
-                               World.initialRevision + revisionOffsetToCheckAt)
+                  World.initialRevision + revisionOffsetToCheckAt)
 
               val checks = for {
                 RecordingsNoLaterThan(
-                  historyId,
-                  historiesFrom,
-                  pertinentRecordings,
-                  _,
-                  _) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
+                historyId,
+                historiesFrom,
+                pertinentRecordings,
+                _,
+                _) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
                   queryWhen))
                 Seq(history) = historiesFrom(scope)
               } yield (historyId, history.datums, pertinentRecordings.map(_._1))
@@ -3001,13 +3001,13 @@ trait WorldBehaviours
         worldResource       <- worldResourceGenerator
         testCaseSubsections <- Gen.listOfN(4, testCaseSubSectionGenerator)
         asOfs <- Gen.listOfN(testCaseSubsections map (_._2.length) sum,
-                             instantGenerator) map (_.sorted)
+          instantGenerator) map (_.sorted)
         asOfsForSubsections = stream.unfold(testCaseSubsections -> asOfs) {
           case ((testCaseSubsection :: remainingTestCaseSubsections), asOfs) =>
             val numberOfRevisions                    = testCaseSubsection._2.length
             val (asOfsForSubsection, remainingAsOfs) = asOfs splitAt numberOfRevisions
             Some(asOfsForSubsection,
-                 remainingTestCaseSubsections -> remainingAsOfs)
+              remainingTestCaseSubsections -> remainingAsOfs)
           case _ => None
         }
         queryWhen <- unboundedInstantGenerator
@@ -3016,18 +3016,18 @@ trait WorldBehaviours
       check(
         Prop.forAllNoShrink(testCaseGenerator) {
           case (worldResource,
-                testCaseSubsections,
-                asOfsForSubsections,
-                queryWhen) =>
+          testCaseSubsections,
+          asOfsForSubsections,
+          queryWhen) =>
             worldResource acquireAndGet {
               world =>
                 val listOfRevisionsToCheckAtAndRecordingsGroupedById =
                   stream.unfold(
                     (testCaseSubsections zip asOfsForSubsections) -> -1) {
                     case ((((recordingsGroupedById,
-                             bigShuffledHistoryOverLotsOfThings),
-                            asOfs) :: remainingSubsections),
-                          maximumEventIdFromPreviousSubsection) =>
+                    bigShuffledHistoryOverLotsOfThings),
+                    asOfs) :: remainingSubsections),
+                    maximumEventIdFromPreviousSubsection) =>
                       val sortedEventIds =
                         (bigShuffledHistoryOverLotsOfThings flatMap (_ map (_._2))).sorted.distinct
                       assert(0 == sortedEventIds.head)
@@ -3047,8 +3047,8 @@ trait WorldBehaviours
                           List(asOfForAnnulments),
                           world)
                         recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
-                                            asOfs,
-                                            world)
+                          asOfs,
+                          world)
                       } catch {
                         case _: RuntimeException =>
                           // The assumption is that our brute-force rewriting of history made what would be
@@ -3070,8 +3070,8 @@ trait WorldBehaviours
                               (Unbounded[Instant], Event)]) -> _))
 
                           recordEventsInWorld(annulmentsGalore,
-                                              List(asOfForAllCorrections),
-                                              world)
+                            List(asOfForAllCorrections),
+                            world)
                           recordEventsInWorld(
                             bigShuffledHistoryOverLotsOfThings,
                             List.fill(asOfs.length)(asOfForAllCorrections),
@@ -3080,7 +3080,7 @@ trait WorldBehaviours
 
                       Some(
                         (world.nextRevision   -> recordingsGroupedById,
-                         remainingSubsections -> maximumEventIdFromThisSubsection))
+                          remainingSubsections -> maximumEventIdFromThisSubsection))
                     case _ => None
                   }
 
@@ -3091,11 +3091,11 @@ trait WorldBehaviours
 
                   val checks = for {
                     RecordingsNoLaterThan(
-                      historyId,
-                      historiesFrom,
-                      pertinentRecordings,
-                      _,
-                      _) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
+                    historyId,
+                    historiesFrom,
+                    pertinentRecordings,
+                    _,
+                    _) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
                       queryWhen))
                     Seq(history) = historiesFrom(scope)
                   } yield
@@ -3140,18 +3140,18 @@ trait WorldBehaviours
         queryWhen <- unboundedInstantGenerator
       } yield
         (worldResource,
-         recordingsGroupedById,
-         bigShuffledHistoryOverLotsOfThings,
-         annulmentsGalore,
-         asOfs,
-         queryWhen)
+          recordingsGroupedById,
+          bigShuffledHistoryOverLotsOfThings,
+          annulmentsGalore,
+          asOfs,
+          queryWhen)
       check(Prop.forAllNoShrink(testCaseGenerator) {
         case (worldResource,
-              recordingsGroupedById,
-              bigShuffledHistoryOverLotsOfThings,
-              annulmentsGalore,
-              asOfs,
-              queryWhen) =>
+        recordingsGroupedById,
+        bigShuffledHistoryOverLotsOfThings,
+        annulmentsGalore,
+        asOfs,
+        queryWhen) =>
           worldResource acquireAndGet {
             world =>
               // Define a history the first time around...
@@ -3172,8 +3172,8 @@ trait WorldBehaviours
               val asOfForCorrections = asOfs.last
 
               recordEventsInWorld(annulmentsGalore,
-                                  List(asOfForCorrections),
-                                  world)
+                List(asOfForCorrections),
+                world)
 
               val scopeAfterAnnulments =
                 world.scopeFor(queryWhen, world.nextRevision)
@@ -3195,7 +3195,7 @@ trait WorldBehaviours
                 historyFrom(world, recordingsGroupedById)(scopeForSecondHistory)
 
               (historyAfterAnnulments.isEmpty :| s"${historyAfterAnnulments}.isEmpty") &&
-              ((firstHistory == secondHistory) :| s"firstHistory === ${secondHistory}")
+                ((firstHistory == secondHistory) :| s"firstHistory === ${secondHistory}")
           }
       })
     }

@@ -166,7 +166,7 @@ trait BitemporalBehaviours
                     case (id, group) => id -> group.size
                   } toSet
 
-                (idsFromWildcardQuery == idsInExistence) :| s"${idsFromWildcardQuery} should be ${idsInExistence}"
+                (idsFromWildcardQuery == idsInExistence) :| s"${idsFromWildcardQuery} should be ${idsInExistence}, the items are: $itemsFromWildcardQuery"
             }
         })
     }
