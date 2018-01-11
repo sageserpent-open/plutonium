@@ -288,6 +288,9 @@ object Measurement {
 // TODO: will need to be able to lower the typetag somehow if we are going to build an update plan with these.
 case class Annihilation[Item: TypeTag](definiteWhen: Instant, id: Any)
     extends Event {
+  override def toString: String =
+    s"Annihilating id: $id at: $definiteWhen with type: $capturedTypeTag"
+
   val when = Finite(definiteWhen)
   @Bind(classOf[JavaSerializer])
   val capturedTypeTag = typeTag[Item]
