@@ -198,6 +198,7 @@ class TimelineImplementation[EventId](
           itemStateUpdate match {
             case ItemStateAnnihilation(uniqueItemSpecification) =>
               snapshotBlobs += (uniqueItemSpecification -> None)
+              identifiedItemAccess.purgeItemFor(uniqueItemSpecification)
             case ItemStatePatch(patch) =>
               for (_ <- makeManagedResource {
                      identifiedItemAccess.allItemsAreLocked = false

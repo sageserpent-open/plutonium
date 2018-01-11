@@ -173,6 +173,10 @@ trait ItemStateStorage { itemStateStorageObject =>
       }
     }
 
+    def purgeItemFor(uniqueItemSpecification: UniqueItemSpecification) = {
+      storage.remove(uniqueItemSpecification)
+    }
+
     class ItemDeserializationThreadContext {
       val uniqueItemSpecificationAccess =
         new DynamicVariable[Option[UniqueItemSpecification]](None)
@@ -207,13 +211,13 @@ trait ItemStateStorage { itemStateStorageObject =>
       item
     }
 
-    def fallbackItemFor[Item](
+    protected def fallbackItemFor[Item](
         uniqueItemSpecification: UniqueItemSpecification): Item
 
     protected def createItemFor[Item](
         uniqueItemSpecification: UniqueItemSpecification): Item
 
-    class Storage extends mutable.HashMap[UniqueItemSpecification, Any]
+    private class Storage extends mutable.HashMap[UniqueItemSpecification, Any]
 
     private val storage: Storage = new Storage
   }
