@@ -820,7 +820,7 @@ class BitemporalSpecUsingWorldEfficientInMemoryImplementation
     extends BitemporalBehaviours
     with WorldEfficientInMemoryImplementationResource {
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
-    PropertyCheckConfig(maxSize = 30)
+    PropertyCheckConfig(maxSize = 30, minSuccessful = 30)
 
   "The class Bitemporal (using the world efficient in-memory implementation)" should behave like bitemporalBehaviour
 
