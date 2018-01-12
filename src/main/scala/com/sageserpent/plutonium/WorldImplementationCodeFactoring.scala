@@ -418,8 +418,13 @@ object WorldImplementationCodeFactoring {
   def isInvariantCheck(method: MethodDescription): Boolean =
     "checkInvariant" == method.getName // TODO: this is hokey.
 
-  class IdentifiedItemsScope { identifiedItemsScopeThis =>
+  class IdentifiedItemsScope extends IdentifiedItemAccess {
+    identifiedItemsScopeThis =>
     private var allItemsAreLocked = false
+
+    override def reconstitute(
+        uniqueItemSpecification: UniqueItemSpecification): Any =
+      itemFor(uniqueItemSpecification.id)(uniqueItemSpecification.typeTag)
 
     def populate[EventId](_when: Unbounded[Instant],
                           eventTimeline: Seq[(Event, EventId)]) = {
@@ -441,25 +446,19 @@ object WorldImplementationCodeFactoring {
             }(List.empty)
           override val updateConsumer: UpdateConsumer[EventId] =
             new UpdateConsumer[EventId] {
-              val identifiedItemAccess = new IdentifiedItemAccess {
-                override def reconstitute(
-                    uniqueItemSpecification: UniqueItemSpecification): Any =
-                  identifiedItemsScopeThis.itemFor(uniqueItemSpecification.id)(
-                    uniqueItemSpecification.typeTag)
-              }
               override def captureAnnihilation(
                   when: Unbounded[Instant],
                   eventId: EventId,
                   uniqueItemSpecification: UniqueItemSpecification): Unit =
                 identifiedItemsScopeThis.annihilateItemFor(
-                  uniqueItemSpecification.id)(uniqueItemSpecification.typeTag)
+                  uniqueItemSpecification)
 
               override def capturePatch(when: Unbounded[Instant],
                                         eventId: EventId,
                                         patch: AbstractPatch): Unit = {
-                patch(identifiedItemAccess)
+                patch(identifiedItemsScopeThis)
                 for (_ <- itemsAreLockedResource) {
-                  patch.checkInvariants(identifiedItemAccess)
+                  patch.checkInvariants(identifiedItemsScopeThis)
                 }
               }
             }
@@ -518,16 +517,19 @@ object WorldImplementationCodeFactoring {
       }
     }
 
-    def annihilateItemFor[Item: TypeTag](id: Any): Unit = {
-      idToItemsMultiMap.get(id) match {
+    def annihilateItemFor(
+        uniqueItemSpecification: UniqueItemSpecification): Unit = {
+      idToItemsMultiMap.get(uniqueItemSpecification.id) match {
         case Some(items) =>
           assert(items.nonEmpty)
 
           // Have to force evaluation of the stream so that the call to '--=' below does not try to incrementally
           // evaluate the stream as the underlying source collection, namely 'items' is being mutated. This is
           // what you get when you go back to imperative programming after too much referential transparency.
-          val itemsSelectedForAnnihilation: Stream[Item] =
-            IdentifiedItemsScope.yieldOnlyItemsOfType(items).force
+          val itemsSelectedForAnnihilation: Stream[Any] =
+            IdentifiedItemsScope
+              .yieldOnlyItemsOfType(items)(uniqueItemSpecification.typeTag)
+              .force
           assert(1 == itemsSelectedForAnnihilation.size)
 
           val itemToBeAnnihilated = itemsSelectedForAnnihilation.head
@@ -539,7 +541,7 @@ object WorldImplementationCodeFactoring {
             .recordAnnihilation()
 
           if (items.isEmpty) {
-            idToItemsMultiMap.remove(id)
+            idToItemsMultiMap.remove(uniqueItemSpecification.id)
           }
         case None =>
           assert(false)
