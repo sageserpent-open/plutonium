@@ -4,6 +4,7 @@ import java.time.Instant
 
 import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.BlobStorage.SnapshotBlob
+import com.sageserpent.plutonium.BlobStorageInMemory.Lifecycle
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 
 import scala.collection.Searching._
@@ -203,26 +204,52 @@ case class BlobStorageInMemory[EventId] private (
           (thisBlobStorage.lifecycles /: events) {
             case (lifecycles, (eventId, None)) =>
               lifecycles
-            case (lifecycles, (eventId, Some((when, snapshots)))) =>
-              val updatedLifecycles = snapshots map {
-                case (UniqueItemSpecification(id, itemTypeTag), snapshot) =>
+            case (lifecycles: Map[Any,
+                                  Set[BlobStorageInMemory.Lifecycle[EventId]]],
+                  (eventId, Some((when, snapshots)))) =>
+              val updatedLifecycles
+                : Map[UniqueItemSpecification,
+                      BlobStorageInMemory.Lifecycle[EventId]] = snapshots map {
+                case (uniqueItemSpecification @ UniqueItemSpecification(
+                        id,
+                        itemTypeTag),
+                      snapshot) =>
                   val lifecyclesForId
                     : Set[BlobStorageInMemory.Lifecycle[EventId]] =
                     lifecycles.getOrElse(
                       id,
                       Set.empty[BlobStorageInMemory.Lifecycle[EventId]]
                     )
-                  id -> {
+                  uniqueItemSpecification -> {
                     val lifecycleForSnapshot: BlobStorageInMemory.Lifecycle[
                       EventId] = lifecyclesForId find (itemTypeTag == _.itemTypeTag) getOrElse (new BlobStorageInMemory.LifecycleImplementation[
                       EventId](itemTypeTag = itemTypeTag): BlobStorageInMemory.Lifecycle[
                       EventId])
 
-                    lifecyclesForId - lifecycleForSnapshot + lifecycleForSnapshot
+                    lifecycleForSnapshot
                       .addSnapshotBlob(eventId, when, snapshot, newRevision)
                   }
               }
-              lifecycles ++ updatedLifecycles
+
+              val explodedLifecyles: Map[
+                UniqueItemSpecification,
+                Lifecycle[EventId]] = lifecycles flatMap {
+                case (id, lifecyclesForAnId) =>
+                  lifecyclesForAnId map (lifecycle =>
+                    UniqueItemSpecification(id, lifecycle.itemTypeTag) -> lifecycle)
+              }
+
+              val resultLifecycles: Map[
+                UniqueItemSpecification,
+                Lifecycle[EventId]] = explodedLifecyles ++ updatedLifecycles
+
+              resultLifecycles.toSeq map {
+                case ((uniqueItemSpecification, lifecycle)) =>
+                  uniqueItemSpecification.id -> lifecycle
+              } groupBy (_._1) map {
+                case (id, group: Seq[(Any, Lifecycle[EventId])]) =>
+                  id -> group.map(_._2).toSet
+              }
           }
 
         thisBlobStorage.copy(revision = newRevision,
