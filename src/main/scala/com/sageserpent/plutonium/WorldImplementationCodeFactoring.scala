@@ -478,7 +478,6 @@ object WorldImplementationCodeFactoring {
           override val updateConsumer: UpdateConsumer[EventId] =
             new UpdateConsumer[EventId] {
               override def captureAnnihilation(
-                  when: Unbounded[Instant],
                   eventId: EventId,
                   annihilation: Annihilation): Unit = {
                 annihilation(identifiedItemsScopeThis)
@@ -573,7 +572,7 @@ object WorldImplementationCodeFactoring {
         }
 
       case annihilation @ Annihilation(when, id) =>
-        patchRecorder.recordAnnihilation(eventId, when, annihilation)
+        patchRecorder.recordAnnihilation(eventId, annihilation)
     }
 
     patchRecorder.noteThatThereAreNoFollowingRecordings()

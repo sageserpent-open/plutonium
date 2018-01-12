@@ -295,10 +295,9 @@ class TimelineImplementation[EventId](
                                    .empty[(EventId, ItemStateUpdate)])
 
             override def captureAnnihilation(
-                when: Unbounded[Instant],
                 eventId: EventId,
                 annihilation: Annihilation): Unit = {
-              itemStatesFor(when) += eventId -> ItemStateAnnihilation(
+              itemStatesFor(annihilation.when) += eventId -> ItemStateAnnihilation(
                 annihilation)
             }
 

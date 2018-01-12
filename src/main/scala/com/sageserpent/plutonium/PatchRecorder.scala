@@ -27,9 +27,7 @@ trait BestPatchSelectionContracts extends BestPatchSelection {
 
 object PatchRecorder {
   trait UpdateConsumer[EventId] {
-    def captureAnnihilation(when: Unbounded[Instant],
-                            eventId: EventId,
-                            annihilation: Annihilation): Unit
+    def captureAnnihilation(eventId: EventId, annihilation: Annihilation): Unit
 
     def capturePatch(when: Unbounded[Instant],
                      eventId: EventId,
@@ -54,9 +52,7 @@ trait PatchRecorder[EventId] {
                                  when: Unbounded[Instant],
                                  patch: AbstractPatch): Unit
 
-  def recordAnnihilation(eventId: EventId,
-                         when: Instant,
-                         annihilation: Annihilation): Unit
+  def recordAnnihilation(eventId: EventId, annihilation: Annihilation): Unit
 
   def noteThatThereAreNoFollowingRecordings(): Unit
 }
@@ -91,14 +87,14 @@ trait PatchRecorderContracts[EventId] extends PatchRecorder[EventId] {
   }
 
   abstract override def recordAnnihilation(eventId: EventId,
-                                           when: Instant,
                                            annihilation: Annihilation): Unit = {
     require(
       whenEventPertainedToByLastRecordingTookPlace
-        .cata(some = Finite(when) >= _, none = true))
+        .cata(some = annihilation.when >= _, none = true))
     require(!allRecordingsAreCaptured)
-    val result = super.recordAnnihilation(eventId, when, annihilation)
-    require(whenEventPertainedToByLastRecordingTookPlace.contains(Finite(when)))
+    val result = super.recordAnnihilation(eventId, annihilation)
+    require(
+      whenEventPertainedToByLastRecordingTookPlace.contains(annihilation.when))
     result
   }
 

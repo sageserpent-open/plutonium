@@ -237,20 +237,17 @@ class PatchRecorderSpec
 
               if (patchApplicationDoesNotBreachTheCutoff)
                 (updateConsumer.captureAnnihilation _)
-                  .expects(Finite(when),
-                           masterSequenceIndex,
+                  .expects(masterSequenceIndex,
                            Annihilation(
                              when,
                              UniqueItemSpecification(id, typeTag[FooHistory])))
-                  .onCall {
-                    (_: Unbounded[Instant], _: EventId, _: Annihilation) =>
-                      sequenceIndicesFromAppliedPatches += masterSequenceIndex: Unit
+                  .onCall { (_: EventId, _: Annihilation) =>
+                    sequenceIndicesFromAppliedPatches += masterSequenceIndex: Unit
                   }
                   .once
               patchRecorder
                 .recordAnnihilation(
                   masterSequenceIndex,
-                  when,
                   Annihilation(when,
                                UniqueItemSpecification(id,
                                                        typeTag[FooHistory])))
