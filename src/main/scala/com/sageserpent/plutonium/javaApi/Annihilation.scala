@@ -2,6 +2,7 @@ package com.sageserpent.plutonium.javaApi
 
 import java.time.Instant
 
+import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.{
   typeTagForClass,
   Annihilation => ScalaAnnihilation
@@ -10,6 +11,7 @@ import com.sageserpent.plutonium.{
 object Annihilation {
   def apply[Item](definiteWhen: Instant,
                   id: Any,
-                  clazz: Class[Item]): ScalaAnnihilation[Item] =
-    ScalaAnnihilation(definiteWhen, id)(typeTagForClass(clazz))
+                  clazz: Class[Item]): ScalaAnnihilation =
+    ScalaAnnihilation(definiteWhen,
+                      UniqueItemSpecification(id, typeTagForClass(clazz)))
 }

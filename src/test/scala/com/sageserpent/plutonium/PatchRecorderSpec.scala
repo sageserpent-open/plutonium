@@ -239,16 +239,21 @@ class PatchRecorderSpec
                 (updateConsumer.captureAnnihilation _)
                   .expects(Finite(when),
                            masterSequenceIndex,
-                           UniqueItemSpecification(id, typeTag[FooHistory]))
+                           Annihilation(
+                             when,
+                             UniqueItemSpecification(id, typeTag[FooHistory])))
                   .onCall {
-                    (_: Unbounded[Instant],
-                     _: EventId,
-                     _: UniqueItemSpecification) =>
+                    (_: Unbounded[Instant], _: EventId, _: Annihilation) =>
                       sequenceIndicesFromAppliedPatches += masterSequenceIndex: Unit
                   }
                   .once
               patchRecorder
-                .recordAnnihilation[FooHistory](masterSequenceIndex, when, id)
+                .recordAnnihilation(
+                  masterSequenceIndex,
+                  when,
+                  Annihilation(when,
+                               UniqueItemSpecification(id,
+                                                       typeTag[FooHistory])))
             }
 
             recordingActionFactories :+ (recordingFinalAnnihilation _)

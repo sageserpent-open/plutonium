@@ -4,8 +4,6 @@ import java.lang.reflect.Method
 import java.time.Instant
 import java.util.concurrent.Callable
 
-import com.esotericsoftware.kryo.serializers.JavaSerializer
-import com.esotericsoftware.kryo.serializers.FieldSerializer.Bind
 import com.sageserpent.americium
 import com.sageserpent.americium.{Finite, PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
@@ -20,12 +18,11 @@ import net.bytebuddy.dynamic.DynamicType.Builder
 import net.bytebuddy.implementation.MethodDelegation
 import net.bytebuddy.implementation.bind.annotation._
 import net.bytebuddy.matcher.ElementMatcher
+import resource._
 
 import scala.collection.mutable
 import scala.reflect.runtime.universe
 import scala.reflect.runtime.universe.{This => _, _}
-
-import resource._
 
 // NOTE: if 'when' is 'NegativeInfinity', the event is taken to be 'at the beginning of time' - this is a way of introducing
 // timeless events, although it permits following events to modify the outcome, which may be quite handy. For now, there is
@@ -285,13 +282,25 @@ object Measurement {
 // NOTE: it is OK to have annihilations and other events occurring at the same time: the documentation of 'World.revise'
 // covers how coincident events are resolved. So an item referred to by an id may be changed, then annihilated, then
 // recreated and so on all at the same time.
-// TODO: will need to be able to lower the typetag somehow if we are going to build an update plan with these.
-case class Annihilation[Item: TypeTag](definiteWhen: Instant, id: Any)
+case class Annihilation(definiteWhen: Instant,
+                        uniqueItemSpecification: UniqueItemSpecification)
     extends Event {
   override def toString: String =
-    s"Annihilating id: $id at: $definiteWhen with type: $capturedTypeTag"
+    s"Annihilation of: $uniqueItemSpecification at: $definiteWhen"
 
   val when = Finite(definiteWhen)
-  @Bind(classOf[JavaSerializer])
-  val capturedTypeTag = typeTag[Item]
+
+  def rewriteItemTypeTag(itemTypeTag: TypeTag[_]) =
+    copy(
+      uniqueItemSpecification =
+        uniqueItemSpecification.copy(typeTag = itemTypeTag))
+
+  def apply(identifiedItemAccess: IdentifiedItemAccess): Unit = {
+    identifiedItemAccess.forget(uniqueItemSpecification)
+  }
+}
+
+object Annihilation {
+  def apply[Item: TypeTag](definiteWhen: Instant, id: Any): Annihilation =
+    Annihilation(definiteWhen, UniqueItemSpecification(id, typeTag[Item]))
 }

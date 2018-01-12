@@ -27,10 +27,9 @@ trait BestPatchSelectionContracts extends BestPatchSelection {
 
 object PatchRecorder {
   trait UpdateConsumer[EventId] {
-    def captureAnnihilation(
-        when: Unbounded[Instant],
-        eventId: EventId,
-        uniqueItemSpecification: UniqueItemSpecification): Unit
+    def captureAnnihilation(when: Unbounded[Instant],
+                            eventId: EventId,
+                            annihilation: Annihilation): Unit
 
     def capturePatch(when: Unbounded[Instant],
                      eventId: EventId,
@@ -55,9 +54,9 @@ trait PatchRecorder[EventId] {
                                  when: Unbounded[Instant],
                                  patch: AbstractPatch): Unit
 
-  def recordAnnihilation[Item: TypeTag](eventId: EventId,
-                                        when: Instant,
-                                        id: Any): Unit
+  def recordAnnihilation(eventId: EventId,
+                         when: Instant,
+                         annihilation: Annihilation): Unit
 
   def noteThatThereAreNoFollowingRecordings(): Unit
 }
@@ -91,16 +90,15 @@ trait PatchRecorderContracts[EventId] extends PatchRecorder[EventId] {
     result
   }
 
-  abstract override def recordAnnihilation[Item: TypeTag](eventId: EventId,
-                                                          when: Instant,
-                                                          id: Any): Unit = {
+  abstract override def recordAnnihilation(eventId: EventId,
+                                           when: Instant,
+                                           annihilation: Annihilation): Unit = {
     require(
       whenEventPertainedToByLastRecordingTookPlace
         .cata(some = Finite(when) >= _, none = true))
     require(!allRecordingsAreCaptured)
-    val result = super.recordAnnihilation(eventId, when, id)
-    require(
-      whenEventPertainedToByLastRecordingTookPlace.contains(Finite(when)))
+    val result = super.recordAnnihilation(eventId, when, annihilation)
+    require(whenEventPertainedToByLastRecordingTookPlace.contains(Finite(when)))
     result
   }
 

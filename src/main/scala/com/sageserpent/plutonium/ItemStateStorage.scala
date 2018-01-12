@@ -173,7 +173,7 @@ trait ItemStateStorage { itemStateStorageObject =>
       }
     }
 
-    def purgeItemFor(uniqueItemSpecification: UniqueItemSpecification) = {
+    def purgeItemFor(uniqueItemSpecification: UniqueItemSpecification): Unit = {
       storage.remove(uniqueItemSpecification)
     }
 

@@ -51,26 +51,24 @@ abstract class PatchRecorderImplementation[EventId](
                                           patch: AbstractPatch): Unit = {
     _whenEventPertainedToByLastRecordingTookPlace = Some(when)
 
-    refineRelevantItemStatesAndYieldTarget(patch).addPatch(when,
-                                                           patch,
-                                                           eventId)
+    refineRelevantItemStatesAndYieldTarget(patch).addPatch(when, patch, eventId)
   }
 
   def annihilateItemFor_[SubclassOfItem <: Item, Item](
       when: Unbounded[Instant],
-      id: Any,
-      typeTag: universe.TypeTag[SubclassOfItem],
+      annihilation: Annihilation,
       eventId: EventId): Unit = {
-    updateConsumer.captureAnnihilation(when,
-                                       eventId,
-                                       UniqueItemSpecification(id, typeTag))
+    updateConsumer.captureAnnihilation(when, eventId, annihilation)
   }
 
-  override def recordAnnihilation[Item: TypeTag](eventId: EventId,
-                                                 _when: Instant,
-                                                 id: Any): Unit = {
+  override def recordAnnihilation(eventId: EventId,
+                                  _when: Instant,
+                                  annihilation: Annihilation): Unit = {
     val liftedWhen = Finite(_when)
     _whenEventPertainedToByLastRecordingTookPlace = Some(liftedWhen)
+
+    val UniqueItemSpecification(id, expectedTypeTag) =
+      annihilation.uniqueItemSpecification
 
     idToItemStatesMap
       .get(id)
@@ -80,7 +78,6 @@ abstract class PatchRecorderImplementation[EventId](
         throw new RuntimeException(
           s"Attempt to annihilate item of id: $id that does not exist at all at: ${_when}.")
       case itemStates =>
-        val expectedTypeTag = typeTag[Item]
         val compatibleItemStates = itemStates filter (_.canBeAnnihilatedAs(
           expectedTypeTag))
 
@@ -99,12 +96,11 @@ abstract class PatchRecorderImplementation[EventId](
 
             override def perform() {
               for (itemStateToBeAnnihilated <- compatibleItemStates) {
-                val typeTagForSpecificItem =
-                  itemStateToBeAnnihilated.lowerBoundTypeTag
-                annihilateItemFor_(liftedWhen,
-                                   id,
-                                   typeTagForSpecificItem,
-                                   eventId)
+                annihilateItemFor_(
+                  liftedWhen,
+                  annihilation.rewriteItemTypeTag(
+                    itemStateToBeAnnihilated.lowerBoundTypeTag),
+                  eventId)
 
                 val itemStates = idToItemStatesMap(id)
 
@@ -228,8 +224,7 @@ abstract class PatchRecorderImplementation[EventId](
         exemplarMethodToCandidatePatchesMap.find {
           case (exemplarMethod, _) =>
             WorldImplementationCodeFactoring
-              .firstMethodIsOverrideCompatibleWithSecond(method,
-                                                         exemplarMethod) ||
+              .firstMethodIsOverrideCompatibleWithSecond(method, exemplarMethod) ||
               WorldImplementationCodeFactoring
                 .firstMethodIsOverrideCompatibleWithSecond(exemplarMethod,
                                                            method)

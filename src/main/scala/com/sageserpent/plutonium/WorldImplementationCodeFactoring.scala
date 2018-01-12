@@ -426,6 +426,37 @@ object WorldImplementationCodeFactoring {
         uniqueItemSpecification: UniqueItemSpecification): Any =
       itemFor(uniqueItemSpecification.id)(uniqueItemSpecification.typeTag)
 
+    override def forget(
+        uniqueItemSpecification: UniqueItemSpecification): Unit = {
+      idToItemsMultiMap.get(uniqueItemSpecification.id) match {
+        case Some(items) =>
+          assert(items.nonEmpty)
+
+          // Have to force evaluation of the stream so that the call to '--=' below does not try to incrementally
+          // evaluate the stream as the underlying source collection, namely 'items' is being mutated. This is
+          // what you get when you go back to imperative programming after too much referential transparency.
+          val itemsSelectedForAnnihilation: Stream[Any] =
+            IdentifiedItemsScope
+              .yieldOnlyItemsOfType(items)(uniqueItemSpecification.typeTag)
+              .force
+          assert(1 == itemsSelectedForAnnihilation.size)
+
+          val itemToBeAnnihilated = itemsSelectedForAnnihilation.head
+
+          items -= itemToBeAnnihilated
+
+          itemToBeAnnihilated
+            .asInstanceOf[AnnihilationHook]
+            .recordAnnihilation()
+
+          if (items.isEmpty) {
+            idToItemsMultiMap.remove(uniqueItemSpecification.id)
+          }
+        case None =>
+          assert(false)
+      }
+    }
+
     def populate[EventId](_when: Unbounded[Instant],
                           eventTimeline: Seq[(Event, EventId)]) = {
       idToItemsMultiMap.clear()
@@ -449,9 +480,9 @@ object WorldImplementationCodeFactoring {
               override def captureAnnihilation(
                   when: Unbounded[Instant],
                   eventId: EventId,
-                  uniqueItemSpecification: UniqueItemSpecification): Unit =
-                identifiedItemsScopeThis.annihilateItemFor(
-                  uniqueItemSpecification)
+                  annihilation: Annihilation): Unit = {
+                annihilation(identifiedItemsScopeThis)
+              }
 
               override def capturePatch(when: Unbounded[Instant],
                                         eventId: EventId,
@@ -517,37 +548,6 @@ object WorldImplementationCodeFactoring {
       }
     }
 
-    def annihilateItemFor(
-        uniqueItemSpecification: UniqueItemSpecification): Unit = {
-      idToItemsMultiMap.get(uniqueItemSpecification.id) match {
-        case Some(items) =>
-          assert(items.nonEmpty)
-
-          // Have to force evaluation of the stream so that the call to '--=' below does not try to incrementally
-          // evaluate the stream as the underlying source collection, namely 'items' is being mutated. This is
-          // what you get when you go back to imperative programming after too much referential transparency.
-          val itemsSelectedForAnnihilation: Stream[Any] =
-            IdentifiedItemsScope
-              .yieldOnlyItemsOfType(items)(uniqueItemSpecification.typeTag)
-              .force
-          assert(1 == itemsSelectedForAnnihilation.size)
-
-          val itemToBeAnnihilated = itemsSelectedForAnnihilation.head
-
-          items -= itemToBeAnnihilated
-
-          itemToBeAnnihilated
-            .asInstanceOf[AnnihilationHook]
-            .recordAnnihilation()
-
-          if (items.isEmpty) {
-            idToItemsMultiMap.remove(uniqueItemSpecification.id)
-          }
-        case None =>
-          assert(false)
-      }
-    }
-
     def itemsFor[Item: TypeTag](id: Any): Stream[Item] = {
       val items = idToItemsMultiMap.getOrElse(id, Set.empty[Item])
 
@@ -573,9 +573,7 @@ object WorldImplementationCodeFactoring {
         }
 
       case annihilation @ Annihilation(when, id) =>
-        implicit val typeTag =
-          annihilation.capturedTypeTag
-        patchRecorder.recordAnnihilation(eventId, when, id)
+        patchRecorder.recordAnnihilation(eventId, when, annihilation)
     }
 
     patchRecorder.noteThatThereAreNoFollowingRecordings()

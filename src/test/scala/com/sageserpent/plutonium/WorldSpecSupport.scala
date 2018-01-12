@@ -8,6 +8,7 @@ import com.sageserpent.americium
 import com.sageserpent.americium._
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.seqEnrichment._
+import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.World._
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.Assertions
@@ -393,7 +394,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
   class RecordingsForAPhoenixId(
       override val historyId: Any,
       override val historiesFrom: Scope => Seq[History],
-      annihilationFor: Instant => Annihilation[_],
+      annihilationFor: Instant => Annihilation,
       ineffectiveEventFor: Unbounded[Instant] => Event,
       dataSamplesGroupedForLifespans: Stream[
         Traversable[(Int, Any, (Unbounded[Instant], Boolean) => Event)]],
@@ -592,7 +593,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
         (Any,
          Scope => Seq[History],
          List[(Int, Any, (Unbounded[Instant], Boolean) => Event)],
-         Instant => Annihilation[_],
+         Instant => Annihilation,
          Unbounded[Instant] => Event)],
       forbidAnnihilations: Boolean = false,
       forbidMeasurements: Boolean = false) = {
@@ -684,7 +685,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
 
     def groupContainsAnAnnihilation(group: List[(Unbounded[Instant], Event)]) =
       group.exists(PartialFunction.cond(_) {
-        case (_, _: Annihilation[_]) => true
+        case (_, _: Annihilation) => true
       })
 
     val groupedGroupsWithAnnihilationsIsolated = recordingsGroupedByWhen groupWhile {

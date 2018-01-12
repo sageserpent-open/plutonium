@@ -52,8 +52,7 @@ class TimelineImplementation[EventId](
 
   case class ItemStatePatch(patch: AbstractPatch) extends ItemStateUpdate
 
-  case class ItemStateAnnihilation(
-      uniqueItemSpecification: UniqueItemSpecification)
+  case class ItemStateAnnihilation(annihilation: Annihilation)
       extends ItemStateUpdate
 
   type UpdatePlan =
@@ -115,6 +114,10 @@ class TimelineImplementation[EventId](
       override def reconstitute(
           uniqueItemSpecification: UniqueItemSpecification) =
         itemFor[Any](uniqueItemSpecification)
+
+      override def forget(
+          uniqueItemSpecification: UniqueItemSpecification): Unit =
+        purgeItemFor(uniqueItemSpecification)
 
       private var blobStorageTimeSlice =
         sourceBlobStorage.timeSlice(NegativeInfinity())
@@ -196,9 +199,9 @@ class TimelineImplementation[EventId](
         } {
 
           itemStateUpdate match {
-            case ItemStateAnnihilation(uniqueItemSpecification) =>
-              snapshotBlobs += (uniqueItemSpecification -> None)
-              identifiedItemAccess.purgeItemFor(uniqueItemSpecification)
+            case ItemStateAnnihilation(annihilation) =>
+              annihilation(identifiedItemAccess)
+              snapshotBlobs += (annihilation.uniqueItemSpecification -> None)
             case ItemStatePatch(patch) =>
               for (_ <- makeManagedResource {
                      identifiedItemAccess.allItemsAreLocked = false
@@ -294,9 +297,9 @@ class TimelineImplementation[EventId](
             override def captureAnnihilation(
                 when: Unbounded[Instant],
                 eventId: EventId,
-                uniqueItemSpecification: UniqueItemSpecification): Unit = {
+                annihilation: Annihilation): Unit = {
               itemStatesFor(when) += eventId -> ItemStateAnnihilation(
-                uniqueItemSpecification)
+                annihilation)
             }
 
             override def capturePatch(when: Unbounded[Instant],
