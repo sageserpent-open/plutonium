@@ -219,7 +219,7 @@ class TimelineImplementation[EventId](
           }
         }
 
-        revisionBuilder.recordSnapshotBlobsForEvent(eventId,
+        revisionBuilder.recordSnapshotBlobsForEvent(Set(eventId),
                                                     when,
                                                     snapshotBlobs.toMap)
       }

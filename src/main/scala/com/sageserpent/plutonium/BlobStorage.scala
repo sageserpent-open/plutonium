@@ -44,34 +44,13 @@ trait BlobStorage[EventId] { blobStorage =>
     // NOTE: the unique item specification must be exact and consistent for all of an item's snapshots. This implies that snapshots from a previous revision may have to be rewritten
     // if an item's greatest lower bound type changes.
     def recordSnapshotBlobsForEvent(
-        eventId: EventId,
+        eventIds: Set[EventId],
         when: Unbounded[Instant],
-        snapshotBlobs: Map[UniqueItemSpecification, Option[SnapshotBlob]])
-      : Unit
+        snapshotBlobs: Map[UniqueItemSpecification, Option[SnapshotBlob]]): Unit
 
     def annulEvent(eventId: EventId)
 
     def build(): BlobStorage[EventId]
-  }
-
-  trait RevisionBuilderContracts extends RevisionBuilder {
-    val eventIds = mutable.Set.empty[EventId]
-
-    abstract override def recordSnapshotBlobsForEvent(
-        eventId: EventId,
-        when: Unbounded[Instant],
-        snapshotBlobs: Map[UniqueItemSpecification, Option[SnapshotBlob]])
-      : Unit = {
-      require(!eventIds.contains(eventId))
-      eventIds += eventId
-      super.recordSnapshotBlobsForEvent(eventId, when, snapshotBlobs)
-    }
-
-    abstract override def annulEvent(eventId: EventId): Unit = {
-      require(!eventIds.contains(eventId))
-      eventIds += eventId
-      super.annulEvent(eventId)
-    }
   }
 
   def openRevision(): RevisionBuilder

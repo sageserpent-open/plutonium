@@ -238,7 +238,7 @@ class BlobStorageSpec
         for ((booking, eventId) <- bookingsForRevision) {
           booking match {
             case Some((when, snapshotBlobs)) =>
-              builder.recordSnapshotBlobsForEvent(eventId,
+              builder.recordSnapshotBlobsForEvent(Set(eventId),
                                                   when,
                                                   snapshotBlobs.toMap)
             case None =>

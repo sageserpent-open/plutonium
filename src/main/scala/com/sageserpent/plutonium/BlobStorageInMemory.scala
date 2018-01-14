@@ -21,7 +21,7 @@ object BlobStorageInMemory {
     def snapshotBlobFor(when: Unbounded[Instant],
                         validRevisionFor: EventId => Revision): SnapshotBlob
 
-    def addSnapshotBlob(eventId: EventId,
+    def addSnapshotBlob(eventIds: Set[EventId],
                         when: Unbounded[Instant],
                         snapshotBlob: Option[SnapshotBlob],
                         revision: Revision): Lifecycle[EventId]
@@ -57,9 +57,9 @@ object BlobStorageInMemory {
   case class LifecycleImplementation[EventId](
       override val itemTypeTag: TypeTag[_ <: Any],
       snapshotBlobs: Vector[(Unbounded[Instant],
-                             (Option[SnapshotBlob], EventId, Revision))] =
+                             (Option[SnapshotBlob], Set[EventId], Revision))] =
         Vector.empty[(Unbounded[Instant],
-                      (Option[SnapshotBlob], EventId, Revision))])
+                      (Option[SnapshotBlob], Set[EventId], Revision))])
       extends BlobStorageInMemory.Lifecycle[EventId] {
     val snapshotBlobTimes = snapshotBlobs.view.map(_._1)
 
@@ -73,8 +73,9 @@ object BlobStorageInMemory {
       snapshotBlobs
         .view(0, indexToSearchDownFromOrInsertAt(when, snapshotBlobTimes))
         .lastIndexWhere(PartialFunction.cond(_) {
-          case (_, (_, eventId, blobRevision)) =>
-            blobRevision == validRevisionFor(eventId)
+          case (_, (_, eventIds, blobRevision)) =>
+            eventIds.forall(eventId =>
+              blobRevision == validRevisionFor(eventId))
         })
     }
 
@@ -97,7 +98,7 @@ object BlobStorageInMemory {
     }
 
     override def addSnapshotBlob(
-        eventId: EventId,
+        eventIds: Set[EventId],
         when: Unbounded[Instant],
         snapshotBlob: Option[SnapshotBlob],
         revision: Revision): BlobStorageInMemory.Lifecycle[EventId] = {
@@ -108,7 +109,7 @@ object BlobStorageInMemory {
         itemTypeTag = this.itemTypeTag,
         snapshotBlobs =
           snapshotBlobs.patch(insertionPoint,
-                              Seq((when, (snapshotBlob, eventId, revision))),
+                              Seq((when, (snapshotBlob, eventIds, revision))),
                               0))
     }
   }
@@ -172,41 +173,41 @@ case class BlobStorageInMemory[EventId] private (
   }
 
   override def openRevision(): RevisionBuilder = {
-    trait RevisionBuilderImplementation extends RevisionBuilder {
+    class RevisionBuilderImplementation extends RevisionBuilder {
       type Event =
-        (EventId,
+        (Set[EventId],
          Option[(Unbounded[Instant],
                  Map[UniqueItemSpecification, Option[SnapshotBlob]])])
 
       val events = mutable.MutableList.empty[Event]
 
       override def annulEvent(eventId: EventId): Unit = {
-        events += (eventId -> None)
+        events += (Set(eventId) -> None)
       }
 
       override def recordSnapshotBlobsForEvent(
-          eventId: EventId,
+          eventIds: Set[EventId],
           when: Unbounded[Instant],
           snapshotBlobs: Map[UniqueItemSpecification, Option[SnapshotBlob]])
         : Unit = {
-        events += eventId -> Some(when -> snapshotBlobs)
+        events += eventIds -> Some(when -> snapshotBlobs)
       }
 
       override def build(): BlobStorage[EventId] = {
         val newRevision = 1 + thisBlobStorage.revision
 
         val newEventRevisions
-          : Map[EventId, Int] = thisBlobStorage.eventRevisions ++ (events map {
-          case (eventId, _) =>
-            eventId -> newRevision
-        })
+          : Map[EventId, Int] = thisBlobStorage.eventRevisions ++ (events flatMap {
+          case (eventIds, _) => eventIds
+        }).distinct.map(_ -> newRevision)
+
         val newLifecycles =
           (thisBlobStorage.lifecycles /: events) {
-            case (lifecycles, (eventId, None)) =>
+            case (lifecycles, (_, None)) =>
               lifecycles
             case (lifecycles: Map[Any,
                                   Set[BlobStorageInMemory.Lifecycle[EventId]]],
-                  (eventId, Some((when, snapshots)))) =>
+                  (eventIds, Some((when, snapshots)))) =>
               val updatedLifecycles
                 : Map[UniqueItemSpecification,
                       BlobStorageInMemory.Lifecycle[EventId]] = snapshots map {
@@ -227,7 +228,7 @@ case class BlobStorageInMemory[EventId] private (
                       EventId])
 
                     lifecycleForSnapshot
-                      .addSnapshotBlob(eventId, when, snapshot, newRevision)
+                      .addSnapshotBlob(eventIds, when, snapshot, newRevision)
                   }
               }
 
@@ -258,6 +259,6 @@ case class BlobStorageInMemory[EventId] private (
       }
     }
 
-    new RevisionBuilderImplementation with RevisionBuilderContracts
+    new RevisionBuilderImplementation
   }
 }
