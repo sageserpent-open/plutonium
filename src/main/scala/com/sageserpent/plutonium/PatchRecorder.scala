@@ -30,7 +30,7 @@ object PatchRecorder {
     def captureAnnihilation(eventId: EventId, annihilation: Annihilation): Unit
 
     def capturePatch(when: Unbounded[Instant],
-                     eventId: EventId,
+                     eventIds: Set[EventId],
                      patch: AbstractPatch): Unit
   }
 }

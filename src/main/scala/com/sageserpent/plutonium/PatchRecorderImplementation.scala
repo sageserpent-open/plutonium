@@ -288,10 +288,7 @@ abstract class PatchRecorderImplementation[EventId](
 
     // The best patch has to be applied as if it occurred when the patch representing
     // the event would have taken place - so it steals the latter's sequence index.
-    val (sequenceIndexForBestPatch,
-         _,
-         whenTheBestPatchOccurs,
-         eventIdForBestPatch) =
+    val (sequenceIndexForBestPatch, _, whenTheBestPatchOccurs, _) =
       patchRepresentingTheEvent
 
     val reconstitutionDataToItemStateMap =
@@ -307,6 +304,8 @@ abstract class PatchRecorderImplementation[EventId](
     val itemStatesReferencedByBestPatch =
       reconstitutionDataToItemStateMap.values
 
+    val eventIdsFromAllCandidatePatches = candidatePatchTuples.map(_._4).toSet
+
     actionQueue.enqueue(new IndexedAction {
       override val sequenceIndex: SequenceIndex = sequenceIndexForBestPatch
       override val when: Unbounded[Instant]     = whenTheBestPatchOccurs
@@ -315,7 +314,7 @@ abstract class PatchRecorderImplementation[EventId](
         val bestPatchWithLoweredTypeTags = bestPatch.rewriteItemTypeTags(
           reconstitutionDataToItemStateMap.mapValues(_.lowerBoundTypeTag))
         updateConsumer.capturePatch(whenTheBestPatchOccurs,
-                                    eventIdForBestPatch,
+                                    eventIdsFromAllCandidatePatches,
                                     bestPatchWithLoweredTypeTags)
       }
       override def canProceed() =

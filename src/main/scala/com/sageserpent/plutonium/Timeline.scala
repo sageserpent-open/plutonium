@@ -288,9 +288,9 @@ class TimelineImplementation[EventId](
             }
 
             override def capturePatch(when: Unbounded[Instant],
-                                      eventId: EventId,
+                                      eventIds: Set[EventId],
                                       patch: AbstractPatch): Unit = {
-              itemStatesFor(when) += Set(eventId) -> ItemStatePatch(patch)
+              itemStatesFor(when) += eventIds -> ItemStatePatch(patch)
             }
           }
       }

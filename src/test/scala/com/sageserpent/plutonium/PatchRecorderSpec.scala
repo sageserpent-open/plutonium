@@ -149,12 +149,10 @@ class PatchRecorderSpec
                                 }
                                 .once
                               (updateConsumer.capturePatch _)
-                                .expects(Finite(whenForStandIn),
-                                         sequenceIndexOfPatchStandIn,
-                                         patch)
+                                .expects(Finite(whenForStandIn), *, patch)
                                 .onCall {
                                   (_: Unbounded[Instant],
-                                   _: EventId,
+                                   _: Set[EventId],
                                    _: AbstractPatch) =>
                                     sequenceIndicesFromAppliedPatches += sequenceIndexOfPatchStandIn: Unit
                                 }
