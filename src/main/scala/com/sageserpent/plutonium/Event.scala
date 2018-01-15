@@ -2,16 +2,14 @@ package com.sageserpent.plutonium
 
 import java.lang.reflect.Method
 import java.time.Instant
+import java.util.concurrent.Callable
 
-import com.esotericsoftware.kryo.serializers.JavaSerializer
-import com.esotericsoftware.kryo.serializers.FieldSerializer.Bind
 import com.sageserpent.americium
 import com.sageserpent.americium.{Finite, PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.WorldImplementationCodeFactoring.{
   AcquiredStateCapturingId,
   IdentifiedItemsScope,
-  BasicNonPersistentAcquiredState,
   ProxyFactory,
   firstMethodIsOverrideCompatibleWithSecond
 }
@@ -20,6 +18,7 @@ import net.bytebuddy.dynamic.DynamicType.Builder
 import net.bytebuddy.implementation.MethodDelegation
 import net.bytebuddy.implementation.bind.annotation._
 import net.bytebuddy.matcher.ElementMatcher
+import resource._
 
 import scala.collection.mutable
 import scala.reflect.runtime.universe
@@ -45,6 +44,8 @@ object capturePatches {
 
     trait AcquiredState extends AcquiredStateCapturingId {
       def capturePatch(patch: AbstractPatch): Unit
+
+      var unlockFullReadAccess: Boolean = false
     }
 
     val matchMutation: ElementMatcher[MethodDescription] = methodDescription =>
@@ -55,12 +56,20 @@ object capturePatches {
         _,
         IdentifiedItemsScope.uniqueItemSpecificationPropertyForRecording)
 
+    val matchAbstractForbiddenReadAccess: ElementMatcher[MethodDescription] =
+      methodDescription =>
+        methodDescription.isAbstract && matchForbiddenReadAccess.matches(
+          methodDescription)
+
     val matchForbiddenReadAccess: ElementMatcher[MethodDescription] =
       methodDescription =>
         !IdentifiedItemsScope
           .alwaysAllowsReadAccessTo(methodDescription) && !RecordingCallbackStuff
           .isFinalizer(methodDescription) && !methodDescription.getReturnType
           .represents(classOf[Unit])
+
+    val matchPermittedReadAccess: ElementMatcher[MethodDescription] =
+      IdentifiedItemsScope.alwaysAllowsReadAccessTo(_)
 
     object mutation {
       @RuntimeType
@@ -81,22 +90,43 @@ object capturePatches {
         acquiredState.uniqueItemSpecification
     }
 
-    object forbiddenReadAccess {
+    object forbiddenAbstractReadAccess {
       @RuntimeType
-      def apply(@Origin method: Method, @This target: AnyRef) = {
+      def apply(@Origin method: Method, @This target: AnyRef) =
         throw new UnsupportedOperationException(
-          s"Attempt to call method: '$method' with a non-unit return type on a recorder proxy: '$target' while capturing a change or measurement.")
-      }
+          s"Attempt to call abstract method: '$method' with a non-unit return type on a recorder proxy: '$target' while capturing a change or measurement.")
     }
 
-    object proxyFactory
-        extends ProxyFactory[AcquiredState, BasicNonPersistentAcquiredState] {
+    object forbiddenReadAccess {
+      @RuntimeType
+      def apply(@Origin method: Method,
+                @This target: AnyRef,
+                @SuperCall superCall: Callable[_],
+                @FieldValue("acquiredState") acquiredState: AcquiredState) =
+        if (!acquiredState.unlockFullReadAccess) {
+          throw new UnsupportedOperationException(
+            s"Attempt to call method: '$method' with a non-unit return type on a recorder proxy: '$target' while capturing a change or measurement.")
+        } else superCall.call()
+    }
+
+    object permittedReadAccess {
+      @RuntimeType
+      def apply(@SuperCall superCall: Callable[_],
+                @FieldValue("acquiredState") acquiredState: AcquiredState) =
+        if (!acquiredState.unlockFullReadAccess) (for {
+          _ <- makeManagedResource {
+            acquiredState.unlockFullReadAccess = true
+          } { _ =>
+            acquiredState.unlockFullReadAccess = false
+          }(List.empty)
+        } yield superCall.call()) acquireAndGet identity
+        else superCall.call()
+    }
+
+    object proxyFactory extends ProxyFactory[AcquiredState] {
       val isForRecordingOnly = true
 
       override val acquiredStateClazz = classOf[AcquiredState]
-
-      override val nonPersistentAcquiredStateClazz =
-        classOf[BasicNonPersistentAcquiredState]
 
       override val additionalInterfaces: Array[Class[_]] =
         RecordingCallbackStuff.additionalInterfaces
@@ -106,16 +136,18 @@ object capturePatches {
       override protected def configureInterceptions(
           builder: Builder[_]): Builder[_] =
         builder
+          .method(matchPermittedReadAccess)
+          .intercept(MethodDelegation.to(permittedReadAccess))
           .method(matchForbiddenReadAccess)
           .intercept(MethodDelegation.to(forbiddenReadAccess))
+          .method(matchAbstractForbiddenReadAccess)
+          .intercept(MethodDelegation.to(forbiddenAbstractReadAccess))
           .method(matchUniqueItemSpecification)
           .intercept(MethodDelegation.to(uniqueItemSpecification))
           .method(matchMutation)
           .intercept(MethodDelegation.to(mutation))
     }
   }
-
-  object stubNonPersistentAcquiredState extends BasicNonPersistentAcquiredState
 
   def apply(update: RecorderFactory => Unit): Seq[AbstractPatch] = {
     val capturedPatches =
@@ -134,8 +166,7 @@ object capturePatches {
           }
         }
 
-        proxyFactory.constructFrom[Item](stateToBeAcquiredByProxy,
-                                         stubNonPersistentAcquiredState)
+        proxyFactory.constructFrom[Item](stateToBeAcquiredByProxy)
       }
     }
 
@@ -251,10 +282,25 @@ object Measurement {
 // NOTE: it is OK to have annihilations and other events occurring at the same time: the documentation of 'World.revise'
 // covers how coincident events are resolved. So an item referred to by an id may be changed, then annihilated, then
 // recreated and so on all at the same time.
-// TODO: will need to be able to lower the typetag somehow if we are going to build an update plan with these.
-case class Annihilation[Item: TypeTag](definiteWhen: Instant, id: Any)
+case class Annihilation(definiteWhen: Instant,
+                        uniqueItemSpecification: UniqueItemSpecification)
     extends Event {
+  override def toString: String =
+    s"Annihilation of: $uniqueItemSpecification at: $definiteWhen"
+
   val when = Finite(definiteWhen)
-  @Bind(classOf[JavaSerializer])
-  val capturedTypeTag = typeTag[Item]
+
+  def rewriteItemTypeTag(itemTypeTag: TypeTag[_]) =
+    copy(
+      uniqueItemSpecification =
+        uniqueItemSpecification.copy(typeTag = itemTypeTag))
+
+  def apply(identifiedItemAccess: IdentifiedItemAccess): Unit = {
+    identifiedItemAccess.forget(uniqueItemSpecification)
+  }
+}
+
+object Annihilation {
+  def apply[Item: TypeTag](definiteWhen: Instant, id: Any): Annihilation =
+    Annihilation(definiteWhen, UniqueItemSpecification(id, typeTag[Item]))
 }

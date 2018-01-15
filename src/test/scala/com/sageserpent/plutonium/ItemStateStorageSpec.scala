@@ -1,15 +1,13 @@
 package com.sageserpent.plutonium
 
+import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.plutonium.BlobStorage.SnapshotBlob
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
-import com.sageserpent.plutonium.BlobStorage.{SnapshotBlob}
-import com.sageserpent.americium.randomEnrichment._
 import org.scalacheck.Prop.BooleanOperators
 import org.scalacheck.{Gen, Prop}
 import org.scalatest.prop.Checkers
 import org.scalatest.{FlatSpec, Matchers}
 
-import scala.reflect.runtime.universe
 import scala.reflect.runtime.universe._
 import scala.util.Random
 
@@ -104,17 +102,20 @@ class ItemStateStorageSpec
     with SharedGenerators {
   import MarkSyntax._
 
-  val maximumMark = 9
-  val markMapletGenerator = for {
-    mark <- Gen.chooseNum(0, maximumMark)
-    neighbourOffset = (1 + mark) % 2
-    neighbours <- Gen.containerOf[Set, Int](
-      Gen.chooseNum(0, maximumMark / 2) map (2 * _ + neighbourOffset))
-  } yield mark -> neighbours
+  def markMapletGenerator(maximumMark: Int) =
+    for {
+      mark <- Gen.chooseNum(0, maximumMark)
+      neighbourOffset = (1 + mark) % 2
+      neighbours <- Gen.containerOf[Set, Int](Gen.chooseNum(
+        0,
+        0 max (maximumMark / 2 - 1)) map (2 * _ + neighbourOffset))
+    } yield mark -> neighbours
 
-  val markMapGenerator: Gen[Map[Int, Set[Int]]] = Gen.nonEmptyListOf(
-    markMapletGenerator) map (_.toMap
-    .withDefaultValue(Set.empty))
+  val markMapGenerator: Gen[Map[Int, Set[Int]]] = for {
+    maximumMark <- Gen.chooseNum(1, 50)
+    markMap <- Gen.nonEmptyListOf(markMapletGenerator(maximumMark)) map (_.toMap
+      .withDefaultValue(Set.empty))
+  } yield markMap
 
   def buildGraphFrom(markMap: Map[Int, Set[Int]]): Seq[GraphNode] = {
     val allMarks = (markMap.keys ++ markMap.values.flatten).toSet
@@ -252,6 +253,7 @@ class ItemStateStorageSpec
 
       noNodesAreGainedOrLost && nodesHaveTheSameStructure && nodesShareIdentityAcrossDistinctReconstitutionCalls
     },
-    MinSuccessful(100)
+    MinSuccessful(200),
+    MaxSize(200)
   )
 }

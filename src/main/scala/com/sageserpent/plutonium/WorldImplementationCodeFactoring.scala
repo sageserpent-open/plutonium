@@ -5,7 +5,6 @@ import java.time.Instant
 import java.util.Optional
 import java.util.concurrent.Callable
 
-import com.esotericsoftware.kryo.serializers.FieldSerializer
 import com.sageserpent.americium.{Finite, NegativeInfinity, Unbounded}
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.PatchRecorder.UpdateConsumer
@@ -117,10 +116,8 @@ object WorldImplementationCodeFactoring {
   val matchGetClass: ElementMatcher[MethodDescription] =
     ElementMatchers.is(classOf[AnyRef].getMethod("getClass"))
 
-  private[plutonium] trait StateAcquisition[
-      AcquiredState, NonPersistentAcquiredState] {
-    def acquireState(state: AcquiredState)
-    def acquireNonPersistentState(state: NonPersistentAcquiredState)
+  private[plutonium] trait StateAcquisition[AcquiredState] {
+    def acquire(acquiredState: AcquiredState)
   }
 
   trait AcquiredStateCapturingId {
@@ -134,16 +131,10 @@ object WorldImplementationCodeFactoring {
       acquiredState.uniqueItemSpecification.id
   }
 
-  trait BasicNonPersistentAcquiredState
-
-  trait ProxyFactory[
-      AcquiredState <: AcquiredStateCapturingId,
-      NonPersistentAcquiredState <: BasicNonPersistentAcquiredState] {
+  trait ProxyFactory[AcquiredState <: AcquiredStateCapturingId] {
     val isForRecordingOnly: Boolean
 
     val acquiredStateClazz: Class[_ <: AcquiredState]
-
-    val nonPersistentAcquiredStateClazz: Class[_ <: NonPersistentAcquiredState]
 
     private def createProxyClass(clazz: Class[_]): Class[_] = {
       val builder = byteBuddy
@@ -151,21 +142,17 @@ object WorldImplementationCodeFactoring {
         .implement(additionalInterfaces.toSeq)
         .ignoreAlso(ElementMatchers.named[MethodDescription]("_isGhost"))
         .defineField("acquiredState", acquiredStateClazz)
-        .defineField("nonPersistentAcquiredState",
-                     nonPersistentAcquiredStateClazz)
         .annotateField(DoNotSerializeAnnotation.annotation)
 
       val stateAcquisitionTypeBuilder =
         TypeDescription.Generic.Builder.parameterizedType(
-          classOf[StateAcquisition[AcquiredState, NonPersistentAcquiredState]],
-          Seq(acquiredStateClazz, nonPersistentAcquiredStateClazz))
+          classOf[StateAcquisition[AcquiredState]],
+          Seq(acquiredStateClazz))
 
       val builderWithInterceptions = configureInterceptions(builder)
         .implement(stateAcquisitionTypeBuilder.build)
-        .method(ElementMatchers.named("acquireState"))
+        .method(ElementMatchers.named("acquire"))
         .intercept(FieldAccessor.ofField("acquiredState"))
-        .method(ElementMatchers.named("acquireNonPersistentState"))
-        .intercept(FieldAccessor.ofField("nonPersistentAcquiredState"))
         .method(ElementMatchers.named("id"))
         .intercept(MethodDelegation.to(id))
 
@@ -178,8 +165,7 @@ object WorldImplementationCodeFactoring {
     protected def configureInterceptions(builder: Builder[_]): Builder[_]
 
     def constructFrom[Item: TypeTag](
-        stateToBeAcquiredByProxy: AcquiredState,
-        nonPersistentStateToBeAcquiredByProxy: NonPersistentAcquiredState) = {
+        stateToBeAcquiredByProxy: AcquiredState) = {
       // NOTE: this returns items that are proxies to 'Item' rather than direct instances of 'Item' itself. Depending on the
       // context (using a scope created by a client from a world, as opposed to while building up that scope from patches),
       // the items may forbid certain operations on them - e.g. for rendering from a client's scope, the items should be
@@ -199,13 +185,9 @@ object WorldImplementationCodeFactoring {
       }
       val proxy = proxyClazz.newInstance().asInstanceOf[Item]
 
-      val stateAcquisition = proxy
-        .asInstanceOf[
-          StateAcquisition[AcquiredState, NonPersistentAcquiredState]]
-      stateAcquisition
-        .acquireState(stateToBeAcquiredByProxy)
-      stateAcquisition.acquireNonPersistentState(
-        nonPersistentStateToBeAcquiredByProxy)
+      proxy
+        .asInstanceOf[StateAcquisition[AcquiredState]]
+        .acquire(stateToBeAcquiredByProxy)
 
       proxy
     }
@@ -233,14 +215,21 @@ object WorldImplementationCodeFactoring {
       mutable.Map
         .empty[universe.Type, Class[_]]
 
-    class AcquiredState(val uniqueItemSpecification: UniqueItemSpecification)
-        extends AcquiredStateCapturingId
-        with AnnihilationHook
+    trait AcquiredState extends AcquiredStateCapturingId with AnnihilationHook {
+      var _isGhost = false
 
-    trait MutationSupport extends BasicNonPersistentAcquiredState {
+      def recordAnnihilation(): Unit = {
+        require(!_isGhost)
+        _isGhost = true
+      }
+
+      def isGhost: Boolean = _isGhost
+
       def itemIsLocked: Boolean
 
-      def recordMutation(item: ItemExtensionApi)
+      def recordMutation(item: ItemExtensionApi): Unit
+
+      var unlockFullReadAccess: Boolean = false
     }
 
     val matchRecordAnnihilation: ElementMatcher[MethodDescription] =
@@ -256,6 +245,9 @@ object WorldImplementationCodeFactoring {
       firstMethodIsOverrideCompatibleWithSecond(
         _,
         IdentifiedItemsScope.isGhostProperty)
+
+    val matchUncheckedReadAccess: ElementMatcher[MethodDescription] =
+      IdentifiedItemsScope.alwaysAllowsReadAccessTo(_)
 
     val matchCheckedReadAccess: ElementMatcher[MethodDescription] =
       !IdentifiedItemsScope.alwaysAllowsReadAccessTo(_)
@@ -281,13 +273,12 @@ object WorldImplementationCodeFactoring {
 
     object mutation {
       @RuntimeType
-      def apply(
-          @Origin method: Method,
-          @This target: ItemExtensionApi,
-          @SuperCall superCall: Callable[_],
-          @FieldValue("acquiredState") acquiredState: AcquiredState,
-          @FieldValue("nonPersistentAcquiredState") nonPersistentAcquiredState: MutationSupport) = {
-        if (nonPersistentAcquiredState.itemIsLocked) {
+      def apply(@Origin method: Method,
+                @This target: ItemExtensionApi,
+                @AllArguments arguments: Array[Any],
+                @SuperCall superCall: Callable[_],
+                @FieldValue("acquiredState") acquiredState: AcquiredState) = {
+        if (acquiredState.itemIsLocked) {
           throw new UnsupportedOperationException(
             s"Attempt to write via: '$method' to an item: '$target' rendered from a bitemporal query.")
         }
@@ -300,7 +291,12 @@ object WorldImplementationCodeFactoring {
 
         superCall.call()
 
-        nonPersistentAcquiredState.recordMutation(target)
+        acquiredState.recordMutation(target)
+        for (argumentItem <- arguments collect {
+               case argumentItem: ItemExtensionApi => argumentItem
+             }) {
+          acquiredState.recordMutation(argumentItem)
+        }
       }
     }
 
@@ -315,13 +311,29 @@ object WorldImplementationCodeFactoring {
       def apply(@Origin method: Method,
                 @SuperCall superCall: Callable[_],
                 @FieldValue("acquiredState") acquiredState: AcquiredState) = {
-        if (acquiredState.isGhost) {
+        if (acquiredState.isGhost && !acquiredState.unlockFullReadAccess) {
           val uniqueItemSpecification = acquiredState.uniqueItemSpecification
           throw new UnsupportedOperationException(
             s"Attempt to read via: '$method' from a ghost item of id: '${uniqueItemSpecification.id}' and type '${uniqueItemSpecification.typeTag}'.")
         }
 
         superCall.call()
+      }
+    }
+
+    object uncheckedReadAccess {
+      @RuntimeType
+      def apply(@Origin method: Method,
+                @SuperCall superCall: Callable[_],
+                @FieldValue("acquiredState") acquiredState: AcquiredState) = {
+        if (!acquiredState.unlockFullReadAccess) (for {
+          _ <- makeManagedResource {
+            acquiredState.unlockFullReadAccess = true
+          } { _ =>
+            acquiredState.unlockFullReadAccess = false
+          }(List.empty)
+        } yield superCall.call()) acquireAndGet identity
+        else superCall.call()
       }
     }
 
@@ -347,12 +359,10 @@ object WorldImplementationCodeFactoring {
         acquiredState.uniqueItemSpecification
     }
 
-    object proxyFactory extends ProxyFactory[AcquiredState, MutationSupport] {
+    object proxyFactory extends ProxyFactory[AcquiredState] {
       override val isForRecordingOnly = false
 
       override val acquiredStateClazz = classOf[AcquiredState]
-
-      override val nonPersistentAcquiredStateClazz = classOf[MutationSupport]
 
       override val additionalInterfaces: Array[Class[_]] =
         QueryCallbackStuff.additionalInterfaces
@@ -362,6 +372,8 @@ object WorldImplementationCodeFactoring {
       override protected def configureInterceptions(
           builder: Builder[_]): Builder[_] =
         builder
+          .method(matchUncheckedReadAccess)
+          .intercept(MethodDelegation.to(uncheckedReadAccess))
           .method(matchCheckedReadAccess)
           .intercept(MethodDelegation.to(checkedReadAccess))
           .method(matchIsGhost)
@@ -406,8 +418,44 @@ object WorldImplementationCodeFactoring {
   def isInvariantCheck(method: MethodDescription): Boolean =
     "checkInvariant" == method.getName // TODO: this is hokey.
 
-  class IdentifiedItemsScope { identifiedItemsScopeThis =>
+  class IdentifiedItemsScope extends IdentifiedItemAccess {
+    identifiedItemsScopeThis =>
     private var allItemsAreLocked = false
+
+    override def reconstitute(
+        uniqueItemSpecification: UniqueItemSpecification): Any =
+      itemFor(uniqueItemSpecification.id)(uniqueItemSpecification.typeTag)
+
+    override def forget(
+        uniqueItemSpecification: UniqueItemSpecification): Unit = {
+      idToItemsMultiMap.get(uniqueItemSpecification.id) match {
+        case Some(items) =>
+          assert(items.nonEmpty)
+
+          // Have to force evaluation of the stream so that the call to '--=' below does not try to incrementally
+          // evaluate the stream as the underlying source collection, namely 'items' is being mutated. This is
+          // what you get when you go back to imperative programming after too much referential transparency.
+          val itemsSelectedForAnnihilation: Stream[Any] =
+            IdentifiedItemsScope
+              .yieldOnlyItemsOfType(items)(uniqueItemSpecification.typeTag)
+              .force
+          assert(1 == itemsSelectedForAnnihilation.size)
+
+          val itemToBeAnnihilated = itemsSelectedForAnnihilation.head
+
+          items -= itemToBeAnnihilated
+
+          itemToBeAnnihilated
+            .asInstanceOf[AnnihilationHook]
+            .recordAnnihilation()
+
+          if (items.isEmpty) {
+            idToItemsMultiMap.remove(uniqueItemSpecification.id)
+          }
+        case None =>
+          assert(false)
+      }
+    }
 
     def populate[EventId](_when: Unbounded[Instant],
                           eventTimeline: Seq[(Event, EventId)]) = {
@@ -429,25 +477,18 @@ object WorldImplementationCodeFactoring {
             }(List.empty)
           override val updateConsumer: UpdateConsumer[EventId] =
             new UpdateConsumer[EventId] {
-              val identifiedItemAccess = new IdentifiedItemAccess {
-                override def reconstitute(
-                    uniqueItemSpecification: UniqueItemSpecification): Any =
-                  identifiedItemsScopeThis.itemFor(uniqueItemSpecification.id)(
-                    uniqueItemSpecification.typeTag)
-              }
               override def captureAnnihilation(
-                  when: Unbounded[Instant],
                   eventId: EventId,
-                  uniqueItemSpecification: UniqueItemSpecification): Unit =
-                identifiedItemsScopeThis.annihilateItemFor(
-                  uniqueItemSpecification.id)(uniqueItemSpecification.typeTag)
+                  annihilation: Annihilation): Unit = {
+                annihilation(identifiedItemsScopeThis)
+              }
 
               override def capturePatch(when: Unbounded[Instant],
-                                        eventId: EventId,
+                                        eventIds: Set[EventId],
                                         patch: AbstractPatch): Unit = {
-                patch(identifiedItemAccess)
+                patch(identifiedItemsScopeThis)
                 for (_ <- itemsAreLockedResource) {
-                  patch.checkInvariants(identifiedItemAccess)
+                  patch.checkInvariants(identifiedItemsScopeThis)
                 }
               }
             }
@@ -470,19 +511,15 @@ object WorldImplementationCodeFactoring {
         import QueryCallbackStuff._
 
         val stateToBeAcquiredByProxy: AcquiredState =
-          new AcquiredState(UniqueItemSpecification(id, typeTag[Item]))
-
-        val nonPersistentStateToBeAcquiredByProxy: MutationSupport =
-          new MutationSupport {
-            override def recordMutation(item: ItemExtensionApi): Unit = {}
-
-            override def itemIsLocked: Boolean =
+          new AcquiredState {
+            val uniqueItemSpecification: UniqueItemSpecification =
+              UniqueItemSpecification(id, typeTag[Item])
+            def itemIsLocked: Boolean =
               identifiedItemsScopeThis.allItemsAreLocked
+            def recordMutation(item: ItemExtensionApi): Unit = {}
           }
 
-        val item = proxyFactory.constructFrom(
-          stateToBeAcquiredByProxy,
-          nonPersistentStateToBeAcquiredByProxy)
+        val item = proxyFactory.constructFrom(stateToBeAcquiredByProxy)
         idToItemsMultiMap.addBinding(id, item)
         item
       }
@@ -507,34 +544,6 @@ object WorldImplementationCodeFactoring {
             itemsOfDesiredType.head
           }
         }
-      }
-    }
-
-    def annihilateItemFor[Item: TypeTag](id: Any): Unit = {
-      idToItemsMultiMap.get(id) match {
-        case Some(items) =>
-          assert(items.nonEmpty)
-
-          // Have to force evaluation of the stream so that the call to '--=' below does not try to incrementally
-          // evaluate the stream as the underlying source collection, namely 'items' is being mutated. This is
-          // what you get when you go back to imperative programming after too much referential transparency.
-          val itemsSelectedForAnnihilation: Stream[Item] =
-            IdentifiedItemsScope.yieldOnlyItemsOfType(items).force
-          assert(1 == itemsSelectedForAnnihilation.size)
-
-          val itemToBeAnnihilated = itemsSelectedForAnnihilation.head
-
-          itemToBeAnnihilated
-            .asInstanceOf[AnnihilationHook]
-            .recordAnnihilation()
-
-          items -= itemToBeAnnihilated
-
-          if (items.isEmpty) {
-            idToItemsMultiMap.remove(id)
-          }
-        case None =>
-          assert(false)
       }
     }
 
@@ -563,9 +572,7 @@ object WorldImplementationCodeFactoring {
         }
 
       case annihilation @ Annihilation(when, id) =>
-        implicit val typeTag =
-          annihilation.capturedTypeTag
-        patchRecorder.recordAnnihilation(eventId, when, id)
+        patchRecorder.recordAnnihilation(eventId, annihilation)
     }
 
     patchRecorder.noteThatThereAreNoFollowingRecordings()

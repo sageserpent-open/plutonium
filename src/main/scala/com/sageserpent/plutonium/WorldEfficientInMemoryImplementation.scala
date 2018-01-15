@@ -6,7 +6,6 @@ import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.World.Revision
 
 import scala.collection.mutable.MutableList
-import scala.reflect.runtime.universe.{Super => _, This => _, _}
 
 class WorldEfficientInMemoryImplementation[EventId]
     extends WorldImplementationCodeFactoring[EventId] {
@@ -36,7 +35,9 @@ class WorldEfficientInMemoryImplementation[EventId]
 
   trait ScopeUsingStorage extends com.sageserpent.plutonium.Scope {
     private def itemCache(): ItemCache = {
-      val timeline = timelines.get(nextRevision) map (_._2) getOrElse emptyTimeline()
+      val timeline = if (nextRevision > World.initialRevision) {
+        timelines(nextRevision - 1)._2
+      } else emptyTimeline()
 
       timeline.itemCacheAt(when)
     }

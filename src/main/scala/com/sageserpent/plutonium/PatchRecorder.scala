@@ -27,13 +27,10 @@ trait BestPatchSelectionContracts extends BestPatchSelection {
 
 object PatchRecorder {
   trait UpdateConsumer[EventId] {
-    def captureAnnihilation(
-        when: Unbounded[Instant],
-        eventId: EventId,
-        uniqueItemSpecification: UniqueItemSpecification): Unit
+    def captureAnnihilation(eventId: EventId, annihilation: Annihilation): Unit
 
     def capturePatch(when: Unbounded[Instant],
-                     eventId: EventId,
+                     eventIds: Set[EventId],
                      patch: AbstractPatch): Unit
   }
 }
@@ -55,9 +52,7 @@ trait PatchRecorder[EventId] {
                                  when: Unbounded[Instant],
                                  patch: AbstractPatch): Unit
 
-  def recordAnnihilation[Item: TypeTag](eventId: EventId,
-                                        when: Instant,
-                                        id: Any): Unit
+  def recordAnnihilation(eventId: EventId, annihilation: Annihilation): Unit
 
   def noteThatThereAreNoFollowingRecordings(): Unit
 }
@@ -91,16 +86,15 @@ trait PatchRecorderContracts[EventId] extends PatchRecorder[EventId] {
     result
   }
 
-  abstract override def recordAnnihilation[Item: TypeTag](eventId: EventId,
-                                                          when: Instant,
-                                                          id: Any): Unit = {
+  abstract override def recordAnnihilation(eventId: EventId,
+                                           annihilation: Annihilation): Unit = {
     require(
       whenEventPertainedToByLastRecordingTookPlace
-        .cata(some = Finite(when) >= _, none = true))
+        .cata(some = annihilation.when >= _, none = true))
     require(!allRecordingsAreCaptured)
-    val result = super.recordAnnihilation(eventId, when, id)
+    val result = super.recordAnnihilation(eventId, annihilation)
     require(
-      whenEventPertainedToByLastRecordingTookPlace.contains(Finite(when)))
+      whenEventPertainedToByLastRecordingTookPlace.contains(annihilation.when))
     result
   }
 

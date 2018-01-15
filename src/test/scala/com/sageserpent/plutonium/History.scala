@@ -4,6 +4,21 @@ abstract class History {
   type Id
   val id: Id
 
+  override def toString: String = s"id: $id, proxied class: ${getClass.getSuperclass}, datums: $datums"
+
+  override def hashCode(): Int =
+    id.hashCode() // Use a stable hash code - remember that the rest of the state will update.
+
+  override def equals(that: scala.Any): Boolean = {
+    val thisClazz = getClass
+    val thatClazz = that.getClass
+
+    if (thisClazz.isAssignableFrom(thatClazz)) {
+      val thatHistory = that.asInstanceOf[History]
+      id == thatHistory.id && datums == thatHistory.datums
+    } else thatClazz.isAssignableFrom(thisClazz) && that.equals(this)
+  }
+
   def checkInvariant(): Unit = {
     if (invariantBreakageScheduled) {
       // NOTE: breakage of a bitemporal invariant is *not* a logic error; we expect

@@ -149,12 +149,10 @@ class PatchRecorderSpec
                                 }
                                 .once
                               (updateConsumer.capturePatch _)
-                                .expects(Finite(whenForStandIn),
-                                         sequenceIndexOfPatchStandIn,
-                                         patch)
+                                .expects(Finite(whenForStandIn), *, patch)
                                 .onCall {
                                   (_: Unbounded[Instant],
-                                   _: EventId,
+                                   _: Set[EventId],
                                    _: AbstractPatch) =>
                                     sequenceIndicesFromAppliedPatches += sequenceIndexOfPatchStandIn: Unit
                                 }
@@ -237,18 +235,20 @@ class PatchRecorderSpec
 
               if (patchApplicationDoesNotBreachTheCutoff)
                 (updateConsumer.captureAnnihilation _)
-                  .expects(Finite(when),
-                           masterSequenceIndex,
-                           UniqueItemSpecification(id, typeTag[FooHistory]))
-                  .onCall {
-                    (_: Unbounded[Instant],
-                     _: EventId,
-                     _: UniqueItemSpecification) =>
-                      sequenceIndicesFromAppliedPatches += masterSequenceIndex: Unit
+                  .expects(masterSequenceIndex,
+                           Annihilation(
+                             when,
+                             UniqueItemSpecification(id, typeTag[FooHistory])))
+                  .onCall { (_: EventId, _: Annihilation) =>
+                    sequenceIndicesFromAppliedPatches += masterSequenceIndex: Unit
                   }
                   .once
               patchRecorder
-                .recordAnnihilation[FooHistory](masterSequenceIndex, when, id)
+                .recordAnnihilation(
+                  masterSequenceIndex,
+                  Annihilation(when,
+                               UniqueItemSpecification(id,
+                                                       typeTag[FooHistory])))
             }
 
             recordingActionFactories :+ (recordingFinalAnnihilation _)
