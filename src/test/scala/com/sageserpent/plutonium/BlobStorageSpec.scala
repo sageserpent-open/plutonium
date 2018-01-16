@@ -49,6 +49,17 @@ class BlobStorageSpec
         UniqueItemSpecification(id, typeTag[AnotherKindOfThing]))
     )
 
+  val uniqueItemSpecificationWithDisjointTypesPerIdGenerator
+    : Gen[UniqueItemSpecification] = {
+    val aSmallChoiceOfIdsToIncreaseTheChancesOfCollisions = Gen.chooseNum(1, 10)
+    Gen.oneOf(
+      (aSmallChoiceOfIdsToIncreaseTheChancesOfCollisions) map (id =>
+        UniqueItemSpecification(id, typeTag[OneKindOfThing])),
+      (aSmallChoiceOfIdsToIncreaseTheChancesOfCollisions) map (id =>
+        UniqueItemSpecification(id, typeTag[AnotherKindOfThing]))
+    )
+  }
+
   val blobGenerator: Gen[Option[SnapshotBlob]] =
     Gen.frequency(
       5 -> (Gen
@@ -320,7 +331,7 @@ class BlobStorageSpec
         retrievedUniqueItemSpecifications shouldBe empty
 
         val retrievedSnapshotBlob: Option[SnapshotBlob] =
-          timeSlice.snapshotBlobFor(UniqueItemSpecification(id, typeTag[Any]))
+          timeSlice.snapshotBlobFor(uniqueItemSpecification)
 
         retrievedSnapshotBlob shouldBe None
     }
@@ -401,6 +412,92 @@ class BlobStorageSpec
               checkExpectations(
                 UniqueItemSpecification(nonExistentItemId, typeTag[Any]))
             }
+          }
+        }
+    }
+  }
+
+  def checkExpectationsForExistenceWhenMultipleItemsShareTheSameId(
+      timeSlice: Timeslice,
+      expectedSnapshotBlob: Option[SnapshotBlob],
+      uniqueItemSpecification: UniqueItemSpecification) = {
+    val id              = uniqueItemSpecification.id
+    val explicitTypeTag = uniqueItemSpecification.typeTag
+
+    val allRetrievedUniqueItemSpecifications =
+      timeSlice.uniqueItemQueriesFor(explicitTypeTag)
+
+    val retrievedUniqueItemSpecifications =
+      timeSlice.uniqueItemQueriesFor(id)(explicitTypeTag)
+
+    expectedSnapshotBlob match {
+      case Some(snapshotBlob) =>
+        allRetrievedUniqueItemSpecifications map (_.id) should contain(id)
+
+        retrievedUniqueItemSpecifications.foreach(_.id shouldBe id)
+
+        assert(
+          retrievedUniqueItemSpecifications.forall(
+            _.typeTag.tpe <:< explicitTypeTag.tpe))
+
+        val retrievedSnapshotBlobs = retrievedUniqueItemSpecifications map timeSlice.snapshotBlobFor
+
+        retrievedSnapshotBlobs should contain(Some(snapshotBlob))
+      case None =>
+    }
+  }
+
+  it should "yield the relevant snapshots even if the item id can refer to several items of disjoint types" in {
+    forAll(
+      seedGenerator,
+      lotsOfTimeSeriesGenerator(
+        uniqueItemSpecificationWithDisjointTypesPerIdGenerator) filter (_.groupBy(
+        _.uniqueItemSpecification.id).values.exists(1 < _.size)),
+      Gen.frequency(10 -> lotsOfTimeSeriesGenerator(
+                      uniqueItemSpecificationWithDisjointTypesPerIdGenerator),
+                    1 -> Gen.const(Seq.empty)),
+      Gen.chooseNum(1, gapBetweenBaseTransformedEventIds)
+    ) {
+      (seed,
+       lotsOfFinalTimeSeries,
+       lotsOfObsoleteTimeSeries,
+       wrapAroundShift) =>
+        val randomBehaviour = new Random(seed)
+
+        val finalBookings =
+          shuffledSnapshotBookings(randomBehaviour, lotsOfFinalTimeSeries)
+
+        val obsoleteBookings =
+          shuffledSnapshotBookings(randomBehaviour, lotsOfObsoleteTimeSeries)
+
+        val revisions =
+          intersperseObsoleteEvents(randomBehaviour,
+                                    finalBookings,
+                                    obsoleteBookings)
+
+        def wrapAround(delta: EventId): EventId =
+          (delta + wrapAroundShift) % gapBetweenBaseTransformedEventIds
+
+        val blobStorage: BlobStorage[EventId] =
+          blobStorageFrom(revisions, wrapAround, randomBehaviour)
+
+        for (TimeSeries(uniqueItemSpecification, snapshots, queryTimes) <- lotsOfFinalTimeSeries) {
+          if (snapshots.head._1 > NegativeInfinity()) {
+            val timeSlice = blobStorage.timeSlice(NegativeInfinity())
+
+            checkExpectationsForNonExistence(timeSlice)(uniqueItemSpecification)
+          }
+
+          for ((snapshotBlob: Option[SnapshotBlob], snapshotTime, queryTime) <- snapshots zip queryTimes map {
+                 case ((snapshotTime, snapshotBlob), queryTime) =>
+                   (snapshotBlob, snapshotTime, queryTime)
+               }) {
+            val timeSlice = blobStorage.timeSlice(queryTime)
+
+            checkExpectationsForExistenceWhenMultipleItemsShareTheSameId(
+              timeSlice,
+              snapshotBlob,
+              uniqueItemSpecification)
           }
         }
     }
