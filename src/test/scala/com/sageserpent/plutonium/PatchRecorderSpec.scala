@@ -110,12 +110,15 @@ class PatchRecorderSpec
 
               val recordingActionFactories = clumpsOfPatches zip bestPatches zip changeInsteadOfMeasurementDecisionsInClumps map {
                 case ((clumpOfPatches, bestPatch), decisions) =>
+                  val eventIdsForPatches: Array[EventId] =
+                    clumpOfPatches map (System.identityHashCode) toArray
+
                   // HACK: this next variable and how it is used is truly horrible...
                   var uglyWayOfCapturingStateAssociatedWithThePatchThatStandsInForTheBestPatch
                     : Option[(Boolean, Int, Instant)] = None
 
-                  clumpOfPatches zip decisions map {
-                    case (patch, makeAChange) =>
+                  (clumpOfPatches zip decisions).zipWithIndex map {
+                    case ((patch, makeAChange), patchIndex) =>
                       def setupInteractionWithBestPatchApplication(
                           patch: AbstractPatch,
                           eventsHaveEffectNoLaterThan: Unbounded[Instant],
@@ -123,14 +126,11 @@ class PatchRecorderSpec
                           masterSequenceIndex: Int,
                           sequenceIndicesFromAppliedPatches: scala.collection.mutable.ListBuffer[
                             Int]): Unit = {
-                        uglyWayOfCapturingStateAssociatedWithThePatchThatStandsInForTheBestPatch match {
-                          case None =>
-                            uglyWayOfCapturingStateAssociatedWithThePatchThatStandsInForTheBestPatch =
-                              Some(
-                                (Finite(when) <= eventsHaveEffectNoLaterThan),
-                                masterSequenceIndex,
-                                when)
-                          case Some(_) =>
+                        if (0 == patchIndex) {
+                          uglyWayOfCapturingStateAssociatedWithThePatchThatStandsInForTheBestPatch =
+                            Some((Finite(when) <= eventsHaveEffectNoLaterThan),
+                                 masterSequenceIndex,
+                                 when)
                         }
 
                         uglyWayOfCapturingStateAssociatedWithThePatchThatStandsInForTheBestPatch match {
@@ -138,8 +138,7 @@ class PatchRecorderSpec
                               (patchStandInIsNotForbiddenByEventTimeCutoff,
                                sequenceIndexOfPatchStandIn,
                                whenForStandIn)) =>
-                            if (patchStandInIsNotForbiddenByEventTimeCutoff && bestPatches
-                                  .contains(patch)) {
+                            if (patchStandInIsNotForbiddenByEventTimeCutoff && bestPatch == patch) {
                               (patch.rewriteItemTypeTags _)
                                 .expects(*)
                                 .onCall {
@@ -149,7 +148,9 @@ class PatchRecorderSpec
                                 }
                                 .once
                               (updateConsumer.capturePatch _)
-                                .expects(Finite(whenForStandIn), *, patch)
+                                .expects(Finite(whenForStandIn),
+                                         eventIdsForPatches.toSet[EventId],
+                                         patch)
                                 .onCall {
                                   (_: Unbounded[Instant],
                                    _: Set[EventId],
@@ -177,9 +178,10 @@ class PatchRecorderSpec
                           when,
                           masterSequenceIndex,
                           sequenceIndicesFromAppliedPatches)
-                        patchRecorder.recordPatchFromChange(masterSequenceIndex,
-                                                            Finite(when),
-                                                            patch)
+                        patchRecorder.recordPatchFromChange(
+                          eventIdsForPatches(patchIndex),
+                          Finite(when),
+                          patch)
                       }
 
                       def recordingMeasurement(patch: AbstractPatch)(
@@ -195,7 +197,7 @@ class PatchRecorderSpec
                           masterSequenceIndex,
                           sequenceIndicesFromAppliedPatches)
                         patchRecorder.recordPatchFromMeasurement(
-                          masterSequenceIndex,
+                          eventIdsForPatches(patchIndex),
                           Finite(when),
                           patch)
                       }
