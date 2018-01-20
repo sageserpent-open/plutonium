@@ -68,13 +68,13 @@ trait ItemStateStorage { itemStateStorageObject =>
             .asInstanceOf[Serializer[ItemSuperType]]
             .read(kryo, input, itemType)
         else {
-          val uniqueItemSpecifiction: UniqueItemSpecification =
+          val uniqueItemSpecification: UniqueItemSpecification =
             kryo
               .readClassAndObject(input)
               .asInstanceOf[UniqueItemSpecification]
 
           val instance: ItemSuperType =
-            itemFor[ItemSuperType](uniqueItemSpecifiction)
+            itemFor[ItemSuperType](uniqueItemSpecification)
           kryo.reference(instance)
           instance
         }
