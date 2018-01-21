@@ -61,7 +61,7 @@ trait ItemStateStorage { itemStateStorageObject =>
     new Serializer[ItemSuperType] {
       override def read(kryo: Kryo,
                         input: Input,
-                        itemType: Class[ItemSuperType]): ItemSuperType = {
+                        itemType: Class[ItemSuperType]): ItemSuperType =
         if (kryo.isDealingWithTopLevelObject)
           kryo
             .underlyingSerializerFor(itemType)
@@ -78,7 +78,6 @@ trait ItemStateStorage { itemStateStorageObject =>
           kryo.reference(instance)
           instance
         }
-      }
 
       override def write(kryo: Kryo,
                          output: Output,
