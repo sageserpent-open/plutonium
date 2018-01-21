@@ -6,12 +6,11 @@ import com.sageserpent.americium.{NegativeInfinity, PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.BlobStorage.SnapshotBlob
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.PatchRecorder.UpdateConsumer
+import com.sageserpent.plutonium.World.{Revision, initialRevision}
 import com.sageserpent.plutonium.WorldImplementationCodeFactoring.{
   EventData,
-  EventOrderingTiebreakerIndex,
   QueryCallbackStuff
 }
-import World.{Revision, initialRevision}
 import resource._
 
 import scala.collection.immutable.{Map, SortedMap, TreeMap}
@@ -116,8 +115,12 @@ class TimelineImplementation[EventId](
         itemFor[Any](uniqueItemSpecification)
 
       override def forget(
-          uniqueItemSpecification: UniqueItemSpecification): Unit =
+          uniqueItemSpecification: UniqueItemSpecification): Unit = {
+        val item = reconstitute(uniqueItemSpecification)
+          .asInstanceOf[AnnihilationHook]
+          .recordAnnihilation()
         purgeItemFor(uniqueItemSpecification)
+      }
 
       private var blobStorageTimeSlice =
         sourceBlobStorage.timeSlice(NegativeInfinity())
@@ -235,9 +238,11 @@ class TimelineImplementation[EventId](
         blobStorage.timeSlice(when)
 
       override def fallbackItemFor[Item](
-          uniqueItemSpecification: UniqueItemSpecification): Item =
-        throw new RuntimeException(
-          s"Snapshot does not exist for: $uniqueItemSpecification at: $when.")
+          uniqueItemSpecification: UniqueItemSpecification): Item = {
+        val item: Item = createItemFor[Item](uniqueItemSpecification)
+        item.asInstanceOf[AnnihilationHook].recordAnnihilation()
+        item
+      }
 
       // TODO - either fuse this back with the other code duplicate above or make it its own thing. Do we really need the 'itemIsLocked'? If we do, then let's fuse...
       override protected def createItemFor[Item](
