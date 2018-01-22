@@ -107,7 +107,7 @@ object WorldImplementationCodeFactoring {
       classOf[AnnihilationHook].getMethod("recordAnnihilation"))
 
     val lifecycleUUIDMethod = new MethodDescription.ForLoadedMethod(
-      classOf[AnnihilationHook].getMethod("lifecycleUUID"))
+      classOf[ItemExtensionApi].getMethod("lifecycleUUID"))
   }
 
   private def clazzFromType[Item](reflectedType: universe.Type): Class[Item] = {

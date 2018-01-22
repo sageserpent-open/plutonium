@@ -1,5 +1,7 @@
 package com.sageserpent.plutonium
 
+import java.util.UUID
+
 import scala.reflect.runtime.universe.TypeTag
 
 object ItemExtensionApi {
@@ -20,4 +22,6 @@ trait ItemExtensionApi {
   // then it is possible for that other item to have a reference to the annihilated item. In
   // this case, the annihilated item is considered to be a 'ghost'.
   def isGhost: Boolean
+
+  def lifecycleUUID: UUID
 }
