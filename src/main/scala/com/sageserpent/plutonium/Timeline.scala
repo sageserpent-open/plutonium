@@ -238,11 +238,9 @@ class TimelineImplementation[EventId](
         blobStorage.timeSlice(when)
 
       override def fallbackItemFor[Item](
-          uniqueItemSpecification: UniqueItemSpecification): Item = {
-        val item: Item = createItemFor[Item](uniqueItemSpecification)
-        item.asInstanceOf[AnnihilationHook].recordAnnihilation()
-        item
-      }
+          uniqueItemSpecification: UniqueItemSpecification): Item =
+        throw new RuntimeException(
+          s"Snapshot does not exist for: $uniqueItemSpecification at: $when.")
 
       // TODO - either fuse this back with the other code duplicate above or make it its own thing. Do we really need the 'itemIsLocked'? If we do, then let's fuse...
       override protected def createItemFor[Item](

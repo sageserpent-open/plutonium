@@ -2,7 +2,7 @@ package com.sageserpent.plutonium
 
 import java.lang.reflect.{Method, Modifier}
 import java.time.Instant
-import java.util.Optional
+import java.util.{Optional, UUID}
 import java.util.concurrent.Callable
 
 import com.sageserpent.americium.{Finite, NegativeInfinity, Unbounded}
@@ -103,8 +103,11 @@ object WorldImplementationCodeFactoring {
     val isGhostProperty = new MethodDescription.ForLoadedMethod(
       classOf[ItemExtensionApi].getMethod("isGhost"))
 
-    val isRecordAnnihilationMethod = new MethodDescription.ForLoadedMethod(
+    val recordAnnihilationMethod = new MethodDescription.ForLoadedMethod(
       classOf[AnnihilationHook].getMethod("recordAnnihilation"))
+
+    val lifecycleUUIDMethod = new MethodDescription.ForLoadedMethod(
+      classOf[AnnihilationHook].getMethod("lifecycleUUID"))
   }
 
   private def clazzFromType[Item](reflectedType: universe.Type): Class[Item] = {
@@ -215,7 +218,7 @@ object WorldImplementationCodeFactoring {
       mutable.Map
         .empty[universe.Type, Class[_]]
 
-    trait AcquiredState extends AcquiredStateCapturingId with AnnihilationHook {
+    trait AcquiredState extends AcquiredStateCapturingId {
       var _isGhost = false
 
       def recordAnnihilation(): Unit = {
@@ -232,10 +235,19 @@ object WorldImplementationCodeFactoring {
       var unlockFullReadAccess: Boolean = false
     }
 
+    val matchSetLifecycleUUID: ElementMatcher[MethodDescription] =
+      ElementMatchers.named("setLifecycleUUID")
+    // TODO - why does Java reflection crash when it tries to obtain this method inside a call to 'firstMethodIsOverrideCompatibleWithSecond'?
+
+    val matchLifecycleUUID: ElementMatcher[MethodDescription] =
+      firstMethodIsOverrideCompatibleWithSecond(
+        _,
+        IdentifiedItemsScope.lifecycleUUIDMethod)
+
     val matchRecordAnnihilation: ElementMatcher[MethodDescription] =
       firstMethodIsOverrideCompatibleWithSecond(
         _,
-        IdentifiedItemsScope.isRecordAnnihilationMethod)
+        IdentifiedItemsScope.recordAnnihilationMethod)
 
     val matchMutation: ElementMatcher[MethodDescription] = methodDescription =>
       methodDescription.getReturnType.represents(classOf[Unit]) && !WorldImplementationCodeFactoring
@@ -372,6 +384,7 @@ object WorldImplementationCodeFactoring {
       override protected def configureInterceptions(
           builder: Builder[_]): Builder[_] =
         builder
+          .defineField("_lifecycleUUID", classOf[UUID])
           .method(matchUncheckedReadAccess)
           .intercept(MethodDelegation.to(uncheckedReadAccess))
           .method(matchCheckedReadAccess)
@@ -382,6 +395,10 @@ object WorldImplementationCodeFactoring {
           .intercept(MethodDelegation.to(mutation))
           .method(matchRecordAnnihilation)
           .intercept(MethodDelegation.to(recordAnnihilation))
+          .method(matchLifecycleUUID)
+          .intercept(FieldAccessor.ofField("_lifecycleUUID"))
+          .method(matchSetLifecycleUUID)
+          .intercept(FieldAccessor.ofField("_lifecycleUUID"))
           .method(matchInvariantCheck)
           .intercept(MethodDelegation.to(checkInvariant))
           .method(matchUniqueItemSpecification)
