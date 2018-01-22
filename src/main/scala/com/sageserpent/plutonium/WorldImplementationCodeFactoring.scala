@@ -277,7 +277,9 @@ object WorldImplementationCodeFactoring {
 
     object recordAnnihilation {
       @RuntimeType
-      def apply(@FieldValue("acquiredState") acquiredState: AcquiredState) = {
+      def apply(@This target: AnnihilationHook,
+                @FieldValue("acquiredState") acquiredState: AcquiredState) = {
+        target.setLifecycleUUID(UUID.randomUUID())
         acquiredState.recordAnnihilation()
         null
       }
@@ -381,10 +383,12 @@ object WorldImplementationCodeFactoring {
       override val cachedProxyClasses: mutable.Map[universe.Type, Class[_]] =
         QueryCallbackStuff.cachedProxyClasses
 
+      val freshItemLifecycleUUID = UUID.randomUUID()
+
       override protected def configureInterceptions(
           builder: Builder[_]): Builder[_] =
         builder
-          .defineField("_lifecycleUUID", classOf[UUID])
+          .defineField("lifecycleUUID", classOf[UUID])
           .method(matchUncheckedReadAccess)
           .intercept(MethodDelegation.to(uncheckedReadAccess))
           .method(matchCheckedReadAccess)
@@ -396,13 +400,24 @@ object WorldImplementationCodeFactoring {
           .method(matchRecordAnnihilation)
           .intercept(MethodDelegation.to(recordAnnihilation))
           .method(matchLifecycleUUID)
-          .intercept(FieldAccessor.ofField("_lifecycleUUID"))
+          .intercept(FieldAccessor.ofField("lifecycleUUID"))
           .method(matchSetLifecycleUUID)
-          .intercept(FieldAccessor.ofField("_lifecycleUUID"))
+          .intercept(FieldAccessor.ofField("lifecycleUUID"))
           .method(matchInvariantCheck)
           .intercept(MethodDelegation.to(checkInvariant))
           .method(matchUniqueItemSpecification)
           .intercept(MethodDelegation.to(uniqueItemSpecification))
+
+      override def constructFrom[Item: TypeTag](
+          stateToBeAcquiredByProxy: AcquiredState) = {
+        val item = super.constructFrom(stateToBeAcquiredByProxy)
+
+        item
+          .asInstanceOf[AnnihilationHook]
+          .setLifecycleUUID(freshItemLifecycleUUID)
+
+        item
+      }
     }
   }
 
