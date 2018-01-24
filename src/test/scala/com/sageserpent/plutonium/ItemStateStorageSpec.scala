@@ -1,5 +1,7 @@
 package com.sageserpent.plutonium
 
+import java.util.UUID
+
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.plutonium.BlobStorage.SnapshotBlob
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
@@ -137,14 +139,16 @@ class ItemStateStorageSpec
     override protected val clazzOfItemSuperType: Class[ItemSuperType] =
       classOf[ItemSuperType]
 
-    override protected def uniqueItemSpecification(
-        item: ItemSuperType): UniqueItemSpecification =
-      item.id match {
+    val theUniqueLifecycleUUIDForAllItemsEver = UUID.randomUUID()
+
+    override protected def uniqueItemSpecificationAndLifecycleUUID(
+        item: ItemSuperType): (UniqueItemSpecification, UUID) =
+      (item.id match {
         case oddId: String =>
           UniqueItemSpecification(oddId, typeTag[OddGraphNode])
         case eventId: Int =>
           UniqueItemSpecification(eventId, typeTag[EvenGraphNode])
-      }
+      }) -> theUniqueLifecycleUUIDForAllItemsEver
   }
 
   "An item" should "be capable of being roundtripped by reconstituting its snapshot" in check(

@@ -1,5 +1,7 @@
 package com.sageserpent.plutonium
 
+import java.util.UUID
+
 import com.esotericsoftware.kryo.factories.ReflectionSerializerFactory
 import com.esotericsoftware.kryo.io.{Input, Output}
 import com.esotericsoftware.kryo.serializers.FieldSerializer
@@ -54,8 +56,8 @@ trait ItemStateStorage { itemStateStorageObject =>
 
   protected val clazzOfItemSuperType: Class[ItemSuperType]
 
-  protected def uniqueItemSpecification(
-      item: ItemSuperType): UniqueItemSpecification
+  protected def uniqueItemSpecificationAndLifecycleUUID(
+      item: ItemSuperType): (UniqueItemSpecification, UUID)
 
   val serializerThatDirectlyEncodesInterItemReferences =
     new Serializer[ItemSuperType] {
@@ -68,13 +70,14 @@ trait ItemStateStorage { itemStateStorageObject =>
             .asInstanceOf[Serializer[ItemSuperType]]
             .read(kryo, input, itemType)
         else {
-          val uniqueItemSpecification: UniqueItemSpecification =
+          val (uniqueItemSpecification, lifecycleUUID): (UniqueItemSpecification,
+                                                         UUID) =
             kryo
               .readClassAndObject(input)
-              .asInstanceOf[UniqueItemSpecification]
+              .asInstanceOf[(UniqueItemSpecification, UUID)]
 
           val instance: ItemSuperType =
-            itemFor[ItemSuperType](uniqueItemSpecification)
+            itemFor[ItemSuperType](uniqueItemSpecification) // TODO - use the lifecycle.
           kryo.reference(instance)
           instance
         }
@@ -87,7 +90,10 @@ trait ItemStateStorage { itemStateStorageObject =>
             .underlyingSerializerFor(item.getClass)
             .asInstanceOf[Serializer[ItemSuperType]]
             .write(kryo, output, item)
-        else kryo.writeClassAndObject(output, uniqueItemSpecification(item))
+        else
+          kryo.writeClassAndObject(
+            output,
+            uniqueItemSpecificationAndLifecycleUUID(item))
       }
     }
 
