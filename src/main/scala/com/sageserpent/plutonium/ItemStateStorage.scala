@@ -94,29 +94,30 @@ trait ItemStateStorage { itemStateStorageObject =>
   val originalInstantiatorStrategy =
     new ScalaKryoInstantiator().newKryo().getInstantiatorStrategy
 
+  def itsAWorkaroundSoChillOut(kryo: KryoBase) = {
+    // Workaround the bug in Chill's own workaround for the claimed Kryo bug. Sheez!
+    // The rest of this is an unavoidable cut and paste from Chill.
+    kryo.setRegistrationRequired(false)
+    kryo.setInstantiatorStrategy(
+      new org.objenesis.strategy.StdInstantiatorStrategy)
+
+    // Handle cases where we may have an odd classloader setup like with libjars
+    // for hadoop
+    val classLoader = Thread.currentThread.getContextClassLoader
+    kryo.setClassLoader(classLoader)
+    val reg = new AllScalaRegistrar
+    reg(kryo)
+    kryo
+  }
+
   val kryoInstantiator = new ScalaKryoInstantiator {
     override def newKryo(): KryoBase = {
-      val kryo = {
-        val k = new KryoBase {
-          // Workaround the bug in Chill's own workaround for the claimed Kryo bug. Sheez!
-          override def newInstantiator(
-              cls: Class[_]): ObjectInstantiator[AnyRef] =
-            getInstantiatorStrategy.newInstantiatorOf[AnyRef](
-              cls.asInstanceOf[Class[AnyRef]])
-        }
-        // The rest of this is an unavoidable cut and paste from Chill.
-        k.setRegistrationRequired(false)
-        k.setInstantiatorStrategy(
-          new org.objenesis.strategy.StdInstantiatorStrategy)
-
-        // Handle cases where we may have an odd classloader setup like with libjars
-        // for hadoop
-        val classLoader = Thread.currentThread.getContextClassLoader
-        k.setClassLoader(classLoader)
-        val reg = new AllScalaRegistrar
-        reg(k)
-        k
-      }
+      val kryo = itsAWorkaroundSoChillOut(new KryoBase {
+        override def newInstantiator(
+            cls: Class[_]): ObjectInstantiator[AnyRef] =
+          getInstantiatorStrategy.newInstantiatorOf[AnyRef](
+            cls.asInstanceOf[Class[AnyRef]])
+      })
 
       kryo.setDefaultSerializer(defaultSerializerFactory)
       kryo.addDefaultSerializer(
