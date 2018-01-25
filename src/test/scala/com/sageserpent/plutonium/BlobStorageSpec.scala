@@ -1,6 +1,7 @@
 package com.sageserpent.plutonium
 
 import java.time.Instant
+import java.util.UUID
 
 import com.sageserpent.americium.Unbounded._
 import com.sageserpent.americium.randomEnrichment._
@@ -249,6 +250,8 @@ class BlobStorageSpec
 
   val eventIdDeltas: Seq[Int] = 1 until gapBetweenBaseTransformedEventIds
 
+  val theOneAndOnlyLifecycleUUID = UUID.randomUUID()
+
   def blobStorageFrom(revisions: Seq[ScalaFmtWorkaround],
                       wrapAround: EventId => EventId,
                       randomBehaviour: Random) = {
@@ -267,9 +270,11 @@ class BlobStorageSpec
                   anchorForTransformedEventIdThatIsPresentInAllRevisions + wrapAround(
                     delta))
 
-              builder.recordSnapshotBlobsForEvent(transformedEventIdSet,
-                                                  when,
-                                                  snapshotBlobs.toMap)
+              builder.recordSnapshotBlobsForEvent(
+                transformedEventIdSet,
+                when,
+                snapshotBlobs.toMap.mapValues(
+                  _.map(_ -> theOneAndOnlyLifecycleUUID)))
             case None =>
               val transformedEventId =
                 eventId * gapBetweenBaseTransformedEventIds + wrapAround(0)

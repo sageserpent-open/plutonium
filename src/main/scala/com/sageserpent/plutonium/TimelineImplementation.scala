@@ -1,6 +1,7 @@
 package com.sageserpent.plutonium
 
 import java.time.Instant
+import java.util.UUID
 
 import com.sageserpent.americium.{NegativeInfinity, PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.BlobStorage.SnapshotBlob
@@ -137,12 +138,13 @@ class TimelineImplementation[EventId](
         proxyFactory.constructFrom[Item](stateToBeAcquiredByProxy)
       }
 
-      def harvestSnapshots(): Map[UniqueItemSpecification, SnapshotBlob] = {
+      def harvestSnapshots()
+        : Map[UniqueItemSpecification, (SnapshotBlob, UUID)] = {
         val result = itemsMutatedSinceLastSnapshotHarvest map {
           case (uniqueItemSpecification, item) =>
             val snapshotBlob = itemStateStorageUsingProxies.snapshotFor(item)
 
-            uniqueItemSpecification -> snapshotBlob
+            uniqueItemSpecification -> (snapshotBlob, item.lifecycleUUID)
         } toMap
 
         itemsMutatedSinceLastSnapshotHarvest.clear()
@@ -164,7 +166,8 @@ class TimelineImplementation[EventId](
         (eventIds, itemStateUpdate) <- itemStateUpdates
       } {
         val snapshotBlobs =
-          mutable.Map.empty[UniqueItemSpecification, Option[SnapshotBlob]]
+          mutable.Map
+            .empty[UniqueItemSpecification, Option[(SnapshotBlob, UUID)]]
 
         itemStateUpdate match {
           case ItemStateAnnihilation(annihilation) =>

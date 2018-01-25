@@ -6,7 +6,6 @@ import java.util.UUID
 import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 
-import scala.collection.mutable
 import scala.reflect.runtime.universe.TypeTag
 
 object BlobStorage {
@@ -62,7 +61,8 @@ trait BlobStorage[EventId] { blobStorage =>
     def recordSnapshotBlobsForEvent(
         eventIds: Set[EventId],
         when: Unbounded[Instant],
-        snapshotBlobs: Map[UniqueItemSpecification, Option[SnapshotBlob]]): Unit
+        snapshotBlobs: Map[UniqueItemSpecification,
+                           Option[(SnapshotBlob, UUID)]]): Unit
 
     def annulEvent(eventId: EventId)
 

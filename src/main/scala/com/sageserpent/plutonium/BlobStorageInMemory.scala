@@ -24,7 +24,7 @@ object BlobStorageInMemory {
 
     def addSnapshotBlob(eventIds: Set[EventId],
                         when: Unbounded[Instant],
-                        snapshotBlob: Option[SnapshotBlob],
+                        snapshotBlob: Option[(SnapshotBlob, UUID)],
                         revision: Revision): Lifecycle[EventId]
 
     val itemTypeTag: TypeTag[_ <: Any]
@@ -57,10 +57,11 @@ object BlobStorageInMemory {
 
   case class LifecycleImplementation[EventId](
       override val itemTypeTag: TypeTag[_ <: Any],
-      snapshotBlobs: Vector[(Unbounded[Instant],
-                             (Option[SnapshotBlob], Set[EventId], Revision))] =
+      snapshotBlobs: Vector[
+        (Unbounded[Instant],
+         (Option[(SnapshotBlob, UUID)], Set[EventId], Revision))] =
         Vector.empty[(Unbounded[Instant],
-                      (Option[SnapshotBlob], Set[EventId], Revision))])
+                      (Option[(SnapshotBlob, UUID)], Set[EventId], Revision))])
       extends BlobStorageInMemory.Lifecycle[EventId] {
     val snapshotBlobTimes = snapshotBlobs.view.map(_._1)
 
@@ -94,14 +95,14 @@ object BlobStorageInMemory {
       assert(-1 != index)
 
       snapshotBlobs(index) match {
-        case (_, (Some(snapshot), _, _)) => snapshot
+        case (_, (Some(snapshot), _, _)) => snapshot._1
       }
     }
 
     override def addSnapshotBlob(
         eventIds: Set[EventId],
         when: Unbounded[Instant],
-        snapshotBlob: Option[SnapshotBlob],
+        snapshotBlob: Option[(SnapshotBlob, UUID)],
         revision: Revision): BlobStorageInMemory.Lifecycle[EventId] = {
       require(!snapshotBlobs.contains(when))
       val insertionPoint =
@@ -182,7 +183,7 @@ case class BlobStorageInMemory[EventId] private (
       type Event =
         (Set[EventId],
          Option[(Unbounded[Instant],
-                 Map[UniqueItemSpecification, Option[SnapshotBlob]])])
+                 Map[UniqueItemSpecification, Option[(SnapshotBlob, UUID)]])])
 
       val events = mutable.MutableList.empty[Event]
 
@@ -193,8 +194,8 @@ case class BlobStorageInMemory[EventId] private (
       override def recordSnapshotBlobsForEvent(
           eventIds: Set[EventId],
           when: Unbounded[Instant],
-          snapshotBlobs: Map[UniqueItemSpecification, Option[SnapshotBlob]])
-        : Unit = {
+          snapshotBlobs: Map[UniqueItemSpecification,
+                             Option[(SnapshotBlob, UUID)]]): Unit = {
         events += eventIds -> Some(when -> snapshotBlobs)
       }
 
