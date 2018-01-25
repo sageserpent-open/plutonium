@@ -1,6 +1,7 @@
 package com.sageserpent.plutonium
 
 import java.time.Instant
+import java.util.UUID
 
 import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.BlobStorage.SnapshotBlob
@@ -167,6 +168,10 @@ case class BlobStorageInMemory[EventId] private (
             uniqueItemSpecification.typeTag == _.itemTypeTag)
           if lifecycle.isValid(when, eventRevisions.apply)
         } yield lifecycle.snapshotBlobFor(when, eventRevisions.apply)
+
+      override def snapshotBlobFor(
+          uniqueItemSpecification: UniqueItemSpecification,
+          lifecycleUUID: UUID): SnapshotBlob = ???
     }
 
     new TimesliceImplementation with TimesliceContracts

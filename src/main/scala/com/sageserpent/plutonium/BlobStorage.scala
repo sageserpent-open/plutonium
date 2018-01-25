@@ -1,6 +1,7 @@
 package com.sageserpent.plutonium
 
 import java.time.Instant
+import java.util.UUID
 
 import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
@@ -18,6 +19,9 @@ object BlobStorage {
 
     def snapshotBlobFor(
         uniqueItemSpecification: UniqueItemSpecification): Option[SnapshotBlob]
+
+    def snapshotBlobFor(uniqueItemSpecification: UniqueItemSpecification,
+                        lifecycleUUID: UUID): SnapshotBlob
   }
 
   trait TimesliceContracts extends Timeslice {
@@ -31,6 +35,18 @@ object BlobStorage {
         s"The item specification: '$uniqueItemSpecification', should pick out a unique item, these match it: ${uniqueItemSpecifications.toList}."
       )
       super.snapshotBlobFor(uniqueItemSpecification)
+    }
+
+    abstract override def snapshotBlobFor(
+        uniqueItemSpecification: UniqueItemSpecification,
+        lifecycleUUID: UUID): SnapshotBlob = {
+      val uniqueItemSpecifications = uniqueItemQueriesFor(
+        uniqueItemSpecification.id)(uniqueItemSpecification.typeTag)
+      require(
+        1 >= uniqueItemSpecifications.size,
+        s"The item specification: '$uniqueItemSpecification', should pick out a unique item, these match it: ${uniqueItemSpecifications.toList}."
+      )
+      super.snapshotBlobFor(uniqueItemSpecification, lifecycleUUID)
     }
   }
 }

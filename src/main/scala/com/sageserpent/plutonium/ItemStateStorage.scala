@@ -77,7 +77,7 @@ trait ItemStateStorage { itemStateStorageObject =>
               .asInstanceOf[(UniqueItemSpecification, UUID)]
 
           val instance: ItemSuperType =
-            itemFor[ItemSuperType](uniqueItemSpecification) // TODO - use the lifecycle.
+            itemFor[ItemSuperType](uniqueItemSpecification, lifecycleUUID)
           kryo.reference(instance)
           instance
         }
@@ -164,6 +164,11 @@ trait ItemStateStorage { itemStateStorageObject =>
     itemDeserializationThreadContextAccess.value.get
       .itemFor(uniqueItemSpecification)
 
+  private def itemFor[Item](uniqueItemSpecification: UniqueItemSpecification,
+                            lifecycleUUID: UUID): Item =
+    itemDeserializationThreadContextAccess.value.get
+      .itemFor(uniqueItemSpecification, lifecycleUUID)
+
   private def createItem[Item]: Item =
     itemDeserializationThreadContextAccess.value.get.createItem[Item]
 
@@ -200,6 +205,24 @@ trait ItemStateStorage { itemStateStorageObject =>
                   snapshot.fold[Any] {
                     fallbackItemFor[Item](uniqueItemSpecification)
                   }(kryoPool.fromBytes)
+                }
+            }
+          )
+          .asInstanceOf[Item]
+      }
+
+      def itemFor[Item](uniqueItemSpecification: UniqueItemSpecification,
+                        lifecycleUUID: UUID): Item = {
+        storage
+          .getOrElse(
+            uniqueItemSpecification, {
+              val snapshot =
+                blobStorageTimeslice
+                  .snapshotBlobFor(uniqueItemSpecification, lifecycleUUID)
+
+              uniqueItemSpecificationAccess
+                .withValue(Some(uniqueItemSpecification)) {
+                  kryoPool.fromBytes(snapshot)
                 }
             }
           )

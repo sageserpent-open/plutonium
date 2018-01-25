@@ -202,6 +202,10 @@ class ItemStateStorageSpec
             uniqueItemSpecification: UniqueItemSpecification)
           : Option[SnapshotBlob] =
           snapshotBlobs.get(uniqueItemSpecification)
+
+        override def snapshotBlobFor(
+            uniqueItemSpecification: UniqueItemSpecification,
+            lifecycleUUID: UUID): SnapshotBlob = ???
       }
 
       val reconstitutionContext = new itemStateStorage.ReconstitutionContext() {
