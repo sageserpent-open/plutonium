@@ -277,9 +277,7 @@ object WorldImplementationCodeFactoring {
 
     object recordAnnihilation {
       @RuntimeType
-      def apply(@This target: AnnihilationHook,
-                @FieldValue("acquiredState") acquiredState: AcquiredState) = {
-        target.setLifecycleUUID(UUID.randomUUID())
+      def apply(@FieldValue("acquiredState") acquiredState: AcquiredState) = {
         acquiredState.recordAnnihilation()
         null
       }
@@ -306,11 +304,6 @@ object WorldImplementationCodeFactoring {
         superCall.call()
 
         acquiredState.recordMutation(target)
-        for (argumentItem <- arguments collect {
-               case argumentItem: ItemExtensionApi => argumentItem
-             }) {
-          acquiredState.recordMutation(argumentItem)
-        }
       }
     }
 
