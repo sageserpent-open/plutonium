@@ -50,8 +50,7 @@ trait BlobStorage[EventId] { blobStorage =>
     def recordSnapshotBlobsForEvent(
         eventIds: Set[EventId],
         when: Unbounded[Instant],
-        snapshotBlobs: Map[UniqueItemSpecification,
-                           Option[(SnapshotBlob, LifecycleIndex)]]): Unit
+        snapshotBlobs: Map[UniqueItemSpecification, Option[SnapshotBlob]]): Unit
 
     def annulEvent(eventId: EventId)
 

@@ -142,13 +142,12 @@ class TimelineImplementation[EventId](
         item
       }
 
-      def harvestSnapshots()
-        : Map[UniqueItemSpecification, (SnapshotBlob, LifecycleIndex)] = {
+      def harvestSnapshots(): Map[UniqueItemSpecification, SnapshotBlob] = {
         val result = itemsMutatedSinceLastSnapshotHarvest map {
           case (uniqueItemSpecification, item) =>
             val snapshotBlob = itemStateStorageUsingProxies.snapshotFor(item)
 
-            uniqueItemSpecification -> (snapshotBlob, item.lifecycleIndex)
+            uniqueItemSpecification -> snapshotBlob
         } toMap
 
         itemsMutatedSinceLastSnapshotHarvest.clear()
@@ -172,8 +171,7 @@ class TimelineImplementation[EventId](
       } {
         val snapshotBlobs =
           mutable.Map
-            .empty[UniqueItemSpecification,
-                   Option[(SnapshotBlob, LifecycleIndex)]]
+            .empty[UniqueItemSpecification, Option[SnapshotBlob]]
 
         itemStateUpdate match {
           case ItemStateAnnihilation(annihilation) =>

@@ -273,11 +273,9 @@ class BlobStorageSpec
                   anchorForTransformedEventIdThatIsPresentInAllRevisions + wrapAround(
                     delta))
 
-              builder.recordSnapshotBlobsForEvent(
-                transformedEventIdSet,
-                when,
-                snapshotBlobs.toMap.mapValues(
-                  _.map(_ -> theOneAndOnlyLifecycleIndex)))
+              builder.recordSnapshotBlobsForEvent(transformedEventIdSet,
+                                                  when,
+                                                  snapshotBlobs.toMap)
             case None =>
               val transformedEventId =
                 eventId * gapBetweenBaseTransformedEventIds + wrapAround(0)

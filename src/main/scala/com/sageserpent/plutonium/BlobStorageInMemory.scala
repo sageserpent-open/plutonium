@@ -15,17 +15,21 @@ import scala.reflect.runtime.universe._
 object BlobStorageInMemory {
   type Revision = Int
 
-  val theOneAndOnlyLifecycleIndex: LifecycleIndex = -1
+  val theInitialLifecycleIndex: LifecycleIndex = 0
 
   trait Lifecycle[EventId] {
     def isValid(when: Unbounded[Instant],
                 validRevisionFor: EventId => Revision): Boolean
+
+    def lifecycleIndexFor(when: Unbounded[Instant],
+                          validRevisionFor: EventId => Revision): LifecycleIndex
+
     def snapshotBlobFor(when: Unbounded[Instant],
                         validRevisionFor: EventId => Revision): SnapshotBlob
 
     def addSnapshotBlob(eventIds: Set[EventId],
                         when: Unbounded[Instant],
-                        snapshotBlob: Option[(SnapshotBlob, LifecycleIndex)],
+                        snapshotBlob: Option[SnapshotBlob],
                         revision: Revision): Lifecycle[EventId]
 
     val itemTypeTag: TypeTag[_ <: Any]
@@ -58,13 +62,10 @@ object BlobStorageInMemory {
 
   case class LifecycleImplementation[EventId](
       override val itemTypeTag: TypeTag[_ <: Any],
-      snapshotBlobs: Vector[
-        (Unbounded[Instant],
-         (Option[(SnapshotBlob, LifecycleIndex)], Set[EventId], Revision))] =
+      snapshotBlobs: Vector[(Unbounded[Instant],
+                             (Option[SnapshotBlob], Set[EventId], Revision))] =
         Vector.empty[(Unbounded[Instant],
-                      (Option[(SnapshotBlob, LifecycleIndex)],
-                       Set[EventId],
-                       Revision))])
+                      (Option[SnapshotBlob], Set[EventId], Revision))])
       extends BlobStorageInMemory.Lifecycle[EventId] {
     val snapshotBlobTimes = snapshotBlobs.view.map(_._1)
 
@@ -90,6 +91,11 @@ object BlobStorageInMemory {
       -1 != index && snapshotBlobs(index)._2._1.isDefined
     }
 
+    override def lifecycleIndexFor(
+        when: Unbounded[Instant],
+        validRevisionFor: EventId => Revision): LifecycleIndex =
+      0 // TODO
+
     override def snapshotBlobFor(
         when: Unbounded[Instant],
         validRevisionFor: EventId => Revision): SnapshotBlob = {
@@ -98,14 +104,14 @@ object BlobStorageInMemory {
       assert(-1 != index)
 
       snapshotBlobs(index) match {
-        case (_, (Some(snapshot), _, _)) => snapshot._1
+        case (_, (Some(snapshot), _, _)) => snapshot
       }
     }
 
     override def addSnapshotBlob(
         eventIds: Set[EventId],
         when: Unbounded[Instant],
-        snapshotBlob: Option[(SnapshotBlob, LifecycleIndex)],
+        snapshotBlob: Option[SnapshotBlob],
         revision: Revision): BlobStorageInMemory.Lifecycle[EventId] = {
       require(!snapshotBlobs.contains(when))
       val insertionPoint =
@@ -164,8 +170,17 @@ case class BlobStorageInMemory[EventId] private (
           .toStream
 
       override def lifecycleIndexFor(
-          uniqueItemSpecification: UniqueItemSpecification): LifecycleIndex =
-        BlobStorageInMemory.theOneAndOnlyLifecycleIndex
+          uniqueItemSpecification: UniqueItemSpecification): LifecycleIndex = {
+        val lifecycle = for {
+          lifecycles <- lifecycles.get(uniqueItemSpecification.id)
+          lifecycle <- lifecycles.find(
+            uniqueItemSpecification.typeTag == _.itemTypeTag)
+        } yield lifecycle
+
+        lifecycle.fold { BlobStorageInMemory.theInitialLifecycleIndex } {
+          _.lifecycleIndexFor(when, eventRevisions.apply)
+        }
+      }
 
       override def snapshotBlobFor(
           uniqueItemSpecification: UniqueItemSpecification,
@@ -186,8 +201,7 @@ case class BlobStorageInMemory[EventId] private (
       type Event =
         (Set[EventId],
          Option[(Unbounded[Instant],
-                 Map[UniqueItemSpecification,
-                     Option[(SnapshotBlob, LifecycleIndex)]])])
+                 Map[UniqueItemSpecification, Option[SnapshotBlob]])])
 
       val events = mutable.MutableList.empty[Event]
 
@@ -198,8 +212,8 @@ case class BlobStorageInMemory[EventId] private (
       override def recordSnapshotBlobsForEvent(
           eventIds: Set[EventId],
           when: Unbounded[Instant],
-          snapshotBlobs: Map[UniqueItemSpecification,
-                             Option[(SnapshotBlob, LifecycleIndex)]]): Unit = {
+          snapshotBlobs: Map[UniqueItemSpecification, Option[SnapshotBlob]])
+        : Unit = {
         events += eventIds -> Some(when -> snapshotBlobs)
       }
 
