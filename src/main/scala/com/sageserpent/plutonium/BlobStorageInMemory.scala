@@ -172,7 +172,7 @@ case class BlobStorageInMemory[EventId] private (
 
       override def snapshotBlobFor(
           uniqueItemSpecification: UniqueItemSpecification,
-          lifecycleUUID: UUID): SnapshotBlob = ???
+          lifecycleUUID: UUID): Option[SnapshotBlob] = ???
     }
 
     new TimesliceImplementation with TimesliceContracts

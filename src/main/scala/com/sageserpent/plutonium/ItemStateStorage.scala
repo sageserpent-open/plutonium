@@ -213,19 +213,26 @@ trait ItemStateStorage { itemStateStorageObject =>
 
       def itemFor[Item](uniqueItemSpecification: UniqueItemSpecification,
                         lifecycleUUID: UUID): Item = {
-        storage
+        val item = storage
           .getOrElse(
             uniqueItemSpecification, {
               val snapshot =
-                blobStorageTimeslice
-                  .snapshotBlobFor(uniqueItemSpecification, lifecycleUUID)
+                blobStorageTimeslice.snapshotBlobFor(uniqueItemSpecification,
+                                                     lifecycleUUID)
 
               uniqueItemSpecificationAccess
                 .withValue(Some(uniqueItemSpecification)) {
-                  kryoPool.fromBytes(snapshot)
+                  snapshot.fold[Any] {
+                    fallbackItemFor[Item](uniqueItemSpecification)
+                  }(kryoPool.fromBytes)
                 }
             }
           )
+
+        // TODO: this is too specific: 'AnnihilationHook only pertains to non-test code. Is there another way of doing this?
+        item.asInstanceOf[AnnihilationHook].setLifecycleUUID(lifecycleUUID)
+
+        item
           .asInstanceOf[Item]
       }
 

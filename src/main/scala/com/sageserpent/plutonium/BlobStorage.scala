@@ -20,7 +20,7 @@ object BlobStorage {
         uniqueItemSpecification: UniqueItemSpecification): Option[SnapshotBlob]
 
     def snapshotBlobFor(uniqueItemSpecification: UniqueItemSpecification,
-                        lifecycleUUID: UUID): SnapshotBlob
+                        lifecycleUUID: UUID): Option[SnapshotBlob]
   }
 
   trait TimesliceContracts extends Timeslice {
@@ -38,7 +38,7 @@ object BlobStorage {
 
     abstract override def snapshotBlobFor(
         uniqueItemSpecification: UniqueItemSpecification,
-        lifecycleUUID: UUID): SnapshotBlob = {
+        lifecycleUUID: UUID): Option[SnapshotBlob] = {
       val uniqueItemSpecifications = uniqueItemQueriesFor(
         uniqueItemSpecification.id)(uniqueItemSpecification.typeTag)
       require(
