@@ -1,9 +1,9 @@
 package com.sageserpent.plutonium
 
-import java.util.UUID
+import com.sageserpent.plutonium.BlobStorage.LifecycleIndex
 
 trait AnnihilationHook {
   def recordAnnihilation(): Unit
 
-  def setLifecycleUUID(uuid: UUID): Unit
+  def setLifecycleIndex(lifecycleIndex: LifecycleIndex): Unit
 }

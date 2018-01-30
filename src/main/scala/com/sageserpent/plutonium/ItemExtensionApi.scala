@@ -1,6 +1,6 @@
 package com.sageserpent.plutonium
 
-import java.util.UUID
+import com.sageserpent.plutonium.BlobStorage.LifecycleIndex
 
 import scala.reflect.runtime.universe.TypeTag
 
@@ -23,5 +23,5 @@ trait ItemExtensionApi {
   // this case, the annihilated item is considered to be a 'ghost'.
   def isGhost: Boolean
 
-  def lifecycleUUID: UUID
+  def lifecycleIndex: LifecycleIndex
 }

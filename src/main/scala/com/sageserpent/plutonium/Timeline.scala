@@ -1,9 +1,9 @@
 package com.sageserpent.plutonium
 
 import java.time.Instant
-import java.util.UUID
 
 import com.sageserpent.americium.Unbounded
+import com.sageserpent.plutonium.BlobStorage.LifecycleIndex
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 
 import scala.collection.immutable.Map
@@ -26,7 +26,7 @@ object itemStateStorageUsingProxies extends ItemStateStorage {
   override protected type ItemSuperType = ItemExtensionApi
   override protected val clazzOfItemSuperType = classOf[ItemSuperType]
 
-  override protected def uniqueItemSpecificationAndLifecycleUUID(
-      item: ItemSuperType): (UniqueItemSpecification, UUID) =
-    item.uniqueItemSpecification -> item.lifecycleUUID
+  override protected def uniqueItemSpecificationAndLifecycleIndex(
+      item: ItemSuperType): (UniqueItemSpecification, LifecycleIndex) =
+    item.uniqueItemSpecification -> item.lifecycleIndex
 }

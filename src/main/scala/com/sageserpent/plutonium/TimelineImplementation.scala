@@ -1,10 +1,9 @@
 package com.sageserpent.plutonium
 
 import java.time.Instant
-import java.util.UUID
 
 import com.sageserpent.americium.{NegativeInfinity, PositiveInfinity, Unbounded}
-import com.sageserpent.plutonium.BlobStorage.SnapshotBlob
+import com.sageserpent.plutonium.BlobStorage.{LifecycleIndex, SnapshotBlob}
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.PatchRecorder.UpdateConsumer
 import com.sageserpent.plutonium.World.{Revision, initialRevision}
@@ -118,7 +117,7 @@ class TimelineImplementation[EventId](
 
       override protected def createItemFor[Item](
           _uniqueItemSpecification: UniqueItemSpecification,
-          lifecycleUUID: UUID) = {
+          lifecycleIndex: LifecycleIndex) = {
         import QueryCallbackStuff.{AcquiredState, proxyFactory}
 
         val stateToBeAcquiredByProxy: AcquiredState =
@@ -138,18 +137,18 @@ class TimelineImplementation[EventId](
 
         val item = proxyFactory.constructFrom[Item](stateToBeAcquiredByProxy)
 
-        item.asInstanceOf[AnnihilationHook].setLifecycleUUID(lifecycleUUID)
+        item.asInstanceOf[AnnihilationHook].setLifecycleIndex(lifecycleIndex)
 
         item
       }
 
       def harvestSnapshots()
-        : Map[UniqueItemSpecification, (SnapshotBlob, UUID)] = {
+        : Map[UniqueItemSpecification, (SnapshotBlob, LifecycleIndex)] = {
         val result = itemsMutatedSinceLastSnapshotHarvest map {
           case (uniqueItemSpecification, item) =>
             val snapshotBlob = itemStateStorageUsingProxies.snapshotFor(item)
 
-            uniqueItemSpecification -> (snapshotBlob, item.lifecycleUUID)
+            uniqueItemSpecification -> (snapshotBlob, item.lifecycleIndex)
         } toMap
 
         itemsMutatedSinceLastSnapshotHarvest.clear()
@@ -159,8 +158,8 @@ class TimelineImplementation[EventId](
 
       override def fallbackItemFor[Item](
           uniqueItemSpecification: UniqueItemSpecification,
-          lifecycleUUID: UUID): Item =
-        createAndStoreItem(uniqueItemSpecification, lifecycleUUID)
+          lifecycleIndex: LifecycleIndex): Item =
+        createAndStoreItem(uniqueItemSpecification, lifecycleIndex)
     }
 
     for {
@@ -173,7 +172,8 @@ class TimelineImplementation[EventId](
       } {
         val snapshotBlobs =
           mutable.Map
-            .empty[UniqueItemSpecification, Option[(SnapshotBlob, UUID)]]
+            .empty[UniqueItemSpecification,
+                   Option[(SnapshotBlob, LifecycleIndex)]]
 
         itemStateUpdate match {
           case ItemStateAnnihilation(annihilation) =>
@@ -226,14 +226,14 @@ class TimelineImplementation[EventId](
 
       override def fallbackItemFor[Item](
           uniqueItemSpecification: UniqueItemSpecification,
-          lifecycleUUID: UUID): Item =
+          lifecycleIndex: LifecycleIndex): Item =
         throw new RuntimeException(
           s"Snapshot does not exist for: $uniqueItemSpecification at: $when.")
 
       // TODO - either fuse this back with the other code duplicate above or make it its own thing. Do we really need the 'itemIsLocked'? If we do, then let's fuse...
       override protected def createItemFor[Item](
           _uniqueItemSpecification: UniqueItemSpecification,
-          lifecycleUUID: UUID) = {
+          lifecycleIndex: LifecycleIndex) = {
         import QueryCallbackStuff.{AcquiredState, proxyFactory}
 
         val stateToBeAcquiredByProxy: AcquiredState =
@@ -249,7 +249,7 @@ class TimelineImplementation[EventId](
 
         val item = proxyFactory.constructFrom[Item](stateToBeAcquiredByProxy)
 
-        item.asInstanceOf[AnnihilationHook].setLifecycleUUID(lifecycleUUID)
+        item.asInstanceOf[AnnihilationHook].setLifecycleIndex(lifecycleIndex)
 
         item
       }

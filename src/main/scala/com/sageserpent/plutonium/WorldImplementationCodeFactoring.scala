@@ -6,6 +6,7 @@ import java.util.{Optional, UUID}
 import java.util.concurrent.Callable
 
 import com.sageserpent.americium.{Finite, NegativeInfinity, Unbounded}
+import com.sageserpent.plutonium.BlobStorage.LifecycleIndex
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.PatchRecorder.UpdateConsumer
 import com.sageserpent.plutonium.World.Revision
@@ -106,8 +107,8 @@ object WorldImplementationCodeFactoring {
     val recordAnnihilationMethod = new MethodDescription.ForLoadedMethod(
       classOf[AnnihilationHook].getMethod("recordAnnihilation"))
 
-    val lifecycleUUIDMethod = new MethodDescription.ForLoadedMethod(
-      classOf[ItemExtensionApi].getMethod("lifecycleUUID"))
+    val lifecycleIndexMethod = new MethodDescription.ForLoadedMethod(
+      classOf[ItemExtensionApi].getMethod("lifecycleIndex"))
   }
 
   private def clazzFromType[Item](reflectedType: universe.Type): Class[Item] = {
@@ -218,7 +219,7 @@ object WorldImplementationCodeFactoring {
       mutable.Map
         .empty[universe.Type, Class[_]]
 
-    val lifecycleUUIDStandIn = UUID.randomUUID()
+    val lifecycleIndexStandIn: LifecycleIndex = -1
 
     trait AcquiredState extends AcquiredStateCapturingId {
       var _isGhost = false
@@ -236,17 +237,23 @@ object WorldImplementationCodeFactoring {
 
       var unlockFullReadAccess: Boolean = false
 
-      var lifecycleUUID: UUID = lifecycleUUIDStandIn
+      def lifecycleIndex: LifecycleIndex = _lifecycleIndex
+
+      def setLifecycleIndex(lifecycleIndex: LifecycleIndex) = {
+        _lifecycleIndex = lifecycleIndex
+      }
+
+      var _lifecycleIndex: LifecycleIndex = lifecycleIndexStandIn
     }
 
-    val matchSetLifecycleUUID: ElementMatcher[MethodDescription] =
-      ElementMatchers.named("setLifecycleUUID")
+    val matchSetLifecycleIndex: ElementMatcher[MethodDescription] =
+      ElementMatchers.named("setLifecycleIndex")
     // TODO - why does Java reflection crash when it tries to obtain this method inside a call to 'firstMethodIsOverrideCompatibleWithSecond'?
 
-    val matchLifecycleUUID: ElementMatcher[MethodDescription] =
+    val matchLifecycleIndex: ElementMatcher[MethodDescription] =
       firstMethodIsOverrideCompatibleWithSecond(
         _,
-        IdentifiedItemsScope.lifecycleUUIDMethod)
+        IdentifiedItemsScope.lifecycleIndexMethod)
 
     val matchRecordAnnihilation: ElementMatcher[MethodDescription] =
       firstMethodIsOverrideCompatibleWithSecond(
@@ -279,29 +286,6 @@ object WorldImplementationCodeFactoring {
         methodDescription,
         IdentifiedItemsScope.uniqueItemSpecificationPropertyForItemExtensionApi)
 
-    object lifecycleUUID {
-      @RuntimeType
-      def apply(@FieldValue("acquiredState") acquiredState: AcquiredState) = {
-        acquiredState.lifecycleUUID
-      }
-    }
-
-    object setLifecycleUUID {
-      @RuntimeType
-      def apply(@FieldValue("acquiredState") acquiredState: AcquiredState,
-                lifecycleUUID: UUID) = {
-        acquiredState.lifecycleUUID = lifecycleUUID
-      }
-    }
-
-    object recordAnnihilation {
-      @RuntimeType
-      def apply(@FieldValue("acquiredState") acquiredState: AcquiredState) = {
-        acquiredState.recordAnnihilation()
-        null
-      }
-    }
-
     object mutation {
       @RuntimeType
       def apply(@Origin method: Method,
@@ -324,12 +308,6 @@ object WorldImplementationCodeFactoring {
 
         acquiredState.recordMutation(target)
       }
-    }
-
-    object isGhost {
-      @RuntimeType
-      def apply(@FieldValue("acquiredState") acquiredState: AcquiredState) =
-        acquiredState.isGhost
     }
 
     object checkedReadAccess {
@@ -379,12 +357,6 @@ object WorldImplementationCodeFactoring {
       }
     }
 
-    object uniqueItemSpecification {
-      @RuntimeType
-      def apply(@FieldValue("acquiredState") acquiredState: AcquiredState) =
-        acquiredState.uniqueItemSpecification
-    }
-
     object proxyFactory extends ProxyFactory[AcquiredState] {
       override val isForRecordingOnly = false
 
@@ -403,19 +375,19 @@ object WorldImplementationCodeFactoring {
           .method(matchCheckedReadAccess)
           .intercept(MethodDelegation.to(checkedReadAccess))
           .method(matchIsGhost)
-          .intercept(MethodDelegation.to(isGhost))
+          .intercept(MethodDelegation.toField("acquiredState"))
           .method(matchMutation)
           .intercept(MethodDelegation.to(mutation))
           .method(matchRecordAnnihilation)
-          .intercept(MethodDelegation.to(recordAnnihilation))
-          .method(matchLifecycleUUID)
-          .intercept(MethodDelegation.to(lifecycleUUID))
-          .method(matchSetLifecycleUUID)
-          .intercept(MethodDelegation.to(setLifecycleUUID))
+          .intercept(MethodDelegation.toField("acquiredState"))
+          .method(matchLifecycleIndex)
+          .intercept(MethodDelegation.toField("acquiredState"))
+          .method(matchSetLifecycleIndex)
+          .intercept(MethodDelegation.toField("acquiredState"))
           .method(matchInvariantCheck)
           .intercept(MethodDelegation.to(checkInvariant))
           .method(matchUniqueItemSpecification)
-          .intercept(MethodDelegation.to(uniqueItemSpecification))
+          .intercept(MethodDelegation.toField("acquiredState"))
     }
   }
 

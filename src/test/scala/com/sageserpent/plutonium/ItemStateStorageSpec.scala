@@ -1,9 +1,7 @@
 package com.sageserpent.plutonium
 
-import java.util.UUID
-
 import com.sageserpent.americium.randomEnrichment._
-import com.sageserpent.plutonium.BlobStorage.SnapshotBlob
+import com.sageserpent.plutonium.BlobStorage.{LifecycleIndex, SnapshotBlob}
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import org.scalacheck.Prop.BooleanOperators
 import org.scalacheck.{Gen, Prop}
@@ -139,16 +137,16 @@ class ItemStateStorageSpec
     override protected val clazzOfItemSuperType: Class[ItemSuperType] =
       classOf[ItemSuperType]
 
-    val theUniqueLifecycleUUIDForAllItemsEver = UUID.randomUUID()
+    val theUniqueLifecycleIndexForAllItemsEver: LifecycleIndex = -23794
 
-    override protected def uniqueItemSpecificationAndLifecycleUUID(
-        item: ItemSuperType): (UniqueItemSpecification, UUID) =
+    override protected def uniqueItemSpecificationAndLifecycleIndex(
+        item: ItemSuperType): (UniqueItemSpecification, LifecycleIndex) =
       (item.id match {
         case oddId: String =>
           UniqueItemSpecification(oddId, typeTag[OddGraphNode])
         case eventId: Int =>
           UniqueItemSpecification(eventId, typeTag[EvenGraphNode])
-      }) -> theUniqueLifecycleUUIDForAllItemsEver
+      }) -> theUniqueLifecycleIndexForAllItemsEver
   }
 
   "An item" should "be capable of being roundtripped by reconstituting its snapshot" in check(
@@ -198,13 +196,13 @@ class ItemStateStorageSpec
             id: Any): Stream[UniqueItemSpecification] =
           snapshotBlobs.keys.filter(_.id == id).toStream
 
-        override def lifecycleUUIDFor(
-            uniqueItemSpecification: UniqueItemSpecification): UUID =
-          itemStateStorage.theUniqueLifecycleUUIDForAllItemsEver
+        override def lifecycleIndexFor(
+            uniqueItemSpecification: UniqueItemSpecification): LifecycleIndex =
+          itemStateStorage.theUniqueLifecycleIndexForAllItemsEver
 
         override def snapshotBlobFor(
             uniqueItemSpecification: UniqueItemSpecification,
-            lifecycleUUID: UUID): Option[SnapshotBlob] =
+            lifecycleIndex: LifecycleIndex): Option[SnapshotBlob] =
           snapshotBlobs.get(uniqueItemSpecification)
       }
 
@@ -217,13 +215,13 @@ class ItemStateStorageSpec
 
         override def fallbackItemFor[Item](
             uniqueItemSpecification: UniqueItemSpecification,
-            lifecycleUUID: UUID): Item =
+            lifecycleIndex: LifecycleIndex): Item =
           idToFallbackItemMap(uniqueItemSpecification.id).asInstanceOf[Item]
 
         // The following implementation is the epitome of hokeyness. Well, it's just test code... Hmmm.
         override protected def createItemFor[Item](
             uniqueItemSpecification: UniqueItemSpecification,
-            lifecycleUUID: UUID): Item =
+            lifecycleIndex: LifecycleIndex): Item =
           (uniqueItemSpecification match {
             case UniqueItemSpecification(id: OddGraphNode#Id, itemTypeTag)
                 if itemTypeTag == typeTag[OddGraphNode] =>

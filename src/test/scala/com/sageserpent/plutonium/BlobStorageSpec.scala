@@ -1,7 +1,6 @@
 package com.sageserpent.plutonium
 
 import java.time.Instant
-import java.util.UUID
 
 import com.sageserpent.americium.Unbounded._
 import com.sageserpent.americium.randomEnrichment._
@@ -12,7 +11,11 @@ import com.sageserpent.americium.{
   PositiveInfinity,
   Unbounded
 }
-import com.sageserpent.plutonium.BlobStorage.{SnapshotBlob, Timeslice}
+import com.sageserpent.plutonium.BlobStorage.{
+  LifecycleIndex,
+  SnapshotBlob,
+  Timeslice
+}
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import org.scalacheck.{Arbitrary, Gen, ShrinkLowPriority => NoShrinking}
 import org.scalatest.LoneElement._
@@ -250,7 +253,7 @@ class BlobStorageSpec
 
   val eventIdDeltas: Seq[Int] = 1 until gapBetweenBaseTransformedEventIds
 
-  val theOneAndOnlyLifecycleUUID = UUID.randomUUID()
+  val theOneAndOnlyLifecycleIndex: LifecycleIndex = 333873
 
   def blobStorageFrom(revisions: Seq[ScalaFmtWorkaround],
                       wrapAround: EventId => EventId,
@@ -274,7 +277,7 @@ class BlobStorageSpec
                 transformedEventIdSet,
                 when,
                 snapshotBlobs.toMap.mapValues(
-                  _.map(_ -> theOneAndOnlyLifecycleUUID)))
+                  _.map(_ -> theOneAndOnlyLifecycleIndex)))
             case None =>
               val transformedEventId =
                 eventId * gapBetweenBaseTransformedEventIds + wrapAround(0)
@@ -296,10 +299,10 @@ class BlobStorageSpec
 
     retrievedUniqueItemSpecifications shouldBe empty
 
-    val lifecycleUUID = timeSlice.lifecycleUUIDFor(uniqueItemSpecification)
+    val lifecycleIndex = timeSlice.lifecycleIndexFor(uniqueItemSpecification)
 
     val retrievedSnapshotBlob: Option[SnapshotBlob] =
-      timeSlice.snapshotBlobFor(uniqueItemSpecification, lifecycleUUID)
+      timeSlice.snapshotBlobFor(uniqueItemSpecification, lifecycleIndex)
 
     retrievedSnapshotBlob shouldBe None
   }
@@ -328,11 +331,12 @@ class BlobStorageSpec
         val theRetrievedUniqueItemSpecification: UniqueItemSpecification =
           retrievedUniqueItemSpecifications.head
 
-        val lifecycleUUID = timeSlice.lifecycleUUIDFor(uniqueItemSpecification)
+        val lifecycleIndex =
+          timeSlice.lifecycleIndexFor(uniqueItemSpecification)
 
         val retrievedSnapshotBlob: Option[SnapshotBlob] =
           timeSlice.snapshotBlobFor(theRetrievedUniqueItemSpecification,
-                                    lifecycleUUID)
+                                    lifecycleIndex)
 
         retrievedSnapshotBlob shouldBe Some(snapshotBlob)
       case None =>
@@ -340,10 +344,11 @@ class BlobStorageSpec
 
         retrievedUniqueItemSpecifications shouldBe empty
 
-        val lifecycleUUID = timeSlice.lifecycleUUIDFor(uniqueItemSpecification)
+        val lifecycleIndex =
+          timeSlice.lifecycleIndexFor(uniqueItemSpecification)
 
         val retrievedSnapshotBlob: Option[SnapshotBlob] =
-          timeSlice.snapshotBlobFor(uniqueItemSpecification, lifecycleUUID)
+          timeSlice.snapshotBlobFor(uniqueItemSpecification, lifecycleIndex)
 
         retrievedSnapshotBlob shouldBe None
     }
@@ -454,9 +459,9 @@ class BlobStorageSpec
 
         val retrievedSnapshotBlobs = retrievedUniqueItemSpecifications map {
           uniqueItemSpecification =>
-            val lifecycleUUID =
-              timeSlice.lifecycleUUIDFor(uniqueItemSpecification)
-            timeSlice.snapshotBlobFor(uniqueItemSpecification, lifecycleUUID)
+            val lifecycleIndex =
+              timeSlice.lifecycleIndexFor(uniqueItemSpecification)
+            timeSlice.snapshotBlobFor(uniqueItemSpecification, lifecycleIndex)
         }
 
         retrievedSnapshotBlobs should contain(Some(snapshotBlob))

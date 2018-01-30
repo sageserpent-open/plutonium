@@ -1,7 +1,6 @@
 package com.sageserpent.plutonium
 
 import java.time.Instant
-import java.util.UUID
 
 import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
@@ -11,28 +10,31 @@ import scala.reflect.runtime.universe.TypeTag
 object BlobStorage {
   type SnapshotBlob = Array[Byte]
 
+  type LifecycleIndex = Int
+
   trait Timeslice {
     def uniqueItemQueriesFor[Item: TypeTag]: Stream[UniqueItemSpecification]
     def uniqueItemQueriesFor[Item: TypeTag](
         id: Any): Stream[UniqueItemSpecification]
 
-    def lifecycleUUIDFor(uniqueItemSpecification: UniqueItemSpecification): UUID
+    def lifecycleIndexFor(
+        uniqueItemSpecification: UniqueItemSpecification): LifecycleIndex
 
     def snapshotBlobFor(uniqueItemSpecification: UniqueItemSpecification,
-                        lifecycleUUID: UUID): Option[SnapshotBlob]
+                        lifecycleIndex: LifecycleIndex): Option[SnapshotBlob]
   }
 
   trait TimesliceContracts extends Timeslice {
     abstract override def snapshotBlobFor(
         uniqueItemSpecification: UniqueItemSpecification,
-        lifecycleUUID: UUID): Option[SnapshotBlob] = {
+        lifecycleIndex: LifecycleIndex): Option[SnapshotBlob] = {
       val uniqueItemSpecifications = uniqueItemQueriesFor(
         uniqueItemSpecification.id)(uniqueItemSpecification.typeTag)
       require(
         1 >= uniqueItemSpecifications.size,
         s"The item specification: '$uniqueItemSpecification', should pick out a unique item, these match it: ${uniqueItemSpecifications.toList}."
       )
-      super.snapshotBlobFor(uniqueItemSpecification, lifecycleUUID)
+      super.snapshotBlobFor(uniqueItemSpecification, lifecycleIndex)
     }
   }
 }
@@ -49,7 +51,7 @@ trait BlobStorage[EventId] { blobStorage =>
         eventIds: Set[EventId],
         when: Unbounded[Instant],
         snapshotBlobs: Map[UniqueItemSpecification,
-                           Option[(SnapshotBlob, UUID)]]): Unit
+                           Option[(SnapshotBlob, LifecycleIndex)]]): Unit
 
     def annulEvent(eventId: EventId)
 
