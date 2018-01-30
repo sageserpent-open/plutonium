@@ -218,6 +218,8 @@ object WorldImplementationCodeFactoring {
       mutable.Map
         .empty[universe.Type, Class[_]]
 
+    val lifecycleUUIDStandIn = UUID.randomUUID()
+
     trait AcquiredState extends AcquiredStateCapturingId {
       var _isGhost = false
 
@@ -233,6 +235,8 @@ object WorldImplementationCodeFactoring {
       def recordMutation(item: ItemExtensionApi): Unit
 
       var unlockFullReadAccess: Boolean = false
+
+      var lifecycleUUID: UUID = lifecycleUUIDStandIn
     }
 
     val matchSetLifecycleUUID: ElementMatcher[MethodDescription] =
@@ -274,6 +278,21 @@ object WorldImplementationCodeFactoring {
         IdentifiedItemsScope.uniqueItemSpecificationPropertyForRecording) || firstMethodIsOverrideCompatibleWithSecond(
         methodDescription,
         IdentifiedItemsScope.uniqueItemSpecificationPropertyForItemExtensionApi)
+
+    object lifecycleUUID {
+      @RuntimeType
+      def apply(@FieldValue("acquiredState") acquiredState: AcquiredState) = {
+        acquiredState.lifecycleUUID
+      }
+    }
+
+    object setLifecycleUUID {
+      @RuntimeType
+      def apply(@FieldValue("acquiredState") acquiredState: AcquiredState,
+                lifecycleUUID: UUID) = {
+        acquiredState.lifecycleUUID = lifecycleUUID
+      }
+    }
 
     object recordAnnihilation {
       @RuntimeType
@@ -376,12 +395,9 @@ object WorldImplementationCodeFactoring {
       override val cachedProxyClasses: mutable.Map[universe.Type, Class[_]] =
         QueryCallbackStuff.cachedProxyClasses
 
-      val freshItemLifecycleUUID = UUID.randomUUID()
-
       override protected def configureInterceptions(
           builder: Builder[_]): Builder[_] =
         builder
-          .defineField("lifecycleUUID", classOf[UUID])
           .method(matchUncheckedReadAccess)
           .intercept(MethodDelegation.to(uncheckedReadAccess))
           .method(matchCheckedReadAccess)
@@ -393,24 +409,13 @@ object WorldImplementationCodeFactoring {
           .method(matchRecordAnnihilation)
           .intercept(MethodDelegation.to(recordAnnihilation))
           .method(matchLifecycleUUID)
-          .intercept(FieldAccessor.ofField("lifecycleUUID"))
+          .intercept(MethodDelegation.to(lifecycleUUID))
           .method(matchSetLifecycleUUID)
-          .intercept(FieldAccessor.ofField("lifecycleUUID"))
+          .intercept(MethodDelegation.to(setLifecycleUUID))
           .method(matchInvariantCheck)
           .intercept(MethodDelegation.to(checkInvariant))
           .method(matchUniqueItemSpecification)
           .intercept(MethodDelegation.to(uniqueItemSpecification))
-
-      override def constructFrom[Item: TypeTag](
-          stateToBeAcquiredByProxy: AcquiredState) = {
-        val item = super.constructFrom(stateToBeAcquiredByProxy)
-
-        item
-          .asInstanceOf[AnnihilationHook]
-          .setLifecycleUUID(freshItemLifecycleUUID)
-
-        item
-      }
     }
   }
 

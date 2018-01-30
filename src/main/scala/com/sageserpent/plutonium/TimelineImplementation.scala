@@ -119,7 +119,7 @@ class TimelineImplementation[EventId](
       override protected def createItemFor[Item](
           _uniqueItemSpecification: UniqueItemSpecification,
           lifecycleUUID: UUID) = {
-        import QueryCallbackStuff._
+        import QueryCallbackStuff.{AcquiredState, proxyFactory}
 
         val stateToBeAcquiredByProxy: AcquiredState =
           new AcquiredState {
@@ -136,7 +136,11 @@ class TimelineImplementation[EventId](
         implicit val typeTagForItem: TypeTag[Item] =
           _uniqueItemSpecification.typeTag.asInstanceOf[TypeTag[Item]]
 
-        proxyFactory.constructFrom[Item](stateToBeAcquiredByProxy)
+        val item = proxyFactory.constructFrom[Item](stateToBeAcquiredByProxy)
+
+        item.asInstanceOf[AnnihilationHook].setLifecycleUUID(lifecycleUUID)
+
+        item
       }
 
       def harvestSnapshots()
@@ -230,7 +234,7 @@ class TimelineImplementation[EventId](
       override protected def createItemFor[Item](
           _uniqueItemSpecification: UniqueItemSpecification,
           lifecycleUUID: UUID) = {
-        import QueryCallbackStuff._
+        import QueryCallbackStuff.{AcquiredState, proxyFactory}
 
         val stateToBeAcquiredByProxy: AcquiredState =
           new AcquiredState {
@@ -243,7 +247,11 @@ class TimelineImplementation[EventId](
         implicit val typeTagForItem: TypeTag[Item] =
           _uniqueItemSpecification.typeTag.asInstanceOf[TypeTag[Item]]
 
-        proxyFactory.constructFrom[Item](stateToBeAcquiredByProxy)
+        val item = proxyFactory.constructFrom[Item](stateToBeAcquiredByProxy)
+
+        item.asInstanceOf[AnnihilationHook].setLifecycleUUID(lifecycleUUID)
+
+        item
       }
     }
 
