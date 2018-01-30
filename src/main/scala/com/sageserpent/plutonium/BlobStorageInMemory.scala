@@ -16,6 +16,8 @@ import scala.reflect.runtime.universe._
 object BlobStorageInMemory {
   type Revision = Int
 
+  val theOneAndOnlyLifecycleUUID = UUID.randomUUID()
+
   trait Lifecycle[EventId] {
     def isValid(when: Unbounded[Instant],
                 validRevisionFor: EventId => Revision): Boolean
@@ -160,19 +162,19 @@ case class BlobStorageInMemory[EventId] private (
           }
           .toStream
 
+      override def lifecycleUUIDFor(
+          uniqueItemSpecification: UniqueItemSpecification): UUID =
+        BlobStorageInMemory.theOneAndOnlyLifecycleUUID
+
       override def snapshotBlobFor(
-          uniqueItemSpecification: UniqueItemSpecification)
-        : Option[SnapshotBlob] =
+          uniqueItemSpecification: UniqueItemSpecification,
+          lifecycleUUID: UUID): Option[SnapshotBlob] =
         for {
           lifecycles <- lifecycles.get(uniqueItemSpecification.id)
           lifecycle <- lifecycles.find(
             uniqueItemSpecification.typeTag == _.itemTypeTag)
           if lifecycle.isValid(when, eventRevisions.apply)
         } yield lifecycle.snapshotBlobFor(when, eventRevisions.apply)
-
-      override def snapshotBlobFor(
-          uniqueItemSpecification: UniqueItemSpecification,
-          lifecycleUUID: UUID): Option[SnapshotBlob] = ???
     }
 
     new TimesliceImplementation with TimesliceContracts

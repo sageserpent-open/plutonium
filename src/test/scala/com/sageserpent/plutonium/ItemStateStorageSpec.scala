@@ -198,14 +198,14 @@ class ItemStateStorageSpec
             id: Any): Stream[UniqueItemSpecification] =
           snapshotBlobs.keys.filter(_.id == id).toStream
 
-        override def snapshotBlobFor(
-            uniqueItemSpecification: UniqueItemSpecification)
-          : Option[SnapshotBlob] =
-          snapshotBlobs.get(uniqueItemSpecification)
+        override def lifecycleUUIDFor(
+            uniqueItemSpecification: UniqueItemSpecification): UUID =
+          itemStateStorage.theUniqueLifecycleUUIDForAllItemsEver
 
         override def snapshotBlobFor(
             uniqueItemSpecification: UniqueItemSpecification,
-            lifecycleUUID: UUID): Option[SnapshotBlob] = ???
+            lifecycleUUID: UUID): Option[SnapshotBlob] =
+          snapshotBlobs.get(uniqueItemSpecification)
       }
 
       val reconstitutionContext = new itemStateStorage.ReconstitutionContext() {
@@ -216,12 +216,14 @@ class ItemStateStorageSpec
           (item.id: Any) -> item) toMap
 
         override def fallbackItemFor[Item](
-            uniqueItemSpecification: UniqueItemSpecification): Item =
+            uniqueItemSpecification: UniqueItemSpecification,
+            lifecycleUUID: UUID): Item =
           idToFallbackItemMap(uniqueItemSpecification.id).asInstanceOf[Item]
 
         // The following implementation is the epitome of hokeyness. Well, it's just test code... Hmmm.
         override protected def createItemFor[Item](
-            uniqueItemSpecification: UniqueItemSpecification): Item =
+            uniqueItemSpecification: UniqueItemSpecification,
+            lifecycleUUID: UUID): Item =
           (uniqueItemSpecification match {
             case UniqueItemSpecification(id: OddGraphNode#Id, itemTypeTag)
                 if itemTypeTag == typeTag[OddGraphNode] =>

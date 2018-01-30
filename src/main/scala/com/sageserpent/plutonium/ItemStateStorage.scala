@@ -139,7 +139,7 @@ trait ItemStateStorage { itemStateStorageObject =>
 
               override def newInstance() = {
                 if (kryo.isDealingWithTopLevelObject) {
-                  createItem[T]
+                  createItemForDeserialisation[T]
                 } else {
                   underlyingInstantiator.newInstance()
                 }
@@ -169,8 +169,9 @@ trait ItemStateStorage { itemStateStorageObject =>
     itemDeserializationThreadContextAccess.value.get
       .itemFor(uniqueItemSpecification, lifecycleUUID)
 
-  private def createItem[Item]: Item =
-    itemDeserializationThreadContextAccess.value.get.createItem[Item]
+  private def createItemForDeserialisation[Item]: Item =
+    itemDeserializationThreadContextAccess.value.get
+      .createItemForDeserialisation[Item]
 
   trait ReconstitutionContext {
     def blobStorageTimeslice
@@ -190,20 +191,24 @@ trait ItemStateStorage { itemStateStorageObject =>
 
     class ItemDeserializationThreadContext {
       val uniqueItemSpecificationAccess =
-        new DynamicVariable[Option[UniqueItemSpecification]](None)
+        new DynamicVariable[Option[(UniqueItemSpecification, UUID)]](None)
 
       def itemFor[Item](
           uniqueItemSpecification: UniqueItemSpecification): Item = {
         storage
           .getOrElse(
             uniqueItemSpecification, {
+              val lifecycleUUID =
+                blobStorageTimeslice.lifecycleUUIDFor(uniqueItemSpecification)
               val snapshot =
-                blobStorageTimeslice.snapshotBlobFor(uniqueItemSpecification)
+                blobStorageTimeslice.snapshotBlobFor(uniqueItemSpecification,
+                                                     lifecycleUUID)
 
               uniqueItemSpecificationAccess
-                .withValue(Some(uniqueItemSpecification)) {
+                .withValue(Some(uniqueItemSpecification, lifecycleUUID)) {
                   snapshot.fold[Any] {
-                    fallbackItemFor[Item](uniqueItemSpecification)
+                    fallbackItemFor[Item](uniqueItemSpecification,
+                                          lifecycleUUID)
                   }(kryoPool.fromBytes)
                 }
             }
@@ -221,37 +226,41 @@ trait ItemStateStorage { itemStateStorageObject =>
                                                      lifecycleUUID)
 
               uniqueItemSpecificationAccess
-                .withValue(Some(uniqueItemSpecification)) {
+                .withValue(Some(uniqueItemSpecification, lifecycleUUID)) {
                   snapshot.fold[Any] {
-                    fallbackItemFor[Item](uniqueItemSpecification)
+                    fallbackItemFor[Item](uniqueItemSpecification,
+                                          lifecycleUUID)
                   }(kryoPool.fromBytes)
                 }
             }
           )
 
-        // TODO: this is too specific: 'AnnihilationHook only pertains to non-test code. Is there another way of doing this?
-        item.asInstanceOf[AnnihilationHook].setLifecycleUUID(lifecycleUUID)
-
         item
           .asInstanceOf[Item]
       }
 
-      private[ItemStateStorage] def createItem[Item]: Item =
-        createAndStoreItem(uniqueItemSpecificationAccess.value.get)
+      private[ItemStateStorage] def createItemForDeserialisation[Item]: Item =
+        uniqueItemSpecificationAccess.value match {
+          case Some((uniqueItemSpecification, lifecycleUUID)) =>
+            createAndStoreItem(uniqueItemSpecification, lifecycleUUID)
+        }
     }
 
     protected def createAndStoreItem[Item](
-        uniqueItemSpecification: UniqueItemSpecification): Item = {
-      val item: Item = createItemFor(uniqueItemSpecification)
+        uniqueItemSpecification: UniqueItemSpecification,
+        lifecycleUUID: UUID): Item = {
+      val item: Item = createItemFor(uniqueItemSpecification, lifecycleUUID)
       storage.update(uniqueItemSpecification, item)
       item
     }
 
     protected def fallbackItemFor[Item](
-        uniqueItemSpecification: UniqueItemSpecification): Item
+        uniqueItemSpecification: UniqueItemSpecification,
+        lifecycleUUID: UUID): Item
 
     protected def createItemFor[Item](
-        uniqueItemSpecification: UniqueItemSpecification): Item
+        uniqueItemSpecification: UniqueItemSpecification,
+        lifecycleUUID: UUID): Item
 
     private class Storage extends mutable.HashMap[UniqueItemSpecification, Any]
 

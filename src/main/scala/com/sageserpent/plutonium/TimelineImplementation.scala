@@ -117,7 +117,8 @@ class TimelineImplementation[EventId](
         blobStorageTimeSlice
 
       override protected def createItemFor[Item](
-          _uniqueItemSpecification: UniqueItemSpecification) = {
+          _uniqueItemSpecification: UniqueItemSpecification,
+          lifecycleUUID: UUID) = {
         import QueryCallbackStuff._
 
         val stateToBeAcquiredByProxy: AcquiredState =
@@ -153,8 +154,9 @@ class TimelineImplementation[EventId](
       }
 
       override def fallbackItemFor[Item](
-          uniqueItemSpecification: UniqueItemSpecification): Item =
-        createAndStoreItem(uniqueItemSpecification)
+          uniqueItemSpecification: UniqueItemSpecification,
+          lifecycleUUID: UUID): Item =
+        createAndStoreItem(uniqueItemSpecification, lifecycleUUID)
     }
 
     for {
@@ -219,13 +221,15 @@ class TimelineImplementation[EventId](
         blobStorage.timeSlice(when)
 
       override def fallbackItemFor[Item](
-          uniqueItemSpecification: UniqueItemSpecification): Item =
+          uniqueItemSpecification: UniqueItemSpecification,
+          lifecycleUUID: UUID): Item =
         throw new RuntimeException(
           s"Snapshot does not exist for: $uniqueItemSpecification at: $when.")
 
       // TODO - either fuse this back with the other code duplicate above or make it its own thing. Do we really need the 'itemIsLocked'? If we do, then let's fuse...
       override protected def createItemFor[Item](
-          _uniqueItemSpecification: UniqueItemSpecification) = {
+          _uniqueItemSpecification: UniqueItemSpecification,
+          lifecycleUUID: UUID) = {
         import QueryCallbackStuff._
 
         val stateToBeAcquiredByProxy: AcquiredState =

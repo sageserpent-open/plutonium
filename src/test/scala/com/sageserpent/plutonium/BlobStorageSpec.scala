@@ -296,8 +296,10 @@ class BlobStorageSpec
 
     retrievedUniqueItemSpecifications shouldBe empty
 
+    val lifecycleUUID = timeSlice.lifecycleUUIDFor(uniqueItemSpecification)
+
     val retrievedSnapshotBlob: Option[SnapshotBlob] =
-      timeSlice.snapshotBlobFor(uniqueItemSpecification)
+      timeSlice.snapshotBlobFor(uniqueItemSpecification, lifecycleUUID)
 
     retrievedSnapshotBlob shouldBe None
   }
@@ -326,8 +328,11 @@ class BlobStorageSpec
         val theRetrievedUniqueItemSpecification: UniqueItemSpecification =
           retrievedUniqueItemSpecifications.head
 
+        val lifecycleUUID = timeSlice.lifecycleUUIDFor(uniqueItemSpecification)
+
         val retrievedSnapshotBlob: Option[SnapshotBlob] =
-          timeSlice.snapshotBlobFor(theRetrievedUniqueItemSpecification)
+          timeSlice.snapshotBlobFor(theRetrievedUniqueItemSpecification,
+                                    lifecycleUUID)
 
         retrievedSnapshotBlob shouldBe Some(snapshotBlob)
       case None =>
@@ -335,8 +340,10 @@ class BlobStorageSpec
 
         retrievedUniqueItemSpecifications shouldBe empty
 
+        val lifecycleUUID = timeSlice.lifecycleUUIDFor(uniqueItemSpecification)
+
         val retrievedSnapshotBlob: Option[SnapshotBlob] =
-          timeSlice.snapshotBlobFor(uniqueItemSpecification)
+          timeSlice.snapshotBlobFor(uniqueItemSpecification, lifecycleUUID)
 
         retrievedSnapshotBlob shouldBe None
     }
@@ -445,7 +452,12 @@ class BlobStorageSpec
           retrievedUniqueItemSpecifications.forall(
             _.typeTag.tpe <:< explicitTypeTag.tpe))
 
-        val retrievedSnapshotBlobs = retrievedUniqueItemSpecifications map timeSlice.snapshotBlobFor
+        val retrievedSnapshotBlobs = retrievedUniqueItemSpecifications map {
+          uniqueItemSpecification =>
+            val lifecycleUUID =
+              timeSlice.lifecycleUUIDFor(uniqueItemSpecification)
+            timeSlice.snapshotBlobFor(uniqueItemSpecification, lifecycleUUID)
+        }
 
         retrievedSnapshotBlobs should contain(Some(snapshotBlob))
       case None =>
