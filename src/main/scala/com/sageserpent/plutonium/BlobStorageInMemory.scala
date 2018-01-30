@@ -136,7 +136,7 @@ object BlobStorageInMemory {
 case class BlobStorageInMemory[EventId] private (
     revision: BlobStorageInMemory.Revision,
     eventRevisions: Map[EventId, BlobStorageInMemory.Revision],
-    lifecycles: Map[Any, Set[BlobStorageInMemory.Lifecycle[EventId]]])
+    lifecycles: Map[Any, Seq[BlobStorageInMemory.Lifecycle[EventId]]])
     extends BlobStorage[EventId] { thisBlobStorage =>
   import BlobStorage._
 
@@ -230,7 +230,7 @@ case class BlobStorageInMemory[EventId] private (
             case (lifecycles, (_, None)) =>
               lifecycles
             case (lifecycles: Map[Any,
-                                  Set[BlobStorageInMemory.Lifecycle[EventId]]],
+                                  Seq[BlobStorageInMemory.Lifecycle[EventId]]],
                   (eventIds, Some((when, snapshots)))) =>
               val updatedLifecycles
                 : Map[UniqueItemSpecification,
@@ -240,10 +240,10 @@ case class BlobStorageInMemory[EventId] private (
                         itemTypeTag),
                       snapshot) =>
                   val lifecyclesForId
-                    : Set[BlobStorageInMemory.Lifecycle[EventId]] =
+                    : Seq[BlobStorageInMemory.Lifecycle[EventId]] =
                     lifecycles.getOrElse(
                       id,
-                      Set.empty[BlobStorageInMemory.Lifecycle[EventId]]
+                      Seq.empty[BlobStorageInMemory.Lifecycle[EventId]]
                     )
                   uniqueItemSpecification -> {
                     val lifecycleForSnapshot: BlobStorageInMemory.Lifecycle[
@@ -273,7 +273,7 @@ case class BlobStorageInMemory[EventId] private (
                   uniqueItemSpecification.id -> lifecycle
               } groupBy (_._1) map {
                 case (id, group: Seq[(Any, Lifecycle[EventId])]) =>
-                  id -> group.map(_._2).toSet
+                  id -> group.map(_._2)
               }
           }
 
