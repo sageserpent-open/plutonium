@@ -77,7 +77,7 @@ trait ItemStateStorage { itemStateStorageObject =>
               .asInstanceOf[(UniqueItemSpecification, UUID)]
 
           val instance: ItemSuperType =
-            itemFor[ItemSuperType](uniqueItemSpecification) // TODO - use the lifecycle.
+            relatedItemFor[ItemSuperType](uniqueItemSpecification) // TODO - use the lifecycle.
           kryo.reference(instance)
           instance
         }
@@ -139,7 +139,7 @@ trait ItemStateStorage { itemStateStorageObject =>
 
               override def newInstance() = {
                 if (kryo.isDealingWithTopLevelObject) {
-                  createItem[T]
+                  createDeserializationTargetItem[T]
                 } else {
                   underlyingInstantiator.newInstance()
                 }
@@ -164,8 +164,14 @@ trait ItemStateStorage { itemStateStorageObject =>
     itemDeserializationThreadContextAccess.value.get
       .itemFor(uniqueItemSpecification)
 
-  private def createItem[Item]: Item =
-    itemDeserializationThreadContextAccess.value.get.createItem[Item]
+  private def relatedItemFor[Item](
+      uniqueItemSpecification: UniqueItemSpecification): Item =
+    itemDeserializationThreadContextAccess.value.get
+      .relatedItemFor(uniqueItemSpecification)
+
+  private def createDeserializationTargetItem[Item]: Item =
+    itemDeserializationThreadContextAccess.value.get
+      .createDeserializationTargetItem[Item]
 
   trait ReconstitutionContext {
     def blobStorageTimeslice
@@ -206,7 +212,27 @@ trait ItemStateStorage { itemStateStorageObject =>
           .asInstanceOf[Item]
       }
 
-      private[ItemStateStorage] def createItem[Item]: Item =
+      def relatedItemFor[Item](
+          uniqueItemSpecification: UniqueItemSpecification): Item = {
+        storage
+          .getOrElse(
+            uniqueItemSpecification, {
+              val snapshot =
+                blobStorageTimeslice.snapshotBlobFor(uniqueItemSpecification)
+
+              uniqueItemSpecificationAccess
+                .withValue(Some(uniqueItemSpecification)) {
+                  snapshot.fold[Any] {
+                    fallbackItemFor[Item](uniqueItemSpecification)
+                  }(kryoPool.fromBytes)
+                }
+            }
+          )
+          .asInstanceOf[Item]
+      }
+
+      private[ItemStateStorage] def createDeserializationTargetItem[Item]
+        : Item =
         createAndStoreItem(uniqueItemSpecificationAccess.value.get)
     }
 
