@@ -105,12 +105,11 @@ object BlobStorageInMemory {
       require(!snapshotBlobs.contains(when))
       val insertionPoint =
         indexToSearchDownFromOrInsertAt(when, snapshotBlobTimes)
-      new LifecycleImplementation(
-        itemTypeTag = this.itemTypeTag,
-        snapshotBlobs =
-          snapshotBlobs.patch(insertionPoint,
-                              Seq((when, (snapshotBlob, eventIds, revision))),
-                              0))
+      LifecycleImplementation(itemTypeTag = this.itemTypeTag,
+                              snapshotBlobs = snapshotBlobs.patch(
+                                insertionPoint,
+                                Seq((when, (snapshotBlob, eventIds, revision))),
+                                0))
     }
   }
 
@@ -125,7 +124,7 @@ object BlobStorageInMemory {
 case class BlobStorageInMemory[EventId] private (
     revision: BlobStorageInMemory.Revision,
     eventRevisions: Map[EventId, BlobStorageInMemory.Revision],
-    lifecycles: Map[Any, Set[BlobStorageInMemory.Lifecycle[EventId]]])
+    lifecycles: Map[Any, Seq[BlobStorageInMemory.Lifecycle[EventId]]])
     extends BlobStorage[EventId] { thisBlobStorage =>
   import BlobStorage._
 
@@ -206,7 +205,7 @@ case class BlobStorageInMemory[EventId] private (
             case (lifecycles, (_, None)) =>
               lifecycles
             case (lifecycles: Map[Any,
-                                  Set[BlobStorageInMemory.Lifecycle[EventId]]],
+                                  Seq[BlobStorageInMemory.Lifecycle[EventId]]],
                   (eventIds, Some((when, snapshots)))) =>
               val updatedLifecycles
                 : Map[UniqueItemSpecification,
@@ -216,16 +215,16 @@ case class BlobStorageInMemory[EventId] private (
                         itemTypeTag),
                       snapshot) =>
                   val lifecyclesForId
-                    : Set[BlobStorageInMemory.Lifecycle[EventId]] =
+                    : Seq[BlobStorageInMemory.Lifecycle[EventId]] =
                     lifecycles.getOrElse(
                       id,
-                      Set.empty[BlobStorageInMemory.Lifecycle[EventId]]
+                      Seq.empty[BlobStorageInMemory.Lifecycle[EventId]]
                     )
                   uniqueItemSpecification -> {
                     val lifecycleForSnapshot: BlobStorageInMemory.Lifecycle[
-                      EventId] = lifecyclesForId find (itemTypeTag == _.itemTypeTag) getOrElse (new BlobStorageInMemory.LifecycleImplementation[
-                      EventId](itemTypeTag = itemTypeTag): BlobStorageInMemory.Lifecycle[
-                      EventId])
+                      EventId] = lifecyclesForId find (itemTypeTag == _.itemTypeTag) getOrElse (BlobStorageInMemory
+                      .LifecycleImplementation[EventId](
+                        itemTypeTag = itemTypeTag))
 
                     lifecycleForSnapshot
                       .addSnapshotBlob(eventIds, when, snapshot, newRevision)
@@ -249,7 +248,7 @@ case class BlobStorageInMemory[EventId] private (
                   uniqueItemSpecification.id -> lifecycle
               } groupBy (_._1) map {
                 case (id, group: Seq[(Any, Lifecycle[EventId])]) =>
-                  id -> group.map(_._2).toSet
+                  id -> group.map(_._2)
               }
           }
 

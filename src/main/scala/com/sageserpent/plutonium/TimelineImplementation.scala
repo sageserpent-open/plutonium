@@ -117,7 +117,7 @@ class TimelineImplementation[EventId](
 
       override protected def createItemFor[Item](
           _uniqueItemSpecification: UniqueItemSpecification) = {
-        import QueryCallbackStuff._
+        import QueryCallbackStuff.{AcquiredState, proxyFactory}
 
         val stateToBeAcquiredByProxy: AcquiredState =
           new AcquiredState {
@@ -164,7 +164,8 @@ class TimelineImplementation[EventId](
         (eventIds, itemStateUpdate) <- itemStateUpdates
       } {
         val snapshotBlobs =
-          mutable.Map.empty[UniqueItemSpecification, Option[SnapshotBlob]]
+          mutable.Map
+            .empty[UniqueItemSpecification, Option[SnapshotBlob]]
 
         itemStateUpdate match {
           case ItemStateAnnihilation(annihilation) =>
@@ -223,7 +224,7 @@ class TimelineImplementation[EventId](
       // TODO - either fuse this back with the other code duplicate above or make it its own thing. Do we really need the 'itemIsLocked'? If we do, then let's fuse...
       override protected def createItemFor[Item](
           _uniqueItemSpecification: UniqueItemSpecification) = {
-        import QueryCallbackStuff._
+        import QueryCallbackStuff.{AcquiredState, proxyFactory}
 
         val stateToBeAcquiredByProxy: AcquiredState =
           new AcquiredState {

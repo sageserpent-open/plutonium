@@ -250,7 +250,8 @@ object WorldImplementationCodeFactoring {
         IdentifiedItemsScope.recordAnnihilationMethod)
 
     val matchMutation: ElementMatcher[MethodDescription] = methodDescription =>
-      methodDescription.getReturnType.represents(classOf[Unit]) && !WorldImplementationCodeFactoring
+      methodDescription.getReturnType
+        .represents(classOf[Unit]) && !WorldImplementationCodeFactoring
         .isInvariantCheck(methodDescription)
 
     val matchIsGhost: ElementMatcher[MethodDescription] =
@@ -267,23 +268,13 @@ object WorldImplementationCodeFactoring {
     val matchInvariantCheck: ElementMatcher[MethodDescription] =
       WorldImplementationCodeFactoring.isInvariantCheck(_)
 
-    val matchUniqueItemSpecification
-      : ElementMatcher[MethodDescription] = methodDescription =>
-      firstMethodIsOverrideCompatibleWithSecond(
-        methodDescription,
-        IdentifiedItemsScope.uniqueItemSpecificationPropertyForRecording) || firstMethodIsOverrideCompatibleWithSecond(
-        methodDescription,
-        IdentifiedItemsScope.uniqueItemSpecificationPropertyForItemExtensionApi)
-
-    object recordAnnihilation {
-      @RuntimeType
-      def apply(@This target: AnnihilationHook,
-                @FieldValue("acquiredState") acquiredState: AcquiredState) = {
-        target.setLifecycleUUID(UUID.randomUUID())
-        acquiredState.recordAnnihilation()
-        null
-      }
-    }
+    val matchUniqueItemSpecification: ElementMatcher[MethodDescription] =
+      methodDescription =>
+        firstMethodIsOverrideCompatibleWithSecond(
+          methodDescription,
+          IdentifiedItemsScope.uniqueItemSpecificationPropertyForRecording) || firstMethodIsOverrideCompatibleWithSecond(
+          methodDescription,
+          IdentifiedItemsScope.uniqueItemSpecificationPropertyForItemExtensionApi)
 
     object mutation {
       @RuntimeType
@@ -312,12 +303,6 @@ object WorldImplementationCodeFactoring {
           acquiredState.recordMutation(argumentItem)
         }
       }
-    }
-
-    object isGhost {
-      @RuntimeType
-      def apply(@FieldValue("acquiredState") acquiredState: AcquiredState) =
-        acquiredState.isGhost
     }
 
     object checkedReadAccess {
@@ -367,12 +352,6 @@ object WorldImplementationCodeFactoring {
       }
     }
 
-    object uniqueItemSpecification {
-      @RuntimeType
-      def apply(@FieldValue("acquiredState") acquiredState: AcquiredState) =
-        acquiredState.uniqueItemSpecification
-    }
-
     object proxyFactory extends ProxyFactory[AcquiredState] {
       override val isForRecordingOnly = false
 
@@ -394,11 +373,11 @@ object WorldImplementationCodeFactoring {
           .method(matchCheckedReadAccess)
           .intercept(MethodDelegation.to(checkedReadAccess))
           .method(matchIsGhost)
-          .intercept(MethodDelegation.to(isGhost))
+          .intercept(MethodDelegation.toField("acquiredState"))
           .method(matchMutation)
           .intercept(MethodDelegation.to(mutation))
           .method(matchRecordAnnihilation)
-          .intercept(MethodDelegation.to(recordAnnihilation))
+          .intercept(MethodDelegation.toField("acquiredState"))
           .method(matchLifecycleUUID)
           .intercept(FieldAccessor.ofField("lifecycleUUID"))
           .method(matchSetLifecycleUUID)
@@ -406,7 +385,7 @@ object WorldImplementationCodeFactoring {
           .method(matchInvariantCheck)
           .intercept(MethodDelegation.to(checkInvariant))
           .method(matchUniqueItemSpecification)
-          .intercept(MethodDelegation.to(uniqueItemSpecification))
+          .intercept(MethodDelegation.toField("acquiredState"))
 
       override def constructFrom[Item: TypeTag](
           stateToBeAcquiredByProxy: AcquiredState) = {
