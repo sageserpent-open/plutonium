@@ -15,20 +15,6 @@ import scala.reflect.runtime.universe._
 object BlobStorageInMemory {
   type Revision = Int
 
-  trait Lifecycle[EventId] {
-    def isValid(when: Unbounded[Instant],
-                validRevisionFor: EventId => Revision): Boolean
-    def snapshotBlobFor(when: Unbounded[Instant],
-                        validRevisionFor: EventId => Revision): SnapshotBlob
-
-    def addSnapshotBlob(eventIds: Set[EventId],
-                        when: Unbounded[Instant],
-                        snapshotBlob: Option[SnapshotBlob],
-                        revision: Revision): Lifecycle[EventId]
-
-    val itemTypeTag: TypeTag[_ <: Any]
-  }
-
   implicit val isSeqLike = new IsSeqLike[SeqView[Unbounded[Instant], Seq[_]]] {
     type A = Unbounded[Instant]
     override val conversion: SeqView[Unbounded[Instant], Seq[_]] => SeqLike[
@@ -54,13 +40,12 @@ object BlobStorageInMemory {
     }
   }
 
-  case class LifecycleImplementation[EventId](
-      override val itemTypeTag: TypeTag[_ <: Any],
+  case class Lifecycle[EventId](
+      itemTypeTag: TypeTag[_ <: Any],
       snapshotBlobs: Vector[(Unbounded[Instant],
                              (Option[SnapshotBlob], Set[EventId], Revision))] =
         Vector.empty[(Unbounded[Instant],
-                      (Option[SnapshotBlob], Set[EventId], Revision))])
-      extends BlobStorageInMemory.Lifecycle[EventId] {
+                      (Option[SnapshotBlob], Set[EventId], Revision))]) {
     val snapshotBlobTimes = snapshotBlobs.view.map(_._1)
 
     require(
@@ -79,15 +64,14 @@ object BlobStorageInMemory {
         })
     }
 
-    override def isValid(when: Unbounded[Instant],
-                         validRevisionFor: EventId => Revision): Boolean = {
+    def isValid(when: Unbounded[Instant],
+                validRevisionFor: EventId => Revision): Boolean = {
       val index = indexOf(when, validRevisionFor)
       -1 != index && snapshotBlobs(index)._2._1.isDefined
     }
 
-    override def snapshotBlobFor(
-        when: Unbounded[Instant],
-        validRevisionFor: EventId => Revision): SnapshotBlob = {
+    def snapshotBlobFor(when: Unbounded[Instant],
+                        validRevisionFor: EventId => Revision): SnapshotBlob = {
       val index = indexOf(when, validRevisionFor)
 
       assert(-1 != index)
@@ -97,19 +81,18 @@ object BlobStorageInMemory {
       }
     }
 
-    override def addSnapshotBlob(
-        eventIds: Set[EventId],
-        when: Unbounded[Instant],
-        snapshotBlob: Option[SnapshotBlob],
-        revision: Revision): BlobStorageInMemory.Lifecycle[EventId] = {
+    def addSnapshotBlob(eventIds: Set[EventId],
+                        when: Unbounded[Instant],
+                        snapshotBlob: Option[SnapshotBlob],
+                        revision: Revision): Lifecycle[EventId] = {
       require(!snapshotBlobs.contains(when))
       val insertionPoint =
         indexToSearchDownFromOrInsertAt(when, snapshotBlobTimes)
-      LifecycleImplementation(itemTypeTag = this.itemTypeTag,
-                              snapshotBlobs = snapshotBlobs.patch(
-                                insertionPoint,
-                                Seq((when, (snapshotBlob, eventIds, revision))),
-                                0))
+      Lifecycle(itemTypeTag = this.itemTypeTag,
+                snapshotBlobs = snapshotBlobs.patch(
+                  insertionPoint,
+                  Seq((when, (snapshotBlob, eventIds, revision))),
+                  0))
     }
   }
 
@@ -223,8 +206,7 @@ case class BlobStorageInMemory[EventId] private (
                   uniqueItemSpecification -> {
                     val lifecycleForSnapshot: BlobStorageInMemory.Lifecycle[
                       EventId] = lifecyclesForId find (itemTypeTag == _.itemTypeTag) getOrElse (BlobStorageInMemory
-                      .LifecycleImplementation[EventId](
-                        itemTypeTag = itemTypeTag))
+                      .Lifecycle[EventId](itemTypeTag = itemTypeTag))
 
                     lifecycleForSnapshot
                       .addSnapshotBlob(eventIds, when, snapshot, newRevision)
