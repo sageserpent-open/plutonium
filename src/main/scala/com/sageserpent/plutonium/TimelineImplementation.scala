@@ -3,7 +3,6 @@ package com.sageserpent.plutonium
 import java.time.Instant
 
 import com.sageserpent.americium.{NegativeInfinity, PositiveInfinity, Unbounded}
-import com.sageserpent.plutonium.BlobStorage.SnapshotBlob
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.PatchRecorder.UpdateConsumer
 import com.sageserpent.plutonium.World.{Revision, initialRevision}
@@ -22,9 +21,12 @@ import scalaz.{-\/, \/-}
 
 class TimelineImplementation[EventId](
     events: Map[EventId, EventData] = Map.empty[EventId, EventData],
-    blobStorage: BlobStorage[EventId] = BlobStorageInMemory.apply[EventId](),
+    blobStorage: BlobStorage[EventId, ItemStateStorage.SnapshotBlob] =
+      BlobStorageInMemory.apply[EventId, ItemStateStorage.SnapshotBlob](),
     nextRevision: Revision = initialRevision)
     extends Timeline[EventId] {
+  import ItemStateStorage.SnapshotBlob
+
   sealed trait ItemStateUpdate
 
   case class ItemStatePatch(patch: AbstractPatch) extends ItemStateUpdate
@@ -65,7 +67,7 @@ class TimelineImplementation[EventId](
 
   private def carryOutUpdatePlanInABlazeOfImperativeGlory(
       annulledEvents: List[EventId],
-      updatePlan: UpdatePlan): BlobStorage[EventId] = {
+      updatePlan: UpdatePlan): BlobStorage[EventId, SnapshotBlob] = {
     val revisionBuilder = blobStorage.openRevision()
 
     val sourceBlobStorage = {
@@ -112,7 +114,7 @@ class TimelineImplementation[EventId](
         blobStorageTimeSlice = sourceBlobStorage.timeSlice(when)
       }
 
-      override def blobStorageTimeslice: BlobStorage.Timeslice =
+      override def blobStorageTimeslice: BlobStorage.Timeslice[SnapshotBlob] =
         blobStorageTimeSlice
 
       override protected def createItemFor[Item](
@@ -213,7 +215,7 @@ class TimelineImplementation[EventId](
             .uniqueItemQueriesFor[Item]
         } yield itemFor[Item](uniqueItemSpecification)
 
-      override val blobStorageTimeslice: BlobStorage.Timeslice =
+      override val blobStorageTimeslice: BlobStorage.Timeslice[SnapshotBlob] =
         blobStorage.timeSlice(when)
 
       override def fallbackItemFor[Item](

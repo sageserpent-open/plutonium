@@ -5,13 +5,10 @@ import java.time.Instant
 import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 
-import scala.collection.mutable
 import scala.reflect.runtime.universe.TypeTag
 
 object BlobStorage {
-  type SnapshotBlob = Array[Byte]
-
-  trait Timeslice {
+  trait Timeslice[SnapshotBlob] {
     def uniqueItemQueriesFor[Item: TypeTag]: Stream[UniqueItemSpecification]
     def uniqueItemQueriesFor[Item: TypeTag](
         id: Any): Stream[UniqueItemSpecification]
@@ -20,7 +17,7 @@ object BlobStorage {
         uniqueItemSpecification: UniqueItemSpecification): Option[SnapshotBlob]
   }
 
-  trait TimesliceContracts extends Timeslice {
+  trait TimesliceContracts[SnapshotBlob] extends Timeslice[SnapshotBlob] {
     abstract override def snapshotBlobFor(
         uniqueItemSpecification: UniqueItemSpecification)
       : Option[SnapshotBlob] = {
@@ -35,7 +32,7 @@ object BlobStorage {
   }
 }
 
-trait BlobStorage[EventId] { blobStorage =>
+trait BlobStorage[EventId, SnapshotBlob] { blobStorage =>
 
   import BlobStorage._
 
@@ -50,10 +47,10 @@ trait BlobStorage[EventId] { blobStorage =>
 
     def annulEvent(eventId: EventId)
 
-    def build(): BlobStorage[EventId]
+    def build(): BlobStorage[EventId, SnapshotBlob]
   }
 
   def openRevision(): RevisionBuilder
 
-  def timeSlice(when: Unbounded[Instant]): Timeslice
+  def timeSlice(when: Unbounded[Instant]): Timeslice[SnapshotBlob]
 }

@@ -3,8 +3,6 @@ package com.sageserpent.plutonium
 import java.time.Instant
 
 import com.sageserpent.americium.Unbounded
-import com.sageserpent.plutonium.BlobStorage.SnapshotBlob
-import com.sageserpent.plutonium.BlobStorageInMemory.Lifecycle
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 
 import scala.collection.Searching._
@@ -40,7 +38,24 @@ object BlobStorageInMemory {
     }
   }
 
-  case class Lifecycle[EventId](
+  def apply[EventId, SnapshotBlob]() =
+    new BlobStorageInMemory[EventId, SnapshotBlob](
+      revision = 0,
+      eventRevisions = Map.empty,
+      lifecycles = Map.empty
+    )
+}
+
+case class BlobStorageInMemory[EventId, SnapshotBlob] private (
+    revision: BlobStorageInMemory.Revision,
+    eventRevisions: Map[EventId, BlobStorageInMemory.Revision],
+    lifecycles: Map[Any,
+                    Seq[BlobStorageInMemory[EventId, SnapshotBlob]#Lifecycle]])
+    extends BlobStorage[EventId, SnapshotBlob] { thisBlobStorage =>
+  import BlobStorage._
+  import BlobStorageInMemory._
+
+  case class Lifecycle(
       itemTypeTag: TypeTag[_ <: Any],
       snapshotBlobs: Vector[(Unbounded[Instant],
                              (Option[SnapshotBlob], Set[EventId], Revision))] =
@@ -84,7 +99,7 @@ object BlobStorageInMemory {
     def addSnapshotBlob(eventIds: Set[EventId],
                         when: Unbounded[Instant],
                         snapshotBlob: Option[SnapshotBlob],
-                        revision: Revision): Lifecycle[EventId] = {
+                        revision: Revision): Lifecycle = {
       require(!snapshotBlobs.contains(when))
       val insertionPoint =
         indexToSearchDownFromOrInsertAt(when, snapshotBlobTimes)
@@ -96,23 +111,8 @@ object BlobStorageInMemory {
     }
   }
 
-  def apply[EventId]() =
-    new BlobStorageInMemory[EventId](
-      revision = 0,
-      eventRevisions = Map.empty,
-      lifecycles = Map.empty
-    )
-}
-
-case class BlobStorageInMemory[EventId] private (
-    revision: BlobStorageInMemory.Revision,
-    eventRevisions: Map[EventId, BlobStorageInMemory.Revision],
-    lifecycles: Map[Any, Seq[BlobStorageInMemory.Lifecycle[EventId]]])
-    extends BlobStorage[EventId] { thisBlobStorage =>
-  import BlobStorage._
-
-  override def timeSlice(when: Unbounded[Instant]): Timeslice = {
-    trait TimesliceImplementation extends Timeslice {
+  override def timeSlice(when: Unbounded[Instant]): Timeslice[SnapshotBlob] = {
+    trait TimesliceImplementation extends Timeslice[SnapshotBlob] {
       override def uniqueItemQueriesFor[Item: TypeTag]
         : Stream[UniqueItemSpecification] =
         lifecycles.flatMap {
@@ -151,7 +151,7 @@ case class BlobStorageInMemory[EventId] private (
         } yield lifecycle.snapshotBlobFor(when, eventRevisions.apply)
     }
 
-    new TimesliceImplementation with TimesliceContracts
+    new TimesliceImplementation with TimesliceContracts[SnapshotBlob]
   }
 
   override def openRevision(): RevisionBuilder = {
@@ -175,7 +175,7 @@ case class BlobStorageInMemory[EventId] private (
         events += eventIds -> Some(when -> snapshotBlobs)
       }
 
-      override def build(): BlobStorage[EventId] = {
+      override def build(): BlobStorage[EventId, SnapshotBlob] = {
         val newRevision = 1 + thisBlobStorage.revision
 
         val newEventRevisions
@@ -187,49 +187,39 @@ case class BlobStorageInMemory[EventId] private (
           (thisBlobStorage.lifecycles /: events) {
             case (lifecycles, (_, None)) =>
               lifecycles
-            case (lifecycles: Map[Any,
-                                  Seq[BlobStorageInMemory.Lifecycle[EventId]]],
-                  (eventIds, Some((when, snapshots)))) =>
-              val updatedLifecycles
-                : Map[UniqueItemSpecification,
-                      BlobStorageInMemory.Lifecycle[EventId]] = snapshots map {
+            case (lifecycles, (eventIds, Some((when, snapshots)))) =>
+              val updatedLifecycles = snapshots map {
                 case (uniqueItemSpecification @ UniqueItemSpecification(
                         id,
                         itemTypeTag),
                       snapshot) =>
-                  val lifecyclesForId
-                    : Seq[BlobStorageInMemory.Lifecycle[EventId]] =
+                  val lifecyclesForId =
                     lifecycles.getOrElse(
                       id,
-                      Seq.empty[BlobStorageInMemory.Lifecycle[EventId]]
+                      Seq.empty[Lifecycle]
                     )
                   uniqueItemSpecification -> {
-                    val lifecycleForSnapshot: BlobStorageInMemory.Lifecycle[
-                      EventId] = lifecyclesForId find (itemTypeTag == _.itemTypeTag) getOrElse (BlobStorageInMemory
-                      .Lifecycle[EventId](itemTypeTag = itemTypeTag))
+                    val lifecycleForSnapshot = lifecyclesForId find (itemTypeTag == _.itemTypeTag) getOrElse Lifecycle(
+                      itemTypeTag = itemTypeTag)
 
                     lifecycleForSnapshot
                       .addSnapshotBlob(eventIds, when, snapshot, newRevision)
                   }
               }
 
-              val explodedLifecyles: Map[
-                UniqueItemSpecification,
-                Lifecycle[EventId]] = lifecycles flatMap {
+              val explodedLifecyles = lifecycles flatMap {
                 case (id, lifecyclesForAnId) =>
                   lifecyclesForAnId map (lifecycle =>
                     UniqueItemSpecification(id, lifecycle.itemTypeTag) -> lifecycle)
               }
 
-              val resultLifecycles: Map[
-                UniqueItemSpecification,
-                Lifecycle[EventId]] = explodedLifecyles ++ updatedLifecycles
+              val resultLifecycles = explodedLifecyles ++ updatedLifecycles
 
               resultLifecycles.toSeq map {
                 case ((uniqueItemSpecification, lifecycle)) =>
                   uniqueItemSpecification.id -> lifecycle
               } groupBy (_._1) map {
-                case (id, group: Seq[(Any, Lifecycle[EventId])]) =>
+                case (id, group) =>
                   id -> group.map(_._2)
               }
           }

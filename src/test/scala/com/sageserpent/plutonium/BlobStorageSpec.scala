@@ -5,15 +5,10 @@ import java.time.Instant
 import com.sageserpent.americium.Unbounded._
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.seqEnrichment._
-import com.sageserpent.americium.{
-  Finite,
-  NegativeInfinity,
-  PositiveInfinity,
-  Unbounded
-}
-import com.sageserpent.plutonium.BlobStorage.{SnapshotBlob, Timeslice}
+import com.sageserpent.americium.{Finite, NegativeInfinity, PositiveInfinity, Unbounded}
+import com.sageserpent.plutonium.BlobStorage.Timeslice
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
-import org.scalacheck.{Arbitrary, Gen, ShrinkLowPriority => NoShrinking}
+import org.scalacheck.{Gen, ShrinkLowPriority => NoShrinking}
 import org.scalatest.LoneElement._
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{FlatSpec, Matchers}
@@ -60,11 +55,10 @@ class BlobStorageSpec
     )
   }
 
+  type SnapshotBlob = Int
+
   val blobGenerator: Gen[Option[SnapshotBlob]] =
-    Gen.frequency(
-      5 -> (Gen
-        .containerOf[Array, Byte](Arbitrary.arbByte.arbitrary) map Some.apply),
-      1 -> Gen.const(None))
+    Gen.frequency(5 -> (Gen.posNum[Int] map Some.apply), 1 -> Gen.const(None))
 
   val blobsGenerator: Gen[List[Option[SnapshotBlob]]] =
     Gen.nonEmptyListOf(blobGenerator)
@@ -184,7 +178,7 @@ class BlobStorageSpec
             .buildRandomSequenceOfDistinctCandidatesChosenFrom(snapshots)
             .map {
               case (when, snapshotBlob) =>
-                when -> snapshotBlob.map(_.sorted) // An easy way to mutate the blob that usually makes it obvious that it's the intended duplicate when debugging.
+                when -> snapshotBlob.map(-_) // An easy way to mutate the blob that usually makes it obvious that it's the intended duplicate when debugging.
             }
       }
 
@@ -252,7 +246,9 @@ class BlobStorageSpec
   def blobStorageFrom(revisions: Seq[ScalaFmtWorkaround],
                       wrapAround: EventId => EventId,
                       randomBehaviour: Random) = {
-    ((BlobStorageInMemory[EventId](): BlobStorage[EventId]) /: revisions) {
+    ((BlobStorageInMemory[EventId, SnapshotBlob](): BlobStorage[
+      EventId,
+      SnapshotBlob]) /: revisions) {
       case (blobStorage, bookingsForRevision) =>
         val builder = blobStorage.openRevision()
         for ((booking, eventId) <- bookingsForRevision) {
@@ -281,7 +277,7 @@ class BlobStorageSpec
     }
   }
 
-  def checkExpectationsForNonExistence(timeSlice: Timeslice)(
+  def checkExpectationsForNonExistence(timeSlice: Timeslice[SnapshotBlob])(
       uniqueItemSpecification: UniqueItemSpecification): Any = {
     val id              = uniqueItemSpecification.id
     val explicitTypeTag = uniqueItemSpecification.typeTag
@@ -297,7 +293,7 @@ class BlobStorageSpec
     retrievedSnapshotBlob shouldBe None
   }
 
-  def checkExpectationsForExistence(timeSlice: Timeslice,
+  def checkExpectationsForExistence(timeSlice: Timeslice[SnapshotBlob],
                                     expectedSnapshotBlob: Option[SnapshotBlob])(
       uniqueItemSpecification: UniqueItemSpecification) = {
     val id              = uniqueItemSpecification.id
@@ -367,7 +363,7 @@ class BlobStorageSpec
         def wrapAround(delta: EventId): EventId =
           (delta + wrapAroundShift) % gapBetweenBaseTransformedEventIds
 
-        val blobStorage: BlobStorage[EventId] =
+        val blobStorage: BlobStorage[EventId, SnapshotBlob] =
           blobStorageFrom(revisions, wrapAround, randomBehaviour)
 
         for (TimeSeries(uniqueItemSpecification, snapshots, queryTimes) <- lotsOfFinalTimeSeries) {
@@ -418,7 +414,7 @@ class BlobStorageSpec
   }
 
   def checkExpectationsForExistenceWhenMultipleItemsShareTheSameId(
-      timeSlice: Timeslice,
+      timeSlice: Timeslice[SnapshotBlob],
       expectedSnapshotBlob: Option[SnapshotBlob],
       uniqueItemSpecification: UniqueItemSpecification) = {
     val id              = uniqueItemSpecification.id
@@ -478,7 +474,7 @@ class BlobStorageSpec
         def wrapAround(delta: EventId): EventId =
           (delta + wrapAroundShift) % gapBetweenBaseTransformedEventIds
 
-        val blobStorage: BlobStorage[EventId] =
+        val blobStorage: BlobStorage[EventId, SnapshotBlob] =
           blobStorageFrom(revisions, wrapAround, randomBehaviour)
 
         for (TimeSeries(uniqueItemSpecification, snapshots, queryTimes) <- lotsOfFinalTimeSeries) {

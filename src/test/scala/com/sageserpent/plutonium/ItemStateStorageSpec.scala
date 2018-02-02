@@ -3,7 +3,6 @@ package com.sageserpent.plutonium
 import java.util.UUID
 
 import com.sageserpent.americium.randomEnrichment._
-import com.sageserpent.plutonium.BlobStorage.SnapshotBlob
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import org.scalacheck.Prop.BooleanOperators
 import org.scalacheck.{Gen, Prop}
@@ -103,6 +102,7 @@ class ItemStateStorageSpec
     with Checkers
     with SharedGenerators {
   import MarkSyntax._
+  import ItemStateStorage.SnapshotBlob
 
   def markMapletGenerator(maximumMark: Int) =
     for {
@@ -190,7 +190,7 @@ class ItemStateStorageSpec
           }) -> itemStateStorage
             .snapshotFor(node)) toMap
 
-      val stubTimeslice = new BlobStorage.Timeslice {
+      val stubTimeslice = new BlobStorage.Timeslice[SnapshotBlob] {
         override def uniqueItemQueriesFor[Item: TypeTag]
           : Stream[UniqueItemSpecification] = snapshotBlobs.keys.toStream
 

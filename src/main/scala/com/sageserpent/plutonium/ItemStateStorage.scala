@@ -23,8 +23,12 @@ import scala.reflect.runtime.universe
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.DynamicVariable
 
+object ItemStateStorage {
+  type SnapshotBlob = Array[Byte]
+}
+
 trait ItemStateStorage { itemStateStorageObject =>
-  import BlobStorage._
+  import ItemStateStorage._
 
   private val itemDeserializationThreadContextAccess =
     new DynamicVariable[
@@ -175,7 +179,7 @@ trait ItemStateStorage { itemStateStorageObject =>
 
   trait ReconstitutionContext {
     def blobStorageTimeslice
-      : BlobStorage.Timeslice // NOTE: abstracting this allows the prospect of a 'moving' timeslice for use when executing an update plan.
+      : BlobStorage.Timeslice[SnapshotBlob] // NOTE: abstracting this allows the prospect of a 'moving' timeslice for use when executing an update plan.
 
     def itemFor[Item](
         uniqueItemSpecification: UniqueItemSpecification): Item = {
