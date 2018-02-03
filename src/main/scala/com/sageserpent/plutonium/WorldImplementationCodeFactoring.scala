@@ -362,8 +362,6 @@ object WorldImplementationCodeFactoring {
       override val cachedProxyClasses: mutable.Map[universe.Type, Class[_]] =
         QueryCallbackStuff.cachedProxyClasses
 
-      val freshItemLifecycleUUID = UUID.randomUUID()
-
       override protected def configureInterceptions(
           builder: Builder[_]): Builder[_] =
         builder
@@ -386,17 +384,6 @@ object WorldImplementationCodeFactoring {
           .intercept(MethodDelegation.to(checkInvariant))
           .method(matchUniqueItemSpecification)
           .intercept(MethodDelegation.toField("acquiredState"))
-
-      override def constructFrom[Item: TypeTag](
-          stateToBeAcquiredByProxy: AcquiredState) = {
-        val item = super.constructFrom(stateToBeAcquiredByProxy)
-
-        item
-          .asInstanceOf[AnnihilationHook]
-          .setLifecycleUUID(freshItemLifecycleUUID)
-
-        item
-      }
     }
   }
 

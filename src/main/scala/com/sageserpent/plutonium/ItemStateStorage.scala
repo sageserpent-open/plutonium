@@ -24,7 +24,7 @@ import scala.reflect.runtime.universe.TypeTag
 import scala.util.DynamicVariable
 
 object ItemStateStorage {
-  type SnapshotBlob = Array[Byte]
+  type SnapshotBlob = (Array[Byte], UUID)
 }
 
 trait ItemStateStorage { itemStateStorageObject =>
@@ -60,8 +60,10 @@ trait ItemStateStorage { itemStateStorageObject =>
 
   protected val clazzOfItemSuperType: Class[ItemSuperType]
 
-  protected def uniqueItemSpecificationAndLifecycleUUID(
-      item: ItemSuperType): (UniqueItemSpecification, UUID)
+  protected def uniqueItemSpecification(
+      item: ItemSuperType): UniqueItemSpecification
+
+  protected def lifecycleUUID(item: ItemSuperType): UUID
 
   val serializerThatDirectlyEncodesInterItemReferences =
     new Serializer[ItemSuperType] {
@@ -81,7 +83,8 @@ trait ItemStateStorage { itemStateStorageObject =>
               .asInstanceOf[(UniqueItemSpecification, UUID)]
 
           val instance: ItemSuperType =
-            relatedItemFor[ItemSuperType](uniqueItemSpecification) // TODO - use the lifecycle.
+            relatedItemFor[ItemSuperType](uniqueItemSpecification,
+                                          lifecycleUUID)
           kryo.reference(instance)
           instance
         }
@@ -97,7 +100,7 @@ trait ItemStateStorage { itemStateStorageObject =>
         else
           kryo.writeClassAndObject(
             output,
-            uniqueItemSpecificationAndLifecycleUUID(item))
+            uniqueItemSpecification(item) -> lifecycleUUID(item))
       }
     }
 
@@ -161,7 +164,8 @@ trait ItemStateStorage { itemStateStorageObject =>
     KryoPool.withByteArrayOutputStream(40, kryoInstantiator)
 
   def snapshotFor(item: Any): SnapshotBlob =
-    kryoPool.toBytesWithClass(item)
+    kryoPool.toBytesWithClass(item) -> lifecycleUUID(
+      item.asInstanceOf[ItemSuperType])
 
   private def itemFor[Item](
       uniqueItemSpecification: UniqueItemSpecification): Item =
@@ -169,9 +173,10 @@ trait ItemStateStorage { itemStateStorageObject =>
       .itemFor(uniqueItemSpecification)
 
   private def relatedItemFor[Item](
-      uniqueItemSpecification: UniqueItemSpecification): Item =
+      uniqueItemSpecification: UniqueItemSpecification,
+      lifecycleUUID: UUID): Item =
     itemDeserializationThreadContextAccess.value.get
-      .relatedItemFor(uniqueItemSpecification)
+      .relatedItemFor(uniqueItemSpecification, lifecycleUUID)
 
   private def createDeserializationTargetItem[Item]: Item =
     itemDeserializationThreadContextAccess.value.get
@@ -190,46 +195,69 @@ trait ItemStateStorage { itemStateStorageObject =>
     }
 
     def purgeItemFor(uniqueItemSpecification: UniqueItemSpecification): Unit = {
-      storage.remove(uniqueItemSpecification)
+      storageKeyedByUniqueItemSpecification.remove(uniqueItemSpecification)
     }
 
     class ItemDeserializationThreadContext {
       val uniqueItemSpecificationAccess =
-        new DynamicVariable[Option[UniqueItemSpecification]](None)
+        new DynamicVariable[Option[(UniqueItemSpecification, UUID)]](None)
 
       def itemFor[Item](
           uniqueItemSpecification: UniqueItemSpecification): Item = {
-        storage
+        storageKeyedByUniqueItemSpecification
           .getOrElse(
             uniqueItemSpecification, {
               val snapshot =
                 blobStorageTimeslice.snapshotBlobFor(uniqueItemSpecification)
 
-              uniqueItemSpecificationAccess
-                .withValue(Some(uniqueItemSpecification)) {
-                  snapshot.fold[Any] {
-                    fallbackItemFor[Item](uniqueItemSpecification)
-                  }(kryoPool.fromBytes)
-                }
+              snapshot.fold[Any] {
+                fallbackItemFor[Item](uniqueItemSpecification)
+              } {
+                case (payload, lifecycleUUID) =>
+                  uniqueItemSpecificationAccess
+                    .withValue(Some(uniqueItemSpecification -> lifecycleUUID)) {
+                      kryoPool.fromBytes(payload)
+                    }
+              }
             }
           )
           .asInstanceOf[Item]
       }
 
-      def relatedItemFor[Item](
-          uniqueItemSpecification: UniqueItemSpecification): Item = {
-        storage
+      def relatedItemFor[Item](uniqueItemSpecification: UniqueItemSpecification,
+                               lifecycleUUID: UUID): Item = {
+        storageKeyedByLifecycleUUID
           .getOrElse(
-            uniqueItemSpecification, {
-              val snapshot =
-                blobStorageTimeslice.snapshotBlobFor(uniqueItemSpecification)
+            lifecycleUUID, {
+              val candidateRelatedItem: Option[Any] =
+                storageKeyedByUniqueItemSpecification
+                  .get(uniqueItemSpecification)
+                  .filter(item =>
+                    lifecycleUUID == itemStateStorageObject.lifecycleUUID(
+                      item.asInstanceOf[ItemSuperType]))
+                  .orElse {
+                    val snapshot =
+                      blobStorageTimeslice.snapshotBlobFor(
+                        uniqueItemSpecification)
 
-              uniqueItemSpecificationAccess
-                .withValue(Some(uniqueItemSpecification)) {
-                  snapshot.fold[Any] {
-                    fallbackItemFor[Item](uniqueItemSpecification)
-                  }(kryoPool.fromBytes)
-                }
+                    snapshot.collect {
+                      case (payload, lifecycleUUIDFromSnapshot)
+                          if lifecycleUUID == lifecycleUUIDFromSnapshot =>
+                        uniqueItemSpecificationAccess
+                          .withValue(
+                            Some(uniqueItemSpecification -> lifecycleUUID)) {
+                            kryoPool.fromBytes(payload)
+                          }
+                    }
+                  }
+
+              candidateRelatedItem.getOrElse {
+                storageKeyedByLifecycleUUID.getOrElseUpdate(
+                  lifecycleUUID, {
+                    fallbackRelatedItemFor[Item](uniqueItemSpecification)
+                  }
+                )
+              }
             }
           )
           .asInstanceOf[Item]
@@ -237,24 +265,41 @@ trait ItemStateStorage { itemStateStorageObject =>
 
       private[ItemStateStorage] def createDeserializationTargetItem[Item]
         : Item =
-        createAndStoreItem(uniqueItemSpecificationAccess.value.get)
+        uniqueItemSpecificationAccess.value.get match {
+          case (uniqueItemSpecification, lifecycleUUID) =>
+            createAndStoreItem(uniqueItemSpecification, lifecycleUUID)
+        }
     }
 
     protected def createAndStoreItem[Item](
-        uniqueItemSpecification: UniqueItemSpecification): Item = {
-      val item: Item = createItemFor(uniqueItemSpecification)
-      storage.update(uniqueItemSpecification, item)
+        uniqueItemSpecification: UniqueItemSpecification,
+        lifecycleUUID: UUID): Item = {
+      val item: Item = createItemFor(uniqueItemSpecification, lifecycleUUID)
+      storageKeyedByUniqueItemSpecification.update(uniqueItemSpecification,
+                                                   item)
       item
     }
 
     protected def fallbackItemFor[Item](
         uniqueItemSpecification: UniqueItemSpecification): Item
 
-    protected def createItemFor[Item](
+    protected def fallbackRelatedItemFor[Item](
         uniqueItemSpecification: UniqueItemSpecification): Item
 
-    private class Storage extends mutable.HashMap[UniqueItemSpecification, Any]
+    protected def createItemFor[Item](
+        uniqueItemSpecification: UniqueItemSpecification,
+        lifecycleUUID: UUID): Item
 
-    private val storage: Storage = new Storage
+    private class StorageKeyedByUniqueItemSpecification
+        extends mutable.HashMap[UniqueItemSpecification, Any]
+
+    private val storageKeyedByUniqueItemSpecification
+      : StorageKeyedByUniqueItemSpecification =
+      new StorageKeyedByUniqueItemSpecification
+
+    private class StorageKeyedByLifecycleUUID extends mutable.HashMap[UUID, Any]
+
+    private val storageKeyedByLifecycleUUID: StorageKeyedByLifecycleUUID =
+      new StorageKeyedByLifecycleUUID
   }
 }

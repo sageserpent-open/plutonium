@@ -27,7 +27,10 @@ object itemStateStorageUsingProxies extends ItemStateStorage {
   override protected type ItemSuperType = ItemExtensionApi
   override protected val clazzOfItemSuperType = classOf[ItemSuperType]
 
-  override protected def uniqueItemSpecificationAndLifecycleUUID(
-      item: ItemSuperType): (UniqueItemSpecification, UUID) =
-    item.uniqueItemSpecification -> item.lifecycleUUID
+  override protected def uniqueItemSpecification(
+      item: ItemSuperType): UniqueItemSpecification =
+    item.uniqueItemSpecification
+
+  override protected def lifecycleUUID(item: ItemSuperType): UUID =
+    item.lifecycleUUID
 }
