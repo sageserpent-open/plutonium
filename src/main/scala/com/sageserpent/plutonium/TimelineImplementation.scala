@@ -152,8 +152,9 @@ class TimelineImplementation[EventId](
         createAndStoreItem(uniqueItemSpecification, UUID.randomUUID())
 
       override protected def fallbackRelatedItemFor[Item](
-          uniqueItemSpecification: UniqueItemSpecification): Item ={
-        val item = createItemFor[Item](uniqueItemSpecification, UUID.randomUUID())
+          uniqueItemSpecification: UniqueItemSpecification): Item = {
+        val item =
+          createItemFor[Item](uniqueItemSpecification, UUID.randomUUID())
         item.asInstanceOf[AnnihilationHook].recordAnnihilation()
         item
       }
@@ -240,7 +241,8 @@ class TimelineImplementation[EventId](
 
       override protected def fallbackRelatedItemFor[Item](
           uniqueItemSpecification: UniqueItemSpecification): Item = {
-        val item = createItemFor[Item](uniqueItemSpecification, UUID.randomUUID())
+        val item =
+          createItemFor[Item](uniqueItemSpecification, UUID.randomUUID())
         item.asInstanceOf[AnnihilationHook].recordAnnihilation()
         item
       }

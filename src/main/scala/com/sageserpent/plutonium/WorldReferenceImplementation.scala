@@ -21,9 +21,9 @@ object MutableState {
 
   implicit val isSeqLike = new IsSeqLike[SeqView[Revision, Seq[_]]] {
     type A = Revision
-    override val conversion: SeqView[Revision, Seq[_]] => SeqLike[
-      this.A,
-      SeqView[Revision, Seq[_]]] =
+    override val conversion
+      : SeqView[Revision, Seq[_]] => SeqLike[this.A,
+                                             SeqView[Revision, Seq[_]]] =
       identity
   }
 
@@ -109,8 +109,7 @@ class MutableState[EventId] {
   }
 }
 
-class WorldReferenceImplementation[EventId](
-    mutableState: MutableState[EventId])
+class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
     extends WorldInefficientImplementationCodeFactoring[EventId] {
 
   import World._
@@ -139,9 +138,7 @@ class WorldReferenceImplementation[EventId](
         val cutoffWhenForBaseWorld = cutoffWhen min cutoffWhenAfterWhichHistoriesDiverge
         if (cutoffRevision > numberOfRevisionsInCommon) {
           val foo =
-            eventIdsAndTheirDatums(cutoffRevision,
-                                   cutoffWhen,
-                                   eventIdInclusion)
+            eventIdsAndTheirDatums(cutoffRevision, cutoffWhen, eventIdInclusion)
           val eventIdsToBeExcluded = foo.map(_._1).toSet
           foo
             .filterNot(PartialFunction.cond(_) {
