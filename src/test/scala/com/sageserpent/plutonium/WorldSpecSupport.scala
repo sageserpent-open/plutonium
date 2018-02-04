@@ -907,6 +907,13 @@ trait WorldReferenceImplementationResource extends WorldResource {
       with WorldContracts[Int])(_ => {})(List.empty))
 }
 
+trait WorldEfficientInMemoryImplementationResource extends WorldResource {
+  val worldResourceGenerator: Gen[ManagedResource[World[Int]]] =
+    Gen.const(
+      makeManagedResource(new WorldEfficientInMemoryImplementation[Int]
+      with WorldContracts[Int])(_ => {})(List.empty))
+}
+
 trait WorldRedisBasedImplementationResource
     extends WorldResource
     with RedisServerFixture {
@@ -923,10 +930,4 @@ trait WorldRedisBasedImplementationResource
           with WorldContracts[Int])(_ => {})(List.empty)
       } yield worldResource
     }
-}
-trait WorldEfficientInMemoryImplementationResource extends WorldResource {
-  val worldResourceGenerator: Gen[ManagedResource[World[Int]]] =
-    Gen.const(
-      makeManagedResource(new WorldEfficientInMemoryImplementation[Int]
-      with WorldContracts[Int])(_ => {})(List.empty))
 }

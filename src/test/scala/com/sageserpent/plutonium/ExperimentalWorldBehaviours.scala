@@ -660,6 +660,15 @@ class ExperimentalWorldSpecUsingWorldReferenceImplementation
   "An experimental world (using the world reference implementation)" should behave like experimentalWorldBehaviour
 }
 
+class ExperimentalWorldSpecUsingWorldEfficientInMemoryImplementation
+    extends ExperimentalWorldBehaviours
+    with WorldEfficientInMemoryImplementationResource {
+  implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
+    PropertyCheckConfig(maxSize = 20)
+
+  "An experimental world (using the world efficient in-memory implementation)" should behave like experimentalWorldBehaviour
+}
+
 class ExperimentalWorldSpecUsingWorldRedisBasedImplementation
     extends ExperimentalWorldBehaviours
     with WorldRedisBasedImplementationResource {
