@@ -226,8 +226,13 @@ class TimelineImplementation[EventId](
     revisionBuilder.build()
   }
 
-  override def retainUpTo(when: Unbounded[Instant]) =
-    this // TODO - support experimental worlds.
+  override def retainUpTo(when: Unbounded[Instant]) = {
+    new TimelineImplementation[EventId](
+      events = this.events filter (when >= _._2.serializableEvent.when),
+      blobStorage = this.blobStorage.retainUpTo(when),
+      nextRevision = this.nextRevision
+    )
+  }
 
   override def itemCacheAt(when: Unbounded[Instant]) =
     new ItemCache with itemStateStorageUsingProxies.ReconstitutionContext {

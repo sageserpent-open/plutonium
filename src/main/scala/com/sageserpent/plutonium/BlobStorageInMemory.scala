@@ -7,7 +7,8 @@ import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 
 import scala.collection.Searching._
 import scala.collection.generic.IsSeqLike
-import scala.collection.{SeqLike, SeqView, mutable}
+import scala.collection.{SeqLike, SeqView, immutable, mutable}
+import scala.reflect.runtime.universe
 import scala.reflect.runtime.universe._
 
 object BlobStorageInMemory {
@@ -111,49 +112,6 @@ case class BlobStorageInMemory[EventId, SnapshotBlob] private (
     }
   }
 
-  override def timeSlice(when: Unbounded[Instant]): Timeslice[SnapshotBlob] = {
-    trait TimesliceImplementation extends Timeslice[SnapshotBlob] {
-      override def uniqueItemQueriesFor[Item: TypeTag]
-        : Stream[UniqueItemSpecification] =
-        lifecycles.flatMap {
-          case (id, lifecyclesForThatId) =>
-            lifecyclesForThatId collect {
-              case lifecycle
-                  if lifecycle.itemTypeTag.tpe <:< typeTag[Item].tpe && lifecycle
-                    .isValid(when, eventRevisions.apply) =>
-                UniqueItemSpecification(id, lifecycle.itemTypeTag)
-            }
-        }.toStream
-
-      override def uniqueItemQueriesFor[Item: TypeTag](
-          id: Any): Stream[UniqueItemSpecification] =
-        lifecycles
-          .get(id)
-          .toSeq
-          .flatMap { lifecyclesForThatId =>
-            lifecyclesForThatId collect {
-              case lifecycle
-                  if lifecycle.itemTypeTag.tpe <:< typeTag[Item].tpe && lifecycle
-                    .isValid(when, eventRevisions.apply) =>
-                UniqueItemSpecification(id, lifecycle.itemTypeTag)
-            }
-          }
-          .toStream
-
-      override def snapshotBlobFor(
-          uniqueItemSpecification: UniqueItemSpecification)
-        : Option[SnapshotBlob] =
-        for {
-          lifecycles <- lifecycles.get(uniqueItemSpecification.id)
-          lifecycle <- lifecycles.find(
-            uniqueItemSpecification.typeTag == _.itemTypeTag)
-          if lifecycle.isValid(when, eventRevisions.apply)
-        } yield lifecycle.snapshotBlobFor(when, eventRevisions.apply)
-    }
-
-    new TimesliceImplementation with TimesliceContracts[SnapshotBlob]
-  }
-
   override def openRevision(): RevisionBuilder = {
     class RevisionBuilderImplementation extends RevisionBuilder {
       type Event =
@@ -232,4 +190,60 @@ case class BlobStorageInMemory[EventId, SnapshotBlob] private (
 
     new RevisionBuilderImplementation
   }
+
+  override def timeSlice(when: Unbounded[Instant]): Timeslice[SnapshotBlob] = {
+    trait TimesliceImplementation extends Timeslice[SnapshotBlob] {
+      override def uniqueItemQueriesFor[Item: TypeTag]
+        : Stream[UniqueItemSpecification] =
+        lifecycles.flatMap {
+          case (id, lifecyclesForThatId) =>
+            lifecyclesForThatId collect {
+              case lifecycle
+                  if lifecycle.itemTypeTag.tpe <:< typeTag[Item].tpe && lifecycle
+                    .isValid(when, eventRevisions.apply) =>
+                UniqueItemSpecification(id, lifecycle.itemTypeTag)
+            }
+        }.toStream
+
+      override def uniqueItemQueriesFor[Item: TypeTag](
+          id: Any): Stream[UniqueItemSpecification] =
+        lifecycles
+          .get(id)
+          .toSeq
+          .flatMap { lifecyclesForThatId =>
+            lifecyclesForThatId collect {
+              case lifecycle
+                  if lifecycle.itemTypeTag.tpe <:< typeTag[Item].tpe && lifecycle
+                    .isValid(when, eventRevisions.apply) =>
+                UniqueItemSpecification(id, lifecycle.itemTypeTag)
+            }
+          }
+          .toStream
+
+      override def snapshotBlobFor(
+          uniqueItemSpecification: UniqueItemSpecification)
+        : Option[SnapshotBlob] =
+        for {
+          lifecycles <- lifecycles.get(uniqueItemSpecification.id)
+          lifecycle <- lifecycles.find(
+            uniqueItemSpecification.typeTag == _.itemTypeTag)
+          if lifecycle.isValid(when, eventRevisions.apply)
+        } yield lifecycle.snapshotBlobFor(when, eventRevisions.apply)
+    }
+
+    new TimesliceImplementation with TimesliceContracts[SnapshotBlob]
+  }
+
+  override def retainUpTo(
+      when: Unbounded[Instant]): BlobStorageInMemory[EventId, SnapshotBlob] =
+    thisBlobStorage.copy(
+      revision = this.revision,
+      eventRevisions = this.eventRevisions,
+      lifecycles = this.lifecycles mapValues (_.flatMap(lifecycle =>
+        lifecycle.snapshotBlobs.filter(when >= _._1) match {
+          case retainedSnapshotBlobs if retainedSnapshotBlobs.nonEmpty =>
+            Some(Lifecycle(lifecycle.itemTypeTag, retainedSnapshotBlobs))
+          case _ => None
+      })) filter (_._2.nonEmpty)
+    )
 }

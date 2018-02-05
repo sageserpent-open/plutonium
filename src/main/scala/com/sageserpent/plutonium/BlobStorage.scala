@@ -53,4 +53,6 @@ trait BlobStorage[EventId, SnapshotBlob] { blobStorage =>
   def openRevision(): RevisionBuilder
 
   def timeSlice(when: Unbounded[Instant]): Timeslice[SnapshotBlob]
+
+  def retainUpTo(when: Unbounded[Instant]): BlobStorage[EventId, SnapshotBlob]
 }
