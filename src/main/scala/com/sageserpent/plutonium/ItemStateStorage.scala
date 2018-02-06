@@ -194,10 +194,6 @@ trait ItemStateStorage { itemStateStorageObject =>
       }
     }
 
-    def purgeItemFor(uniqueItemSpecification: UniqueItemSpecification): Unit = {
-      storageKeyedByUniqueItemSpecification.remove(uniqueItemSpecification)
-    }
-
     class ItemDeserializationThreadContext {
       val uniqueItemSpecificationAccess =
         new DynamicVariable[Option[(UniqueItemSpecification, UUID)]](None)
