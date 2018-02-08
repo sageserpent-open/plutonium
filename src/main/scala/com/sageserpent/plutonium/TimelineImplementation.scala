@@ -81,42 +81,37 @@ class TimelineImplementation[EventId](
   private def carryOutUpdatePlanInABlazeOfImperativeGlory(
       annulledEvents: List[EventId],
       updatePlan: UpdatePlan): BlobStorage[EventId, SnapshotBlob] = {
-    val revisionBuilder = blobStorage.openRevision()
+    var microRevisedBlobStorage = {
+      val initialMicroRevisionBuilder = blobStorage.openRevision()
 
-    val sourceBlobStorage = {
-      val revisionBuilder = blobStorage.openRevision()
-
-      val allEventsThatNeedToBeAnnulledOrRedefined
-        : Seq[EventId] = annulledEvents ++ updatePlan.values
-        .flatMap(_.flatMap(_._1).distinct)
-
-      for (eventId <- allEventsThatNeedToBeAnnulledOrRedefined) {
-        revisionBuilder.annulEvent(eventId)
+      for (eventId <- annulledEvents) {
+        initialMicroRevisionBuilder.annulEvent(eventId)
       }
-
-      revisionBuilder.build()
-    }
-
-    for (eventId <- annulledEvents) {
-      revisionBuilder.annulEvent(eventId)
+      initialMicroRevisionBuilder.build()
     }
 
     val identifiedItemAccess = new IdentifiedItemAccess
     with itemStateStorageUsingProxies.ReconstitutionContext {
       override def reconstitute(
           uniqueItemSpecification: UniqueItemSpecification) =
-        itemFor[Any](uniqueItemSpecification)
+        if (forgottenItemSpecifications.contains(uniqueItemSpecification)) {
+          forgottenItemSpecifications -= uniqueItemSpecification
+          fallbackItemFor[Any](uniqueItemSpecification)
+        } else itemFor[Any](uniqueItemSpecification)
+
+      private val forgottenItemSpecifications =
+        mutable.Set.empty[UniqueItemSpecification]
 
       override def forget(
           uniqueItemSpecification: UniqueItemSpecification): Unit = {
         val item = reconstitute(uniqueItemSpecification)
           .asInstanceOf[AnnihilationHook]
           .recordAnnihilation()
-        purgeItemFor(uniqueItemSpecification)
+        forgottenItemSpecifications += uniqueItemSpecification
       }
 
       private var blobStorageTimeSlice =
-        sourceBlobStorage.timeSlice(NegativeInfinity())
+        microRevisedBlobStorage.timeSlice(NegativeInfinity())
 
       var allItemsAreLocked = true
 
@@ -124,7 +119,7 @@ class TimelineImplementation[EventId](
         mutable.Map.empty[UniqueItemSpecification, ItemExtensionApi]
 
       def resetSourceTimesliceTo(when: Unbounded[Instant]) = {
-        blobStorageTimeSlice = sourceBlobStorage.timeSlice(when)
+        blobStorageTimeSlice = microRevisedBlobStorage.timeSlice(when)
       }
 
       override def blobStorageTimeslice: BlobStorage.Timeslice[SnapshotBlob] =
@@ -194,51 +189,70 @@ class TimelineImplementation[EventId](
     for {
       (when, itemStateUpdates: Seq[(Set[EventId], ItemStateUpdate)]) <- updatePlan
     } {
+      {
+        val microRevisionWithAnullmentsBuilder =
+          microRevisedBlobStorage.openRevision()
+
+        val eventsAtThisTime = itemStateUpdates.flatMap(_._1)
+
+        for (eventId <- eventsAtThisTime) {
+          microRevisionWithAnullmentsBuilder.annulEvent(eventId)
+        }
+
+        microRevisedBlobStorage = microRevisionWithAnullmentsBuilder.build()
+      }
+
       identifiedItemAccess.resetSourceTimesliceTo(when)
 
       val timesliceOfBlobStorageBeingRevisedOverall = blobStorage
         .timeSlice(when)
 
-      for {
-        (eventIds, itemStateUpdate) <- itemStateUpdates
-      } {
-        val snapshotBlobs =
-          mutable.Map
-            .empty[UniqueItemSpecification, Option[SnapshotBlob]]
+      {
+        val microRevisionBuilder = microRevisedBlobStorage.openRevision()
 
-        itemStateUpdate match {
-          case ItemStateAnnihilation(annihilation) =>
-            annihilation(identifiedItemAccess)
-            snapshotBlobs += (annihilation.uniqueItemSpecification -> None)
-          case ItemStatePatch(patch) =>
-            for (_ <- makeManagedResource {
-                   identifiedItemAccess.allItemsAreLocked = false
-                 } { _ =>
-                   identifiedItemAccess.allItemsAreLocked = true
-                 }(List.empty)) {
-              patch(identifiedItemAccess)
-            }
+        for {
+          (eventIds, itemStateUpdate) <- itemStateUpdates
+        } {
+          val snapshotBlobs =
+            mutable.Map
+              .empty[UniqueItemSpecification, Option[SnapshotBlob]]
 
-            patch.checkInvariants(identifiedItemAccess)
-
-            snapshotBlobs ++= identifiedItemAccess
-              .harvestSnapshots()
-              .filter {
-                case (uniqueItemSpecification, snapshot) =>
-                  !timesliceOfBlobStorageBeingRevisedOverall
-                    .snapshotBlobFor(uniqueItemSpecification)
-                    .contains(snapshot)
+          itemStateUpdate match {
+            case ItemStateAnnihilation(annihilation) =>
+              annihilation(identifiedItemAccess)
+              snapshotBlobs += (annihilation.uniqueItemSpecification -> None)
+            case ItemStatePatch(patch) =>
+              for (_ <- makeManagedResource {
+                     identifiedItemAccess.allItemsAreLocked = false
+                   } { _ =>
+                     identifiedItemAccess.allItemsAreLocked = true
+                   }(List.empty)) {
+                patch(identifiedItemAccess)
               }
-              .mapValues(Some.apply)
+
+              patch.checkInvariants(identifiedItemAccess)
+
+              snapshotBlobs ++= identifiedItemAccess
+                .harvestSnapshots()
+                .filter {
+                  case (uniqueItemSpecification, snapshot) =>
+                    !timesliceOfBlobStorageBeingRevisedOverall
+                      .snapshotBlobFor(uniqueItemSpecification)
+                      .contains(snapshot)
+                }
+                .mapValues(Some.apply)
+          }
+
+          microRevisionBuilder.recordSnapshotBlobsForEvent(eventIds,
+                                                           when,
+                                                           snapshotBlobs.toMap)
         }
 
-        revisionBuilder.recordSnapshotBlobsForEvent(eventIds,
-                                                    when,
-                                                    snapshotBlobs.toMap)
+        microRevisedBlobStorage = microRevisionBuilder.build()
       }
     }
 
-    revisionBuilder.build()
+    microRevisedBlobStorage
   }
 
   override def retainUpTo(when: Unbounded[Instant]) = {
