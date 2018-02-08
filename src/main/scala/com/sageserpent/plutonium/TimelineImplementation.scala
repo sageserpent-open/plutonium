@@ -184,6 +184,9 @@ class TimelineImplementation[EventId](
     } {
       identifiedItemAccess.resetSourceTimesliceTo(when)
 
+      val timesliceOfBlobStorageBeingRevisedOverall = blobStorage
+        .timeSlice(when)
+
       for {
         (eventIds, itemStateUpdate) <- itemStateUpdates
       } {
@@ -208,6 +211,12 @@ class TimelineImplementation[EventId](
 
             snapshotBlobs ++= identifiedItemAccess
               .harvestSnapshots()
+              .filter {
+                case (uniqueItemSpecification, snapshot) =>
+                  !timesliceOfBlobStorageBeingRevisedOverall
+                    .snapshotBlobFor(uniqueItemSpecification)
+                    .contains(snapshot)
+              }
               .mapValues(Some.apply)
         }
 
