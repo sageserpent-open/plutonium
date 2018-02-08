@@ -34,7 +34,7 @@ class WorldEfficientInMemoryImplementation[EventId]
     MutableList.empty
 
   trait ScopeUsingStorage extends com.sageserpent.plutonium.Scope {
-    private def itemCache(): ItemCache = {
+    lazy val itemCache: ItemCache = {
       val timeline = if (nextRevision > World.initialRevision) {
         timelines(nextRevision - 1)._2
       } else emptyTimeline()
@@ -43,10 +43,10 @@ class WorldEfficientInMemoryImplementation[EventId]
     }
 
     override def render[Item](bitemporal: Bitemporal[Item]): Stream[Item] =
-      itemCache().render(bitemporal)
+      itemCache.render(bitemporal)
 
     override def numberOf[Item](bitemporal: Bitemporal[Item]): Revision =
-      itemCache().numberOf(bitemporal)
+      itemCache.numberOf(bitemporal)
   }
 
   override def scopeFor(when: Unbounded[Instant],
