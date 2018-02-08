@@ -449,7 +449,7 @@ trait WorldStateSharingBehaviours
                 }
                 revisionChecks.reduce(_ ++ _) && queryChecks
                   .reduceOption(_ && _)
-                  .getOrElse(Prop.proved)
+                  .getOrElse(Prop.undecided)
             }
         },
         testParameters
