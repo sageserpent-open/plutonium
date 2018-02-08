@@ -148,8 +148,14 @@ class TimelineImplementation[EventId](
       }
 
       override protected def fallbackItemFor[Item](
-          uniqueItemSpecification: UniqueItemSpecification): Item =
-        createAndStoreItem(uniqueItemSpecification, UUID.randomUUID())
+          uniqueItemSpecification: UniqueItemSpecification): Item = {
+        val item =
+          createAndStoreItem[Item](uniqueItemSpecification, UUID.randomUUID())
+        itemsMutatedSinceLastSnapshotHarvest.update(
+          uniqueItemSpecification,
+          item.asInstanceOf[ItemExtensionApi])
+        item
+      }
 
       override protected def fallbackRelatedItemFor[Item](
           uniqueItemSpecification: UniqueItemSpecification): Item = {

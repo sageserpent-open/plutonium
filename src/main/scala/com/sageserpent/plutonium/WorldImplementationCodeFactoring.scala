@@ -297,11 +297,6 @@ object WorldImplementationCodeFactoring {
         superCall.call()
 
         acquiredState.recordMutation(target)
-        for (argumentItem <- arguments collect {
-               case argumentItem: ItemExtensionApi => argumentItem
-             }) {
-          acquiredState.recordMutation(argumentItem)
-        }
       }
     }
 
