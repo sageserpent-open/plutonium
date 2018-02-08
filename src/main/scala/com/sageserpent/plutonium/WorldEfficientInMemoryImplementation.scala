@@ -7,8 +7,11 @@ import com.sageserpent.plutonium.World.Revision
 
 import scala.collection.mutable.MutableList
 
-class WorldEfficientInMemoryImplementation[EventId]
+class WorldEfficientInMemoryImplementation[EventId](
+    timelines: MutableList[(Instant, Timeline[EventId])])
     extends WorldImplementationCodeFactoring[EventId] {
+  def this() = this(MutableList.empty[(Instant, Timeline[EventId])])
+
   override def revisionAsOfs: Array[Instant] = timelines.map(_._1).toArray
 
   override def nextRevision: Revision = timelines.size
@@ -27,11 +30,16 @@ class WorldEfficientInMemoryImplementation[EventId]
     resultCapturedBeforeMutation
   }
 
-  override def forkExperimentalWorld(scope: javaApi.Scope): World[EventId] =
-    ??? // TODO - but much later....
+  override def forkExperimentalWorld(scope: javaApi.Scope): World[EventId] = {
+    val relevantTimelines = timelines.take(scope.nextRevision)
 
-  private val timelines: MutableList[(Instant, Timeline[EventId])] =
-    MutableList.empty
+    val relevantTimelinesEachWithHistorySharedWithThis = relevantTimelines map {
+      case (asOf, timeline) => asOf -> timeline.retainUpTo(scope.when)
+    }
+
+    new WorldEfficientInMemoryImplementation[EventId](
+      relevantTimelinesEachWithHistorySharedWithThis)
+  }
 
   trait ScopeUsingStorage extends com.sageserpent.plutonium.Scope {
     lazy val itemCache: ItemCache = {

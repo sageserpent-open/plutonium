@@ -1,13 +1,10 @@
 package com.sageserpent.plutonium
 
 import java.time.Instant
-import java.util.UUID
 
 import com.sageserpent.americium.Unbounded
-import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 
 import scala.collection.immutable.Map
-import scala.reflect.runtime.universe.{Super => _, This => _}
 
 trait Timeline[EventId] {
   def revise(events: Map[EventId, Option[Event]]): Timeline[EventId]
@@ -21,16 +18,4 @@ trait Timeline[EventId] {
 object emptyTimeline {
   def apply[EventId]() =
     new TimelineImplementation[EventId]
-}
-
-object itemStateStorageUsingProxies extends ItemStateStorage {
-  override protected type ItemSuperType = ItemExtensionApi
-  override protected val clazzOfItemSuperType = classOf[ItemSuperType]
-
-  override protected def uniqueItemSpecification(
-      item: ItemSuperType): UniqueItemSpecification =
-    item.uniqueItemSpecification
-
-  override protected def lifecycleUUID(item: ItemSuperType): UUID =
-    item.lifecycleUUID
 }

@@ -20,6 +20,18 @@ import scalaz.std.list._
 import scalaz.syntax.monadPlus._
 import scalaz.{-\/, \/-}
 
+object itemStateStorageUsingProxies extends ItemStateStorage {
+  override protected type ItemSuperType = ItemExtensionApi
+  override protected val clazzOfItemSuperType = classOf[ItemSuperType]
+
+  override protected def uniqueItemSpecification(
+      item: ItemSuperType): UniqueItemSpecification =
+    item.uniqueItemSpecification
+
+  override protected def lifecycleUUID(item: ItemSuperType): UUID =
+    item.lifecycleUUID
+}
+
 class TimelineImplementation[EventId](
     events: Map[EventId, EventData] = Map.empty[EventId, EventData],
     blobStorage: BlobStorage[EventId, ItemStateStorage.SnapshotBlob] =
@@ -229,8 +241,13 @@ class TimelineImplementation[EventId](
     revisionBuilder.build()
   }
 
-  override def retainUpTo(when: Unbounded[Instant]) =
-    this // TODO - support experimental worlds.
+  override def retainUpTo(when: Unbounded[Instant]) = {
+    new TimelineImplementation[EventId](
+      events = this.events filter (when >= _._2.serializableEvent.when),
+      blobStorage = this.blobStorage.retainUpTo(when),
+      nextRevision = this.nextRevision
+    )
+  }
 
   override def itemCacheAt(when: Unbounded[Instant]) =
     new ItemCache with itemStateStorageUsingProxies.ReconstitutionContext {
