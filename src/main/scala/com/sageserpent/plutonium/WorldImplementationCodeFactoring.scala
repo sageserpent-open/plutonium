@@ -9,7 +9,7 @@ import com.sageserpent.americium.{Finite, NegativeInfinity, Unbounded}
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.PatchRecorder.UpdateConsumer
 import com.sageserpent.plutonium.World.Revision
-import net.bytebuddy.ByteBuddy
+import net.bytebuddy.{ByteBuddy, NamingStrategy}
 import net.bytebuddy.description.`type`.TypeDescription
 import net.bytebuddy.description.method.MethodDescription
 import net.bytebuddy.dynamic.DynamicType.Builder
@@ -139,8 +139,14 @@ object WorldImplementationCodeFactoring {
 
     val acquiredStateClazz: Class[_ <: AcquiredState]
 
+    val proxySuffix: String
+
     private def createProxyClass(clazz: Class[_]): Class[_] = {
       val builder = byteBuddy
+        .`with`(new NamingStrategy.AbstractBase {
+          override def name(superClass: TypeDescription): String =
+            s"${superClass.getSimpleName}_$proxySuffix"
+        })
         .subclass(clazz, ConstructorStrategy.Default.DEFAULT_CONSTRUCTOR)
         .implement(additionalInterfaces.toSeq)
         .ignoreAlso(ElementMatchers.named[MethodDescription]("_isGhost"))
@@ -351,6 +357,8 @@ object WorldImplementationCodeFactoring {
       override val isForRecordingOnly = false
 
       override val acquiredStateClazz = classOf[AcquiredState]
+
+      override val proxySuffix: String = "stateProxy"
 
       override val additionalInterfaces: Array[Class[_]] =
         QueryCallbackStuff.additionalInterfaces

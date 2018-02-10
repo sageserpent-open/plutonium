@@ -128,6 +128,8 @@ object capturePatches {
 
       override val acquiredStateClazz = classOf[AcquiredState]
 
+      override val proxySuffix: String = "_recordingProxy"
+
       override val additionalInterfaces: Array[Class[_]] =
         RecordingCallbackStuff.additionalInterfaces
       override val cachedProxyClasses: mutable.Map[Type, Class[_]] =
