@@ -2,33 +2,29 @@ package com.sageserpent.plutonium
 
 import java.lang.reflect.{Method, Modifier}
 import java.time.Instant
-import java.util.{Optional, UUID}
 import java.util.concurrent.Callable
+import java.util.{Optional, UUID}
 
 import com.sageserpent.americium.{Finite, NegativeInfinity, Unbounded}
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.PatchRecorder.UpdateConsumer
 import com.sageserpent.plutonium.World.Revision
-import net.bytebuddy.{ByteBuddy, NamingStrategy}
 import net.bytebuddy.description.`type`.TypeDescription
 import net.bytebuddy.description.method.MethodDescription
 import net.bytebuddy.dynamic.DynamicType.Builder
 import net.bytebuddy.dynamic.loading.ClassLoadingStrategy
 import net.bytebuddy.dynamic.scaffold.subclass.ConstructorStrategy
 import net.bytebuddy.implementation.bind.annotation._
-import net.bytebuddy.implementation.{
-  FieldAccessor,
-  FixedValue,
-  MethodDelegation
-}
+import net.bytebuddy.implementation.{FieldAccessor, MethodDelegation}
 import net.bytebuddy.matcher.{ElementMatcher, ElementMatchers}
+import net.bytebuddy.{ByteBuddy, NamingStrategy}
 import resource.{ManagedResource, makeManagedResource}
 
 import scala.collection.JavaConversions._
 import scala.collection.Searching._
 import scala.collection.mutable
+import scala.reflect.runtime.universe
 import scala.reflect.runtime.universe.{Super => _, This => _, _}
-import scala.reflect.runtime.{universe, _}
 
 object WorldImplementationCodeFactoring {
   type EventOrderingTiebreakerIndex = Int
@@ -67,7 +63,7 @@ object WorldImplementationCodeFactoring {
     def yieldOnlyItemsOfSupertypeOf[Item: TypeTag](items: Traversable[Any]) = {
       val reflectedType = typeTag[Item].tpe
       val clazzOfItem =
-        clazzFromType(reflectedType)
+        classFromType(reflectedType)
 
       items filter { item =>
         val itemClazz = item.getClass
@@ -78,7 +74,7 @@ object WorldImplementationCodeFactoring {
     def yieldOnlyItemsOfType[Item: TypeTag](items: Traversable[Any]) = {
       val reflectedType = typeTag[Item].tpe
       val clazzOfItem =
-        clazzFromType[Item](reflectedType)
+        classFromType[Item](reflectedType)
 
       items.toStream filter (clazzOfItem.isInstance(_)) map (clazzOfItem.cast(
         _))
@@ -108,10 +104,6 @@ object WorldImplementationCodeFactoring {
 
     val lifecycleUUIDMethod = new MethodDescription.ForLoadedMethod(
       classOf[ItemExtensionApi].getMethod("lifecycleUUID"))
-  }
-
-  private def clazzFromType[Item](reflectedType: universe.Type): Class[Item] = {
-    currentMirror.runtimeClass(reflectedType).asInstanceOf[Class[Item]]
   }
 
   val byteBuddy = new ByteBuddy()
@@ -201,16 +193,16 @@ object WorldImplementationCodeFactoring {
       proxy
     }
 
-    def proxyClassFor[Item: TypeTag](): Class[_] = {
-      val typeOfItem = typeOf[Item]
-      cachedProxyClasses.get(typeOfItem) match {
-        case Some(cachedProxyClazz) => cachedProxyClazz
-        case None =>
-          val proxyClazz = createProxyClass(clazzFromType(typeOfItem))
-          cachedProxyClasses += (typeOfItem -> proxyClazz)
-          proxyClazz
+    def proxyClassFor[Item: TypeTag]()
+      : Class[_] = // NOTE: using 'synchronized' is rather hokey, but there are subtle issues with
+      // using the likes of 'TrieMap.getOrElseUpdate' due to the initialiser block being executed
+      // more than once, even though the map is indeed thread safe. Let's keep it simple for now...
+      synchronized {
+        val typeOfItem = typeOf[Item]
+        cachedProxyClasses.getOrElseUpdate(typeOfItem, {
+          createProxyClass(classFromType(typeOfItem))
+        })
       }
-    }
 
     protected val additionalInterfaces: Array[Class[_]]
     protected val cachedProxyClasses: scala.collection.mutable.Map[Type,
