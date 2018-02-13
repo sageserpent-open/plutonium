@@ -106,6 +106,10 @@ class ItemStateStorageSpec
   import MarkSyntax._
   import ItemStateStorage.SnapshotBlob
 
+  val oddGraphNodeTypeTag = typeTag[OddGraphNode]
+
+  val evenGraphNodeTypeTag = typeTag[EvenGraphNode]
+
   def markMapletGenerator(maximumMark: Int) =
     for {
       mark <- Gen.chooseNum(0, maximumMark)
@@ -144,9 +148,9 @@ class ItemStateStorageSpec
     override protected def uniqueItemSpecification(
         item: ItemSuperType): UniqueItemSpecification = item.id match {
       case oddId: String =>
-        UniqueItemSpecification(oddId, typeTag[OddGraphNode])
+        UniqueItemSpecification(oddId, oddGraphNodeTypeTag)
       case eventId: Int =>
-        UniqueItemSpecification(eventId, typeTag[EvenGraphNode])
+        UniqueItemSpecification(eventId, evenGraphNodeTypeTag)
     }
 
     override protected def lifecycleUUID(item: ItemSuperType): UUID =
@@ -186,9 +190,9 @@ class ItemStateStorageSpec
         nodesThatAreToBeRoundtripped map (node =>
           (node.id match {
             case oddId: String =>
-              UniqueItemSpecification(oddId, typeTag[OddGraphNode])
+              UniqueItemSpecification(oddId, oddGraphNodeTypeTag)
             case eventId: Int =>
-              UniqueItemSpecification(eventId, typeTag[EvenGraphNode])
+              UniqueItemSpecification(eventId, evenGraphNodeTypeTag)
           }) -> itemStateStorage
             .snapshotFor(node)) toMap
 
@@ -227,10 +231,10 @@ class ItemStateStorageSpec
             lifecycleUUID: UUID): Item = {
           val item = uniqueItemSpecification match {
             case UniqueItemSpecification(id: OddGraphNode#Id, itemTypeTag)
-              if itemTypeTag == typeTag[OddGraphNode] =>
+                if itemTypeTag == oddGraphNodeTypeTag =>
               new OddGraphNode(id)
             case UniqueItemSpecification(id: EvenGraphNode#Id, itemTypeTag)
-              if itemTypeTag == typeTag[EvenGraphNode] =>
+                if itemTypeTag == evenGraphNodeTypeTag =>
               new EvenGraphNode(id)
           }
 
@@ -244,10 +248,10 @@ class ItemStateStorageSpec
         .map(_.id match {
           case oddId: String =>
             reconstitutionContext.itemFor[OddGraphNode](
-              UniqueItemSpecification(oddId, typeTag[OddGraphNode]))
+              UniqueItemSpecification(oddId, oddGraphNodeTypeTag))
           case evenId: Int =>
             reconstitutionContext.itemFor[EvenGraphNode](
-              UniqueItemSpecification(evenId, typeTag[EvenGraphNode]))
+              UniqueItemSpecification(evenId, evenGraphNodeTypeTag))
         })
         .toList
 
