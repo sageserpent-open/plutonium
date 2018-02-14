@@ -5,7 +5,12 @@ import java.time.Instant
 import com.sageserpent.americium.Unbounded._
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.seqEnrichment._
-import com.sageserpent.americium.{Finite, NegativeInfinity, PositiveInfinity, Unbounded}
+import com.sageserpent.americium.{
+  Finite,
+  NegativeInfinity,
+  PositiveInfinity,
+  Unbounded
+}
 import com.sageserpent.plutonium.BlobStorage.Timeslice
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import org.scalacheck.{Gen, ShrinkLowPriority => NoShrinking}
@@ -48,9 +53,9 @@ class BlobStorageSpec
     : Gen[UniqueItemSpecification] = {
     val aSmallChoiceOfIdsToIncreaseTheChancesOfCollisions = Gen.chooseNum(1, 10)
     Gen.oneOf(
-      (aSmallChoiceOfIdsToIncreaseTheChancesOfCollisions) map (id =>
+      aSmallChoiceOfIdsToIncreaseTheChancesOfCollisions map (id =>
         UniqueItemSpecification(id, typeTag[OneKindOfThing])),
-      (aSmallChoiceOfIdsToIncreaseTheChancesOfCollisions) map (id =>
+      aSmallChoiceOfIdsToIncreaseTheChancesOfCollisions map (id =>
         UniqueItemSpecification(id, typeTag[AnotherKindOfThing]))
     )
   }
@@ -373,7 +378,7 @@ class BlobStorageSpec
             checkExpectationsForNonExistence(timeSlice)(uniqueItemSpecification)
           }
 
-          for ((snapshotBlob: Option[SnapshotBlob], snapshotTime, queryTime) <- snapshots zip queryTimes map {
+          for ((snapshotBlob: Option[SnapshotBlob], _, queryTime) <- snapshots zip queryTimes map {
                  case ((snapshotTime, snapshotBlob), queryTime) =>
                    (snapshotBlob, snapshotTime, queryTime)
                }) {
@@ -484,7 +489,7 @@ class BlobStorageSpec
             checkExpectationsForNonExistence(timeSlice)(uniqueItemSpecification)
           }
 
-          for ((snapshotBlob: Option[SnapshotBlob], snapshotTime, queryTime) <- snapshots zip queryTimes map {
+          for ((snapshotBlob: Option[SnapshotBlob], _, queryTime) <- snapshots zip queryTimes map {
                  case ((snapshotTime, snapshotBlob), queryTime) =>
                    (snapshotBlob, snapshotTime, queryTime)
                }) {
