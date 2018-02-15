@@ -2,8 +2,8 @@ package com.sageserpent.plutonium
 
 import java.lang.reflect.{Method, Modifier}
 import java.time.Instant
-import java.util.Optional
 import java.util.concurrent.Callable
+import java.util.{Optional, UUID}
 
 import com.sageserpent.americium.{
   Finite,
@@ -11,31 +11,26 @@ import com.sageserpent.americium.{
   PositiveInfinity,
   Unbounded
 }
+import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
+import com.sageserpent.plutonium.PatchRecorder.UpdateConsumer
 import com.sageserpent.plutonium.World.Revision
-import net.bytebuddy.ByteBuddy
 import net.bytebuddy.description.`type`.TypeDescription
 import net.bytebuddy.description.method.MethodDescription
 import net.bytebuddy.dynamic.DynamicType.Builder
 import net.bytebuddy.dynamic.loading.ClassLoadingStrategy
 import net.bytebuddy.dynamic.scaffold.subclass.ConstructorStrategy
 import net.bytebuddy.implementation.bind.annotation._
-import net.bytebuddy.implementation.{
-  FieldAccessor,
-  FixedValue,
-  MethodDelegation
-}
+import net.bytebuddy.implementation.{FieldAccessor, MethodDelegation}
 import net.bytebuddy.matcher.{ElementMatcher, ElementMatchers}
+import net.bytebuddy.{ByteBuddy, NamingStrategy}
 import resource.{ManagedResource, makeManagedResource}
 
 import scala.collection.JavaConversions._
 import scala.collection.Searching._
 import scala.collection.mutable
-import scala.reflect.runtime._
+import scala.reflect.runtime.universe
 import scala.reflect.runtime.universe.{Super => _, This => _, _}
 
-/**
-  * Created by Gerard on 19/07/2015.
-  */
 object WorldImplementationCodeFactoring {
   type EventOrderingTiebreakerIndex = Int
 
@@ -61,16 +56,19 @@ object WorldImplementationCodeFactoring {
       (serializableEvent, introducedInRevision, eventOrderingTiebreakerIndex)
   }
 
-  def eventTimelineFrom(eventDatums: Seq[AbstractEventData]): Seq[Event] =
+  def eventTimelineFrom[EventId](
+      eventDatums: Seq[(EventId, AbstractEventData)]): Seq[(Event, EventId)] =
     (eventDatums collect {
-      case eventData: EventData => eventData
-    }).sorted.map(_.serializableEvent)
+      case (eventId, eventData: EventData) => eventId -> eventData
+    }).sortBy(_._2).map {
+      case (eventId, eventData) => eventData.serializableEvent -> eventId
+    }
 
   object IdentifiedItemsScope {
     def yieldOnlyItemsOfSupertypeOf[Item: TypeTag](items: Traversable[Any]) = {
       val reflectedType = typeTag[Item].tpe
       val clazzOfItem =
-        currentMirror.runtimeClass(reflectedType).asInstanceOf[Class[Item]]
+        classFromType(reflectedType)
 
       items filter { item =>
         val itemClazz = item.getClass
@@ -81,7 +79,7 @@ object WorldImplementationCodeFactoring {
     def yieldOnlyItemsOfType[Item: TypeTag](items: Traversable[Any]) = {
       val reflectedType = typeTag[Item].tpe
       val clazzOfItem =
-        currentMirror.runtimeClass(reflectedType).asInstanceOf[Class[Item]]
+        classFromType[Item](reflectedType)
 
       items.toStream filter (clazzOfItem.isInstance(_)) map (clazzOfItem.cast(
         _))
@@ -95,14 +93,22 @@ object WorldImplementationCodeFactoring {
     val nonMutableMembersThatCanAlwaysBeReadFrom = (classOf[ItemExtensionApi].getMethods ++ classOf[
       AnyRef].getMethods) map (new MethodDescription.ForLoadedMethod(_))
 
-    val itemReconstitutionDataProperty = new MethodDescription.ForLoadedMethod(
-      classOf[Recorder].getMethod("itemReconstitutionData"))
+    val uniqueItemSpecificationPropertyForRecording =
+      new MethodDescription.ForLoadedMethod(
+        classOf[Recorder].getMethod("uniqueItemSpecification"))
+
+    val uniqueItemSpecificationPropertyForItemExtensionApi =
+      new MethodDescription.ForLoadedMethod(
+        classOf[ItemExtensionApi].getMethod("uniqueItemSpecification"))
 
     val isGhostProperty = new MethodDescription.ForLoadedMethod(
       classOf[ItemExtensionApi].getMethod("isGhost"))
 
-    val isRecordAnnihilationMethod = new MethodDescription.ForLoadedMethod(
+    val recordAnnihilationMethod = new MethodDescription.ForLoadedMethod(
       classOf[AnnihilationHook].getMethod("recordAnnihilation"))
+
+    val lifecycleUUIDMethod = new MethodDescription.ForLoadedMethod(
+      classOf[ItemExtensionApi].getMethod("lifecycleUUID"))
   }
 
   val byteBuddy = new ByteBuddy()
@@ -115,14 +121,14 @@ object WorldImplementationCodeFactoring {
   }
 
   trait AcquiredStateCapturingId {
-    val _id: Any
+    val uniqueItemSpecification: UniqueItemSpecification
   }
 
   object id {
     @RuntimeType
     def apply(
         @FieldValue("acquiredState") acquiredState: AcquiredStateCapturingId) =
-      acquiredState._id
+      acquiredState.uniqueItemSpecification.id
   }
 
   trait ProxyFactory[AcquiredState <: AcquiredStateCapturingId] {
@@ -130,12 +136,16 @@ object WorldImplementationCodeFactoring {
 
     val acquiredStateClazz: Class[_ <: AcquiredState]
 
+    val proxySuffix: String
+
     private def createProxyClass(clazz: Class[_]): Class[_] = {
       val builder = byteBuddy
+        .`with`(new NamingStrategy.AbstractBase {
+          override def name(superClass: TypeDescription): String =
+            s"${superClass.getSimpleName}_$proxySuffix"
+        })
         .subclass(clazz, ConstructorStrategy.Default.DEFAULT_CONSTRUCTOR)
         .implement(additionalInterfaces.toSeq)
-        .method(matchGetClass)
-        .intercept(FixedValue.value(clazz))
         .ignoreAlso(ElementMatchers.named[MethodDescription]("_isGhost"))
         .defineField("acquiredState", acquiredStateClazz)
 
@@ -159,18 +169,6 @@ object WorldImplementationCodeFactoring {
 
     protected def configureInterceptions(builder: Builder[_]): Builder[_]
 
-    private def constructorFor(identifiableType: Type) = {
-      val clazz =
-        currentMirror.runtimeClass(identifiableType.typeSymbol.asClass)
-
-      val proxyClazz = createProxyClass(clazz)
-
-      val proxyClassSymbol = currentMirror.classSymbol(proxyClazz)
-      val classMirror      = currentMirror.reflectClass(proxyClassSymbol.asClass)
-      val constructor      = proxyClassSymbol.toType.decls.find(_.isConstructor).get
-      classMirror.reflectConstructor(constructor.asMethod) -> clazz
-    }
-
     def constructFrom[Item: TypeTag](
         stateToBeAcquiredByProxy: AcquiredState) = {
       // NOTE: this returns items that are proxies to 'Item' rather than direct instances of 'Item' itself. Depending on the
@@ -178,14 +176,9 @@ object WorldImplementationCodeFactoring {
       // the items may forbid certain operations on them - e.g. for rendering from a client's scope, the items should be
       // read-only.
 
-      val typeOfItem = typeOf[Item]
-      val (constructor, clazz) = cachedProxyConstructors.get(typeOfItem) match {
-        case Some(cachedProxyConstructorData) => cachedProxyConstructorData
-        case None =>
-          val (constructor, clazz) = constructorFor(typeOfItem)
-          cachedProxyConstructors += (typeOfItem -> (constructor, clazz))
-          constructor                            -> clazz
-      }
+      val proxyClazz = proxyClassFor()
+
+      val clazz = proxyClazz.getSuperclass
 
       if (!isForRecordingOnly && clazz.getMethods.exists(
             method =>
@@ -193,9 +186,9 @@ object WorldImplementationCodeFactoring {
               "id" != method.getName && Modifier.isAbstract(
                 method.getModifiers))) {
         throw new UnsupportedOperationException(
-          s"Attempt to create an instance of an abstract class '$clazz' for id: '${stateToBeAcquiredByProxy._id}'.")
+          s"Attempt to create an instance of an abstract class '$clazz' for id: '${stateToBeAcquiredByProxy.uniqueItemSpecification.id}'.")
       }
-      val proxy = constructor().asInstanceOf[Item]
+      val proxy = proxyClazz.newInstance().asInstanceOf[Item]
 
       proxy
         .asInstanceOf[StateAcquisition[AcquiredState]]
@@ -204,31 +197,63 @@ object WorldImplementationCodeFactoring {
       proxy
     }
 
+    def proxyClassFor[Item: TypeTag]()
+      : Class[_] = // NOTE: using 'synchronized' is rather hokey, but there are subtle issues with
+      // using the likes of 'TrieMap.getOrElseUpdate' due to the initialiser block being executed
+      // more than once, even though the map is indeed thread safe. Let's keep it simple for now...
+      synchronized {
+        val typeOfItem = typeOf[Item]
+        cachedProxyClasses.getOrElseUpdate(typeOfItem, {
+          createProxyClass(classFromType(typeOfItem))
+        })
+      }
+
     protected val additionalInterfaces: Array[Class[_]]
-    protected val cachedProxyConstructors: scala.collection.mutable.Map[
-      (Type),
-      (universe.MethodMirror, Class[_])]
+    protected val cachedProxyClasses: scala.collection.mutable.Map[Type,
+                                                                   Class[_]]
   }
 
   object QueryCallbackStuff {
     val additionalInterfaces: Array[Class[_]] =
       Array(classOf[ItemExtensionApi], classOf[AnnihilationHook])
-    val cachedProxyConstructors =
-      mutable.Map.empty[universe.Type, (universe.MethodMirror, Class[_])]
+    val cachedProxyClasses =
+      mutable.Map
+        .empty[universe.Type, Class[_]]
 
-    trait AcquiredState extends AcquiredStateCapturingId with AnnihilationHook {
-      def itemReconstitutionData: Recorder#ItemReconstitutionData[_]
+    trait AcquiredState extends AcquiredStateCapturingId {
+      var _isGhost = false
 
-      def itemsAreLocked: Boolean
+      def recordAnnihilation(): Unit = {
+        require(!_isGhost)
+        _isGhost = true
+      }
+
+      def isGhost: Boolean = _isGhost
+
+      def itemIsLocked: Boolean
+
+      def recordMutation(item: ItemExtensionApi): Unit
+
+      var unlockFullReadAccess: Boolean = false
     }
+
+    val matchSetLifecycleUUID: ElementMatcher[MethodDescription] =
+      ElementMatchers.named("setLifecycleUUID")
+    // TODO - why does Java reflection crash when it tries to obtain this method inside a call to 'firstMethodIsOverrideCompatibleWithSecond'?
+
+    val matchLifecycleUUID: ElementMatcher[MethodDescription] =
+      firstMethodIsOverrideCompatibleWithSecond(
+        _,
+        IdentifiedItemsScope.lifecycleUUIDMethod)
 
     val matchRecordAnnihilation: ElementMatcher[MethodDescription] =
       firstMethodIsOverrideCompatibleWithSecond(
         _,
-        IdentifiedItemsScope.isRecordAnnihilationMethod)
+        IdentifiedItemsScope.recordAnnihilationMethod)
 
     val matchMutation: ElementMatcher[MethodDescription] = methodDescription =>
-      methodDescription.getReturnType.represents(classOf[Unit]) && !WorldImplementationCodeFactoring
+      methodDescription.getReturnType
+        .represents(classOf[Unit]) && !WorldImplementationCodeFactoring
         .isInvariantCheck(methodDescription)
 
     val matchIsGhost: ElementMatcher[MethodDescription] =
@@ -236,45 +261,45 @@ object WorldImplementationCodeFactoring {
         _,
         IdentifiedItemsScope.isGhostProperty)
 
+    val matchUncheckedReadAccess: ElementMatcher[MethodDescription] =
+      IdentifiedItemsScope.alwaysAllowsReadAccessTo(_)
+
     val matchCheckedReadAccess: ElementMatcher[MethodDescription] =
       !IdentifiedItemsScope.alwaysAllowsReadAccessTo(_)
 
     val matchInvariantCheck: ElementMatcher[MethodDescription] =
       WorldImplementationCodeFactoring.isInvariantCheck(_)
 
-    object recordAnnihilation {
-      @RuntimeType
-      def apply(@FieldValue("acquiredState") acquiredState: AcquiredState) = {
-        acquiredState.recordAnnihilation()
-        null
-      }
-    }
+    val matchUniqueItemSpecification: ElementMatcher[MethodDescription] =
+      methodDescription =>
+        firstMethodIsOverrideCompatibleWithSecond(
+          methodDescription,
+          IdentifiedItemsScope.uniqueItemSpecificationPropertyForRecording) || firstMethodIsOverrideCompatibleWithSecond(
+          methodDescription,
+          IdentifiedItemsScope.uniqueItemSpecificationPropertyForItemExtensionApi)
 
     object mutation {
       @RuntimeType
       def apply(@Origin method: Method,
-                @This target: AnyRef,
+                @This target: ItemExtensionApi,
+                @AllArguments arguments: Array[Any],
                 @SuperCall superCall: Callable[_],
                 @FieldValue("acquiredState") acquiredState: AcquiredState) = {
-        if (acquiredState.itemsAreLocked) {
+        if (acquiredState.itemIsLocked) {
           throw new UnsupportedOperationException(
             s"Attempt to write via: '$method' to an item: '$target' rendered from a bitemporal query.")
         }
 
         if (acquiredState.isGhost) {
-          val itemReconstitutionData = acquiredState.itemReconstitutionData
+          val uniqueItemSpecification = acquiredState.uniqueItemSpecification
           throw new UnsupportedOperationException(
-            s"Attempt to write via: '$method' to a ghost item of id: '${itemReconstitutionData._1}' and type '${itemReconstitutionData._2}'.")
+            s"Attempt to write via: '$method' to a ghost item of id: '${uniqueItemSpecification.id}' and type '${uniqueItemSpecification.typeTag}'.")
         }
 
         superCall.call()
-      }
-    }
 
-    object isGhost {
-      @RuntimeType
-      def apply(@FieldValue("acquiredState") acquiredState: AcquiredState) =
-        acquiredState.isGhost
+        acquiredState.recordMutation(target)
+      }
     }
 
     object checkedReadAccess {
@@ -282,73 +307,99 @@ object WorldImplementationCodeFactoring {
       def apply(@Origin method: Method,
                 @SuperCall superCall: Callable[_],
                 @FieldValue("acquiredState") acquiredState: AcquiredState) = {
-        if (acquiredState.isGhost) {
-          val itemReconstitutionData = acquiredState.itemReconstitutionData
+        if (acquiredState.isGhost && !acquiredState.unlockFullReadAccess) {
+          val uniqueItemSpecification = acquiredState.uniqueItemSpecification
           throw new UnsupportedOperationException(
-            s"Attempt to read via: '$method' from a ghost item of id: '${itemReconstitutionData._1}' and type '${itemReconstitutionData._2}'.")
+            s"Attempt to read via: '$method' from a ghost item of id: '${uniqueItemSpecification.id}' and type '${uniqueItemSpecification.typeTag}'.")
         }
 
         superCall.call()
       }
     }
 
+    object uncheckedReadAccess {
+      @RuntimeType
+      def apply(@Origin method: Method,
+                @SuperCall superCall: Callable[_],
+                @FieldValue("acquiredState") acquiredState: AcquiredState) = {
+        if (!acquiredState.unlockFullReadAccess) (for {
+          _ <- makeManagedResource {
+            acquiredState.unlockFullReadAccess = true
+          } { _ =>
+            acquiredState.unlockFullReadAccess = false
+          }(List.empty)
+        } yield superCall.call()) acquireAndGet identity
+        else superCall.call()
+      }
+    }
+
     object checkInvariant {
-      def apply(@This thiz: ItemExtensionApi): Unit = {
-        if (thiz.isGhost) {
+      def apply(
+          @FieldValue("acquiredState") acquiredState: AcquiredState): Unit = {
+        if (acquiredState.isGhost) {
           throw new RuntimeException(
-            s"Item: '$thiz.id' has been annihilated but is being referred to in an invariant.")
+            s"Item: '$acquiredState.id' has been annihilated but is being referred to in an invariant.")
         }
       }
 
-      def apply(@This thiz: ItemExtensionApi,
+      def apply(@FieldValue("acquiredState") acquiredState: AcquiredState,
                 @SuperCall superCall: Callable[Unit]): Unit = {
-        apply(thiz)
+        apply(acquiredState)
         superCall.call()
       }
     }
 
     object proxyFactory extends ProxyFactory[AcquiredState] {
-      val isForRecordingOnly = false
+      override val isForRecordingOnly = false
 
       override val acquiredStateClazz = classOf[AcquiredState]
 
+      override val proxySuffix: String = "stateProxy"
+
       override val additionalInterfaces: Array[Class[_]] =
         QueryCallbackStuff.additionalInterfaces
-      override val cachedProxyConstructors
-        : mutable.Map[universe.Type, (universe.MethodMirror, Class[_])] =
-        QueryCallbackStuff.cachedProxyConstructors
+      override val cachedProxyClasses: mutable.Map[universe.Type, Class[_]] =
+        QueryCallbackStuff.cachedProxyClasses
 
       override protected def configureInterceptions(
           builder: Builder[_]): Builder[_] =
         builder
+          .defineField("lifecycleUUID", classOf[UUID])
+          .method(matchUncheckedReadAccess)
+          .intercept(MethodDelegation.to(uncheckedReadAccess))
           .method(matchCheckedReadAccess)
           .intercept(MethodDelegation.to(checkedReadAccess))
           .method(matchIsGhost)
-          .intercept(MethodDelegation.to(isGhost))
+          .intercept(MethodDelegation.toField("acquiredState"))
           .method(matchMutation)
           .intercept(MethodDelegation.to(mutation))
           .method(matchRecordAnnihilation)
-          .intercept(MethodDelegation.to(recordAnnihilation))
+          .intercept(MethodDelegation.toField("acquiredState"))
+          .method(matchLifecycleUUID)
+          .intercept(FieldAccessor.ofField("lifecycleUUID"))
+          .method(matchSetLifecycleUUID)
+          .intercept(FieldAccessor.ofField("lifecycleUUID"))
           .method(matchInvariantCheck)
           .intercept(MethodDelegation.to(checkInvariant))
+          .method(matchUniqueItemSpecification)
+          .intercept(MethodDelegation.toField("acquiredState"))
     }
   }
 
   def firstMethodIsOverrideCompatibleWithSecond(
       firstMethod: MethodDescription,
-      secondMethod: MethodDescription): Boolean = {
+      secondMethod: MethodDescription): Boolean =
     secondMethod.getName == firstMethod.getName &&
-    secondMethod.getReceiverType.asErasure
-      .isAssignableFrom(firstMethod.getReceiverType.asErasure) &&
-    (secondMethod.getReturnType.asErasure
-      .isAssignableFrom(firstMethod.getReturnType.asErasure) ||
-    secondMethod.getReturnType.asErasure
-      .isAssignableFrom(firstMethod.getReturnType.asErasure.asBoxed)) &&
-    secondMethod.getParameters.size == firstMethod.getParameters.size &&
-    secondMethod.getParameters.toSeq
-      .map(_.getType) == firstMethod.getParameters.toSeq
-      .map(_.getType) // What about contravariance? Hmmm...
-  }
+      secondMethod.getReceiverType.asErasure
+        .isAssignableFrom(firstMethod.getReceiverType.asErasure) &&
+      (secondMethod.getReturnType.asErasure
+        .isAssignableFrom(firstMethod.getReturnType.asErasure) ||
+        secondMethod.getReturnType.asErasure
+          .isAssignableFrom(firstMethod.getReturnType.asErasure.asBoxed)) &&
+      secondMethod.getParameters.size == firstMethod.getParameters.size &&
+      secondMethod.getParameters.toSeq
+        .map(_.getType) == firstMethod.getParameters.toSeq
+        .map(_.getType) // What about contravariance? Hmmm...
 
   def firstMethodIsOverrideCompatibleWithSecond(
       firstMethod: Method,
@@ -364,58 +415,93 @@ object WorldImplementationCodeFactoring {
   def isInvariantCheck(method: MethodDescription): Boolean =
     "checkInvariant" == method.getName // TODO: this is hokey.
 
-  class IdentifiedItemsScope { identifiedItemsScopeThis =>
+  class IdentifiedItemsScope extends IdentifiedItemAccess {
+    identifiedItemsScopeThis =>
+    private var allItemsAreLocked = false
 
-    var itemsAreLocked = false
+    override def reconstitute(
+        uniqueItemSpecification: UniqueItemSpecification): Any =
+      itemFor(uniqueItemSpecification.id)(uniqueItemSpecification.typeTag)
 
-    def this(_when: Unbounded[Instant], eventTimeline: Seq[Event]) = {
-      this()
-      for (_ <- makeManagedResource {
-             itemsAreLocked = false
-           } { _ =>
-             itemsAreLocked = true
-           }(List.empty)) {
-        val patchRecorder = new PatchRecorderImplementation(_when)
-        with PatchRecorderContracts with BestPatchSelectionImplementation
-        with BestPatchSelectionContracts {
-          override val identifiedItemsScope: IdentifiedItemsScope =
-            identifiedItemsScopeThis
-          override val itemsAreLockedResource: ManagedResource[Unit] =
-            makeManagedResource {
-              itemsAreLocked = true
-            } { _ =>
-              itemsAreLocked = false
-            }(List.empty)
-        }
+    override def forget(
+        uniqueItemSpecification: UniqueItemSpecification): Unit = {
+      idToItemsMultiMap.get(uniqueItemSpecification.id) match {
+        case Some(items) =>
+          assert(items.nonEmpty)
 
-        for (event <- eventTimeline) event match {
-          case Change(when, patches) =>
-            for (patch <- patches) {
-              patchRecorder.recordPatchFromChange(when, patch)
-            }
+          // Have to force evaluation of the stream so that the call to '--=' below does not try to incrementally
+          // evaluate the stream as the underlying source collection, namely 'items' is being mutated. This is
+          // what you get when you go back to imperative programming after too much referential transparency.
+          val itemsSelectedForAnnihilation: Stream[Any] =
+            IdentifiedItemsScope
+              .yieldOnlyItemsOfType(items)(uniqueItemSpecification.typeTag)
+              .force
+          assert(1 == itemsSelectedForAnnihilation.size)
 
-          case Measurement(when, patches) =>
-            for (patch <- patches) {
-              patchRecorder.recordPatchFromMeasurement(when, patch)
-            }
+          val itemToBeAnnihilated = itemsSelectedForAnnihilation.head
 
-          case annihilation @ Annihilation(when, id) =>
-            implicit val typeTag =
-              annihilation.capturedTypeTag
-            patchRecorder.recordAnnihilation(when, id)
-        }
+          items -= itemToBeAnnihilated
 
-        patchRecorder.noteThatThereAreNoFollowingRecordings()
+          itemToBeAnnihilated
+            .asInstanceOf[AnnihilationHook]
+            .recordAnnihilation()
+
+          if (items.isEmpty) {
+            idToItemsMultiMap.remove(uniqueItemSpecification.id)
+          }
+        case None =>
+          assert(false)
       }
     }
 
-    class MultiMap[Key, Value]
-        extends scala.collection.mutable.HashMap[
-          Key,
-          scala.collection.mutable.Set[Value]]
-        with scala.collection.mutable.MultiMap[Key, Value] {}
+    def populate[EventId](_when: Unbounded[Instant],
+                          eventTimeline: Seq[(Event, EventId)]) = {
+      idToItemsMultiMap.clear()
 
-    val idToItemsMultiMap = new MultiMap[Any, Any]
+      for (_ <- makeManagedResource {
+             allItemsAreLocked = false
+           } { _ =>
+             allItemsAreLocked = true
+           }(List.empty)) {
+        val patchRecorder = new PatchRecorderImplementation[EventId](_when)
+        with PatchRecorderContracts[EventId]
+        with BestPatchSelectionImplementation with BestPatchSelectionContracts {
+          val itemsAreLockedResource: ManagedResource[Unit] =
+            makeManagedResource {
+              allItemsAreLocked = true
+            } { _ =>
+              allItemsAreLocked = false
+            }(List.empty)
+          override val updateConsumer: UpdateConsumer[EventId] =
+            new UpdateConsumer[EventId] {
+              override def captureAnnihilation(
+                  eventId: EventId,
+                  annihilation: Annihilation): Unit = {
+                annihilation(identifiedItemsScopeThis)
+              }
+
+              override def capturePatch(when: Unbounded[Instant],
+                                        eventIds: Set[EventId],
+                                        patch: AbstractPatch): Unit = {
+                patch(identifiedItemsScopeThis)
+                for (_ <- itemsAreLockedResource) {
+                  patch.checkInvariants(identifiedItemsScopeThis)
+                }
+              }
+            }
+        }
+
+        recordPatches(eventTimeline, patchRecorder)
+      }
+    }
+
+    class MultiMap
+        extends scala.collection.mutable.HashMap[
+          Any,
+          scala.collection.mutable.Set[Any]]
+        with scala.collection.mutable.MultiMap[Any, Any] {}
+
+    val idToItemsMultiMap = new MultiMap
 
     def itemFor[Item: TypeTag](id: Any): Item = {
       def constructAndCacheItem(): Item = {
@@ -423,13 +509,11 @@ object WorldImplementationCodeFactoring {
 
         val stateToBeAcquiredByProxy: AcquiredState =
           new AcquiredState {
-            val _id = id
-
-            def itemReconstitutionData: Recorder#ItemReconstitutionData[Item] =
-              id -> typeTag[Item]
-
-            def itemsAreLocked: Boolean =
-              identifiedItemsScopeThis.itemsAreLocked
+            val uniqueItemSpecification: UniqueItemSpecification =
+              UniqueItemSpecification(id, typeTag[Item])
+            def itemIsLocked: Boolean =
+              identifiedItemsScopeThis.allItemsAreLocked
+            def recordMutation(item: ItemExtensionApi): Unit = {}
           }
 
         val item = proxyFactory.constructFrom(stateToBeAcquiredByProxy)
@@ -460,34 +544,6 @@ object WorldImplementationCodeFactoring {
       }
     }
 
-    def annihilateItemFor[Item: TypeTag](id: Any, when: Instant): Unit = {
-      idToItemsMultiMap.get(id) match {
-        case Some(items) =>
-          assert(items.nonEmpty)
-
-          // Have to force evaluation of the stream so that the call to '--=' below does not try to incrementally
-          // evaluate the stream as the underlying source collection, namely 'items' is being mutated. This is
-          // what you get when you go back to imperative programming after too much referential transparency.
-          val itemsSelectedForAnnihilation: Stream[Item] =
-            IdentifiedItemsScope.yieldOnlyItemsOfType(items).force
-          assert(1 == itemsSelectedForAnnihilation.size)
-
-          val itemToBeAnnihilated = itemsSelectedForAnnihilation.head
-
-          itemToBeAnnihilated
-            .asInstanceOf[AnnihilationHook]
-            .recordAnnihilation()
-
-          items -= itemToBeAnnihilated
-
-          if (items.isEmpty) {
-            idToItemsMultiMap.remove(id)
-          }
-        case None =>
-          assert(false)
-      }
-    }
-
     def itemsFor[Item: TypeTag](id: Any): Stream[Item] = {
       val items = idToItemsMultiMap.getOrElse(id, Set.empty[Item])
 
@@ -499,50 +555,48 @@ object WorldImplementationCodeFactoring {
         idToItemsMultiMap.values.flatten)
   }
 
+  def recordPatches[EventId](eventTimeline: Seq[(Event, EventId)],
+                             patchRecorder: PatchRecorder[EventId]) = {
+    for ((event, eventId) <- eventTimeline) event match {
+      case Change(when, patches) =>
+        for (patch <- patches) {
+          patchRecorder.recordPatchFromChange(eventId, when, patch)
+        }
+
+      case Measurement(when, patches) =>
+        for (patch <- patches) {
+          patchRecorder.recordPatchFromMeasurement(eventId, when, patch)
+        }
+
+      case annihilation @ Annihilation(when, id) =>
+        patchRecorder.recordAnnihilation(eventId, annihilation)
+    }
+
+    patchRecorder.noteThatThereAreNoFollowingRecordings()
+  }
+
   trait ScopeImplementation extends com.sageserpent.plutonium.Scope {
     val identifiedItemsScope: IdentifiedItemsScope
 
-    override def render[Item](bitemporal: Bitemporal[Item]): Stream[Item] = {
-      bitemporal match {
-        case ApBitemporalResult(preceedingContext,
-                                stage: (Bitemporal[(_) => Item])) =>
-          for {
-            preceedingContext <- render(preceedingContext)
-            stage             <- render(stage)
-          } yield stage(preceedingContext)
-        case PlusBitemporalResult(lhs, rhs) => render(lhs) ++ render(rhs)
-        case PointBitemporalResult(item)    => Stream(item)
-        case NoneBitemporalResult()         => Stream.empty
-        case bitemporal @ IdentifiedItemsBitemporalResult(id) =>
-          implicit val typeTag = bitemporal.capturedTypeTag
-          identifiedItemsScope.itemsFor(id)
-        case bitemporal @ WildcardBitemporalResult() =>
-          implicit val typeTag = bitemporal.capturedTypeTag
-          identifiedItemsScope.allItems()
-      }
+    object itemCache extends ItemCache {
+      override def itemsFor[Item: TypeTag](id: Any): Stream[Item] =
+        identifiedItemsScope.itemsFor(id)
+
+      override def allItems[Item: TypeTag](): Stream[Item] =
+        identifiedItemsScope.allItems()
     }
 
-    override def numberOf[Item](bitemporal: Bitemporal[Item]): Int = {
-      bitemporal match {
-        case ApBitemporalResult(preceedingContext,
-                                stage: (Bitemporal[(_) => Item])) =>
-          numberOf(preceedingContext) * numberOf(stage)
-        case PlusBitemporalResult(lhs, rhs) => numberOf(lhs) + numberOf(rhs)
-        case PointBitemporalResult(item)    => 1
-        case NoneBitemporalResult()         => 0
-        case bitemporal @ IdentifiedItemsBitemporalResult(id) =>
-          implicit val typeTag = bitemporal.capturedTypeTag
-          identifiedItemsScope.itemsFor(id).size
-        case bitemporal @ WildcardBitemporalResult() =>
-          implicit val typeTag = bitemporal.capturedTypeTag
-          identifiedItemsScope.allItems().size
-      }
-    }
+    override def render[Item](bitemporal: Bitemporal[Item]): Stream[Item] =
+      itemCache.render(bitemporal)
+
+    override def numberOf[Item](bitemporal: Bitemporal[Item]): Int =
+      itemCache.numberOf(bitemporal)
   }
 }
 
 abstract class WorldImplementationCodeFactoring[EventId]
     extends World[EventId] {
+  import WorldImplementationCodeFactoring._
 
   abstract class ScopeBasedOnNextRevision(val when: Unbounded[Instant],
                                           val nextRevision: Revision)
@@ -592,29 +646,20 @@ abstract class WorldImplementationCodeFactoring[EventId]
   def annul(eventId: EventId, asOf: Instant): Revision =
     revise(Map(eventId -> None), asOf)
 
-}
-
-abstract class WorldInefficientImplementationCodeFactoring[EventId]
-    extends WorldImplementationCodeFactoring[EventId] {
-
-  import WorldImplementationCodeFactoring._
-
   trait SelfPopulatedScope extends ScopeImplementation {
-    val identifiedItemsScope = {
-      new IdentifiedItemsScope(when, eventTimeline(nextRevision))
-    }
+    val identifiedItemsScope = new IdentifiedItemsScope
+
+    identifiedItemsScope.populate(when, eventTimeline(nextRevision))
   }
 
-  protected def eventTimeline(nextRevision: Revision): Seq[Event]
-
-  // This produces a 'read-only' scope - objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
   override def scopeFor(when: Unbounded[Instant],
                         nextRevision: Revision): Scope =
-    new ScopeBasedOnNextRevision(when, nextRevision) with SelfPopulatedScope
+    new ScopeBasedOnNextRevision(when, nextRevision) with SelfPopulatedScope {}
 
-  // This produces a 'read-only' scope - objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
   override def scopeFor(when: Unbounded[Instant], asOf: Instant): Scope =
     new ScopeBasedOnAsOf(when, asOf) with SelfPopulatedScope
+
+  protected def eventTimeline(nextRevision: Revision): Seq[(Event, EventId)]
 
   def revise(events: Map[EventId, Option[Event]], asOf: Instant): Revision = {
     def newEventDatumsFor(nextRevisionPriorToUpdate: Revision)
@@ -630,17 +675,17 @@ abstract class WorldInefficientImplementationCodeFactoring[EventId]
     }
 
     def buildAndValidateEventTimelineForProposedNewRevision(
-        newEventDatums: Seq[AbstractEventData],
-        pertinentEventDatumsExcludingTheNewRevision: Seq[AbstractEventData])
-      : Unit = {
+        newEventDatums: Seq[(EventId, AbstractEventData)],
+        pertinentEventDatumsExcludingTheNewRevision: Seq[
+          (EventId, AbstractEventData)]): Unit = {
       val eventTimelineIncludingNewRevision = eventTimelineFrom(
         pertinentEventDatumsExcludingTheNewRevision union newEventDatums)
 
       // This does a check for consistency of the world's history as per this new revision as part of construction.
       // We then throw away the resulting history if successful, the idea being for now to rebuild it as part of
       // constructing a scope to apply queries on.
-      new IdentifiedItemsScope(PositiveInfinity[Instant],
-                               eventTimelineIncludingNewRevision)
+      (new IdentifiedItemsScope)
+        .populate(PositiveInfinity[Instant], eventTimelineIncludingNewRevision)
     }
 
     transactNewRevision(asOf,
@@ -652,8 +697,8 @@ abstract class WorldInefficientImplementationCodeFactoring[EventId]
       asOf: Instant,
       newEventDatumsFor: Revision => Map[EventId, AbstractEventData],
       buildAndValidateEventTimelineForProposedNewRevision: (
-          Seq[AbstractEventData],
-          Seq[AbstractEventData]) => Unit): Revision
+          Seq[(EventId, AbstractEventData)],
+          Seq[(EventId, AbstractEventData)]) => Unit): Revision
 
   protected def checkRevisionPrecondition(asOf: Instant,
                                           revisionAsOfs: Seq[Instant]): Unit = {
@@ -661,22 +706,4 @@ abstract class WorldInefficientImplementationCodeFactoring[EventId]
       throw new IllegalArgumentException(
         s"'asOf': ${asOf} should be no earlier than that of the last revision: ${revisionAsOfs.last}")
   }
-}
-
-class WorldEfficientInMemoryImplementation[EventId]
-    extends WorldImplementationCodeFactoring[EventId] {
-  override def nextRevision: Revision = ???
-
-  override def revisionAsOfs: Array[Instant] = ???
-
-  override def revise(events: Map[EventId, Option[Event]],
-                      asOf: Instant): Revision = ???
-
-  override def scopeFor(when: Unbounded[Instant],
-                        nextRevision: Revision): Scope = ???
-
-  override def scopeFor(when: Unbounded[Instant], asOf: Instant): Scope = ???
-
-  override def forkExperimentalWorld(scope: javaApi.Scope): World[EventId] =
-    ???
 }

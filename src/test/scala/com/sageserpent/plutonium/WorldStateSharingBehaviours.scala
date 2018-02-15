@@ -17,9 +17,6 @@ import resource._
 import scala.collection.mutable.Set
 import scala.util.Random
 
-/**
-  * Created by Gerard on 13/02/2016.
-  */
 trait WorldStateSharingBehaviours
     extends FlatSpec
     with Matchers
@@ -452,7 +449,7 @@ trait WorldStateSharingBehaviours
                 }
                 revisionChecks.reduce(_ ++ _) && queryChecks
                   .reduceOption(_ && _)
-                  .getOrElse(Prop.proved)
+                  .getOrElse(Prop.undecided)
             }
         },
         testParameters

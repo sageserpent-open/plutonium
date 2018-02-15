@@ -3,36 +3,25 @@ package com.sageserpent.plutonium
 import java.lang.reflect.Method
 import java.time.Instant
 
-import com.sageserpent.americium.{
-  Finite,
-  NegativeInfinity,
-  PositiveInfinity,
-  Unbounded
-}
-import resource.ManagedResource
+import com.sageserpent.americium.{Finite, Unbounded}
+import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 
-import scala.collection.{Map, mutable}
+import scala.collection.mutable
 import scala.reflect.runtime._
 import scala.reflect.runtime.universe._
 
-/**
-  * Created by Gerard on 10/01/2016.
-  */
 object PatchRecorderImplementation {
   private type SequenceIndex = Long
   val initialSequenceIndex: SequenceIndex = 0L
 }
 
-abstract class PatchRecorderImplementation(
+abstract class PatchRecorderImplementation[EventId](
     eventsHaveEffectNoLaterThan: Unbounded[Instant])
-    extends PatchRecorder {
+    extends PatchRecorder[EventId] {
   // This class makes no pretence at exception safety - it doesn't need to in the context
   // of the client 'WorldReferenceImplementation', which provides exception safety at a higher level.
   self: BestPatchSelection =>
   import PatchRecorderImplementation._
-
-  val identifiedItemsScope: WorldImplementationCodeFactoring.IdentifiedItemsScope
-  val itemsAreLockedResource: ManagedResource[Unit]
 
   private var _whenEventPertainedToByLastRecordingTookPlace
     : Option[Unbounded[Instant]] = None
@@ -45,7 +34,8 @@ abstract class PatchRecorderImplementation(
 
   override def allRecordingsAreCaptured: Boolean = _allRecordingsAreCaptured
 
-  override def recordPatchFromChange(when: Unbounded[Instant],
+  override def recordPatchFromChange(eventId: EventId,
+                                     when: Unbounded[Instant],
                                      patch: AbstractPatch): Unit = {
     _whenEventPertainedToByLastRecordingTookPlace = Some(when)
 
@@ -53,27 +43,30 @@ abstract class PatchRecorderImplementation(
 
     itemState.submitCandidatePatches(patch.method)
 
-    itemState.addPatch(when, patch)
+    itemState.addPatch(when, patch, eventId)
   }
 
-  override def recordPatchFromMeasurement(when: Unbounded[Instant],
+  override def recordPatchFromMeasurement(eventId: EventId,
+                                          when: Unbounded[Instant],
                                           patch: AbstractPatch): Unit = {
     _whenEventPertainedToByLastRecordingTookPlace = Some(when)
 
-    refineRelevantItemStatesAndYieldTarget(patch).addPatch(when, patch)
+    refineRelevantItemStatesAndYieldTarget(patch).addPatch(when, patch, eventId)
   }
 
   def annihilateItemFor_[SubclassOfItem <: Item, Item](
-      id: Any,
-      typeTag: universe.TypeTag[SubclassOfItem],
-      when: Instant): Unit = {
-    identifiedItemsScope.annihilateItemFor[SubclassOfItem](id, when)(typeTag)
+      when: Unbounded[Instant],
+      annihilation: Annihilation,
+      eventId: EventId): Unit = {
+    updateConsumer.captureAnnihilation(eventId, annihilation)
   }
 
-  override def recordAnnihilation[Item: TypeTag](_when: Instant,
-                                                 id: Any): Unit = {
-    val liftedWhen = Finite(_when)
-    _whenEventPertainedToByLastRecordingTookPlace = Some(liftedWhen)
+  override def recordAnnihilation(eventId: EventId,
+                                  annihilation: Annihilation): Unit = {
+    _whenEventPertainedToByLastRecordingTookPlace = Some(annihilation.when)
+
+    val UniqueItemSpecification(id, expectedTypeTag) =
+      annihilation.uniqueItemSpecification
 
     idToItemStatesMap
       .get(id)
@@ -81,9 +74,8 @@ abstract class PatchRecorderImplementation(
       .flatten filter (!_.itemAnnihilationHasBeenNoted) match {
       case Seq() =>
         throw new RuntimeException(
-          s"Attempt to annihilate item of id: $id that does not exist at all at: ${_when}.")
+          s"Attempt to annihilate item of id: $id that does not exist at all at: ${annihilation.when}.")
       case itemStates =>
-        val expectedTypeTag = typeTag[Item]
         val compatibleItemStates = itemStates filter (_.canBeAnnihilatedAs(
           expectedTypeTag))
 
@@ -98,13 +90,15 @@ abstract class PatchRecorderImplementation(
 
           actionQueue.enqueue(new IndexedAction() {
             override val sequenceIndex            = _sequenceIndex
-            override val when: Unbounded[Instant] = liftedWhen
+            override val when: Unbounded[Instant] = annihilation.when
 
             override def perform() {
               for (itemStateToBeAnnihilated <- compatibleItemStates) {
-                val typeTagForSpecificItem =
-                  itemStateToBeAnnihilated.lowerBoundTypeTag
-                annihilateItemFor_(id, typeTagForSpecificItem, _when)
+                annihilateItemFor_(
+                  when,
+                  annihilation.rewriteItemTypeTag(
+                    itemStateToBeAnnihilated.lowerBoundTypeTag),
+                  eventId)
 
                 val itemStates = idToItemStatesMap(id)
 
@@ -124,7 +118,7 @@ abstract class PatchRecorderImplementation(
           applyPatches(drainDownQueue = false)
         } else
           throw new RuntimeException(
-            s"Attempt to annihilate item of id: $id that does not exist with the expected type of '${expectedTypeTag.tpe}' at: ${_when}, the items that do exist have types: '${compatibleItemStates map (_.lowerBoundTypeTag.tpe) toList}'.")
+            s"Attempt to annihilate item of id: $id that does not exist with the expected type of '${expectedTypeTag.tpe}' at: ${annihilation.when}, the items that do exist have types: '${compatibleItemStates map (_.lowerBoundTypeTag.tpe) toList}'.")
     }
   }
 
@@ -155,7 +149,8 @@ abstract class PatchRecorderImplementation(
            }) actionQueue.dequeue().perform()
   }
 
-  type CandidatePatchTuple = (SequenceIndex, AbstractPatch, Unbounded[Instant])
+  type CandidatePatchTuple =
+    (SequenceIndex, AbstractPatch, Unbounded[Instant], EventId)
 
   private type CandidatePatches = mutable.MutableList[CandidatePatchTuple]
 
@@ -192,8 +187,10 @@ abstract class PatchRecorderImplementation(
     def canBeAnnihilatedAs(typeTag: TypeTag[_]) =
       isFusibleWith(typeTag)
 
-    def addPatch(when: Unbounded[Instant], patch: AbstractPatch) = {
-      val candidatePatchTuple = (nextSequenceIndex(), patch, when)
+    def addPatch(when: Unbounded[Instant],
+                 patch: AbstractPatch,
+                 eventId: EventId) = {
+      val candidatePatchTuple = (nextSequenceIndex(), patch, when, eventId)
       methodAndItsCandidatePatchTuplesFor(patch.method) match {
         case (Some((exemplarMethod, candidatePatchTuples))) =>
           candidatePatchTuples += candidatePatchTuple
@@ -260,11 +257,11 @@ abstract class PatchRecorderImplementation(
   private val idToItemStatesMap =
     mutable.Map.empty[Any, mutable.Set[ItemState]]
 
-  private type ItemReconstitutionDataToItemStateMap =
-    mutable.Map[Recorder#ItemReconstitutionData[_], ItemState]
+  private type UniqueItemSpecificationToItemStateMap =
+    mutable.Map[UniqueItemSpecification, ItemState]
 
   private val patchToItemStatesMap =
-    mutable.Map.empty[AbstractPatch, ItemReconstitutionDataToItemStateMap]
+    mutable.Map.empty[AbstractPatch, UniqueItemSpecificationToItemStateMap]
 
   private var _nextSequenceIndex: SequenceIndex = initialSequenceIndex
 
@@ -291,80 +288,62 @@ abstract class PatchRecorderImplementation(
 
     // The best patch has to be applied as if it occurred when the patch representing
     // the event would have taken place - so it steals the latter's sequence index.
-    val (sequenceIndexForBestPatch, _, whenTheBestPatchOccurs) =
+    val (sequenceIndexForBestPatch, _, whenTheBestPatchOccurs, _) =
       patchRepresentingTheEvent
 
     val reconstitutionDataToItemStateMap =
       patchToItemStatesMap.remove(bestPatch).get
 
-    class IdentifiedItemAccessImplementation extends IdentifiedItemAccess {
-      for (((id, _), itemState) <- reconstitutionDataToItemStateMap) {
-        if (itemState.itemWouldConflictWithEarlierLifecyclePriorTo > sequenceIndexForBestPatch) {
-          throw new RuntimeException(
-            s"Attempt to execute patch involving id: '$id' of type: '${itemState.lowerBoundTypeTag.tpe}' for a later lifecycle that cannot exist at time: $whenTheBestPatchOccurs, as there is at least one item from a previous lifecycle up until: ${itemState.itemWouldConflictWithEarlierLifecyclePriorTo}.")
-        }
-      }
-
-      override def reconstitute[Item](
-          itemReconstitutionData: Recorder#ItemReconstitutionData[Item])
-        : Item = {
-        val id        = itemReconstitutionData._1
-        val itemState = reconstitutionDataToItemStateMap(itemReconstitutionData)
-
-        itemFor_(id, itemState.lowerBoundTypeTag).asInstanceOf[Item]
-      }
-
-      def itemFor_[SubclassOfItem <: Item, Item](
-          id: Any,
-          typeTag: universe.TypeTag[SubclassOfItem]): SubclassOfItem = {
-        PatchRecorderImplementation.this.identifiedItemsScope
-          .itemFor[SubclassOfItem](id)(typeTag)
+    for ((UniqueItemSpecification(id, _), itemState) <- reconstitutionDataToItemStateMap) {
+      if (itemState.itemWouldConflictWithEarlierLifecyclePriorTo > sequenceIndexForBestPatch) {
+        throw new RuntimeException(
+          s"Attempt to execute patch involving id: '$id' of type: '${itemState.lowerBoundTypeTag.tpe}' for a later lifecycle that cannot exist at time: $whenTheBestPatchOccurs, as there is at least one item from a previous lifecycle up until: ${itemState.itemWouldConflictWithEarlierLifecyclePriorTo}.")
       }
     }
 
-    val identifiedItemAccess = new IdentifiedItemAccessImplementation
-
     val itemStatesReferencedByBestPatch =
       reconstitutionDataToItemStateMap.values
+
+    val eventIdsFromAllCandidatePatches = candidatePatchTuples.map(_._4).toSet
 
     actionQueue.enqueue(new IndexedAction {
       override val sequenceIndex: SequenceIndex = sequenceIndexForBestPatch
       override val when: Unbounded[Instant]     = whenTheBestPatchOccurs
 
       override def perform() {
-        bestPatch(identifiedItemAccess)
-        for (_ <- itemsAreLockedResource) {
-          bestPatch.checkInvariants(identifiedItemAccess)
-        }
+        val bestPatchWithLoweredTypeTags = bestPatch.rewriteItemTypeTags(
+          reconstitutionDataToItemStateMap.mapValues(_.lowerBoundTypeTag))
+        updateConsumer.capturePatch(whenTheBestPatchOccurs,
+                                    eventIdsFromAllCandidatePatches,
+                                    bestPatchWithLoweredTypeTags)
       }
       override def canProceed() =
         itemStatesReferencedByBestPatch.forall(_.itemAnnihilationHasBeenNoted)
     })
 
-    for ((sequenceIndex, _, _) <- candidatePatchTuples) {
+    for ((sequenceIndex, _, _, _) <- candidatePatchTuples) {
       outstandingSequenceIndices -= sequenceIndex
     }
   }
 
   private def refineRelevantItemStatesAndYieldTarget(
       patch: AbstractPatch): ItemState = {
-    def refinedItemStateFor(
-        reconstitutionData: Recorder#ItemReconstitutionData[_]) = {
+    def refinedItemStateFor(reconstitutionData: UniqueItemSpecification) = {
       val itemState = itemStateFor(reconstitutionData)
-      itemState.refineType(reconstitutionData._2)
+      itemState.refineType(reconstitutionData.typeTag)
       patchToItemStatesMap.getOrElseUpdate(patch, mutable.Map.empty) += reconstitutionData -> itemState
       itemState
     }
 
-    for (argumentReconstitutionData <- patch.argumentReconstitutionDatums) {
+    for (argumentReconstitutionData <- patch.argumentItemSpecifications) {
       refinedItemStateFor(argumentReconstitutionData)
     }
-    refinedItemStateFor(patch.targetReconstitutionData)
+    refinedItemStateFor(patch.targetItemSpecification)
   }
 
   private def itemStateFor(
-      itemReconstitutionData: Recorder#ItemReconstitutionData[_]): ItemState = {
-    val (id, typeTag) = itemReconstitutionData
+      uniqueItemSpecification: UniqueItemSpecification): ItemState = {
+    val UniqueItemSpecification(id, typeTag) = uniqueItemSpecification
 
     val (itemStatesFromPreviousLifecycles, itemStates) = idToItemStatesMap
       .get(id)

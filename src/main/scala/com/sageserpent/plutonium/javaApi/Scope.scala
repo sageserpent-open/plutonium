@@ -4,9 +4,6 @@ import java.time.Instant
 import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.{Bitemporal => ScalaBitemporal}
 
-/**
-  * Created by Gerard on 03/05/2016.
-  */
 trait Scope {
   val when: Unbounded[Instant]
   val nextRevision: Int

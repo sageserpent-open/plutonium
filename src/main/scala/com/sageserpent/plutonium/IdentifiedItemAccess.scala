@@ -1,9 +1,9 @@
 package com.sageserpent.plutonium
 
-/**
-  * Created by Gerard on 17/01/2016.
-  */
+import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
+
 trait IdentifiedItemAccess {
-  def reconstitute[Item](
-      itemReconstitutionData: Recorder#ItemReconstitutionData[Item]): Item
+  def reconstitute(uniqueItemSpecification: UniqueItemSpecification): Any
+
+  def forget(uniqueItemSpecification: UniqueItemSpecification): Unit
 }

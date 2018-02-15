@@ -1,10 +1,10 @@
 package com.sageserpent.plutonium
 
 import java.lang.reflect.Method
+import scala.reflect.runtime.universe._
 
-/**
-  * Created by Gerard on 10/01/2016.
-  */
+import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
+
 object AbstractPatch {
   def patchesAreRelated(lhs: AbstractPatch, rhs: AbstractPatch): Boolean = {
     val bothReferToTheSameItem = lhs.targetId == rhs.targetId && (lhs.targetTypeTag.tpe <:< rhs.targetTypeTag.tpe || rhs.targetTypeTag.tpe <:< lhs.targetTypeTag.tpe)
@@ -16,11 +16,18 @@ object AbstractPatch {
   }
 }
 
+// TODO: will need to be able to lower the typetags for the target and arguments somehow if we are going to build an update plan with these.
 abstract class AbstractPatch {
+  def rewriteItemTypeTags(
+      uniqueItemSpecificationToTypeTagMap: collection.Map[
+        UniqueItemSpecification,
+        TypeTag[_]]): AbstractPatch
+
   val method: Method
-  val targetReconstitutionData: Recorder#ItemReconstitutionData[_]
-  val argumentReconstitutionDatums: Seq[Recorder#ItemReconstitutionData[_]]
-  lazy val (targetId, targetTypeTag) = targetReconstitutionData
+  val targetItemSpecification: UniqueItemSpecification
+  val argumentItemSpecifications: Seq[UniqueItemSpecification]
+  lazy val UniqueItemSpecification(targetId, targetTypeTag) =
+    targetItemSpecification
   def apply(identifiedItemAccess: IdentifiedItemAccess): Unit
   def checkInvariants(identifiedItemAccess: IdentifiedItemAccess): Unit
 }

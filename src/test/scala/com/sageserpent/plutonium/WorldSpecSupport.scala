@@ -1,8 +1,5 @@
 package com.sageserpent.plutonium
 
-/**
-  * Created by Gerard on 21/09/2015.
-  */
 import java.time.Instant
 import java.util.UUID
 
@@ -11,6 +8,7 @@ import com.sageserpent.americium
 import com.sageserpent.americium._
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.seqEnrichment._
+import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.World._
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.Assertions
@@ -28,25 +26,9 @@ object WorldSpecSupport {
   val changeError = new RuntimeException("Error in making a change.")
 }
 
-trait WorldSpecSupport extends Assertions {
+trait WorldSpecSupport extends Assertions with SharedGenerators {
 
   import WorldSpecSupport._
-
-  val seedGenerator = Arbitrary.arbitrary[Long]
-
-  val instantGenerator = Arbitrary.arbitrary[Long] map Instant.ofEpochMilli
-
-  val unboundedInstantGenerator = Gen.frequency(
-    1  -> Gen.oneOf(NegativeInfinity[Instant], PositiveInfinity[Instant]),
-    10 -> (instantGenerator map Finite.apply))
-
-  val changeWhenGenerator: Gen[Unbounded[Instant]] = Gen.frequency(
-    1  -> Gen.oneOf(Seq(NegativeInfinity[Instant])),
-    10 -> (instantGenerator map (Finite(_))))
-
-  val stringIdGenerator = Gen.chooseNum(50, 100) map ("Name: " + _.toString)
-
-  val integerIdGenerator = Gen.chooseNum(-20, 20)
 
   val fooHistoryIdGenerator = stringIdGenerator
 
@@ -363,7 +345,7 @@ trait WorldSpecSupport extends Assertions {
                                                     (item: History) => {
                                                       // A useless event: nothing changes - and the event refers to the item type abstractly to boot.
                                                     })
-       else if (headsItIs)
+       else if (anotherRoundOfHeadsItIs)
          Measurement.forOneItem(_: Unbounded[Instant])(historyId,
                                                        (item: AHistory) => {
                                                          // A useless event: nothing is measured!
@@ -412,7 +394,7 @@ trait WorldSpecSupport extends Assertions {
   class RecordingsForAPhoenixId(
       override val historyId: Any,
       override val historiesFrom: Scope => Seq[History],
-      annihilationFor: Instant => Annihilation[_],
+      annihilationFor: Instant => Annihilation,
       ineffectiveEventFor: Unbounded[Instant] => Event,
       dataSamplesGroupedForLifespans: Stream[
         Traversable[(Int, Any, (Unbounded[Instant], Boolean) => Event)]],
@@ -611,7 +593,7 @@ trait WorldSpecSupport extends Assertions {
         (Any,
          Scope => Seq[History],
          List[(Int, Any, (Unbounded[Instant], Boolean) => Event)],
-         Instant => Annihilation[_],
+         Instant => Annihilation,
          Unbounded[Instant] => Event)],
       forbidAnnihilations: Boolean = false,
       forbidMeasurements: Boolean = false) = {
@@ -694,35 +676,34 @@ trait WorldSpecSupport extends Assertions {
     Gen.nonEmptyListOf(recordingsForAnIdGenerator) retryUntil idsAreNotRepeated
   }
 
+  def shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhenForAGivenItem(
+      random: Random,
+      events: List[(Unbounded[Instant], Event)]) = {
+    // NOTE: 'groupBy' actually destroys the sort order, so we have to sort after grouping. We have to do this to
+    // keep the annihilations after the events that define the lifespan of the items that get annihilated.
+    val recordingsGroupedByWhen = (events groupBy (_._1)).toSeq sortBy (_._1) map (_._2)
+
+    def groupContainsAnAnnihilation(group: List[(Unbounded[Instant], Event)]) =
+      group.exists(PartialFunction.cond(_) {
+        case (_, _: Annihilation) => true
+      })
+
+    val groupedGroupsWithAnnihilationsIsolated = recordingsGroupedByWhen groupWhile {
+      case (lhs, rhs) =>
+        !(groupContainsAnAnnihilation(lhs) || groupContainsAnAnnihilation(rhs))
+    }
+
+    groupedGroupsWithAnnihilationsIsolated flatMap (random
+      .shuffle(_)) flatten
+  }
+
   def shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
       random: Random,
       recordingsGroupedById: List[RecordingsForAnId]) = {
     // PLAN: shuffle each lots of events on a per-id basis, keeping the annihilations out of the way. Then merge the results using random picking.
-    def shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
-        random: Random,
-        events: List[(Unbounded[Instant], Event)]) = {
-      // NOTE: 'groupBy' actually destroys the sort order, so we have to sort after grouping. We have to do this to
-      // keep the annihilations after the events that define the lifespan of the items that get annihilated.
-      val recordingsGroupedByWhen = (events groupBy (_._1)).toSeq sortBy (_._1) map (_._2)
-
-      def groupContainsAnAnnihilation(
-          group: List[(Unbounded[Instant], Event)]) =
-        group.exists(PartialFunction.cond(_) {
-          case (_, _: Annihilation[_]) => true
-        })
-
-      val groupedGroupsWithAnnihilationsIsolated = recordingsGroupedByWhen groupWhile {
-        case (lhs, rhs) =>
-          !(groupContainsAnAnnihilation(lhs) || groupContainsAnAnnihilation(
-            rhs))
-      }
-
-      groupedGroupsWithAnnihilationsIsolated flatMap (random
-        .shuffle(_)) flatten
-    }
 
     random.pickAlternatelyFrom(
-      recordingsGroupedById map (_.events) map (shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+      recordingsGroupedById map (_.events) map (shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhenForAGivenItem(
         random,
         _)))
   }

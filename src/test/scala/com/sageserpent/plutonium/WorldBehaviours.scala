@@ -1,8 +1,5 @@
 package com.sageserpent.plutonium
 
-/**
-  * Created by Gerard on 19/07/2015.
-  */
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 
@@ -160,7 +157,7 @@ trait WorldBehaviours
             if (checks.nonEmpty)
               Prop.all(checks.map {
                 case (historyId, actualHistory, expectedHistory) =>
-                  ((actualHistory.length == expectedHistory.length) :| s"For ${historyId}, ${actualHistory.length} == expectedHistory.length") &&
+                  ((actualHistory.length == expectedHistory.length) :| s"For ${historyId}, got: ${actualHistory.length} datums, but expected: ${expectedHistory.length}, actual history: $actualHistory, expected history: $expectedHistory.") &&
                     Prop.all(
                       (actualHistory zip expectedHistory zipWithIndex) map {
                         case ((actual, expected), step) =>
@@ -536,7 +533,7 @@ trait WorldBehaviours
               if (checks.nonEmpty)
                 Prop.all(checks.map {
                   case (historyId, actualHistory, expectedHistory) =>
-                    ((actualHistory.length == expectedHistory.length) :| s"For ${historyId}, the number of datums: ${actualHistory.length} was expected to be to: ${expectedHistory.length}") &&
+                    ((actualHistory.length == expectedHistory.length) :| s"For ${historyId}, the number of datums: ${actualHistory.length} was expected to be to: ${expectedHistory.length} - actual history: ${actualHistory}, expected history: ${expectedHistory}") &&
                       Prop.all(
                         (actualHistory zip expectedHistory zipWithIndex) map {
                           case ((actual, expected), step) =>
@@ -544,6 +541,62 @@ trait WorldBehaviours
                         }: _*)
                 }: _*)
               else Prop.undecided
+          }
+      })
+    }
+
+    it should "build an item's state in a manner consistent with the history experienced by the item due to events that define changes on it." in {
+      val itemId = "Fred"
+
+      val testCaseGenerator = for {
+        worldResource <- worldResourceGenerator
+        eventTimes    <- Gen.nonEmptyListOf(instantGenerator) map (_.sorted)
+        sequence = 1 to eventTimes.size
+        events: List[(Unbounded[Instant], Event)] = eventTimes zip sequence map {
+          case (when, step) =>
+            Finite(when) -> Change
+              .forOneItem[StrictlyIncreasingSequenceConsumer](when)(itemId, {
+                item: StrictlyIncreasingSequenceConsumer =>
+                  item.consume(step)
+              })
+        }
+        seed <- seedGenerator
+        random = new Random(seed)
+        bigShuffledHistoryOverLotsOfThings: Stream[Seq[((Unbounded[Instant],
+        Event), Int)]] = random.splitIntoNonEmptyPieces(
+          shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhenForAGivenItem(
+            random,
+            events).zipWithIndex)
+        asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
+                             instantGenerator) map (_.sorted)
+        queryWhen <- unboundedInstantGenerator
+      } yield
+        (worldResource,
+         bigShuffledHistoryOverLotsOfThings,
+         asOfs,
+         queryWhen,
+         sequence)
+      check(Prop.forAllNoShrink(testCaseGenerator) {
+        case (worldResource,
+              bigShuffledHistoryOverLotsOfThings,
+              asOfs,
+              queryWhen,
+              sequence) =>
+          worldResource acquireAndGet {
+            world =>
+              recordEventsInWorld(
+                liftRecordings(bigShuffledHistoryOverLotsOfThings),
+                asOfs,
+                world)
+
+              val scope = world.scopeFor(queryWhen, world.nextRevision)
+
+              val _ = scope
+                .render(
+                  Bitemporal.withId[StrictlyIncreasingSequenceConsumer](itemId))
+                .force
+
+              Prop.proved
           }
       })
     }

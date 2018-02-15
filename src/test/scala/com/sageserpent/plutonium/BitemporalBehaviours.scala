@@ -11,9 +11,6 @@ import scalaz.scalacheck._
 import scalaz.syntax.applicativePlus._
 import scalaz.{ApplicativePlus, Equal}
 
-/**
-  * Created by Gerard on 29/07/2015.
-  */
 trait BitemporalBehaviours
     extends FlatSpec
     with Checkers
@@ -169,7 +166,7 @@ trait BitemporalBehaviours
                     case (id, group) => id -> group.size
                   } toSet
 
-                (idsInExistence == idsFromWildcardQuery) :| s"${idsInExistence} should be ${idsFromWildcardQuery}"
+                (idsFromWildcardQuery == idsInExistence) :| s"${idsFromWildcardQuery} should be ${idsInExistence}, the items are: $itemsFromWildcardQuery"
             }
         })
     }
@@ -284,7 +281,9 @@ trait BitemporalBehaviours
                     val itemsFromSpecificQuery =
                       scope.render(Bitemporal.withId[AHistory](id)).toSet
                     itemsFromSpecificQuery
-                      .subsetOf(itemsFromWildcardQuery) :| s"itemsFromSpecificQuery.subsetOf(${itemsFromWildcardQuery})"
+                      .subsetOf(itemsFromWildcardQuery) :| s"${itemsFromSpecificQuery.map(
+                      _.asInstanceOf[ItemExtensionApi].uniqueItemSpecification)} should be a subset of: ${itemsFromWildcardQuery.map(
+                      _.asInstanceOf[ItemExtensionApi].uniqueItemSpecification)}"
                   }): _*)
                 } else Prop.undecided
               }
@@ -493,7 +492,8 @@ trait BitemporalBehaviours
                       : Bitemporal[(AHistory, AHistory)] =
                       (bitemporalQueryOne |@| bitemporalQueryTwo)(
                         (_: AHistory, _: AHistory))
-                    val numberOfItems = scope.numberOf[AHistory](id)
+                    val numberOfItems =
+                      scope.numberOf(Bitemporal.withId[AHistory](id))
                     val itemsFromAgglomeratedQuery =
                       scope.render(agglomeratedBitemporalQuery).toSet
                     val repeatedItemPairs
@@ -679,13 +679,21 @@ trait BitemporalBehaviours
                   MoreSpecificFooHistory#Id]) map (_.asInstanceOf[
                   MoreSpecificFooHistory#Id])).toSet
 
-              if (itemsFromWildcardQuery.nonEmpty || ids.nonEmpty) {
-                val wildcardProperty = Prop((itemsFromWildcardQuery[
-                  MoreSpecificFooHistory] map (_.asInstanceOf[FooHistory]))
-                  .subsetOf(itemsFromWildcardQuery[FooHistory])) &&
-                  Prop(
-                    (itemsFromWildcardQuery[FooHistory] map (_.asInstanceOf[
-                      History])).subsetOf(itemsFromWildcardQuery[History]))
+              if (itemsFromWildcardQuery[History].nonEmpty || ids.nonEmpty) {
+                def subsetProperty[AHistory <: History](
+                    itemSubset: Set[AHistory],
+                    itemSuperset: Set[AHistory]) =
+                  itemSubset
+                    .subsetOf(itemSuperset) :| s"'$itemSubset' should be a subset of '$itemSuperset'."
+
+                val wildcardProperty = subsetProperty(
+                  (itemsFromWildcardQuery[MoreSpecificFooHistory] map (_.asInstanceOf[
+                    FooHistory])),
+                  itemsFromWildcardQuery[FooHistory]) &&
+                  subsetProperty(
+                    itemsFromWildcardQuery[FooHistory] map (_.asInstanceOf[
+                      History]),
+                    itemsFromWildcardQuery[History])
 
                 val genericQueryByIdProperty = Prop.all(ids.toSeq map (id => {
                   def itemsFromGenericQueryById[
@@ -694,13 +702,14 @@ trait BitemporalBehaviours
                       .render(Bitemporal.withId[AHistory](
                         id.asInstanceOf[AHistory#Id]))
                       .toSet
-                  Prop(
-                    (itemsFromGenericQueryById[MoreSpecificFooHistory] map (_.asInstanceOf[
-                      FooHistory]))
-                      .subsetOf(itemsFromGenericQueryById[FooHistory])) &&
-                  Prop(
-                    (itemsFromGenericQueryById[FooHistory] map (_.asInstanceOf[
-                      History])).subsetOf(itemsFromGenericQueryById[History]))
+                  subsetProperty(itemsFromGenericQueryById[
+                                   MoreSpecificFooHistory] map (_.asInstanceOf[
+                                   FooHistory]),
+                                 itemsFromGenericQueryById[FooHistory]) &&
+                  subsetProperty(
+                    itemsFromGenericQueryById[FooHistory] map (_.asInstanceOf[
+                      History]),
+                    itemsFromGenericQueryById[History])
                 }): _*)
 
                 wildcardProperty && genericQueryByIdProperty
@@ -778,7 +787,7 @@ trait BitemporalBehaviours
               if (allIdsFromWildcard.nonEmpty) {
                 Prop.all(allItemsFromWildcard map isReadonly: _*) && Prop.all(
                   allIdsFromWildcard flatMap { id =>
-                    val items = scope.render(Bitemporal.withId(id))
+                    val items = scope.render(Bitemporal.withId[History](id))
                     items map isReadonly
                   }: _*)
               } else Prop.undecided

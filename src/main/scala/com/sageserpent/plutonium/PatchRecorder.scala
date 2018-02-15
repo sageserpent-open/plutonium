@@ -3,14 +3,11 @@ package com.sageserpent.plutonium
 import java.time.Instant
 
 import com.sageserpent.americium.{Finite, Unbounded}
+import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 
 import scalaz.std.option.optionSyntax._
-
 import scala.reflect.runtime.universe._
 
-/**
-  * Created by Gerard on 09/01/2016.
-  */
 trait BestPatchSelection {
   def apply(relatedPatches: Seq[AbstractPatch]): AbstractPatch
 }
@@ -28,57 +25,76 @@ trait BestPatchSelectionContracts extends BestPatchSelection {
   }
 }
 
-trait PatchRecorder {
+object PatchRecorder {
+  trait UpdateConsumer[EventId] {
+    def captureAnnihilation(eventId: EventId, annihilation: Annihilation): Unit
+
+    def capturePatch(when: Unbounded[Instant],
+                     eventIds: Set[EventId],
+                     patch: AbstractPatch): Unit
+  }
+}
+
+trait PatchRecorder[EventId] {
+  import PatchRecorder._
+
+  val updateConsumer: UpdateConsumer[EventId]
+
   def whenEventPertainedToByLastRecordingTookPlace: Option[Unbounded[Instant]]
 
   def allRecordingsAreCaptured: Boolean
 
-  def recordPatchFromChange(when: Unbounded[Instant],
+  def recordPatchFromChange(eventId: EventId,
+                            when: Unbounded[Instant],
                             patch: AbstractPatch): Unit
 
-  def recordPatchFromMeasurement(when: Unbounded[Instant],
+  def recordPatchFromMeasurement(eventId: EventId,
+                                 when: Unbounded[Instant],
                                  patch: AbstractPatch): Unit
 
-  def recordAnnihilation[Item: TypeTag](when: Instant, id: Any): Unit
+  def recordAnnihilation(eventId: EventId, annihilation: Annihilation): Unit
 
   def noteThatThereAreNoFollowingRecordings(): Unit
 }
 
-trait PatchRecorderContracts extends PatchRecorder {
+trait PatchRecorderContracts[EventId] extends PatchRecorder[EventId] {
   require(whenEventPertainedToByLastRecordingTookPlace.isEmpty)
   require(!allRecordingsAreCaptured)
 
-  abstract override def recordPatchFromChange(when: Unbounded[Instant],
+  abstract override def recordPatchFromChange(eventId: EventId,
+                                              when: Unbounded[Instant],
                                               patch: AbstractPatch): Unit = {
     require(
       whenEventPertainedToByLastRecordingTookPlace.cata(some = when >= _,
                                                         none = true))
     require(!allRecordingsAreCaptured)
-    val result = super.recordPatchFromChange(when, patch)
+    val result = super.recordPatchFromChange(eventId, when, patch)
     require(whenEventPertainedToByLastRecordingTookPlace == Some(when))
     result
   }
 
   abstract override def recordPatchFromMeasurement(
+      eventId: EventId,
       when: Unbounded[Instant],
       patch: AbstractPatch): Unit = {
     require(
       whenEventPertainedToByLastRecordingTookPlace.cata(some = when >= _,
                                                         none = true))
     require(!allRecordingsAreCaptured)
-    val result = super.recordPatchFromMeasurement(when, patch)
+    val result = super.recordPatchFromMeasurement(eventId, when, patch)
     require(whenEventPertainedToByLastRecordingTookPlace == Some(when))
     result
   }
 
-  abstract override def recordAnnihilation[Item: TypeTag](when: Instant,
-                                                          id: Any): Unit = {
+  abstract override def recordAnnihilation(eventId: EventId,
+                                           annihilation: Annihilation): Unit = {
     require(
       whenEventPertainedToByLastRecordingTookPlace
-        .cata(some = Finite(when) >= _, none = true))
+        .cata(some = annihilation.when >= _, none = true))
     require(!allRecordingsAreCaptured)
-    val result = super.recordAnnihilation(when, id)
-    require(whenEventPertainedToByLastRecordingTookPlace.contains(Finite(when)))
+    val result = super.recordAnnihilation(eventId, annihilation)
+    require(
+      whenEventPertainedToByLastRecordingTookPlace.contains(annihilation.when))
     result
   }
 

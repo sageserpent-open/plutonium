@@ -75,4 +75,42 @@ that the scope in a spore captures all the history up to, but not including, the
 
 (DONE)
 
+---------------------------------------------------------------------------------------------------------------------------
 
+12. Time to introduce the scalable implementation - this will be based on a timeline whose implementation will take over from the existing patch recorder implementation.
+
+A timeline will exhibit a pure functional API that creates a brand new timeline from an existing one, given the same inputs that would be given to the existing 'World.revise'.
+
+If the world history for the new timeline turns out to be inconsistent, the creation is aborted by throwing an exception.
+
+This means that experimental worlds can be supported directly simply by branching a new timeline off an old one, provided that old timelines are kept around. Hmm.
+
+This also paves the way for only evaluating a world timeline once and persisting the resulting item states in a manner associated with the timeline. Hmm.
+
+Need to share state efficiently too, both for timelines and for item states. This also has to take into account the branching implicit when doing experimental worlds.
+
+One possibility is to calculate a new world timeline without regard to exception safety, persisting as we go into an experimental world.
+If everything works out, the data in the experimental world is moved across into the original world, otherwise all keys in the experimental world are simply purged.
+
+What are the goals - all we want to do now is to be able to *incrementally* define a new world revision - queries can be slow if needs be for now. So can experimental worlds, for that matter.
+
+Also, start with an in-memory implementation that holds on to all events, lifecycle bits and pieces and snapshotted item states.
+
+Do not try to merge the cacheing for the 'ItemStateReferenceResolutionContext' implementation with what's been done for the 'IdentifiedItemsScope' - they are really
+two different things. We can reuse the helpers in the companion object of 'IdentifiedItemsScope', though.
+
+Rejig expectations - do fast queries, but full recalculation via the existing patch recorder (albeit adapted to make item state snaphots).
+
+The plan for reconstituting items in a query is based on prior serialization of items recording only the top-level item using the usual serialized representation.
+
+Any references from the top-level item to other items are converted to a placeholder case class instance that captures the item's class (not the static type tag) and id.
+
+During reconstitution, the placeholders are deserialized by referring to the context - this either supplies existing items that have already been deserialized, or recursively calls top-level deserialization to create the referenced item and populate the context.
+
+(OPTIMISATION: consider cacheing type tags associated with class objects, possibly pre-populating the cache via known type tags captured from the API, or working directly with class objects where appropriate).
+
+SHORT TERM GOAL: Use the existing 'IdentifiedItemsScope' along with full unoptimized playback, but populate the storage as playback progresses. The scopes used for queries will consult said storage.
+
+Looking at the code, the item state storage abstraction should be similar to 'Timeline' - it has a functional API that yields a new storage object for a new revision, and like timelines,
+each instance pertains to a specific revision. So as with timelines, a world should store multiple storage objects, one per revision. Asking for a scope then selects the appropriate
+storage object.

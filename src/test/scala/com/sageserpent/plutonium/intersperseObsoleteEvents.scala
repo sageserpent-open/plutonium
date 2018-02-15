@@ -13,7 +13,7 @@ object intersperseObsoleteEvents {
                          finalEventRelatedThings: Seq[EventRelatedThing],
                          obsoleteEventRelatedThings: Seq[EventRelatedThing])
     : Stream[(Option[EventRelatedThing], EventId)] = {
-    case class UnfoldState(eventRelatedThings: Seq[EventRelatedThing],
+    case class UnfoldState(finalEventRelatedThings: Seq[EventRelatedThing],
                            obsoleteEventRelatedThings: Seq[EventRelatedThing],
                            eventId: EventId,
                            eventsToBeCorrected: Set[EventId])
@@ -21,11 +21,11 @@ object intersperseObsoleteEvents {
 
     def yieldEitherARecordingOrAnObsoleteRecording(unfoldState: UnfoldState) =
       unfoldState match {
-        case unfoldState @ UnfoldState(eventRelatedThings,
+        case unfoldState @ UnfoldState(finalEventRelatedThings,
                                        obsoleteEventRelatedThings,
                                        eventId,
                                        eventsToBeCorrected) =>
-          if (eventRelatedThings.isEmpty) {
+          if (finalEventRelatedThings.isEmpty) {
             if (eventsToBeCorrected.nonEmpty) {
               // Issue annulments correcting any outstanding obsolete events.
               val obsoleteEventId = random.chooseOneOf(eventsToBeCorrected)
@@ -64,11 +64,11 @@ object intersperseObsoleteEvents {
                 eventsToBeCorrected = eventsToBeCorrected - obsoleteEventId))
           } else {
             // Issue the definitive non-obsolete event; this will not be subsequently corrected.
-            val Seq(eventRelatedThing, remainingEventRelatedThings @ _*) =
-              eventRelatedThings
+            val Seq(eventRelatedThing, remainingFinalEventRelatedThings @ _*) =
+              finalEventRelatedThings
             Some(
               (Some(eventRelatedThing), eventId) -> unfoldState.copy(
-                eventRelatedThings = remainingEventRelatedThings,
+                finalEventRelatedThings = remainingFinalEventRelatedThings,
                 eventId = 1 + eventId,
                 eventsToBeCorrected = eventsToBeCorrected - eventId))
           }

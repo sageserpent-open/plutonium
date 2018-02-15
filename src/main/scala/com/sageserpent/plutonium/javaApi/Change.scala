@@ -6,9 +6,6 @@ import java.util.function.{BiConsumer, Consumer}
 import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.{typeTagForClass, Change => ScalaChange}
 
-/**
-  * Created by Gerard on 02/05/2016.
-  */
 object Change {
   def forOneItem[Item](when: Unbounded[Instant],
                        id: Any,

@@ -125,7 +125,7 @@ public class JavaApiTest {
             final Iterable<Account> exampleIterable = scope.renderAsIterable(Bitemporal.withId("Fred", Account.class));
 
             assert !exampleIterable.iterator().hasNext();
-        }
+    }
 
         {
             int followingRevision = 5;
@@ -135,6 +135,6 @@ public class JavaApiTest {
             final Account account = scope.render(Bitemporal.withId("Fred", Account.class)).head();
 
             assert 3.0 == account.getCash();
-        }
+}
     }
 }

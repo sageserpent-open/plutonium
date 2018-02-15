@@ -2,20 +2,20 @@ package com.sageserpent.plutonium
 
 import java.lang.reflect.{InvocationTargetException, Method}
 
+import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.Patch.MethodPieces
 
+import scala.reflect.runtime.universe
+import scala.reflect.runtime.universe._
 import scalaz.{-\/, \/, \/-}
 
-/**
-  * Created by Gerard on 23/01/2016.
-  */
 object Patch {
   type WrappedArgument =
-    \/[AnyRef, Recorder#ItemReconstitutionData[_]]
+    \/[AnyRef, UniqueItemSpecification]
 
   def wrap(argument: AnyRef): WrappedArgument = argument match {
     case argumentRecorder: Recorder =>
-      \/-(argumentRecorder.itemReconstitutionData)
+      \/-(argumentRecorder.uniqueItemSpecification)
     case _ => -\/(argument)
   }
 
@@ -26,7 +26,7 @@ object Patch {
                                     method.getName,
                                     method.getParameterTypes)
     new Patch(methodPieces,
-              targetRecorder.itemReconstitutionData,
+              targetRecorder.uniqueItemSpecification,
               arguments map wrap)
   }
 
@@ -39,20 +39,40 @@ object Patch {
 
 }
 
-class Patch(
-    methodPieces: MethodPieces,
-    override val targetReconstitutionData: Recorder#ItemReconstitutionData[_],
-    wrappedArguments: Array[Patch.WrappedArgument])
+class Patch(methodPieces: MethodPieces,
+            override val targetItemSpecification: UniqueItemSpecification,
+            wrappedArguments: Array[Patch.WrappedArgument])
     extends AbstractPatch {
   import Patch._
+
+  override def toString: String =
+    s"Patch for: '$targetItemSpecification', method: '${method.getName}', arguments: '${wrappedArguments.toList}''"
+
+  override def rewriteItemTypeTags(
+      uniqueItemSpecificationToTypeTagMap: collection.Map[
+        UniqueItemSpecification,
+        TypeTag[_]]): AbstractPatch = {
+    val rewrittenTargetItemSpecification: UniqueItemSpecification =
+      UniqueItemSpecification(
+        targetItemSpecification.id,
+        uniqueItemSpecificationToTypeTagMap(targetItemSpecification))
+    val rewrittenArguments
+      : Array[WrappedArgument] = wrappedArguments map (_.map(
+      argumentUniqueItemSpecification =>
+        UniqueItemSpecification(argumentUniqueItemSpecification.id,
+                                uniqueItemSpecificationToTypeTagMap(
+                                  argumentUniqueItemSpecification))))
+    new Patch(methodPieces,
+              rewrittenTargetItemSpecification,
+              rewrittenArguments)
+  }
 
   @transient
   override lazy val method = methodPieces.method
 
-  override val argumentReconstitutionDatums
-    : Seq[Recorder#ItemReconstitutionData[_]] =
+  override val argumentItemSpecifications: Seq[UniqueItemSpecification] =
     wrappedArguments collect {
-      case \/-(itemReconstitutionData) => itemReconstitutionData
+      case \/-(uniqueItemSpecification) => uniqueItemSpecification
     }
 
   def unwrap(identifiedItemAccess: IdentifiedItemAccess)(
@@ -63,7 +83,7 @@ class Patch(
 
   def apply(identifiedItemAccess: IdentifiedItemAccess): Unit = {
     val targetBeingPatched =
-      identifiedItemAccess.reconstitute(targetReconstitutionData)
+      identifiedItemAccess.reconstitute(targetItemSpecification)
     try {
       method.invoke(targetBeingPatched,
                     wrappedArguments map unwrap(identifiedItemAccess): _*)
@@ -75,18 +95,12 @@ class Patch(
 
   def checkInvariants(identifiedItemAccess: IdentifiedItemAccess): Unit = {
     identifiedItemAccess
-      .reconstitute(targetReconstitutionData)
+      .reconstitute(targetItemSpecification)
       .asInstanceOf[ItemExtensionApi]
       .checkInvariant()
 
-    def wildcardCapture[Item](
-        itemReconstitutionData: Recorder#ItemReconstitutionData[Item]) =
-      identifiedItemAccess.reconstitute(itemReconstitutionData)
-
-    for (argumentReconstitutionDatum <- argumentReconstitutionDatums) {
-      wildcardCapture(argumentReconstitutionDatum)
-        .asInstanceOf[ItemExtensionApi]
-        .checkInvariant()
+    for (argument <- argumentItemSpecifications map identifiedItemAccess.reconstitute) {
+      argument.asInstanceOf[ItemExtensionApi].checkInvariant()
     }
   }
 }

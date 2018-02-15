@@ -1,15 +1,9 @@
 package com.sageserpent.plutonium
 
-/**
-  * Created by Gerard on 14/04/2016.
-  */
+import java.util.UUID
+
 trait AnnihilationHook {
-  protected var _isGhost = false
+  def recordAnnihilation(): Unit
 
-  def recordAnnihilation(): Unit = {
-    require(!_isGhost)
-    _isGhost = true
-  }
-
-  def isGhost: Boolean = _isGhost
+  def setLifecycleUUID(uuid: UUID): Unit
 }

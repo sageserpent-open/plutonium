@@ -4,64 +4,29 @@ import java.nio.ByteBuffer
 import java.time.Instant
 import java.util.{NoSuchElementException, UUID}
 
-import com.esotericsoftware.kryo.io.{Input, Output}
-import com.esotericsoftware.kryo.serializers.JavaSerializer
-import com.esotericsoftware.kryo.{Kryo, Serializer}
+import com.esotericsoftware.kryo.Kryo
 import com.lambdaworks.redis.RedisClient
 import com.lambdaworks.redis.api.rx.RedisReactiveCommands
 import com.lambdaworks.redis.codec.{ByteArrayCodec, RedisCodec, Utf8StringCodec}
 import com.sageserpent.americium.{PositiveInfinity, Unbounded}
+import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.twitter.chill.{KryoPool, ScalaKryoInstantiator}
 import io.netty.handler.codec.EncoderException
 import rx.lang.scala.JavaConversions._
 import rx.lang.scala.Observable
 
 import scala.Ordering.Implicits._
-import scala.reflect.runtime.universe._
 
-/**
-  * Created by Gerard on 27/05/2016.
-  */
 object WorldRedisBasedImplementation {
+  import UniqueItemSpecificationSerializationSupport.SpecialSerializer
+
   val redisNamespaceComponentSeparator = ":"
-
-  val javaSerializer = new JavaSerializer
-
-  class ItemReconstitutionDataSerializer[Item]
-      extends Serializer[Recorder#ItemReconstitutionData[Item]] {
-    override def write(kryo: Kryo,
-                       output: Output,
-                       data: Recorder#ItemReconstitutionData[Item]): Unit = {
-      val (id, typeTag) = data
-      kryo.writeClassAndObject(output, id)
-      kryo.writeObject(output, typeTag, javaSerializer)
-    }
-
-    override def read(kryo: Kryo,
-                      input: Input,
-                      dataType: Class[Recorder#ItemReconstitutionData[Item]])
-      : Recorder#ItemReconstitutionData[Item] = {
-      val id = kryo.readClassAndObject(input).asInstanceOf[Any]
-      val typeTag = kryo
-        .readObject[TypeTag[Item]](input,
-                                   classOf[TypeTag[Item]],
-                                   javaSerializer)
-      id -> typeTag
-    }
-  }
 
   val kryoPool = KryoPool.withByteArrayOutputStream(
     40,
-    new ScalaKryoInstantiator().withRegistrar((kryo: Kryo) => {
-      def registerSerializerForItemReconstitutionData[Item]() = {
-        // TODO - I think this is a potential bug, as 'Recorder#ItemReconstitutionData[Item]' is an alias
-        // to a tuple type instance that is erased at runtime - so all kinds of things could be passed to
-        // the special case serializer. Need to think about this, perhaps a value class wrapper will do the trick?
-        kryo.register(classOf[Recorder#ItemReconstitutionData[Item]],
-                      new ItemReconstitutionDataSerializer[Item])
-      }
-      registerSerializerForItemReconstitutionData()
-    })
+    new ScalaKryoInstantiator().withRegistrar { (kryo: Kryo) =>
+      kryo.register(classOf[UniqueItemSpecification], new SpecialSerializer)
+    }
   )
 
   object redisCodecDelegatingKeysToStandardCodec
@@ -84,7 +49,7 @@ object WorldRedisBasedImplementation {
 
 class WorldRedisBasedImplementation[EventId](redisClient: RedisClient,
                                              identityGuid: String)
-    extends WorldInefficientImplementationCodeFactoring[EventId] {
+    extends WorldImplementationCodeFactoring[EventId] {
   parentWorld =>
 
   import World._
@@ -143,23 +108,25 @@ class WorldRedisBasedImplementation[EventId](redisClient: RedisClient,
       override protected def pertinentEventDatumsObservable(
           cutoffRevision: Revision,
           cutoffWhen: Unbounded[Instant],
-          eventIdInclusion: EventIdInclusion): Observable[AbstractEventData] = {
+          eventIdInclusion: EventIdInclusion)
+        : Observable[(EventId, AbstractEventData)] = {
         val cutoffWhenForBaseWorld = cutoffWhen min cutoffWhenAfterWhichHistoriesDiverge
         if (cutoffRevision > numberOfRevisionsInCommon) for {
-          (eventIds, eventDatums) <- eventIdsAndTheirDatumsObservable(
+          eventIdsAndTheirDatums <- eventIdsAndTheirDatumsObservable(
             cutoffRevision,
-            eventIdInclusion).toList map (_.unzip)
-          eventIdsToBeExcluded = eventIds.toSet
-          eventDatum <- Observable
-            .from(eventDatums filter (eventDatumComesWithinCutoff(
-              _,
-              cutoffWhen))) merge baseWorld.pertinentEventDatumsObservable(
+            eventIdInclusion).toList
+          eventIdsToBeExcluded = eventIdsAndTheirDatums.map(_._1).toSet
+          eventIdAndItsDatum <- Observable
+            .from(eventIdsAndTheirDatums filter {
+              case (_, eventDatum) =>
+                eventDatumComesWithinCutoff(eventDatum, cutoffWhen)
+            }) merge baseWorld.pertinentEventDatumsObservable(
             numberOfRevisionsInCommon,
             cutoffWhenForBaseWorld,
             eventId =>
               !eventIdsToBeExcluded.contains(eventId) && eventIdInclusion(
                 eventId))
-        } yield eventDatum
+        } yield eventIdAndItsDatum
         else
           baseWorld.pertinentEventDatumsObservable(cutoffRevision,
                                                    cutoffWhenForBaseWorld,
@@ -175,7 +142,8 @@ class WorldRedisBasedImplementation[EventId](redisClient: RedisClient,
       .asInstanceOf[Observable[Instant]]
       .toArray
 
-  override protected def eventTimeline(cutoffRevision: Revision): Seq[Event] =
+  override protected def eventTimeline(
+      cutoffRevision: Revision): Seq[(Event, EventId)] =
     try {
       val eventDatumsObservable = for {
         _           <- toScalaObservable(redisApi.watch(asOfsKey))
@@ -205,10 +173,12 @@ class WorldRedisBasedImplementation[EventId](redisClient: RedisClient,
   protected def pertinentEventDatumsObservable(
       cutoffRevision: Revision,
       cutoffWhen: Unbounded[Instant],
-      eventIdInclusion: EventIdInclusion): Observable[AbstractEventData] =
-    eventIdsAndTheirDatumsObservable(cutoffRevision, eventIdInclusion) map (_._2) filter (eventDatumComesWithinCutoff(
-      _,
-      cutoffWhen))
+      eventIdInclusion: EventIdInclusion)
+    : Observable[(EventId, AbstractEventData)] =
+    eventIdsAndTheirDatumsObservable(cutoffRevision, eventIdInclusion) filter {
+      case (_, eventDatum) =>
+        eventDatumComesWithinCutoff(eventDatum, cutoffWhen)
+    }
 
   private def eventDatumComesWithinCutoff(eventDatum: AbstractEventData,
                                           cutoffWhen: Unbounded[Instant]) =
@@ -236,7 +206,7 @@ class WorldRedisBasedImplementation[EventId](redisClient: RedisClient,
 
   def pertinentEventDatumsObservable(cutoffRevision: Revision,
                                      eventIdsForNewEvents: Iterable[EventId])
-    : Observable[AbstractEventData] = {
+    : Observable[(EventId, AbstractEventData)] = {
     val eventIdsToBeExcluded = eventIdsForNewEvents.toSet
     pertinentEventDatumsObservable(
       cutoffRevision,
@@ -245,7 +215,7 @@ class WorldRedisBasedImplementation[EventId](redisClient: RedisClient,
   }
 
   def pertinentEventDatumsObservable(
-      cutoffRevision: Revision): Observable[AbstractEventData] =
+      cutoffRevision: Revision): Observable[(EventId, AbstractEventData)] =
     pertinentEventDatumsObservable(cutoffRevision,
                                    PositiveInfinity(),
                                    _ => true)
@@ -254,21 +224,23 @@ class WorldRedisBasedImplementation[EventId](redisClient: RedisClient,
       asOf: Instant,
       newEventDatumsFor: Revision => Map[EventId, AbstractEventData],
       buildAndValidateEventTimelineForProposedNewRevision: (
-          Seq[AbstractEventData],
-          Seq[AbstractEventData]) => Unit): Revision = {
+          Seq[(EventId, AbstractEventData)],
+          Seq[(EventId, AbstractEventData)]) => Unit): Revision = {
     try {
       val revisionObservable = for {
         _                         <- toScalaObservable(redisApi.watch(asOfsKey))
         nextRevisionPriorToUpdate <- nextRevisionObservable
         newEventDatums: Map[EventId, AbstractEventData] = newEventDatumsFor(
           nextRevisionPriorToUpdate)
-        (pertinentEventDatumsExcludingTheNewRevision: Seq[AbstractEventData], _) <- pertinentEventDatumsObservable(
+        (pertinentEventDatumsExcludingTheNewRevision: Seq[(EventId,
+         AbstractEventData)],
+         _) <- pertinentEventDatumsObservable(
           nextRevisionPriorToUpdate,
           newEventDatums.keys.toSeq).toList zip
           (for (revisionAsOfs <- revisionAsOfsObservable)
             yield checkRevisionPrecondition(asOf, revisionAsOfs))
         _ = buildAndValidateEventTimelineForProposedNewRevision(
-          newEventDatums.values.toSeq,
+          newEventDatums.toSeq,
           pertinentEventDatumsExcludingTheNewRevision)
         transactionGuid = UUID.randomUUID()
         foo <- Observable
