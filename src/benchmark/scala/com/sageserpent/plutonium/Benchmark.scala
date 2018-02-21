@@ -5,7 +5,7 @@ import java.time.Instant
 import com.sageserpent.americium.randomEnrichment._
 import org.scalameter.{Bench, Gen}
 
-object Benchmark extends Bench.LocalTime {
+object Benchmark extends Bench.OfflineRegressionReport {
   type EventId = Int
 
   abstract class Thing {
@@ -14,7 +14,7 @@ object Benchmark extends Bench.LocalTime {
     var reference: Option[Thing] = None
   }
 
-  val sizes = Gen.range("Number of bookings")(0, 2000, 50)
+  val sizes = Gen.range("Number of bookings")(0, 500, 50)
 
   performance of "Bookings" in {
     using(sizes) in { size =>
@@ -24,7 +24,7 @@ object Benchmark extends Bench.LocalTime {
 
       val idSet = 0 until 1 + (size / 5)
 
-      val world = new WorldReferenceImplementation[EventId]()
+      val world = new WorldEfficientInMemoryImplementation[EventId]()
 
       for (step <- 0 until size) {
         val oneId     = randomBehaviour.chooseOneOf(idSet)
