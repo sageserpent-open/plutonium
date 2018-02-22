@@ -3,9 +3,13 @@ package com.sageserpent.plutonium
 import java.time.Instant
 
 import com.sageserpent.americium.randomEnrichment._
+import org.scalameter.reporting.RegressionReporter
 import org.scalameter.{Bench, Gen}
 
 object Benchmark extends Bench.OfflineRegressionReport {
+  override def historian: RegressionReporter.Historian =
+    RegressionReporter.Historian.Complete()
+
   type EventId = Int
 
   abstract class Thing {
