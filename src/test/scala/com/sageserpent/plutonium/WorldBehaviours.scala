@@ -562,8 +562,7 @@ trait WorldBehaviours
         }
         seed <- seedGenerator
         random = new Random(seed)
-        bigShuffledHistoryOverLotsOfThings: Stream[Seq[((Unbounded[Instant],
-        Event), Int)]] = random.splitIntoNonEmptyPieces(
+        bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(
           shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhenForAGivenItem(
             random,
             events).zipWithIndex)
