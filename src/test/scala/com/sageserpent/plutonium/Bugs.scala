@@ -66,7 +66,7 @@ class WorldEfficientInMemoryImplementationBugs
         scope
           .render(Bitemporal.withId[IntegerHistory](firstItemId))
           .loneElement
-          .datums should contain theSameElementsAs (Seq(expectedFinalValue))
+          .datums should contain theSameElementsAs Seq(expectedFinalValue)
       }
     }
   }
@@ -122,7 +122,90 @@ class WorldEfficientInMemoryImplementationBugs
         scope
           .render(Bitemporal.withId[IntegerHistory](firstItemId))
           .loneElement
-          .datums should contain theSameElementsAs (Seq(expectedFinalValue))
+          .datums should contain theSameElementsAs Seq(expectedFinalValue)
+      }
+    }
+  }
+
+  "events that have the same effect on an item" should "be applicable across several item lifecycles, even if the item unified type changes" in {
+    forAll(worldResourceGenerator) { worldResource =>
+      val lizId = "Liz"
+
+      val sharedAsOf = Instant.ofEpochSecond(0)
+
+      val commonValue = "Foo"
+
+      worldResource acquireAndGet { world =>
+        {
+          world.revise(
+            0,
+            Change.forOneItem[FooHistory](Instant.ofEpochSecond(0L))(lizId, {
+              liz =>
+                liz.property1 = commonValue
+            }),
+            sharedAsOf)
+
+          world.revise(1,
+                       Annihilation[FooHistory](Instant.ofEpochSecond(1L),
+                                                lizId),
+                       sharedAsOf)
+        }
+
+        {
+          world.revise(
+            2,
+            Change.forOneItem[FooHistory](Instant.ofEpochSecond(2L))(lizId, {
+              liz =>
+                liz.property1 = commonValue
+            }),
+            sharedAsOf)
+
+          world.revise(
+            3,
+            Annihilation[MoreSpecificFooHistory](Instant.ofEpochSecond(3L),
+                                                 lizId),
+            sharedAsOf)
+        }
+
+        {
+          world.revise(
+            4,
+            Change.forOneItem[FooHistory](Instant.ofEpochSecond(4L))(lizId, {
+              liz =>
+                liz.property1 = commonValue
+            }),
+            sharedAsOf)
+
+          world.revise(
+            5,
+            Annihilation[AnotherSpecificFooHistory](Instant.ofEpochSecond(5L),
+                                                    lizId),
+            sharedAsOf)
+        }
+
+        {
+          world
+            .scopeFor(Instant.ofEpochSecond(0L), sharedAsOf)
+            .render(Bitemporal.withId[FooHistory](lizId))
+            .loneElement
+            .datums should contain theSameElementsAs List(commonValue)
+        }
+
+        {
+          world
+            .scopeFor(Instant.ofEpochSecond(2L), sharedAsOf)
+            .render(Bitemporal.withId[MoreSpecificFooHistory](lizId))
+            .loneElement
+            .datums should contain theSameElementsAs List(commonValue)
+        }
+
+        {
+          world
+            .scopeFor(Instant.ofEpochSecond(4L), sharedAsOf)
+            .render(Bitemporal.withId[AnotherSpecificFooHistory](lizId))
+            .loneElement
+            .datums should contain theSameElementsAs List(commonValue)
+        }
       }
     }
   }
