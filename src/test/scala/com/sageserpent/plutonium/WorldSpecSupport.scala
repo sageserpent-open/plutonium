@@ -628,8 +628,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
           numberOfEventsForLimitedLifespans(dataSamplesGroupedForLifespans)
       }
       numberOfEventsOverall = numberOfEventsForLifespans.sum
-      sampleWhens <- changeWhensInIncreasingOrderGenerator(
-        numberOfEventsOverall)
+      sampleWhens <- Gen.listOfN(numberOfEventsOverall, changeWhenGenerator) map (_ sorted)
       sampleWhensGroupedForLifespans = stream.unfold(
         numberOfEventsForLifespans -> sampleWhens) {
         case (numberOfEvents #:: remainingNumberOfEventsForLifespans,
