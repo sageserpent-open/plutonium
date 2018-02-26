@@ -145,10 +145,11 @@ class WorldEfficientInMemoryImplementationBugs
             }),
             sharedAsOf)
 
-          world.revise(1,
-                       Annihilation[FooHistory](Instant.ofEpochSecond(1L),
-                                                lizId),
-                       sharedAsOf)
+          world.revise(
+            1,
+            Annihilation[MoreSpecificFooHistory](Instant.ofEpochSecond(1L),
+                                                 lizId),
+            sharedAsOf)
         }
 
         {
@@ -162,8 +163,8 @@ class WorldEfficientInMemoryImplementationBugs
 
           world.revise(
             3,
-            Annihilation[MoreSpecificFooHistory](Instant.ofEpochSecond(3L),
-                                                 lizId),
+            Annihilation[AnotherSpecificFooHistory](Instant.ofEpochSecond(3L),
+                                                    lizId),
             sharedAsOf)
         }
 
@@ -176,24 +177,15 @@ class WorldEfficientInMemoryImplementationBugs
             }),
             sharedAsOf)
 
-          world.revise(
-            5,
-            Annihilation[AnotherSpecificFooHistory](Instant.ofEpochSecond(5L),
-                                                    lizId),
-            sharedAsOf)
+          world.revise(5,
+                       Annihilation[FooHistory](Instant.ofEpochSecond(5L),
+                                                lizId),
+                       sharedAsOf)
         }
 
         {
           world
             .scopeFor(Instant.ofEpochSecond(0L), sharedAsOf)
-            .render(Bitemporal.withId[FooHistory](lizId))
-            .loneElement
-            .datums should contain theSameElementsAs List(commonValue)
-        }
-
-        {
-          world
-            .scopeFor(Instant.ofEpochSecond(2L), sharedAsOf)
             .render(Bitemporal.withId[MoreSpecificFooHistory](lizId))
             .loneElement
             .datums should contain theSameElementsAs List(commonValue)
@@ -201,8 +193,16 @@ class WorldEfficientInMemoryImplementationBugs
 
         {
           world
-            .scopeFor(Instant.ofEpochSecond(4L), sharedAsOf)
+            .scopeFor(Instant.ofEpochSecond(2L), sharedAsOf)
             .render(Bitemporal.withId[AnotherSpecificFooHistory](lizId))
+            .loneElement
+            .datums should contain theSameElementsAs List(commonValue)
+        }
+
+        {
+          world
+            .scopeFor(Instant.ofEpochSecond(4L), sharedAsOf)
+            .render(Bitemporal.withId[FooHistory](lizId))
             .loneElement
             .datums should contain theSameElementsAs List(commonValue)
         }
