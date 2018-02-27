@@ -84,7 +84,8 @@ class TimelineImplementation[EventId](
     var microRevisedBlobStorage = {
       val initialMicroRevisionBuilder = blobStorage.openRevision()
 
-      for (eventId <- annulledEvents) {
+      val eventsBeingUpdated = updatePlan.values.flatMap(_ flatMap (_._1))
+      for (eventId <- annulledEvents ++ eventsBeingUpdated) {
         initialMicroRevisionBuilder.annulEvent(eventId)
       }
       initialMicroRevisionBuilder.build()
@@ -189,19 +190,6 @@ class TimelineImplementation[EventId](
     for {
       (when, itemStateUpdates: Seq[(Set[EventId], ItemStateUpdate)]) <- updatePlan
     } {
-      {
-        val microRevisionWithAnullmentsBuilder =
-          microRevisedBlobStorage.openRevision()
-
-        val eventsAtThisTime = itemStateUpdates.flatMap(_._1)
-
-        for (eventId <- eventsAtThisTime) {
-          microRevisionWithAnullmentsBuilder.annulEvent(eventId)
-        }
-
-        microRevisedBlobStorage = microRevisionWithAnullmentsBuilder.build()
-      }
-
       identifiedItemAccess.resetSourceTimesliceTo(when)
 
       val timesliceOfBlobStorageBeingRevisedOverall = blobStorage
