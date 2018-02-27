@@ -292,7 +292,7 @@ abstract class PatchRecorderImplementation[EventId](
       patchRepresentingTheEvent
 
     val reconstitutionDataToItemStateMap =
-      patchToItemStatesMap(bestPatch)
+      patchToItemStatesMap.remove(bestPatch).get
 
     for ((UniqueItemSpecification(id, _), itemState) <- reconstitutionDataToItemStateMap) {
       if (itemState.itemWouldConflictWithEarlierLifecyclePriorTo > sequenceIndexForBestPatch) {
