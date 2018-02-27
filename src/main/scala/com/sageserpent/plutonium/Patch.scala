@@ -39,9 +39,9 @@ object Patch {
 
 }
 
-class Patch(methodPieces: MethodPieces,
-            override val targetItemSpecification: UniqueItemSpecification,
-            wrappedArguments: Array[Patch.WrappedArgument])
+case class Patch(methodPieces: MethodPieces,
+                 override val targetItemSpecification: UniqueItemSpecification,
+                 wrappedArguments: Array[Patch.WrappedArgument])
     extends AbstractPatch {
   import Patch._
 

@@ -260,6 +260,11 @@ abstract class PatchRecorderImplementation[EventId](
   private type UniqueItemSpecificationToItemStateMap =
     mutable.Map[UniqueItemSpecification, ItemState]
 
+  implicit val patchBagConfiguration =
+    mutable.HashBag.configuration.compact[AbstractPatch]
+
+  private val bagOfPatches = mutable.Bag.empty[AbstractPatch]
+
   private val patchToItemStatesMap =
     mutable.Map.empty[AbstractPatch, UniqueItemSpecificationToItemStateMap]
 
@@ -291,8 +296,14 @@ abstract class PatchRecorderImplementation[EventId](
     val (sequenceIndexForBestPatch, _, whenTheBestPatchOccurs, _) =
       patchRepresentingTheEvent
 
+    bagOfPatches -= bestPatch
+
     val reconstitutionDataToItemStateMap =
-      patchToItemStatesMap.remove(bestPatch).get
+      if (bagOfPatches.contains(bestPatch)) {
+        patchToItemStatesMap(bestPatch)
+      } else {
+        patchToItemStatesMap.remove(bestPatch).get
+      }
 
     for ((UniqueItemSpecification(id, _), itemState) <- reconstitutionDataToItemStateMap) {
       if (itemState.itemWouldConflictWithEarlierLifecyclePriorTo > sequenceIndexForBestPatch) {
@@ -328,17 +339,24 @@ abstract class PatchRecorderImplementation[EventId](
 
   private def refineRelevantItemStatesAndYieldTarget(
       patch: AbstractPatch): ItemState = {
+    val itemStates: UniqueItemSpecificationToItemStateMap = mutable.Map.empty
+
     def refinedItemStateFor(reconstitutionData: UniqueItemSpecification) = {
       val itemState = itemStateFor(reconstitutionData)
       itemState.refineType(reconstitutionData.typeTag)
-      patchToItemStatesMap.getOrElseUpdate(patch, mutable.Map.empty) += reconstitutionData -> itemState
+      itemStates += reconstitutionData -> itemState
       itemState
     }
 
     for (argumentReconstitutionData <- patch.argumentItemSpecifications) {
       refinedItemStateFor(argumentReconstitutionData)
     }
-    refinedItemStateFor(patch.targetItemSpecification)
+    val targetItemState = refinedItemStateFor(patch.targetItemSpecification)
+
+    bagOfPatches += patch
+    patchToItemStatesMap.getOrElseUpdate(patch, mutable.Map.empty) ++= itemStates
+
+    targetItemState
   }
 
   private def itemStateFor(
