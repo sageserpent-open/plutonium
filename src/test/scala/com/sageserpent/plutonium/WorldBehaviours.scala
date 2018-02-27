@@ -2772,7 +2772,62 @@ trait WorldBehaviours
           recordings)
         shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhenForAGivenItem(
           random,
-          recordings)
+          obsoleteRecordings)
+        bigShuffledHistoryOverLotsOfThings = intersperseObsoleteEvents(
+          random,
+          shuffledRecordings,
+          shuffledObsoleteRecordings)
+        asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
+                             instantGenerator) map (_.sorted)
+      } yield (worldResource, bigShuffledHistoryOverLotsOfThings, asOfs, steps)
+      check(Prop.forAllNoShrink(testCaseGenerator) {
+        case (worldResource,
+              bigShuffledHistoryOverLotsOfThings,
+              asOfs,
+              steps) =>
+          worldResource acquireAndGet {
+            world =>
+              recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
+                                  asOfs,
+                                  world)
+
+              val scope =
+                world.scopeFor(PositiveInfinity[Instant](), world.nextRevision)
+
+              val fredTheItem = scope
+                .render(Bitemporal.withId[IntegerHistory](itemId))
+                .force
+
+              (steps == fredTheItem.head.datums) :| s"Expecting: ${steps}, but got: ${fredTheItem.head.datums}"
+          }
+      })
+    }
+
+    it should "build an item's state in a manner consistent with the history experienced by the item regardless of any corrected history - with a twist." in {
+      val itemId = "Fred"
+
+      val testCaseGenerator = for {
+        worldResource <- worldResourceGenerator
+        eventTimes    <- Gen.nonEmptyListOf(instantGenerator) map (_.sorted)
+        steps = 1 to eventTimes.size
+        recordingsThatAreBothObsoleteAndCorrecting: List[(Unbounded[Instant],
+        Event)] = eventTimes zip steps map {
+          case (when, step) =>
+            Finite(when) -> Change
+              .forOneItem[IntegerHistory](when)(itemId, {
+                item: IntegerHistory =>
+                  item.integerProperty = step
+              })
+        }
+
+        seed <- seedGenerator
+        random = new Random(seed)
+        shuffledRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhenForAGivenItem(
+          random,
+          recordingsThatAreBothObsoleteAndCorrecting)
+        shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhenForAGivenItem(
+          random,
+          recordingsThatAreBothObsoleteAndCorrecting)
         bigShuffledHistoryOverLotsOfThings = intersperseObsoleteEvents(
           random,
           shuffledRecordings,
