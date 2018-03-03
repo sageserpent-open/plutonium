@@ -57,9 +57,6 @@ class TimelineImplementation[EventId](
         case (eventId, None)        => -\/(eventId)
       }).separate
 
-    val stub =
-      SortedMap.empty[Unbounded[Instant], Map[EventId, Seq[ItemStateUpdate]]]
-
     val eventsForNewTimeline
       : Map[EventId, EventData] = this.events -- annulledEvents ++ newEvents.zipWithIndex.map {
       case ((eventId, event), tiebreakerIndex) =>
