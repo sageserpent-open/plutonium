@@ -3,7 +3,7 @@ package com.sageserpent.plutonium
 import java.time.Instant
 import java.util.UUID
 
-import com.sageserpent.americium.{NegativeInfinity, PositiveInfinity, Unbounded}
+import com.sageserpent.americium.{PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.PatchRecorder.UpdateConsumer
 import com.sageserpent.plutonium.World.{Revision, initialRevision}
@@ -11,7 +11,6 @@ import com.sageserpent.plutonium.WorldImplementationCodeFactoring.{
   EventData,
   QueryCallbackStuff
 }
-import resource.makeManagedResource
 
 import scala.collection.immutable.{Map, SortedMap, TreeMap}
 import scala.collection.mutable
@@ -40,16 +39,6 @@ class TimelineImplementation[EventId](
     extends Timeline[EventId] {
   import ItemStateStorage.SnapshotBlob
 
-  sealed trait ItemStateUpdate
-
-  case class ItemStatePatch(patch: AbstractPatch) extends ItemStateUpdate
-
-  case class ItemStateAnnihilation(annihilation: Annihilation)
-      extends ItemStateUpdate
-
-  type UpdatePlan =
-    SortedMap[Unbounded[Instant], Seq[(Set[EventId], ItemStateUpdate)]]
-
   override def revise(events: Map[EventId, Option[Event]]) = {
     val (annulledEvents, newEvents) =
       (events.toList map {
@@ -63,181 +52,17 @@ class TimelineImplementation[EventId](
         eventId -> EventData(event, nextRevision, tiebreakerIndex)
     }.toMap
 
-    val updatePlan = createUpdatePlan(eventsForNewTimeline)
+    val updatePlan =
+      UpdatePlan(annulledEvents.toSet, createUpdates(eventsForNewTimeline))
 
     val blobStorageForNewTimeline =
-      carryOutUpdatePlanInABlazeOfImperativeGlory(annulledEvents, updatePlan)
+      updatePlan(blobStorage)
 
     new TimelineImplementation(
       events = eventsForNewTimeline,
       blobStorage = blobStorageForNewTimeline,
       nextRevision = 1 + nextRevision
     )
-  }
-
-  private def carryOutUpdatePlanInABlazeOfImperativeGlory(
-      annulledEvents: List[EventId],
-      updatePlan: UpdatePlan): BlobStorage[EventId, SnapshotBlob] = {
-    var microRevisedBlobStorage = {
-      val initialMicroRevisionBuilder = blobStorage.openRevision()
-
-      val eventsBeingUpdated = updatePlan.values.flatMap(_ flatMap (_._1))
-      for (eventId <- annulledEvents ++ eventsBeingUpdated) {
-        initialMicroRevisionBuilder.annulEvent(eventId)
-      }
-      initialMicroRevisionBuilder.build()
-    }
-
-    val identifiedItemAccess = new IdentifiedItemAccess
-    with itemStateStorageUsingProxies.ReconstitutionContext {
-      override def reconstitute(
-          uniqueItemSpecification: UniqueItemSpecification) =
-        if (forgottenItemSpecifications.contains(uniqueItemSpecification)) {
-          forgottenItemSpecifications -= uniqueItemSpecification
-          fallbackItemFor[Any](uniqueItemSpecification)
-        } else itemFor[Any](uniqueItemSpecification)
-
-      private val forgottenItemSpecifications =
-        mutable.Set.empty[UniqueItemSpecification]
-
-      override def forget(
-          uniqueItemSpecification: UniqueItemSpecification): Unit = {
-        val item = reconstitute(uniqueItemSpecification)
-          .asInstanceOf[AnnihilationHook]
-          .recordAnnihilation()
-        forgottenItemSpecifications += uniqueItemSpecification
-      }
-
-      private var blobStorageTimeSlice =
-        microRevisedBlobStorage.timeSlice(NegativeInfinity())
-
-      var allItemsAreLocked = true
-
-      private val itemsMutatedSinceLastSnapshotHarvest =
-        mutable.Map.empty[UniqueItemSpecification, ItemExtensionApi]
-
-      def resetSourceTimesliceTo(when: Unbounded[Instant]) = {
-        blobStorageTimeSlice = microRevisedBlobStorage.timeSlice(when)
-      }
-
-      override def blobStorageTimeslice: BlobStorage.Timeslice[SnapshotBlob] =
-        blobStorageTimeSlice
-
-      override protected def createItemFor[Item](
-          _uniqueItemSpecification: UniqueItemSpecification,
-          lifecycleUUID: UUID) = {
-        import QueryCallbackStuff.{AcquiredState, proxyFactory}
-
-        val stateToBeAcquiredByProxy: AcquiredState =
-          new AcquiredState {
-            val uniqueItemSpecification: UniqueItemSpecification =
-              _uniqueItemSpecification
-            def itemIsLocked: Boolean = allItemsAreLocked
-            def recordMutation(item: ItemExtensionApi): Unit = {
-              itemsMutatedSinceLastSnapshotHarvest.update(
-                item.uniqueItemSpecification,
-                item)
-            }
-          }
-
-        implicit val typeTagForItem: TypeTag[Item] =
-          _uniqueItemSpecification.typeTag.asInstanceOf[TypeTag[Item]]
-
-        val item = proxyFactory.constructFrom[Item](stateToBeAcquiredByProxy)
-
-        item
-          .asInstanceOf[AnnihilationHook]
-          .setLifecycleUUID(lifecycleUUID)
-
-        item
-      }
-
-      override protected def fallbackItemFor[Item](
-          uniqueItemSpecification: UniqueItemSpecification): Item = {
-        val item =
-          createAndStoreItem[Item](uniqueItemSpecification, UUID.randomUUID())
-        itemsMutatedSinceLastSnapshotHarvest.update(
-          uniqueItemSpecification,
-          item.asInstanceOf[ItemExtensionApi])
-        item
-      }
-
-      override protected def fallbackRelatedItemFor[Item](
-          uniqueItemSpecification: UniqueItemSpecification): Item = {
-        val item =
-          createItemFor[Item](uniqueItemSpecification, UUID.randomUUID())
-        item.asInstanceOf[AnnihilationHook].recordAnnihilation()
-        item
-      }
-
-      def harvestSnapshots(): Map[UniqueItemSpecification, SnapshotBlob] = {
-        val result = itemsMutatedSinceLastSnapshotHarvest map {
-          case (uniqueItemSpecification, item) =>
-            val snapshotBlob = itemStateStorageUsingProxies.snapshotFor(item)
-
-            uniqueItemSpecification -> snapshotBlob
-        } toMap
-
-        itemsMutatedSinceLastSnapshotHarvest.clear()
-
-        result
-      }
-    }
-
-    for {
-      (when, itemStateUpdates: Seq[(Set[EventId], ItemStateUpdate)]) <- updatePlan
-    } {
-      identifiedItemAccess.resetSourceTimesliceTo(when)
-
-      val timesliceOfBlobStorageBeingRevisedOverall = blobStorage
-        .timeSlice(when)
-
-      {
-        val microRevisionBuilder = microRevisedBlobStorage.openRevision()
-
-        for {
-          (eventIds, itemStateUpdate) <- itemStateUpdates
-        } {
-          val snapshotBlobs =
-            mutable.Map
-              .empty[UniqueItemSpecification, Option[SnapshotBlob]]
-
-          itemStateUpdate match {
-            case ItemStateAnnihilation(annihilation) =>
-              annihilation(identifiedItemAccess)
-              snapshotBlobs += (annihilation.uniqueItemSpecification -> None)
-            case ItemStatePatch(patch) =>
-              for (_ <- makeManagedResource {
-                     identifiedItemAccess.allItemsAreLocked = false
-                   } { _ =>
-                     identifiedItemAccess.allItemsAreLocked = true
-                   }(List.empty)) {
-                patch(identifiedItemAccess)
-              }
-
-              patch.checkInvariants(identifiedItemAccess)
-
-              snapshotBlobs ++= identifiedItemAccess
-                .harvestSnapshots()
-                .filter {
-                  case (uniqueItemSpecification, snapshot) =>
-                    !timesliceOfBlobStorageBeingRevisedOverall
-                      .snapshotBlobFor(uniqueItemSpecification)
-                      .contains(snapshot)
-                }
-                .mapValues(Some.apply)
-          }
-
-          microRevisionBuilder.recordSnapshotBlobsForEvent(eventIds,
-                                                           when,
-                                                           snapshotBlobs.toMap)
-        }
-
-        microRevisedBlobStorage = microRevisionBuilder.build()
-      }
-    }
-
-    microRevisedBlobStorage
   }
 
   override def retainUpTo(when: Unbounded[Instant]) = {
@@ -305,8 +130,8 @@ class TimelineImplementation[EventId](
       }
     }
 
-  private def createUpdatePlan(
-      eventsForNewTimeline: Map[EventId, EventData]): UpdatePlan = {
+  private def createUpdates(eventsForNewTimeline: Map[EventId, EventData])
+    : SortedMap[Unbounded[Instant], Seq[(Set[EventId], ItemStateUpdate)]] = {
     val eventTimeline = WorldImplementationCodeFactoring.eventTimelineFrom(
       eventsForNewTimeline.toSeq)
 
@@ -343,10 +168,7 @@ class TimelineImplementation[EventId](
 
     WorldImplementationCodeFactoring.recordPatches(eventTimeline, patchRecorder)
 
-    val updatePlan: UpdatePlan =
-      TreeMap[Unbounded[Instant], Seq[(Set[EventId], ItemStateUpdate)]](
-        updatePlanBuffer.toSeq: _*)
-
-    updatePlan
+    TreeMap[Unbounded[Instant], Seq[(Set[EventId], ItemStateUpdate)]](
+      updatePlanBuffer.toSeq: _*)
   }
 }
