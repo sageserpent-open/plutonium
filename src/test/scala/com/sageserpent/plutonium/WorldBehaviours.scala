@@ -9,11 +9,13 @@ import com.sageserpent.americium
 import com.sageserpent.americium._
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.seqEnrichment._
+import com.sageserpent.plutonium.intersperseObsoleteEvents.EventId
 import org.scalacheck.Prop.BooleanOperators
 import org.scalacheck.{Gen, Prop}
 import org.scalatest.prop.Checkers
-import org.scalatest.{FlatSpec, Matchers}
+import org.scalatest.{FlatSpec, Matchers, Outcome}
 
+import scala.collection.immutable
 import scala.collection.immutable.{::, TreeMap}
 import scala.util.Random
 import scalaz.std.stream
@@ -3492,6 +3494,93 @@ class WorldSpecUsingWorldRedisBasedImplementation
             secondSerializationFailedInExpectedManner && secondRevisionAttemptFailed &&
             queryOk
         }
+    })
+  }
+}
+
+class AllTheWorlds
+    extends FlatSpec
+    with Matchers
+    with Checkers
+    with WorldSpecSupport
+    with WorldRedisBasedImplementationResource {
+  val redisServerPort = 6455
+
+  object worldReferenceImplementationResource
+      extends WorldReferenceImplementationResource
+
+  object worldEfficientInMemoryImplementationResource
+      extends WorldEfficientInMemoryImplementationResource
+
+  "all the world implementations" should "agree" in {
+    val testCaseGenerator = for {
+      worldReferenceImplementationResource         <- worldReferenceImplementationResource.worldResourceGenerator
+      worldEfficientInMemoryImplementationResource <- worldEfficientInMemoryImplementationResource.worldResourceGenerator
+      worldRedisBasedImplementationResource        <- worldResourceGenerator
+      recordingsGroupedById <- recordingsGroupedByIdGenerator(
+        forbidAnnihilations = false)
+      obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
+      seed                          <- seedGenerator
+      random = new Random(seed)
+      shuffledRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+        random,
+        recordingsGroupedById)
+      shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+        random,
+        obsoleteRecordingsGroupedById)
+      bigShuffledHistoryOverLotsOfThings = intersperseObsoleteEvents(
+        random,
+        shuffledRecordings,
+        shuffledObsoleteRecordings)
+      asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
+                           instantGenerator) map (_.sorted)
+      queryWhen <- unboundedInstantGenerator
+    } yield
+      (worldReferenceImplementationResource,
+       worldEfficientInMemoryImplementationResource,
+       worldRedisBasedImplementationResource,
+       recordingsGroupedById,
+       bigShuffledHistoryOverLotsOfThings,
+       asOfs,
+       queryWhen)
+    check(Prop.forAllNoShrink(testCaseGenerator) {
+      case (worldReferenceImplementationResource,
+            worldEfficientInMemoryImplementationResource,
+            worldRedisBasedImplementationResource,
+            recordingsGroupedById,
+            bigShuffledHistoryOverLotsOfThings,
+            asOfs,
+            queryWhen) =>
+        def resultsFrom(world: World[Int]): immutable.Seq[(Any, Seq[Any])] = {
+          recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
+
+          val scope = world.scopeFor(queryWhen, world.nextRevision)
+
+          for {
+            RecordingsNoLaterThan(historyId, historiesFrom, _, _, _) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
+              queryWhen))
+            Seq(history) = historiesFrom(scope)
+          } yield (historyId, history.datums)
+        }
+
+        val checks = for {
+          worldReferenceImplementation         <- worldReferenceImplementationResource
+          worldEfficientInMemoryImplementation <- worldEfficientInMemoryImplementationResource
+          worldRedisBasedImplementation        <- worldRedisBasedImplementationResource
+        } yield {
+          val worldReferenceImplementationResults =
+            resultsFrom(worldReferenceImplementation)
+          val worldEfficientInMemoryImplementationResults =
+            resultsFrom(worldEfficientInMemoryImplementation)
+          val redisBasedImplementationResults =
+            resultsFrom(worldRedisBasedImplementation)
+
+          ((worldReferenceImplementationResults == worldEfficientInMemoryImplementationResults) :| s"Should have agreement between reference implementation and efficient in-memory implementation.") &&
+          ((worldEfficientInMemoryImplementationResults == redisBasedImplementationResults) :| s"Should have agreement between efficient in-memory implementation and Redis based implementation.") &&
+          ((redisBasedImplementationResults == worldReferenceImplementationResults) :| s"Should have agreement between Redis based implementation and reference implementation.")
+        }
+
+        checks acquireAndGet identity
     })
   }
 }
