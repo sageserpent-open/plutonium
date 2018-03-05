@@ -30,5 +30,11 @@ class LifecyclesStateSpec
   // should refer to patches that come from the events, and these should be correctly ordered wrt to the the events that made them.
 
   // 8. Similar to #7, but intersperse obsolete events - all of the obsolete events must either be explicitly annulled or knocked out by a subsequent final
-  // update. What gets through should have the same effect as if oen big revision was made with the final events.
+  // update. What gets through should have the same effect as if one big revision was made with the final events.
+
+  // Test case strategy: make set of ids, and for each id, maintain a sequence of maps of disjoint item types. It is permissible to knock out one item type
+  // key and add in another, as long the invariant is maintained that the keys are disjoint types. The associated values are times when an event happens - this could
+  // be a change or a measurement. Removing a key models annihilating an item. The mapped times are updated in non strictly increasing order. Whenever an actual event
+  // is made from a maplet, the type of the item may be replaced by some subclass, as long as all such substitutions are themselves supertypes of some common class
+  // that is not just 'Null'.
 }
