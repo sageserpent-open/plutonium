@@ -1,8 +1,8 @@
-package com.sageserpent.plutonium.javaApi
+package com.sageserpent.plutonium
 
-import org.scalatest.{FlatSpec, Matchers}
+import org.scalacheck.{ShrinkLowPriority => NoShrinking}
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
-import org.scalacheck.{Gen, ShrinkLowPriority => NoShrinking}
+import org.scalatest.{FlatSpec, Matchers}
 
 class LifecyclesStateSpec
     extends FlatSpec
