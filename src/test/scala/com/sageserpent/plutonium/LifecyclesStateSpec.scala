@@ -1,20 +1,27 @@
 package com.sageserpent.plutonium
 
+import java.time.Instant
+
+import com.sageserpent.americium.Unbounded
 import org.scalacheck.{ShrinkLowPriority => NoShrinking}
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{FlatSpec, Matchers}
+
+import scala.collection.immutable
+import scala.util.Random
 
 class LifecyclesStateSpec
     extends FlatSpec
     with Matchers
     with GeneratorDrivenPropertyChecks
-    with NoShrinking {
+    with NoShrinking
+    with WorldSpecSupport {
   // TODO - presumably there would be some kind of compatibility test with 'PatchRecorder'?
 
   // TODO - so if one 'LifecyclesState' was mutated into another by a series of revisions, it would make the same cumulative update plan
   // as if all the revisions were rolled together as one - or at least it would have the same effect. Hmm, need to think about that more precisely.
 
-  // 1. If I feed in new events that refer to a bunch of item ids, then I know that the updates generated will only refer to a subset of those ids plus those booked in vai prior revisions.
+  // 1. If I feed in new events that refer to a bunch of item ids, then I know that the updates generated will only refer to a subset of those ids plus those booked in via prior revisions.
 
   // 2. Something to do with working out the type of a lifecycle's item.
 
@@ -37,4 +44,20 @@ class LifecyclesStateSpec
   // be a change or a measurement. Removing a key models annihilating an item. The mapped times are updated in non strictly increasing order. Whenever an actual event
   // is made from a maplet, the type of the item may be replaced by some subclass, as long as all such substitutions are themselves supertypes of some common class
   // that is not just 'Null'.
+
+  type EventId = Int
+
+  "Booking in events in one block revision" should "build a correct update plan" in {
+    forAll(recordingsGroupedByIdGenerator(forbidAnnihilations = false)) {
+      recordingsGroupedById =>
+        val events: Map[EventId, Some[Event]] =
+          (recordingsGroupedById.flatMap(_.events) map (_._2)).zipWithIndex map {
+            case (event, index) => index -> Some(event)
+          } toMap
+
+        def harvestUpdatePlan(updatePlan: UpdatePlan[EventId]) = ???  // TODO - build an 'IdentifiedItemAccess' that can have expectations applied. Also yield empty dependencies.
+
+        val results = noLifecyclesState[EventId]().revise(events, harvestUpdatePlan)._2
+    }
+  }
 }

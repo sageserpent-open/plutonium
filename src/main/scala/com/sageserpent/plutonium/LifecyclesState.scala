@@ -10,13 +10,12 @@ object LifecyclesState {
 
 trait LifecyclesState[EventId] {
 
-  def revise[Input, Output](events: Map[EventId, Option[Event]],
-                            updatePlanConsumer: (
-                                Input,
-                                UpdatePlan[EventId]) => (Dependencies, Output))
+  def revise[Output](
+      events: Map[EventId, Option[Event]],
+      updatePlanConsumer: (UpdatePlan[EventId]) => (Dependencies, Output))
     : (LifecyclesState[EventId], Output)
 }
 
 object noLifecyclesState {
-  def apply[EventId]: LifecyclesState[EventId] = ???
+  def apply[EventId](): LifecyclesState[EventId] = ???
 }
