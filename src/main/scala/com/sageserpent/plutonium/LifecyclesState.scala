@@ -5,7 +5,9 @@ import com.sageserpent.plutonium.LifecyclesState.Dependencies
 import scala.collection.immutable.Map
 
 object LifecyclesState {
-  type Dependencies
+  trait Dependencies
+
+  object noDependencies extends Dependencies
 }
 
 trait LifecyclesState[EventId] {

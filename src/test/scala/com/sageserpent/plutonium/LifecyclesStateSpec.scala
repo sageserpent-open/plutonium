@@ -1,6 +1,7 @@
 package com.sageserpent.plutonium
 
-import com.sageserpent.americium.PositiveInfinity
+import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
+import com.sageserpent.plutonium.LifecyclesState.noDependencies
 import org.scalacheck.{ShrinkLowPriority => NoShrinking}
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{FlatSpec, Inspectors, Matchers}
@@ -43,35 +44,39 @@ class LifecyclesStateSpec
   type EventId = Int
 
   "Booking in events in one block revision" should "build a correct update plan" in {
-    forAll(recordingsGroupedByIdGenerator(forbidAnnihilations = false)) {
-      recordingsGroupedById =>
-        val events: Map[EventId, Some[Event]] =
-          (recordingsGroupedById.flatMap(_.events) map (_._2)).zipWithIndex map {
-            case (event, index) => index -> Some(event)
-          } toMap
+    forAll(recordingsGroupedByIdGenerator(forbidAnnihilations = false),
+           unboundedInstantGenerator) { (recordingsGroupedById, queryWhen) =>
+      val events: Map[EventId, Some[Event]] =
+        (recordingsGroupedById.flatMap(_.events) map (_._2)).zipWithIndex map {
+          case (event, index) => index -> Some(event)
+        } toMap
 
-        def harvestUpdatePlan(updatePlan: UpdatePlan[EventId])
-          : (LifecyclesState.Dependencies, Scope) =
-          ??? // TODO - build an 'Scope' at positive infinity that can have expectations applied. Also yield empty dependencies.
+      def harvestUpdatePlan(updatePlan: UpdatePlan[EventId])
+        : (LifecyclesState.Dependencies, ItemCache) = {
+        val blobStorage =
+          updatePlan(BlobStorageInMemory[EventId, SnapshotBlob]())
+        val itemCache =
+          new ItemCacheUsingBlobStorage[EventId](blobStorage, queryWhen)
+        (noDependencies, itemCache) // TODO - shouldn't this work with arbitrary dependencies being returned? Shouldn't that be tested, then?
+      }
 
-        val scope: Scope =
-          noLifecyclesState[EventId]().revise(events, harvestUpdatePlan)._2
+      val itemCache: ItemCache =
+        noLifecyclesState[EventId]().revise(events, harvestUpdatePlan)._2
 
-        val checks = for {
-          RecordingsNoLaterThan(
-            historyId,
-            historiesFrom,
-            pertinentRecordings,
-            _,
-            _) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
-            PositiveInfinity()))
-          Seq(history) = historiesFrom(scope)
-        } yield (historyId, history.datums, pertinentRecordings.map(_._1))
+      val checks = for {
+        RecordingsNoLaterThan(
+          historyId,
+          historiesFrom,
+          pertinentRecordings,
+          _,
+          _) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(queryWhen))
+        Seq(history) = historiesFrom(itemCache)
+      } yield (historyId, history.datums, pertinentRecordings.map(_._1))
 
-        Inspectors.forAll(checks) {
-          case (_, actualDatums, expectedDatums) =>
-            actualDatums should contain theSameElementsInOrderAs expectedDatums
-        }
+      Inspectors.forAll(checks) {
+        case (_, actualDatums, expectedDatums) =>
+          actualDatums should contain theSameElementsInOrderAs expectedDatums
+      }
     }
   }
 }
