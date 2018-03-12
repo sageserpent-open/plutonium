@@ -3,8 +3,11 @@ package com.sageserpent.plutonium
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
 import com.sageserpent.plutonium.LifecyclesState.noDependencies
 import org.scalacheck.{ShrinkLowPriority => NoShrinking}
+import org.scalatest.exceptions.TestFailedException
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{FlatSpec, Inspectors, Matchers}
+
+import scala.collection.immutable.TreeMap
 
 class LifecyclesStateSpec
     extends FlatSpec
@@ -46,10 +49,13 @@ class LifecyclesStateSpec
   "Booking in events in one block revision" should "build a correct update plan" in {
     forAll(recordingsGroupedByIdGenerator(forbidAnnihilations = false),
            unboundedInstantGenerator) { (recordingsGroupedById, queryWhen) =>
-      val events: Map[EventId, Some[Event]] =
+      val events: Map[EventId, Some[Event]] = TreeMap(
+        // Use 'TreeMap' as it won't rearrange the key ordering. We do this purely
+        // to ensure that events that occur at the same time won't be shuffled as
+        // they go into the map wrt the expected histories.
         (recordingsGroupedById.flatMap(_.events) map (_._2)).zipWithIndex map {
           case (event, index) => index -> Some(event)
-        } toMap
+        }: _*)
 
       def harvestUpdatePlan(updatePlan: UpdatePlan[EventId])
         : (LifecyclesState.Dependencies, ItemCache) = {
@@ -74,8 +80,14 @@ class LifecyclesStateSpec
       } yield (historyId, history.datums, pertinentRecordings.map(_._1))
 
       Inspectors.forAll(checks) {
-        case (_, actualDatums, expectedDatums) =>
-          actualDatums should contain theSameElementsInOrderAs expectedDatums
+        case (historyId, actualDatums, expectedDatums) =>
+          try {
+            actualDatums should contain theSameElementsInOrderAs expectedDatums
+          } catch {
+            case testFailedException: TestFailedException =>
+              throw testFailedException.modifyMessage(_.map(message =>
+                s"for id: $historyId at: $queryWhen, $message"))
+          }
       }
     }
   }
