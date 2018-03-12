@@ -571,22 +571,14 @@ object WorldImplementationCodeFactoring {
     patchRecorder.noteThatThereAreNoFollowingRecordings()
   }
 
-  trait ScopeImplementation extends com.sageserpent.plutonium.Scope {
+  trait ScopeImplementation extends com.sageserpent.plutonium.Scope with ItemCacheImplementation {
     val identifiedItemsScope: IdentifiedItemsScope
 
-    object itemCache extends ItemCache {
-      override def itemsFor[Item: TypeTag](id: Any): Stream[Item] =
-        identifiedItemsScope.itemsFor(id)
+    override def itemsFor[Item: TypeTag](id: Any): Stream[Item] =
+      identifiedItemsScope.itemsFor(id)
 
-      override def allItems[Item: TypeTag](): Stream[Item] =
-        identifiedItemsScope.allItems()
-    }
-
-    override def render[Item](bitemporal: Bitemporal[Item]): Stream[Item] =
-      itemCache.render(bitemporal)
-
-    override def numberOf[Item](bitemporal: Bitemporal[Item]): Int =
-      itemCache.numberOf(bitemporal)
+    override def allItems[Item: TypeTag](): Stream[Item] =
+      identifiedItemsScope.allItems()
   }
 }
 

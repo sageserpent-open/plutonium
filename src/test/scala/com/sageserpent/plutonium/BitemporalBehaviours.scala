@@ -566,8 +566,8 @@ trait BitemporalBehaviours
                   Prop.all(ids.toSeq map (id => {
                     val itemsFromGenericQueryById =
                       scope.render(Bitemporal.withId[History](id)).toSet
-                    (itemsFromGenericQueryById.size == scope.numberOf[History](
-                      id)) :| s""
+                    (itemsFromGenericQueryById.size == scope.numberOf(
+                      Bitemporal.withId[History](id))) :| s""
                   }): _*)
                 } else Prop.undecided
               }
