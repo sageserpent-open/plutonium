@@ -1,14 +1,9 @@
 package com.sageserpent.plutonium
 
-import java.time.Instant
-
-import com.sageserpent.americium.Unbounded
+import com.sageserpent.americium.PositiveInfinity
 import org.scalacheck.{ShrinkLowPriority => NoShrinking}
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
-import org.scalatest.{FlatSpec, Matchers}
-
-import scala.collection.immutable
-import scala.util.Random
+import org.scalatest.{FlatSpec, Inspectors, Matchers}
 
 class LifecyclesStateSpec
     extends FlatSpec
@@ -55,9 +50,28 @@ class LifecyclesStateSpec
             case (event, index) => index -> Some(event)
           } toMap
 
-        def harvestUpdatePlan(updatePlan: UpdatePlan[EventId]) = ???  // TODO - build an 'IdentifiedItemAccess' that can have expectations applied. Also yield empty dependencies.
+        def harvestUpdatePlan(updatePlan: UpdatePlan[EventId])
+          : (LifecyclesState.Dependencies, Scope) =
+          ??? // TODO - build an 'Scope' at positive infinity that can have expectations applied. Also yield empty dependencies.
 
-        val results = noLifecyclesState[EventId]().revise(events, harvestUpdatePlan)._2
+        val scope: Scope =
+          noLifecyclesState[EventId]().revise(events, harvestUpdatePlan)._2
+
+        val checks = for {
+          RecordingsNoLaterThan(
+            historyId,
+            historiesFrom,
+            pertinentRecordings,
+            _,
+            _) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
+            PositiveInfinity()))
+          Seq(history) = historiesFrom(scope)
+        } yield (historyId, history.datums, pertinentRecordings.map(_._1))
+
+        Inspectors.forAll(checks) {
+          case (_, actualDatums, expectedDatums) =>
+            actualDatums should contain theSameElementsInOrderAs expectedDatums
+        }
     }
   }
 }
