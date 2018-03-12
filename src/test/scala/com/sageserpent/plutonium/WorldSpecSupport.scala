@@ -324,8 +324,8 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
       anotherRoundOfHeadsItIs <- Arbitrary.arbBool.arbitrary
     } yield
       (historyId,
-       (scope: Scope) =>
-         scope.render(Bitemporal.withId[AHistory](historyId)): Seq[History],
+       (itemCache: ItemCache) =>
+         itemCache.render(Bitemporal.withId[AHistory](historyId)): Seq[History],
        for {
          (index,
           (data,
@@ -360,7 +360,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
   trait RecordingsForAnId {
     val historyId: Any
 
-    val historiesFrom: Scope => Seq[History]
+    val historiesFrom: ItemCache => Seq[History]
 
     val events: List[(Unbounded[Instant], Event)]
 
@@ -381,19 +381,19 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
 
   case class RecordingsNoLaterThan(
       historyId: Any,
-      historiesFrom: Scope => Seq[History],
+      historiesFrom: ItemCache => Seq[History],
       datums: List[(Any, Unbounded[Instant])],
       ineffectiveEventFor: Unbounded[Instant] => Event,
       whenAnnihilated: Option[Unbounded[Instant]])
 
   case class NonExistentRecordings(
       historyId: Any,
-      historiesFrom: Scope => Seq[History],
+      historiesFrom: ItemCache => Seq[History],
       ineffectiveEventFor: Unbounded[Instant] => Event)
 
   class RecordingsForAPhoenixId(
       override val historyId: Any,
-      override val historiesFrom: Scope => Seq[History],
+      override val historiesFrom: ItemCache => Seq[History],
       annihilationFor: Instant => Annihilation,
       ineffectiveEventFor: Unbounded[Instant] => Event,
       dataSamplesGroupedForLifespans: Stream[
@@ -591,7 +591,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
   def recordingsGroupedByIdGenerator_(
       dataSamplesForAnIdGenerator: Gen[
         (Any,
-         Scope => Seq[History],
+         ItemCache => Seq[History],
          List[(Int, Any, (Unbounded[Instant], Boolean) => Event)],
          Instant => Annihilation,
          Unbounded[Instant] => Event)],
