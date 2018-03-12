@@ -74,7 +74,8 @@ class TimelineImplementation[EventId](
   }
 
   override def itemCacheAt(when: Unbounded[Instant]) =
-    new ItemCacheImplementation with itemStateStorageUsingProxies.ReconstitutionContext {
+    new ItemCacheImplementation
+    with itemStateStorageUsingProxies.ReconstitutionContext {
       override def itemsFor[Item: TypeTag](id: Any): Stream[Item] =
         for {
           uniqueItemSpecification <- blobStorageTimeslice.uniqueItemQueriesFor(

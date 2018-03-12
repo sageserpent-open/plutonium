@@ -571,7 +571,9 @@ object WorldImplementationCodeFactoring {
     patchRecorder.noteThatThereAreNoFollowingRecordings()
   }
 
-  trait ScopeImplementation extends com.sageserpent.plutonium.Scope with ItemCacheImplementation {
+  trait ScopeImplementation
+      extends com.sageserpent.plutonium.Scope
+      with ItemCacheImplementation {
     val identifiedItemsScope: IdentifiedItemsScope
 
     override def itemsFor[Item: TypeTag](id: Any): Stream[Item] =
