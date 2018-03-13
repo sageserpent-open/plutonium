@@ -104,16 +104,18 @@ class LifecyclesStateSpec
 
   "Booking in events over several revisions with other events that are revised or annulled" should "result in the same update plan as booking in the events via a single block revision" in {
     forAll(
-      recordingsGroupedByIdGenerator(forbidAnnihilations = false)
-        .map(_.flatMap(_.events) map (_._2)),
+      recordingsGroupedByIdGenerator(forbidAnnihilations = false),
       nonConflictingRecordingsGroupedByIdGenerator.map(
         _.flatMap(_.events) map (_._2)),
       seedGenerator,
       unboundedInstantGenerator
-    ) { (events, obsoleteEvents, seed, queryWhen) =>
-      def harvestUpdatePlan(updatePlan: UpdatePlan[EventId])
-        : (LifecyclesState.Dependencies, UpdatePlan[EventId]) =
-        noDependencies -> updatePlan
+    ) { (recordingsGroupedById, obsoleteEvents, seed, queryWhen) =>
+      def harvestUpdatePlan(blobStorage: BlobStorage[EventId, SnapshotBlob])(
+          updatePlan: UpdatePlan[EventId])
+        : (LifecyclesState.Dependencies, BlobStorage[EventId, SnapshotBlob]) =
+        noDependencies -> updatePlan(blobStorage)
+
+      val events = recordingsGroupedById.flatMap(_.events) map (_._2)
 
       val eventsInOneBlock: Map[EventId, Some[Event]] = TreeMap(
         // Use 'TreeMap' as it won't rearrange the key ordering. We do this purely
@@ -123,9 +125,12 @@ class LifecyclesStateSpec
           case (event, index) => index -> Some(event)
         }: _*)
 
-      val updatePlanResultingFromBlockBooking: UpdatePlan[EventId] =
+      val blobStorageResultingFromBlockBooking
+        : BlobStorage[EventId, SnapshotBlob] =
         noLifecyclesState[EventId]()
-          .revise(eventsInOneBlock, harvestUpdatePlan)
+          .revise(
+            eventsInOneBlock,
+            harvestUpdatePlan(BlobStorageInMemory[EventId, SnapshotBlob]()))
           ._2
 
       val random = new Random(seed)
@@ -135,23 +140,47 @@ class LifecyclesStateSpec
         intersperseObsoleteEvents(random, events, obsoleteEvents) map (
             booking => TreeMap(booking.map(_.swap): _*)) toList
 
-      val incrementalUpdatePlans
-        : immutable.Seq[UpdatePlan[EventId]] = stream.unfold(noLifecyclesState[
-        EventId]() -> severalRevisionBookingsWithObsoleteEventsThrownIn) {
-        case (lifecyclesState, Nil) => None
-        case (lifecyclesState, booking :: remainingBookings) =>
-          val (revisedLifecyclesState, updatePlan) =
-            lifecyclesState.revise(booking, harvestUpdatePlan)
-          Some(updatePlan, revisedLifecyclesState -> remainingBookings)
+      val blobStorageResultingFromIncrementalBookings
+        : BlobStorage[EventId, SnapshotBlob] =
+        ((noLifecyclesState[EventId]() -> (BlobStorageInMemory[EventId,
+                                                               SnapshotBlob](): BlobStorage[
+          EventId,
+          SnapshotBlob])) /: severalRevisionBookingsWithObsoleteEventsThrownIn) {
+          case ((lifecyclesState, blobStorage), booking) =>
+            lifecyclesState.revise(booking, harvestUpdatePlan(blobStorage))
+        }._2
+
+      val itemCacheFromBlockBooking =
+        new ItemCacheUsingBlobStorage[EventId](
+          blobStorageResultingFromBlockBooking,
+          queryWhen)
+
+      val itemCacheFromIncrementalBookings =
+        new ItemCacheUsingBlobStorage[EventId](
+          blobStorageResultingFromIncrementalBookings,
+          queryWhen)
+
+      val checks = for {
+        RecordingsNoLaterThan(historyId, historiesFrom, _, _, _) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
+          queryWhen))
+        Seq(historyFromBlockBooking) = historiesFrom(itemCacheFromBlockBooking)
+        Seq(historyFromIncrementalBookings) = historiesFrom(
+          itemCacheFromIncrementalBookings)
+      } yield
+        (historyId,
+         historyFromIncrementalBookings.datums,
+         historyFromBlockBooking.datums)
+
+      Inspectors.forAll(checks) {
+        case (historyId, actualDatums, expectedDatums) =>
+          try {
+            actualDatums should contain theSameElementsInOrderAs expectedDatums
+          } catch {
+            case testFailedException: TestFailedException =>
+              throw testFailedException.modifyMessage(_.map(message =>
+                s"for id: $historyId at: $queryWhen, $message"))
+          }
       }
-
-      val cumulativeUpdatePlan
-        : UpdatePlan[EventId] = incrementalUpdatePlans reduce (
-          (first,
-           second) => first supersededBy second)
-
-      cumulativeUpdatePlan.toString should be(
-        updatePlanResultingFromBlockBooking.toString)
     }
   }
 }
