@@ -150,7 +150,8 @@ class LifecyclesStateSpec
           (first,
            second) => first supersededBy second)
 
-      cumulativeUpdatePlan should be(updatePlanResultingFromBlockBooking)
+      cumulativeUpdatePlan.toString should be(
+        updatePlanResultingFromBlockBooking.toString)
     }
   }
 }
