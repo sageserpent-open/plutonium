@@ -59,6 +59,8 @@ class LifecyclesStateSpec
 
       def harvestUpdatePlan(updatePlan: UpdatePlan[EventId])
         : (LifecyclesState.Dependencies, ItemCache) = {
+        updatePlan.annulments shouldBe empty
+
         val blobStorage =
           updatePlan(BlobStorageInMemory[EventId, SnapshotBlob]())
         val itemCache =
