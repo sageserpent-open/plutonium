@@ -1,7 +1,6 @@
 package com.sageserpent.plutonium
 
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
-import com.sageserpent.plutonium.LifecyclesState.noDependencies
 import org.scalacheck.{ShrinkLowPriority => NoShrinking}
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.prop.GeneratorDrivenPropertyChecks

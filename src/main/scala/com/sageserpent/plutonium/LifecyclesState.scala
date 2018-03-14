@@ -4,22 +4,15 @@ import java.time.Instant
 
 import com.sageserpent.americium.{PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
-import com.sageserpent.plutonium.LifecyclesState.Dependencies
 import com.sageserpent.plutonium.PatchRecorder.UpdateConsumer
 import com.sageserpent.plutonium.World.{Revision, initialRevision}
 import com.sageserpent.plutonium.WorldImplementationCodeFactoring.EventData
 
 import scala.collection.immutable.{Map, SortedMap, TreeMap}
 import scala.collection.mutable
-import scalaz.{-\/, \/-}
 import scalaz.std.list._
 import scalaz.syntax.monadPlus._
-
-object LifecyclesState {
-  trait Dependencies
-
-  object noDependencies extends Dependencies
-}
+import scalaz.{-\/, \/-}
 
 trait LifecyclesState[EventId] {
 
