@@ -30,7 +30,7 @@ class TimelineImplementation[EventId](
 
   override def revise(events: Map[EventId, Option[Event]]) = {
     val (newLifecyclesState, blobStorageForNewTimeline) = lifecyclesState
-      .revise(events, updatePlan => (noDependencies, updatePlan(blobStorage)))
+      .revise(events, blobStorage)
 
     new TimelineImplementation(
       lifecyclesState = newLifecyclesState,
