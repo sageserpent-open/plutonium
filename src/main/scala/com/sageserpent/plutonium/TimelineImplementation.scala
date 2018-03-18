@@ -6,7 +6,6 @@ import java.util.UUID
 import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
-import com.sageserpent.plutonium.LifecyclesState.noDependencies
 
 import scala.collection.immutable.Map
 
@@ -30,7 +29,7 @@ class TimelineImplementation[EventId](
 
   override def revise(events: Map[EventId, Option[Event]]) = {
     val (newLifecyclesState, blobStorageForNewTimeline) = lifecyclesState
-      .revise(events, updatePlan => (noDependencies, updatePlan(blobStorage)))
+      .revise(events, blobStorage)
 
     new TimelineImplementation(
       lifecyclesState = newLifecyclesState,
