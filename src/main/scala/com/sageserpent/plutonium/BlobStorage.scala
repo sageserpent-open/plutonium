@@ -2,7 +2,7 @@ package com.sageserpent.plutonium
 
 import java.time.Instant
 
-import com.sageserpent.americium.{NegativeInfinity, Unbounded}
+import com.sageserpent.americium.{PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 
 import scala.reflect.runtime.universe.TypeTag
@@ -45,7 +45,7 @@ trait BlobStorage[EventId, SnapshotBlob] { blobStorage =>
         snapshotBlobs: Map[UniqueItemSpecification, Option[SnapshotBlob]]): Unit
 
     def annulEvent(eventId: EventId) =
-      recordSnapshotBlobsForEvent(Set(eventId), NegativeInfinity(), Map.empty)
+      recordSnapshotBlobsForEvent(Set(eventId), PositiveInfinity(), Map.empty)
 
     def build(): BlobStorage[EventId, SnapshotBlob]
   }
