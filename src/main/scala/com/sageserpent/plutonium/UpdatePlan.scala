@@ -133,9 +133,6 @@ case class UpdatePlan[EventId](
     } {
       identifiedItemAccess.resetSourceTimesliceTo(when)
 
-      val timesliceOfBlobStorageBeingRevisedOverall = blobStorage
-        .timeSlice(when)
-
       {
         val microRevisionBuilder = microRevisedBlobStorage.openRevision()
 
@@ -163,12 +160,6 @@ case class UpdatePlan[EventId](
 
               snapshotBlobs ++= identifiedItemAccess
                 .harvestSnapshots()
-                .filter {
-                  case (uniqueItemSpecification, snapshot) =>
-                    !timesliceOfBlobStorageBeingRevisedOverall
-                      .snapshotBlobFor(uniqueItemSpecification)
-                      .contains(snapshot)
-                }
                 .mapValues(Some.apply)
           }
 

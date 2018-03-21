@@ -2,7 +2,7 @@ package com.sageserpent.plutonium
 
 import java.time.Instant
 
-import com.sageserpent.americium.Unbounded
+import com.sageserpent.americium.{NegativeInfinity, Unbounded}
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 
 import scala.reflect.runtime.universe.TypeTag
@@ -37,7 +37,6 @@ trait BlobStorage[EventId, SnapshotBlob] { blobStorage =>
   import BlobStorage._
 
   trait RevisionBuilder {
-    // TODO - what does it mean if there are no snapshots? A no-op?
     // NOTE: the unique item specification must be exact and consistent for all of an item's snapshots. This implies that snapshots from a previous revision may have to be rewritten
     // if an item's greatest lower bound type changes.
     def recordSnapshotBlobsForEvent(
@@ -45,7 +44,8 @@ trait BlobStorage[EventId, SnapshotBlob] { blobStorage =>
         when: Unbounded[Instant],
         snapshotBlobs: Map[UniqueItemSpecification, Option[SnapshotBlob]]): Unit
 
-    def annulEvent(eventId: EventId)
+    def annulEvent(eventId: EventId) =
+      recordSnapshotBlobsForEvent(Set(eventId), NegativeInfinity(), Map.empty)
 
     def build(): BlobStorage[EventId, SnapshotBlob]
   }
