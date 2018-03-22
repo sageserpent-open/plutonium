@@ -14,19 +14,17 @@ import scala.collection.immutable.{Map, SortedMap}
 import scala.collection.mutable
 
 case class UpdatePlan[EventId](
-    annulments: Set[EventId],
+    eventsMadeObsolete: Set[EventId],
     updates: SortedMap[Unbounded[Instant],
                        Seq[(Set[EventId], ItemStateUpdate)]]) {
   def apply(blobStorage: BlobStorage[EventId, (Array[Byte], UUID)])
     : BlobStorage[EventId, SnapshotBlob] = {
-    val UpdatePlan(annulments, updates) = this
+    val UpdatePlan(eventsMadeObsolete, updates) = this
 
     var microRevisedBlobStorage = {
       val initialMicroRevisionBuilder = blobStorage.openRevision()
 
-      val eventsBeingUpdated =
-        updates.values.flatMap(_ flatMap (_._1))
-      for (eventId <- annulments ++ eventsBeingUpdated) {
+      for (eventId <- eventsMadeObsolete) {
         initialMicroRevisionBuilder.annulEvent(eventId)
       }
       initialMicroRevisionBuilder.build()
@@ -35,6 +33,19 @@ case class UpdatePlan[EventId](
     for {
       (when, itemStateUpdates: Seq[(Set[EventId], ItemStateUpdate)]) <- updates
     } {
+      {
+        val microRevisionWithAnullmentsBuilder =
+          microRevisedBlobStorage.openRevision()
+
+        val eventsAtThisTime = itemStateUpdates.flatMap(_._1)
+
+        for (eventId <- eventsAtThisTime) {
+          microRevisionWithAnullmentsBuilder.annulEvent(eventId)
+        }
+
+        microRevisedBlobStorage = microRevisionWithAnullmentsBuilder.build()
+      }
+
       val identifiedItemAccess = new IdentifiedItemAccess
       with itemStateStorageUsingProxies.ReconstitutionContext {
         override def reconstitute(
@@ -49,7 +60,7 @@ case class UpdatePlan[EventId](
 
         override def forget(
             uniqueItemSpecification: UniqueItemSpecification): Unit = {
-          val item = reconstitute(uniqueItemSpecification)
+          reconstitute(uniqueItemSpecification)
             .asInstanceOf[AnnihilationHook]
             .recordAnnihilation()
           forgottenItemSpecifications += uniqueItemSpecification

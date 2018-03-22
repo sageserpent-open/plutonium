@@ -55,8 +55,10 @@ class LifecyclesStateImplementation[EventId](
         eventId -> EventData(event, nextRevision, tiebreakerIndex)
     }.toMap
 
+    val eventsMadeObsolete = this.events.keySet intersect events.keySet
+
     val updatePlan =
-      UpdatePlan(annulledEvents.toSet, createUpdates(eventsForNewTimeline))
+      UpdatePlan(eventsMadeObsolete, createUpdates(eventsForNewTimeline))
 
     new LifecyclesStateImplementation[EventId](
       events = eventsForNewTimeline,
