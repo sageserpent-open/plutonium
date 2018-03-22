@@ -99,11 +99,14 @@ object WorldImplementationCodeFactoring {
     val isGhostProperty = new MethodDescription.ForLoadedMethod(
       classOf[ItemExtensionApi].getMethod("isGhost"))
 
+    val lifecycleUUIDMethod = new MethodDescription.ForLoadedMethod(
+      classOf[ItemExtensionApi].getMethod("lifecycleUUID"))
+
     val recordAnnihilationMethod = new MethodDescription.ForLoadedMethod(
       classOf[AnnihilationHook].getMethod("recordAnnihilation"))
 
-    val lifecycleUUIDMethod = new MethodDescription.ForLoadedMethod(
-      classOf[ItemExtensionApi].getMethod("lifecycleUUID"))
+    val setLifecycleUUIDMethod = new MethodDescription.ForLoadedMethod(
+      classOf[AnnihilationHook].getMethod("setLifecycleUUID", classOf[UUID]))
   }
 
   val byteBuddy = new ByteBuddy()
@@ -234,8 +237,9 @@ object WorldImplementationCodeFactoring {
     }
 
     val matchSetLifecycleUUID: ElementMatcher[MethodDescription] =
-      ElementMatchers.named("setLifecycleUUID")
-    // TODO - why does Java reflection crash when it tries to obtain this method inside a call to 'firstMethodIsOverrideCompatibleWithSecond'?
+      firstMethodIsOverrideCompatibleWithSecond(
+        _,
+        IdentifiedItemsScope.setLifecycleUUIDMethod)
 
     val matchLifecycleUUID: ElementMatcher[MethodDescription] =
       firstMethodIsOverrideCompatibleWithSecond(
