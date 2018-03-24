@@ -4,7 +4,8 @@ abstract class History {
   type Id
   val id: Id
 
-  override def toString: String = s"id: $id, proxied class: ${getClass.getSuperclass}, datums: $datums"
+  override def toString: String =
+    s"id: $id, proxied class: ${getClass.getSuperclass}, hash code: ${hashCode()}, datums: $datums"
 
   override def hashCode(): Int =
     id.hashCode() // Use a stable hash code - remember that the rest of the state will update.
