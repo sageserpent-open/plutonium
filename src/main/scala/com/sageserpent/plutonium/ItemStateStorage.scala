@@ -273,6 +273,7 @@ trait ItemStateStorage { itemStateStorageObject =>
       val item: Item = createItemFor(uniqueItemSpecification, lifecycleUUID)
       storageKeyedByUniqueItemSpecification.update(uniqueItemSpecification,
                                                    item)
+      storageKeyedByLifecycleUUID.update(lifecycleUUID, item)
       item
     }
 
