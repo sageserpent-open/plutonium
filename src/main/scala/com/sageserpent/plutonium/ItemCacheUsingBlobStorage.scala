@@ -34,7 +34,7 @@ class ItemCacheUsingBlobStorage[EventId](
     throw new RuntimeException(
       s"Snapshot does not exist for: $uniqueItemSpecification at: $when.")
 
-  override protected def fallbackRelatedItemFor[Item](
+  override protected def fallbackAnnihilatedItemFor[Item](
       uniqueItemSpecification: UniqueItemSpecification): Item = {
     val item =
       createItemFor[Item](uniqueItemSpecification, UUID.randomUUID())

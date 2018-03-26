@@ -60,7 +60,7 @@ case class UpdatePlan[EventId](
 
         override def forget(
             uniqueItemSpecification: UniqueItemSpecification): Unit = {
-          reconstitute(uniqueItemSpecification)
+          itemFor[Any](uniqueItemSpecification, noteAnnihilation = true)
             .asInstanceOf[AnnihilationHook]
             .recordAnnihilation()
           forgottenItemSpecifications += uniqueItemSpecification
@@ -116,7 +116,7 @@ case class UpdatePlan[EventId](
           item
         }
 
-        override protected def fallbackRelatedItemFor[Item](
+        override protected def fallbackAnnihilatedItemFor[Item](
             uniqueItemSpecification: UniqueItemSpecification): Item = {
           val item =
             createItemFor[Item](uniqueItemSpecification, UUID.randomUUID())

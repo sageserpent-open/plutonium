@@ -167,10 +167,10 @@ trait ItemStateStorage { itemStateStorageObject =>
     kryoPool.toBytesWithClass(item) -> lifecycleUUID(
       item.asInstanceOf[ItemSuperType])
 
-  private def itemFor[Item](
-      uniqueItemSpecification: UniqueItemSpecification): Item =
+  private def itemFor[Item](uniqueItemSpecification: UniqueItemSpecification,
+                            noteAnnihilation: Boolean): Item =
     itemDeserializationThreadContextAccess.value.get
-      .itemFor(uniqueItemSpecification)
+      .itemFor(uniqueItemSpecification, noteAnnihilation)
 
   private def relatedItemFor[Item](
       uniqueItemSpecification: UniqueItemSpecification,
@@ -186,11 +186,12 @@ trait ItemStateStorage { itemStateStorageObject =>
     def blobStorageTimeslice
       : BlobStorage.Timeslice[SnapshotBlob] // NOTE: abstracting this allows the prospect of a 'moving' timeslice for use when executing an update plan.
 
-    def itemFor[Item](
-        uniqueItemSpecification: UniqueItemSpecification): Item = {
+    def itemFor[Item](uniqueItemSpecification: UniqueItemSpecification,
+                      noteAnnihilation: Boolean = false): Item = {
       itemDeserializationThreadContextAccess.withValue(
         Some(new ItemDeserializationThreadContext)) {
-        itemStateStorageObject.itemFor[Item](uniqueItemSpecification)
+        itemStateStorageObject
+          .itemFor[Item](uniqueItemSpecification, noteAnnihilation)
       }
     }
 
@@ -198,9 +199,9 @@ trait ItemStateStorage { itemStateStorageObject =>
       val uniqueItemSpecificationAccess =
         new DynamicVariable[Option[(UniqueItemSpecification, UUID)]](None)
 
-      def itemFor[Item](
-          uniqueItemSpecification: UniqueItemSpecification): Item = {
-        storageKeyedByUniqueItemSpecification
+      def itemFor[Item](uniqueItemSpecification: UniqueItemSpecification,
+                        noteAnnihilation: Boolean): Item = {
+        val item = itemsKeyedByUniqueItemSpecification
           .getOrElse(
             uniqueItemSpecification, {
               val snapshot =
@@ -218,15 +219,21 @@ trait ItemStateStorage { itemStateStorageObject =>
             }
           )
           .asInstanceOf[Item]
+
+        if (noteAnnihilation)
+          annihilatedItemsKeyedByLifecycleUUID(
+            lifecycleUUID(item.asInstanceOf[ItemSuperType])) = item
+
+        item
       }
 
       def relatedItemFor[Item](uniqueItemSpecification: UniqueItemSpecification,
                                lifecycleUUID: UUID): Item = {
-        storageKeyedByLifecycleUUID
+        annihilatedItemsKeyedByLifecycleUUID
           .getOrElse(
             lifecycleUUID, {
               val candidateRelatedItem: Option[Any] =
-                storageKeyedByUniqueItemSpecification
+                itemsKeyedByUniqueItemSpecification
                   .get(uniqueItemSpecification)
                   .filter(item =>
                     lifecycleUUID == itemStateStorageObject.lifecycleUUID(
@@ -248,9 +255,9 @@ trait ItemStateStorage { itemStateStorageObject =>
                   }
 
               candidateRelatedItem.getOrElse {
-                storageKeyedByLifecycleUUID.getOrElseUpdate(
+                annihilatedItemsKeyedByLifecycleUUID.getOrElseUpdate(
                   lifecycleUUID, {
-                    fallbackRelatedItemFor[Item](uniqueItemSpecification)
+                    fallbackAnnihilatedItemFor[Item](uniqueItemSpecification)
                   }
                 )
               }
@@ -271,16 +278,14 @@ trait ItemStateStorage { itemStateStorageObject =>
         uniqueItemSpecification: UniqueItemSpecification,
         lifecycleUUID: UUID): Item = {
       val item: Item = createItemFor(uniqueItemSpecification, lifecycleUUID)
-      storageKeyedByUniqueItemSpecification.update(uniqueItemSpecification,
-                                                   item)
-      storageKeyedByLifecycleUUID.update(lifecycleUUID, item)
+      itemsKeyedByUniqueItemSpecification.update(uniqueItemSpecification, item)
       item
     }
 
     protected def fallbackItemFor[Item](
         uniqueItemSpecification: UniqueItemSpecification): Item
 
-    protected def fallbackRelatedItemFor[Item](
+    protected def fallbackAnnihilatedItemFor[Item](
         uniqueItemSpecification: UniqueItemSpecification): Item
 
     protected def createItemFor[Item](
@@ -290,13 +295,14 @@ trait ItemStateStorage { itemStateStorageObject =>
     private class StorageKeyedByUniqueItemSpecification
         extends mutable.HashMap[UniqueItemSpecification, Any]
 
-    private val storageKeyedByUniqueItemSpecification
+    private val itemsKeyedByUniqueItemSpecification
       : StorageKeyedByUniqueItemSpecification =
       new StorageKeyedByUniqueItemSpecification
 
     private class StorageKeyedByLifecycleUUID extends mutable.HashMap[UUID, Any]
 
-    private val storageKeyedByLifecycleUUID: StorageKeyedByLifecycleUUID =
+    private val annihilatedItemsKeyedByLifecycleUUID
+      : StorageKeyedByLifecycleUUID =
       new StorageKeyedByLifecycleUUID
   }
 }
