@@ -65,6 +65,8 @@ trait ItemStateStorage { itemStateStorageObject =>
 
   protected def lifecycleUUID(item: ItemSuperType): UUID
 
+  protected def noteAnnihilationOnItem(item: ItemSuperType): Unit
+
   val serializerThatDirectlyEncodesInterItemReferences =
     new Serializer[ItemSuperType] {
       override def read(kryo: Kryo,
@@ -167,10 +169,16 @@ trait ItemStateStorage { itemStateStorageObject =>
     kryoPool.toBytesWithClass(item) -> lifecycleUUID(
       item.asInstanceOf[ItemSuperType])
 
-  private def itemFor[Item](uniqueItemSpecification: UniqueItemSpecification,
-                            noteAnnihilation: Boolean): Item =
+  private def itemFor[Item](
+      uniqueItemSpecification: UniqueItemSpecification): Item =
     itemDeserializationThreadContextAccess.value.get
-      .itemFor(uniqueItemSpecification, noteAnnihilation)
+      .itemFor(uniqueItemSpecification)
+
+  private def noteAnnihilation(
+      uniqueItemSpecification: UniqueItemSpecification) = {
+    itemDeserializationThreadContextAccess.value.get
+      .noteAnnihilation(uniqueItemSpecification)
+  }
 
   private def relatedItemFor[Item](
       uniqueItemSpecification: UniqueItemSpecification,
@@ -186,12 +194,21 @@ trait ItemStateStorage { itemStateStorageObject =>
     def blobStorageTimeslice
       : BlobStorage.Timeslice[SnapshotBlob] // NOTE: abstracting this allows the prospect of a 'moving' timeslice for use when executing an update plan.
 
-    def itemFor[Item](uniqueItemSpecification: UniqueItemSpecification,
-                      noteAnnihilation: Boolean = false): Item = {
+    def itemFor[Item](
+        uniqueItemSpecification: UniqueItemSpecification): Item = {
       itemDeserializationThreadContextAccess.withValue(
         Some(new ItemDeserializationThreadContext)) {
         itemStateStorageObject
-          .itemFor[Item](uniqueItemSpecification, noteAnnihilation)
+          .itemFor[Item](uniqueItemSpecification)
+      }
+    }
+
+    def noteAnnihilation(
+        uniqueItemSpecification: UniqueItemSpecification): Unit = {
+      itemDeserializationThreadContextAccess.withValue(
+        Some(new ItemDeserializationThreadContext)) {
+        itemStateStorageObject
+          .noteAnnihilation(uniqueItemSpecification)
       }
     }
 
@@ -199,32 +216,54 @@ trait ItemStateStorage { itemStateStorageObject =>
       val uniqueItemSpecificationAccess =
         new DynamicVariable[Option[(UniqueItemSpecification, UUID)]](None)
 
-      def itemFor[Item](uniqueItemSpecification: UniqueItemSpecification,
-                        noteAnnihilation: Boolean): Item = {
+      def itemFor[Item](
+          uniqueItemSpecification: UniqueItemSpecification): Item = {
+        itemsKeyedByUniqueItemSpecification
+          .getOrElse(
+            uniqueItemSpecification, {
+              val snapshot =
+                blobStorageTimeslice.snapshotBlobFor(uniqueItemSpecification)
+
+              snapshot match {
+                case Some((payload, lifecycleUUID))
+                    if !annihilatedItemsKeyedByLifecycleUUID.contains(
+                      lifecycleUUID) =>
+                  uniqueItemSpecificationAccess
+                    .withValue(Some(uniqueItemSpecification -> lifecycleUUID)) {
+                      kryoPool.fromBytes(payload)
+                    }
+                case _ => fallbackItemFor[Item](uniqueItemSpecification)
+              }
+            }
+          )
+          .asInstanceOf[Item]
+      }
+
+      def noteAnnihilation(
+          uniqueItemSpecification: UniqueItemSpecification): Unit = {
         val item = itemsKeyedByUniqueItemSpecification
           .getOrElse(
             uniqueItemSpecification, {
               val snapshot =
                 blobStorageTimeslice.snapshotBlobFor(uniqueItemSpecification)
 
-              snapshot.fold[Any] {
-                fallbackItemFor[Item](uniqueItemSpecification)
-              } {
-                case (payload, lifecycleUUID) =>
+              snapshot match {
+                case Some((payload, lifecycleUUID)) =>
                   uniqueItemSpecificationAccess
                     .withValue(Some(uniqueItemSpecification -> lifecycleUUID)) {
                       kryoPool.fromBytes(payload)
                     }
+                case None =>
+                  throw new RuntimeException(
+                    s"Attempt to annihilate item: $uniqueItemSpecification that does not exist.")
               }
             }
           )
-          .asInstanceOf[Item]
+          .asInstanceOf[ItemSuperType]
 
-        if (noteAnnihilation)
-          annihilatedItemsKeyedByLifecycleUUID(
-            lifecycleUUID(item.asInstanceOf[ItemSuperType])) = item
-
-        item
+        noteAnnihilationOnItem(item)
+        annihilatedItemsKeyedByLifecycleUUID(lifecycleUUID(item)) = item
+        itemsKeyedByUniqueItemSpecification.remove(uniqueItemSpecification)
       }
 
       def relatedItemFor[Item](uniqueItemSpecification: UniqueItemSpecification,

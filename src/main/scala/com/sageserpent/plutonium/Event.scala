@@ -298,7 +298,7 @@ case class Annihilation(definiteWhen: Instant,
         uniqueItemSpecification.copy(typeTag = itemTypeTag))
 
   def apply(identifiedItemAccess: IdentifiedItemAccess): Unit = {
-    identifiedItemAccess.forget(uniqueItemSpecification)
+    identifiedItemAccess.noteAnnihilation(uniqueItemSpecification)
   }
 }
 

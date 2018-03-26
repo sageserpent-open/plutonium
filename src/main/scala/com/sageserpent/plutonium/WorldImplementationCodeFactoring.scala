@@ -423,7 +423,7 @@ object WorldImplementationCodeFactoring {
         uniqueItemSpecification: UniqueItemSpecification): Any =
       itemFor(uniqueItemSpecification.id)(uniqueItemSpecification.typeTag)
 
-    override def forget(
+    override def noteAnnihilation(
         uniqueItemSpecification: UniqueItemSpecification): Unit = {
       val items = idToItemsMultiMap(uniqueItemSpecification.id)
 

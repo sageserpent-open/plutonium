@@ -50,21 +50,7 @@ case class UpdatePlan[EventId](
       with itemStateStorageUsingProxies.ReconstitutionContext {
         override def reconstitute(
             uniqueItemSpecification: UniqueItemSpecification) =
-          if (forgottenItemSpecifications.contains(uniqueItemSpecification)) {
-            forgottenItemSpecifications -= uniqueItemSpecification
-            fallbackItemFor[Any](uniqueItemSpecification)
-          } else itemFor[Any](uniqueItemSpecification)
-
-        private val forgottenItemSpecifications =
-          mutable.Set.empty[UniqueItemSpecification]
-
-        override def forget(
-            uniqueItemSpecification: UniqueItemSpecification): Unit = {
-          itemFor[Any](uniqueItemSpecification, noteAnnihilation = true)
-            .asInstanceOf[AnnihilationHook]
-            .recordAnnihilation()
-          forgottenItemSpecifications += uniqueItemSpecification
-        }
+          itemFor[Any](uniqueItemSpecification)
 
         private val blobStorageTimeSlice =
           microRevisedBlobStorage.timeSlice(when)
