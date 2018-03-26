@@ -2377,31 +2377,6 @@ trait WorldBehaviours
                }
            ))
 
-    def negatingImplementingHistoryNegativeIntegerDataSampleGenerator(
-        faulty: Boolean) =
-      for { data <- Gen.negNum[Int] } yield
-        (data,
-         (when: americium.Unbounded[Instant],
-          makeAChange: Boolean,
-          implementingHistoryId: NegatingImplementingHistory#Id) =>
-           eventConstructorReferringToOneItem[NegatingImplementingHistory](
-             makeAChange)(when)
-             .apply(
-               implementingHistoryId,
-               (implementingHistory: NegatingImplementingHistory) => {
-                 // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
-                 assert(implementingHistoryId == implementingHistory.id)
-                 assertThrows[UnsupportedOperationException](
-                   implementingHistory.datums)
-                 assertThrows[UnsupportedOperationException](
-                   implementingHistory.property)
-
-                 if (faulty) implementingHistory.forceInvariantBreakage() // Modelling breakage of the bitemporal invariant.
-
-                 implementingHistory.property = data
-               }
-           ))
-
     val abstractedDataSamplesForAnIdGenerator =
       dataSamplesForAnIdGenerator_[AbstractedHistory](
         abstractedOrImplementingHistoryIdGenerator,
