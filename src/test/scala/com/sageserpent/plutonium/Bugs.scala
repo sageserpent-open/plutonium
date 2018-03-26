@@ -260,4 +260,55 @@ class WorldEfficientInMemoryImplementationBugs
       }
     }
   }
+
+  "a related item that was annihilated where that item is resurrected just after it is annihilated" should "be detected as a ghost by an event that attempts to mutate it - with a twist" in {
+    forAll(worldResourceGenerator) { worldResource =>
+      val referrerId = "The Referrer of"
+
+      val referredId = "The Referred to"
+
+      val startOfRelationship = Instant.ofEpochSecond(0L)
+
+      val whenAnnihilationAndResurrectionTakesPlace = startOfRelationship plusSeconds (1L)
+
+      val sharedAsOf = Instant.ofEpochSecond(0)
+
+      worldResource acquireAndGet { world =>
+        world.revise(
+          1,
+          Change.forTwoItems[ReferringHistory, FooHistory](startOfRelationship)(
+            referrerId,
+            referredId, { (referrer, referred) =>
+              referrer.referTo(referred)
+            }),
+          sharedAsOf
+        )
+        world.revise(
+          Map(
+            2 -> Some(
+              Annihilation[FooHistory](
+                whenAnnihilationAndResurrectionTakesPlace,
+                referredId)),
+            3 -> Some(Change.forOneItem[FooHistory](
+              whenAnnihilationAndResurrectionTakesPlace)(referredId, {
+              referred =>
+                referred.property1 = "Hello"
+            }))
+          ),
+          sharedAsOf
+        )
+        intercept[RuntimeException] {
+          world.revise(
+            4,
+            Change.forOneItem[ReferringHistory](
+              whenAnnihilationAndResurrectionTakesPlace)(referrerId, {
+              referrer =>
+                referrer.mutateRelatedItem(referredId.asInstanceOf[History#Id])
+            }),
+            sharedAsOf
+          )
+        }
+      }
+    }
+  }
 }
