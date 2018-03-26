@@ -2195,11 +2195,11 @@ trait WorldBehaviours
                 if (checks.nonEmpty)
                   Prop.all(checks.map {
                     case (historyId, actualHistory, expectedHistory) =>
-                      ((actualHistory.length == expectedHistory.length) :| s"For ${historyId}, ${actualHistory.length} == expectedHistory.length") &&
+                      ((actualHistory.length == expectedHistory.length) :| s"For ${historyId}, expected to see: ${expectedHistory.length} datums, but got: ${actualHistory.length} - actual history: ${actualHistory.toList}, expected history: ${expectedHistory.toList}.") &&
                         Prop.all(
                           (actualHistory zip expectedHistory zipWithIndex) map {
                             case ((actual, expected), step) =>
-                              (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}"
+                              (actual == expected) :| s"For ${historyId}, @step ${step}, the actual datum: ${actual} was not equal to the expected value: ${expected}."
                           }: _*)
                   }: _*)
                 else Prop.undecided
@@ -2316,7 +2316,7 @@ trait WorldBehaviours
                 if (checks.nonEmpty)
                   Prop.all(checks.map {
                     case (historyId, actualHistory, expectedHistory) =>
-                      ((actualHistory.length == expectedHistory.length) :| s"For ${historyId}, ${actualHistory.length} == expectedHistory.length") &&
+                      ((actualHistory.length == expectedHistory.length) :| s"For ${historyId}, expected to see: ${expectedHistory.length} datums, but got: ${actualHistory.length} - actual history: ${actualHistory.toList}, expected history: ${expectedHistory.toList}.") &&
                         Prop.all(
                           (actualHistory zip expectedHistory zipWithIndex) map {
                             case ((actual, expected), step) =>
