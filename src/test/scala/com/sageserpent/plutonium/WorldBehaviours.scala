@@ -12,6 +12,7 @@ import com.sageserpent.americium.seqEnrichment._
 import com.sageserpent.plutonium.intersperseObsoleteEvents.EventId
 import org.scalacheck.Prop.BooleanOperators
 import org.scalacheck.{Gen, Prop}
+import org.scalatest.exceptions.TestFailedException
 import org.scalatest.prop.Checkers
 import org.scalatest.{FlatSpec, Matchers, Outcome}
 
@@ -1434,32 +1435,44 @@ trait WorldBehaviours
             if (checks.nonEmpty)
               Prop.all(checks.zipWithIndex.map {
                 case ((referencedHistoryId, whenAnnihilated), index) => {
-                  intercept[RuntimeException] {
-                    world.revise(
-                      Map(
-                        -2 - index -> Some(
+                  try {
+                    intercept[RuntimeException] {
+                      world.revise(
+                        Map(-2 - index -> Some(
                           Change.forOneItem[ReferringHistory](whenAnnihilated)(
                             theReferrerId,
                             (referringHistory: ReferringHistory) => {
                               referringHistory.mutateRelatedItem(
                                 referencedHistoryId)
                             }))),
-                      world.revisionAsOfs.last
-                    )
+                        world.revisionAsOfs.last
+                      )
+                    }
+                  } catch {
+                    case exception: TestFailedException =>
+                      println(
+                        s"Failed to detect mutation of a ghost, referring item id: $theReferrerId, referenced item id: $referencedHistoryId, when: $whenAnnihilated, when the relationship was set up: $referencingEventWhen.")
+                      throw exception
                   }
 
-                  intercept[RuntimeException] {
-                    world.revise(
-                      Map(
-                        -3 - index -> Some(
+                  try {
+                    intercept[RuntimeException] {
+                      world.revise(
+                        Map(-3 - index -> Some(
                           Change.forOneItem[ReferringHistory](whenAnnihilated)(
                             theReferrerId,
                             (referringHistory: ReferringHistory) => {
                               referringHistory.referToRelatedItem(
                                 referencedHistoryId)
                             }))),
-                      world.revisionAsOfs.last
-                    )
+                        world.revisionAsOfs.last
+                      )
+                    }
+                  } catch {
+                    case exception: TestFailedException =>
+                      println(
+                        s"Failed to detect mutation of a ghost, referring item id: $theReferrerId, referenced item id: $referencedHistoryId, when: $whenAnnihilated, when the relationship was set up: $referencingEventWhen.")
+                      throw exception
                   }
 
                   Prop.proved
