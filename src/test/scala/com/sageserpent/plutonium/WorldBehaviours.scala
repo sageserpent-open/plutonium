@@ -1318,10 +1318,10 @@ trait WorldBehaviours
                 referencingEventWhen))
 
               // Have to make sure the referenced item is annihilated *after* the event making the reference to it,
-              // in case that event caused the creation of a new lifecycle for the referenced item.
-              laterQueryWhenAtAnnihilation <- whenAnnihilated.toList
-              if laterQueryWhenAtAnnihilation > referencingEventWhen
-            } yield (referencedHistoryId, laterQueryWhenAtAnnihilation)
+              // otherwise that event will have caused the creation of a new lifecycle for the referenced item instead.
+              whenAnnihilated <- whenAnnihilated.toList
+              if whenAnnihilated > referencingEventWhen
+            } yield (referencedHistoryId, whenAnnihilated)
 
             val theReferrerId = "The Referrer"
 
@@ -1359,6 +1359,110 @@ trait WorldBehaviours
                   }
                   (idOfGhost == referencedHistoryId) :| s"Expected referenced item of id: '$referencedHistoryId' referred to by item of id: '${referringHistory.id}' to reveal its id correctly - but got '$idOfGhost' instead."
                   itIsAGhost :| s"Expected referenced item of id: '$referencedHistoryId' referred to by item of id: '${referringHistory.id}' to be a ghost at time: $laterQueryWhenAtAnnihilation - the event causing referral was at: $referencingEventWhen."
+                }
+              }: _*)
+            else Prop.undecided
+          }
+      })
+    }
+
+    it should "not allow an event to either refer to or to mutate the state of a related item that is a ghost" in {
+      val testCaseGenerator = for {
+        worldResource <- worldResourceGenerator
+        referencedHistoryRecordingsGroupedById <- referencedHistoryRecordingsGroupedByIdGenerator(
+          forbidAnnihilations = false)
+        seed <- seedGenerator
+        random = new Random(seed)
+        bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(
+          shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+            random,
+            referencedHistoryRecordingsGroupedById).zipWithIndex)
+        asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
+                             instantGenerator) map (_.sorted)
+        referencingEventWhen <- unboundedInstantGenerator
+      } yield
+        (worldResource,
+         referencedHistoryRecordingsGroupedById,
+         bigShuffledHistoryOverLotsOfThings,
+         asOfs,
+         referencingEventWhen)
+      check(Prop.forAllNoShrink(testCaseGenerator) {
+        case (worldResource,
+              referencedHistoryRecordingsGroupedById,
+              bigShuffledHistoryOverLotsOfThings,
+              asOfs,
+              referencingEventWhen) =>
+          worldResource acquireAndGet { world =>
+            recordEventsInWorld(
+              liftRecordings(bigShuffledHistoryOverLotsOfThings),
+              asOfs,
+              world)
+
+            val checks = for {
+              RecordingsNoLaterThan(
+                referencedHistoryId: History#Id,
+                _,
+                _,
+                _,
+                whenAnnihilated) <- referencedHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(
+                referencingEventWhen))
+
+              // Have to make sure the referenced item is annihilated *after* the event making the reference to it,
+              // otherwise that event will have caused the creation of a new lifecycle for the referenced item instead.
+              whenAnnihilated <- whenAnnihilated.toList
+              if whenAnnihilated > referencingEventWhen
+            } yield (referencedHistoryId, whenAnnihilated)
+
+            val theReferrerId = "The Referrer"
+
+            for (((referencedHistoryId, _), index) <- checks zipWithIndex) {
+              world.revise(
+                Map(
+                  -1 - index -> Some(
+                    Change.forTwoItems[ReferringHistory, History](
+                      referencingEventWhen)(theReferrerId,
+                                            referencedHistoryId,
+                                            (referringHistory: ReferringHistory,
+                                             referencedItem: History) => {
+                                              referringHistory.referTo(
+                                                referencedItem)
+                                            }))),
+                world.revisionAsOfs.last
+              )
+            }
+
+            if (checks.nonEmpty)
+              Prop.all(checks.zipWithIndex.map {
+                case ((referencedHistoryId, whenAnnihilated), index) => {
+                  intercept[RuntimeException] {
+                    world.revise(
+                      Map(
+                        -2 - index -> Some(
+                          Change.forOneItem[ReferringHistory](whenAnnihilated)(
+                            theReferrerId,
+                            (referringHistory: ReferringHistory) => {
+                              referringHistory.mutateRelatedItem(
+                                referencedHistoryId)
+                            }))),
+                      world.revisionAsOfs.last
+                    )
+                  }
+
+                  intercept[RuntimeException] {
+                    world.revise(
+                      Map(
+                        -3 - index -> Some(
+                          Change.forOneItem[ReferringHistory](whenAnnihilated)(
+                            theReferrerId,
+                            (referringHistory: ReferringHistory) => {
+                              referringHistory.referToRelatedItem(
+                                referencedHistoryId)
+                            }))),
+                      world.revisionAsOfs.last
+                    )
+                  }
+
+                  Prop.proved
                 }
               }: _*)
             else Prop.undecided
