@@ -9,17 +9,19 @@ import com.sageserpent.americium
 import com.sageserpent.americium._
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.seqEnrichment._
-import com.sageserpent.plutonium.intersperseObsoleteEvents.EventId
 import org.scalacheck.Prop.BooleanOperators
 import org.scalacheck.{Gen, Prop}
+import org.scalatest.exceptions.TestFailedException
 import org.scalatest.prop.Checkers
-import org.scalatest.{FlatSpec, Matchers, Outcome}
+import org.scalatest.{FlatSpec, Matchers}
+import scalaz.std.stream
+import scalaz.syntax.applicativePlus._
 
 import scala.collection.immutable
 import scala.collection.immutable.{::, TreeMap}
 import scala.util.Random
-import scalaz.std.stream
-import scalaz.syntax.applicativePlus._
+
+import scala.reflect.runtime.universe.TypeTag
 
 trait WorldBehaviours
     extends FlatSpec
@@ -173,6 +175,82 @@ trait WorldBehaviours
   }
 
   def worldBehaviour = {
+    it should "deduce the most accurate type for items based on the events that refer to them" in {
+      val testCaseGenerator = for {
+        worldResource <- worldResourceGenerator
+        seed          <- seedGenerator
+        random = new Random((seed))
+        fooHistoryIds     <- Gen.nonEmptyListOf(fooHistoryIdGenerator)
+        numberOfReferrers <- Gen.chooseNum(1, 4)
+        referringHistoryIds <- Gen.listOfN(numberOfReferrers,
+                                           referringHistoryIdGenerator)
+      } yield (worldResource, random, fooHistoryIds, referringHistoryIds)
+      check(Prop.forAllNoShrink(testCaseGenerator) {
+        case (worldResource, random, fooHistoryIds, referringHistoryIds) =>
+          val sharedAsOf = Instant.ofEpochSecond(0L)
+          worldResource acquireAndGet {
+            world =>
+              val derivationDepths = fooHistoryIds zip Stream.continually {
+                random.chooseAnyNumberFromZeroToOneLessThan(3)
+              } toMap
+
+              {
+                var eventId = 0
+
+                for {
+                  fooHistoryId <- fooHistoryIds
+                  selectedReferringHistoryIds <- random.chooseSeveralOf(
+                    referringHistoryIds,
+                    random.chooseAnyNumberFromOneTo(referringHistoryIds.size))
+                  referringHistoryId <- selectedReferringHistoryIds
+                } {
+                  def referTo[AHistory <: History: TypeTag] =
+                    Change.forTwoItems[ReferringHistory, AHistory](
+                      referringHistoryId,
+                      fooHistoryId, {
+                        (referringHistory: ReferringHistory,
+                         history: AHistory) =>
+                          referringHistory.referTo(history)
+                      })
+
+                  val waysOfReferringToAFooHistory =
+                    Array(
+                      referTo[History],
+                      referTo[FooHistory],
+                      referTo[MoreSpecificFooHistory]) take (1 + derivationDepths(
+                      fooHistoryId))
+
+                  val eventWithSomeFlavourOfReferredHistory =
+                    random.chooseOneOf(waysOfReferringToAFooHistory)
+
+                  world.revise(eventId,
+                               eventWithSomeFlavourOfReferredHistory,
+                               sharedAsOf)
+
+                  eventId += 1
+                }
+              }
+
+              val scope =
+                world.scopeFor(NegativeInfinity[Instant](), sharedAsOf)
+
+              Prop.all(fooHistoryIds map {
+                fooHistoryId =>
+                  val derivationDepth = derivationDepths(fooHistoryId)
+                  def fetch[AHistory <: History: TypeTag] =
+                    scope.render(Bitemporal.withId[AHistory](fooHistoryId))
+                  val waysOfFetchingHistory =
+                    Array(fetch[History],
+                          fetch[FooHistory],
+                          fetch[MoreSpecificFooHistory])
+                  val Seq(bitemporalWithExpectedFlavourOfHistory) =
+                    waysOfFetchingHistory(derivationDepth)
+                  (bitemporalWithExpectedFlavourOfHistory.id == fooHistoryId) :| s"Expected to have a single bitemporal of id: $fooHistoryId, but got one of id: ${bitemporalWithExpectedFlavourOfHistory.id}"
+              }: _*)
+          }
+      })
+    }
+
     it should "reveal the same lack of history from a scope with an 'asOf' limit that comes at or after that revision but before the following revision" in {
       val testCaseGenerator = for {
         worldResource <- worldResourceGenerator
@@ -1318,10 +1396,10 @@ trait WorldBehaviours
                 referencingEventWhen))
 
               // Have to make sure the referenced item is annihilated *after* the event making the reference to it,
-              // in case that event caused the creation of a new lifecycle for the referenced item.
-              laterQueryWhenAtAnnihilation <- whenAnnihilated.toList
-              if laterQueryWhenAtAnnihilation > referencingEventWhen
-            } yield (referencedHistoryId, laterQueryWhenAtAnnihilation)
+              // otherwise that event will have caused the creation of a new lifecycle for the referenced item instead.
+              whenAnnihilated <- whenAnnihilated.toList
+              if whenAnnihilated > referencingEventWhen
+            } yield (referencedHistoryId, whenAnnihilated)
 
             val theReferrerId = "The Referrer"
 
@@ -1359,6 +1437,122 @@ trait WorldBehaviours
                   }
                   (idOfGhost == referencedHistoryId) :| s"Expected referenced item of id: '$referencedHistoryId' referred to by item of id: '${referringHistory.id}' to reveal its id correctly - but got '$idOfGhost' instead."
                   itIsAGhost :| s"Expected referenced item of id: '$referencedHistoryId' referred to by item of id: '${referringHistory.id}' to be a ghost at time: $laterQueryWhenAtAnnihilation - the event causing referral was at: $referencingEventWhen."
+                }
+              }: _*)
+            else Prop.undecided
+          }
+      })
+    }
+
+    it should "not allow an event to either refer to or to mutate the state of a related item that is a ghost" in {
+      val testCaseGenerator = for {
+        worldResource <- worldResourceGenerator
+        referencedHistoryRecordingsGroupedById <- referencedHistoryRecordingsGroupedByIdGenerator(
+          forbidAnnihilations = false)
+        seed <- seedGenerator
+        random = new Random(seed)
+        bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(
+          shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+            random,
+            referencedHistoryRecordingsGroupedById).zipWithIndex)
+        asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
+                             instantGenerator) map (_.sorted)
+        referencingEventWhen <- unboundedInstantGenerator
+      } yield
+        (worldResource,
+         referencedHistoryRecordingsGroupedById,
+         bigShuffledHistoryOverLotsOfThings,
+         asOfs,
+         referencingEventWhen)
+      check(Prop.forAllNoShrink(testCaseGenerator) {
+        case (worldResource,
+              referencedHistoryRecordingsGroupedById,
+              bigShuffledHistoryOverLotsOfThings,
+              asOfs,
+              referencingEventWhen) =>
+          worldResource acquireAndGet { world =>
+            recordEventsInWorld(
+              liftRecordings(bigShuffledHistoryOverLotsOfThings),
+              asOfs,
+              world)
+
+            val checks = for {
+              RecordingsNoLaterThan(
+                referencedHistoryId: History#Id,
+                _,
+                _,
+                _,
+                whenAnnihilated) <- referencedHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(
+                referencingEventWhen))
+
+              // Have to make sure the referenced item is annihilated *after* the event making the reference to it,
+              // otherwise that event will have caused the creation of a new lifecycle for the referenced item instead.
+              whenAnnihilated <- whenAnnihilated.toList
+              if whenAnnihilated > referencingEventWhen
+            } yield (referencedHistoryId, whenAnnihilated)
+
+            val theReferrerId = "The Referrer"
+
+            for (((referencedHistoryId, _), index) <- checks zipWithIndex) {
+              world.revise(
+                Map(
+                  -1 - index -> Some(
+                    Change.forTwoItems[ReferringHistory, History](
+                      referencingEventWhen)(theReferrerId,
+                                            referencedHistoryId,
+                                            (referringHistory: ReferringHistory,
+                                             referencedItem: History) => {
+                                              referringHistory.referTo(
+                                                referencedItem)
+                                            }))),
+                world.revisionAsOfs.last
+              )
+            }
+
+            if (checks.nonEmpty)
+              Prop.all(checks.zipWithIndex.map {
+                case ((referencedHistoryId, whenAnnihilated), index) => {
+                  try {
+                    intercept[RuntimeException] {
+                      world.revise(
+                        Map(-2 - index -> Some(
+                          Change.forOneItem[ReferringHistory](whenAnnihilated)(
+                            theReferrerId,
+                            (referringHistory: ReferringHistory) => {
+                              referringHistory.mutateRelatedItem(
+                                referencedHistoryId)
+                            }))),
+                        world.revisionAsOfs.last
+                      )
+                    }
+                  } catch {
+                    case exception: TestFailedException =>
+                      println(
+                        s"Failed to detect mutation of a ghost, referring item id: $theReferrerId, referenced item id: $referencedHistoryId, when: $whenAnnihilated, when the relationship was set up: $referencingEventWhen.")
+                      throw exception
+                  }
+
+                  try {
+                    intercept[RuntimeException] {
+                      world.revise(
+                        Map(-3 - index -> Some(
+                          Change.forOneItem[ReferringHistory](whenAnnihilated)(
+                            theReferrerId,
+                            (referringHistory: ReferringHistory) => {
+                              referringHistory.referToRelatedItem(
+                                referencedHistoryId)
+                            }))),
+                        world.revisionAsOfs.last
+                      )
+                    }
+                  } catch {
+                    case exception: TestFailedException =>
+                      println(
+                        s"Failed to detect mutation of a ghost, referring item id: $theReferrerId, referenced item id: $referencedHistoryId, when: $whenAnnihilated, when the relationship was set up: $referencingEventWhen.")
+                      throw exception
+                  }
+
+                  Prop.proved
                 }
               }: _*)
             else Prop.undecided
@@ -2078,11 +2272,11 @@ trait WorldBehaviours
                 if (checks.nonEmpty)
                   Prop.all(checks.map {
                     case (historyId, actualHistory, expectedHistory) =>
-                      ((actualHistory.length == expectedHistory.length) :| s"For ${historyId}, ${actualHistory.length} == expectedHistory.length") &&
+                      ((actualHistory.length == expectedHistory.length) :| s"For ${historyId}, expected to see: ${expectedHistory.length} datums, but got: ${actualHistory.length} - actual history: ${actualHistory.toList}, expected history: ${expectedHistory.toList}.") &&
                         Prop.all(
                           (actualHistory zip expectedHistory zipWithIndex) map {
                             case ((actual, expected), step) =>
-                              (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}"
+                              (actual == expected) :| s"For ${historyId}, @step ${step}, the actual datum: ${actual} was not equal to the expected value: ${expected}."
                           }: _*)
                   }: _*)
                 else Prop.undecided
@@ -2199,7 +2393,7 @@ trait WorldBehaviours
                 if (checks.nonEmpty)
                   Prop.all(checks.map {
                     case (historyId, actualHistory, expectedHistory) =>
-                      ((actualHistory.length == expectedHistory.length) :| s"For ${historyId}, ${actualHistory.length} == expectedHistory.length") &&
+                      ((actualHistory.length == expectedHistory.length) :| s"For ${historyId}, expected to see: ${expectedHistory.length} datums, but got: ${actualHistory.length} - actual history: ${actualHistory.toList}, expected history: ${expectedHistory.toList}.") &&
                         Prop.all(
                           (actualHistory zip expectedHistory zipWithIndex) map {
                             case ((actual, expected), step) =>
@@ -2247,31 +2441,6 @@ trait WorldBehaviours
              .apply(
                implementingHistoryId,
                (implementingHistory: ImplementingHistory) => {
-                 // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
-                 assert(implementingHistoryId == implementingHistory.id)
-                 assertThrows[UnsupportedOperationException](
-                   implementingHistory.datums)
-                 assertThrows[UnsupportedOperationException](
-                   implementingHistory.property)
-
-                 if (faulty) implementingHistory.forceInvariantBreakage() // Modelling breakage of the bitemporal invariant.
-
-                 implementingHistory.property = data
-               }
-           ))
-
-    def negatingImplementingHistoryNegativeIntegerDataSampleGenerator(
-        faulty: Boolean) =
-      for { data <- Gen.negNum[Int] } yield
-        (data,
-         (when: americium.Unbounded[Instant],
-          makeAChange: Boolean,
-          implementingHistoryId: NegatingImplementingHistory#Id) =>
-           eventConstructorReferringToOneItem[NegatingImplementingHistory](
-             makeAChange)(when)
-             .apply(
-               implementingHistoryId,
-               (implementingHistory: NegatingImplementingHistory) => {
                  // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
                  assert(implementingHistoryId == implementingHistory.id)
                  assertThrows[UnsupportedOperationException](

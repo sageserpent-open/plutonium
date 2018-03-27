@@ -19,6 +19,12 @@ object itemStateStorageUsingProxies extends ItemStateStorage {
 
   override protected def lifecycleUUID(item: ItemSuperType): UUID =
     item.lifecycleUUID
+
+  override protected def noteAnnihilationOnItem(item: ItemSuperType): Unit = {
+    item
+      .asInstanceOf[AnnihilationHook]
+      .recordAnnihilation()
+  }
 }
 
 class TimelineImplementation[EventId](
