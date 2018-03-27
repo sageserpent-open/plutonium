@@ -9,18 +9,19 @@ import com.sageserpent.americium
 import com.sageserpent.americium._
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.seqEnrichment._
-import com.sageserpent.plutonium.intersperseObsoleteEvents.EventId
 import org.scalacheck.Prop.BooleanOperators
 import org.scalacheck.{Gen, Prop}
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.prop.Checkers
-import org.scalatest.{FlatSpec, Matchers, Outcome}
+import org.scalatest.{FlatSpec, Matchers}
+import scalaz.std.stream
+import scalaz.syntax.applicativePlus._
 
 import scala.collection.immutable
 import scala.collection.immutable.{::, TreeMap}
 import scala.util.Random
-import scalaz.std.stream
-import scalaz.syntax.applicativePlus._
+
+import scala.reflect.runtime.universe.TypeTag
 
 trait WorldBehaviours
     extends FlatSpec
@@ -174,6 +175,82 @@ trait WorldBehaviours
   }
 
   def worldBehaviour = {
+    it should "deduce the most accurate type for items based on the events that refer to them" in {
+      val testCaseGenerator = for {
+        worldResource <- worldResourceGenerator
+        seed          <- seedGenerator
+        random = new Random((seed))
+        fooHistoryIds     <- Gen.nonEmptyListOf(fooHistoryIdGenerator)
+        numberOfReferrers <- Gen.chooseNum(1, 4)
+        referringHistoryIds <- Gen.listOfN(numberOfReferrers,
+                                           referringHistoryIdGenerator)
+      } yield (worldResource, random, fooHistoryIds, referringHistoryIds)
+      check(Prop.forAllNoShrink(testCaseGenerator) {
+        case (worldResource, random, fooHistoryIds, referringHistoryIds) =>
+          val sharedAsOf = Instant.ofEpochSecond(0L)
+          worldResource acquireAndGet {
+            world =>
+              val derivationDepths = fooHistoryIds zip Stream.continually {
+                random.chooseAnyNumberFromZeroToOneLessThan(3)
+              } toMap
+
+              {
+                var eventId = 0
+
+                for {
+                  fooHistoryId <- fooHistoryIds
+                  selectedReferringHistoryIds <- random.chooseSeveralOf(
+                    referringHistoryIds,
+                    random.chooseAnyNumberFromOneTo(referringHistoryIds.size))
+                  referringHistoryId <- selectedReferringHistoryIds
+                } {
+                  def referTo[AHistory <: History: TypeTag] =
+                    Change.forTwoItems[ReferringHistory, AHistory](
+                      referringHistoryId,
+                      fooHistoryId, {
+                        (referringHistory: ReferringHistory,
+                         history: AHistory) =>
+                          referringHistory.referTo(history)
+                      })
+
+                  val waysOfReferringToAFooHistory =
+                    Array(
+                      referTo[History],
+                      referTo[FooHistory],
+                      referTo[MoreSpecificFooHistory]) take (1 + derivationDepths(
+                      fooHistoryId))
+
+                  val eventWithSomeFlavourOfReferredHistory =
+                    random.chooseOneOf(waysOfReferringToAFooHistory)
+
+                  world.revise(eventId,
+                               eventWithSomeFlavourOfReferredHistory,
+                               sharedAsOf)
+
+                  eventId += 1
+                }
+              }
+
+              val scope =
+                world.scopeFor(NegativeInfinity[Instant](), sharedAsOf)
+
+              Prop.all(fooHistoryIds map {
+                fooHistoryId =>
+                  val derivationDepth = derivationDepths(fooHistoryId)
+                  def fetch[AHistory <: History: TypeTag] =
+                    scope.render(Bitemporal.withId[AHistory](fooHistoryId))
+                  val waysOfFetchingHistory =
+                    Array(fetch[History],
+                          fetch[FooHistory],
+                          fetch[MoreSpecificFooHistory])
+                  val Seq(bitemporalWithExpectedFlavourOfHistory) =
+                    waysOfFetchingHistory(derivationDepth)
+                  (bitemporalWithExpectedFlavourOfHistory.id == fooHistoryId) :| s"Expected to have a single bitemporal of id: $fooHistoryId, but got one of id: ${bitemporalWithExpectedFlavourOfHistory.id}"
+              }: _*)
+          }
+      })
+    }
+
     it should "reveal the same lack of history from a scope with an 'asOf' limit that comes at or after that revision but before the following revision" in {
       val testCaseGenerator = for {
         worldResource <- worldResourceGenerator
