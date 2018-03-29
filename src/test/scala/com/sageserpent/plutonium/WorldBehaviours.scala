@@ -180,10 +180,13 @@ trait WorldBehaviours
         worldResource <- worldResourceGenerator
         seed          <- seedGenerator
         random = new Random((seed))
-        fooHistoryIds     <- Gen.nonEmptyListOf(fooHistoryIdGenerator)
+        fooHistoryIds <- Gen.nonEmptyContainerOf[Set, FooHistory#Id](
+          fooHistoryIdGenerator)
         numberOfReferrers <- Gen.chooseNum(1, 4)
-        referringHistoryIds <- Gen.listOfN(numberOfReferrers,
-                                           referringHistoryIdGenerator)
+        referringHistoryIds: Set[ReferringHistory#Id] <- Gen
+          .containerOfN[Set, ReferringHistory#Id](numberOfReferrers,
+                                                  referringHistoryIdGenerator)
+        if (referringHistoryIds intersect fooHistoryIds).isEmpty
       } yield (worldResource, random, fooHistoryIds, referringHistoryIds)
       check(Prop.forAllNoShrink(testCaseGenerator) {
         case (worldResource, random, fooHistoryIds, referringHistoryIds) =>
@@ -202,9 +205,9 @@ trait WorldBehaviours
                   selectedReferringHistoryIds <- random.chooseSeveralOf(
                     referringHistoryIds,
                     random.chooseAnyNumberFromOneTo(referringHistoryIds.size))
-                  referringHistoryId <- selectedReferringHistoryIds
                 } {
-                  def referTo[AHistory <: History: TypeTag] =
+                  def referTo[AHistory <: History: TypeTag](
+                      referringHistoryId: ReferringHistory#Id) =
                     Change.forTwoItems[ReferringHistory, AHistory](
                       referringHistoryId,
                       fooHistoryId, {
@@ -213,28 +216,43 @@ trait WorldBehaviours
                           referringHistory.referTo(history)
                       })
 
-                  val waysOfReferringToAFooHistory =
+                  val waysOfReferringToAFooHistory
+                    : Array[ReferringHistory#Id => Change] =
                     Array(
-                      referTo[History],
-                      referTo[FooHistory],
-                      referTo[MoreSpecificFooHistory]) take (1 + derivationDepths(
+                      referTo[History] _,
+                      referTo[FooHistory] _,
+                      referTo[MoreSpecificFooHistory] _) take (1 + derivationDepths(
                       fooHistoryId))
 
-                  val eventWithSomeFlavourOfReferredHistory =
-                    random.chooseOneOf(waysOfReferringToAFooHistory)
+                  def makeAReferencingEvent(
+                      eventConstructor: ReferringHistory#Id => Change,
+                      referringHistoryId: ReferringHistory#Id) = {
+                    val eventWithSomeFlavourOfReferredHistory =
+                      eventConstructor(referringHistoryId)
 
-                  world.revise(eventId,
-                               eventWithSomeFlavourOfReferredHistory,
-                               sharedAsOf)
+                    world.revise(eventId,
+                                 eventWithSomeFlavourOfReferredHistory,
+                                 sharedAsOf)
 
-                  eventId += 1
+                    eventId += 1
+                  }
+
+                  val (firstReferringId :: theOtherReferringIds) =
+                    referringHistoryIds.toList
+
+                  makeAReferencingEvent(waysOfReferringToAFooHistory.last,
+                                        firstReferringId)
+
+                  theOtherReferringIds foreach (makeAReferencingEvent(
+                    random.chooseOneOf(waysOfReferringToAFooHistory),
+                    _))
                 }
               }
 
               val scope =
                 world.scopeFor(NegativeInfinity[Instant](), sharedAsOf)
 
-              Prop.all(fooHistoryIds map {
+              Prop.all(fooHistoryIds.toSeq map {
                 fooHistoryId =>
                   val derivationDepth = derivationDepths(fooHistoryId)
                   def fetch[AHistory <: History: TypeTag] =
