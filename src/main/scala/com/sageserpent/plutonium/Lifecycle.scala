@@ -103,3 +103,32 @@ trait Lifecycles[EventId] {
   def recordAnnihilation(eventId: EventId,
                          annihilation: Annihilation): Lifecycles[EventId]
 }
+
+class LifecyclesImplementation[EventId] extends Lifecycles[EventId] {
+  // TODO: need to store each lifecycle somewhere - how about in a map keyed by id, where each maplet refers to an ordered sequence of lifecycles for that id?
+  // This implies an invariant - the lifecycles in a maplet must not conflict - so no overlaps are permitted, they should all be fused already.
+
+  // TODO: yes, we can annul an event id from an individual lifecycle - but how do we get to that lifecycle? Do we need a second map from event id to lifecycle?
+  // Is it a map or a multimap? Well, for one thing an event may generate more than one patch at the same physical time that refers to the same item - and not just
+  // by alternating between target and argument references, we can repeat the same kind of reference. The other thing is that an annihilation can be sandwiched into
+  // the middle of an event, so patches in the same event (and thus sharing the same event id) may refer to separate lifecycles. This also means that lifecycles may
+  // indeed lap up to each other in physical time. Hmmm.
+
+  override val uniqueItemSpecification: UniqueItemSpecification = ???
+
+  override def annul(eventId: EventId): Lifecycles[EventId] = ???
+
+  override def recordPatchFromChange(
+      eventId: EventId,
+      when: Unbounded[Instant],
+      patch: AbstractPatch): Lifecycles[EventId] = ???
+
+  override def recordPatchFromMeasurement(
+      eventId: EventId,
+      when: Unbounded[Instant],
+      patch: AbstractPatch): Lifecycles[EventId] = ???
+
+  override def recordAnnihilation(
+      eventId: EventId,
+      annihilation: Annihilation): Lifecycles[EventId] = ???
+}
