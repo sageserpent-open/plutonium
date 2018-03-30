@@ -4,6 +4,8 @@ import java.time.Instant
 
 import com.sageserpent.americium.{PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
+import com.sageserpent.plutonium.Lifecycle.FusionResult
+
 import scala.reflect.runtime.universe.TypeTag
 
 object Lifecycle {
@@ -20,11 +22,26 @@ object Lifecycle {
 
   case object Measurement extends PatchKind
 
-  def apply[EventId](patch: AbstractPatch,
+  def apply[EventId](eventId: EventId,
+                     when: Unbounded[Instant],
+                     patch: AbstractPatch,
                      kind: PatchKind): Seq[Lifecycle[EventId]] = ???
+
+  trait FusionResult[EventId]
+
+  case class Split[EventId](first: Lifecycle[EventId],
+                            second: Lifecycle[EventId])
+      extends FusionResult[EventId] {
+    require(first.endTime.fold(false)(_ < second.startTime))
+  }
+
+  case class Merge[EventId](merged: Lifecycle[EventId])
+      extends FusionResult[EventId]
 }
 
 trait Lifecycle[EventId] {
+  import Lifecycle.FusionResult
+
   val uniqueItemSpecification: UniqueItemSpecification
 
   val lowerBoundTypeTag = uniqueItemSpecification.typeTag
@@ -34,28 +51,31 @@ trait Lifecycle[EventId] {
   require(lowerBoundTypeTag.tpe <:< upperBoundTypeTag.tpe)
 
   def isInconsistentWith(another: Lifecycle[EventId]): Boolean =
-    !(this.lowerBoundTypeTag.tpe <:< another.lowerBoundTypeTag.tpe || another.lowerBoundTypeTag.tpe <:< this.lowerBoundTypeTag.tpe) &&
-      (this.upperBoundTypeTag.tpe <:< another.upperBoundTypeTag.tpe || another.upperBoundTypeTag.tpe <:< this.upperBoundTypeTag.tpe)
+    (another.upperBoundTypeTag.tpe <:< this.upperBoundTypeTag.tpe || this.upperBoundTypeTag.tpe <:< another.upperBoundTypeTag.tpe) && !this
+      .isFusibleWith(another)
 
   def isFusibleWith(another: Lifecycle[EventId]): Boolean =
-    (this.lowerBoundTypeTag.tpe <:< another.lowerBoundTypeTag.tpe || another.lowerBoundTypeTag.tpe <:< this.lowerBoundTypeTag.tpe) &&
-      (this.upperBoundTypeTag.tpe <:< another.upperBoundTypeTag.tpe || another.upperBoundTypeTag.tpe <:< this.upperBoundTypeTag.tpe)
+    this.lowerBoundTypeTag.tpe <:< another.lowerBoundTypeTag.tpe || another.lowerBoundTypeTag.tpe <:< this.lowerBoundTypeTag.tpe
 
-  def overlapsWith(another: Lifecycle[EventId]): Boolean
+  def overlapsWith(another: Lifecycle[EventId]): Boolean =
+    !(this.endTime.fold(false)(_ < another.startTime) || another.endTime.fold(
+      false)(_ < this.startTime))
 
   val startTime: Unbounded[Instant]
 
   val endTime: Option[Unbounded[Instant]]
 
-  // NOTE: may get one or two lifecycles back - fusing with an annihilation can split a
-  // lifecycle, whereas fusing with a patch or measurement will result in just one.
-  def fuseWith(another: Lifecycle[EventId])
-    : (Lifecycle[EventId], Option[Lifecycle[EventId]])
+  def fuseWith(another: Lifecycle[EventId]): FusionResult[EventId]
+
+  def annul(eventId: EventId): Lifecycle[EventId]
 }
 
 trait LifecycleContracts[EventId] extends Lifecycle[EventId] {
-  abstract override def fuseWith(another: Lifecycle[EventId])
-    : (Lifecycle[EventId], Option[Lifecycle[EventId]]) = {
+  require(endTime.fold(true)(startTime < _))
+  require(lowerBoundTypeTag.tpe <:< upperBoundTypeTag.tpe)
+
+  abstract override def fuseWith(
+      another: Lifecycle[EventId]): FusionResult[EventId] = {
     require(
       this.uniqueItemSpecification.id == another.uniqueItemSpecification.id)
     require(isFusibleWith(another))
