@@ -3,11 +3,10 @@ package com.sageserpent.plutonium
 import java.lang.reflect.Method
 import java.time.Instant
 
-import com.sageserpent.americium.{Finite, Unbounded}
+import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 
 import scala.collection.mutable
-import scala.reflect.runtime._
 import scala.reflect.runtime.universe._
 
 object PatchRecorderImplementation {

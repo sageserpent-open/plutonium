@@ -179,7 +179,7 @@ trait WorldBehaviours
       val testCaseGenerator = for {
         worldResource <- worldResourceGenerator
         seed          <- seedGenerator
-        random = new Random((seed))
+        random = new Random(seed)
         fooHistoryIds <- Gen.nonEmptyContainerOf[Set, FooHistory#Id](
           fooHistoryIdGenerator)
         numberOfReferrers <- Gen.chooseNum(1, 4)
@@ -193,7 +193,7 @@ trait WorldBehaviours
           val sharedAsOf = Instant.ofEpochSecond(0L)
           worldResource acquireAndGet {
             world =>
-              val derivationDepths = fooHistoryIds zip Stream.continually {
+              val linearizationIndices = fooHistoryIds zip Stream.continually {
                 random.chooseAnyNumberFromZeroToOneLessThan(3)
               } toMap
 
@@ -219,7 +219,7 @@ trait WorldBehaviours
                     Array(
                       referTo[History] _,
                       referTo[FooHistory] _,
-                      referTo[MoreSpecificFooHistory] _) take (1 + derivationDepths(
+                      referTo[MoreSpecificFooHistory] _) take (1 + linearizationIndices(
                       fooHistoryId))
 
                   val eventConstructors =
@@ -244,7 +244,6 @@ trait WorldBehaviours
 
               Prop.all(fooHistoryIds.toSeq map {
                 fooHistoryId =>
-                  val derivationDepth = derivationDepths(fooHistoryId)
                   def fetch[AHistory <: History: TypeTag] =
                     scope.render(Bitemporal.withId[AHistory](fooHistoryId))
                   val waysOfFetchingHistory =
@@ -252,7 +251,7 @@ trait WorldBehaviours
                           fetch[FooHistory],
                           fetch[MoreSpecificFooHistory])
                   val Seq(bitemporalWithExpectedFlavourOfHistory) =
-                    waysOfFetchingHistory(derivationDepth)
+                    waysOfFetchingHistory(linearizationIndices(fooHistoryId))
                   (bitemporalWithExpectedFlavourOfHistory.id == fooHistoryId) :| s"Expected to have a single bitemporal of id: $fooHistoryId, but got one of id: ${bitemporalWithExpectedFlavourOfHistory.id}"
               }: _*)
           }
