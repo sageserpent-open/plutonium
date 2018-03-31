@@ -155,6 +155,9 @@ class ItemStateStorageSpec
 
     override protected def lifecycleUUID(item: ItemSuperType): UUID =
       item.lifecycleUUID
+
+    override protected def noteAnnihilationOnItem(item: ItemSuperType): Unit =
+      ???
   }
 
   "An item" should "be capable of being roundtripped by reconstituting its snapshot" in check(
@@ -221,7 +224,7 @@ class ItemStateStorageSpec
             uniqueItemSpecification: UniqueItemSpecification): Item =
           idToFallbackItemMap(uniqueItemSpecification.id).asInstanceOf[Item]
 
-        override protected def fallbackRelatedItemFor[Item](
+        override protected def fallbackAnnihilatedItemFor[Item](
             uniqueItemSpecification: UniqueItemSpecification): Item =
           idToFallbackItemMap(uniqueItemSpecification.id).asInstanceOf[Item]
 

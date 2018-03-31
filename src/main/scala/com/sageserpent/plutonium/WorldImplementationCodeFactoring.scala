@@ -99,11 +99,14 @@ object WorldImplementationCodeFactoring {
     val isGhostProperty = new MethodDescription.ForLoadedMethod(
       classOf[ItemExtensionApi].getMethod("isGhost"))
 
+    val lifecycleUUIDMethod = new MethodDescription.ForLoadedMethod(
+      classOf[ItemExtensionApi].getMethod("lifecycleUUID"))
+
     val recordAnnihilationMethod = new MethodDescription.ForLoadedMethod(
       classOf[AnnihilationHook].getMethod("recordAnnihilation"))
 
-    val lifecycleUUIDMethod = new MethodDescription.ForLoadedMethod(
-      classOf[ItemExtensionApi].getMethod("lifecycleUUID"))
+    val setLifecycleUUIDMethod = new MethodDescription.ForLoadedMethod(
+      classOf[AnnihilationHook].getMethod("setLifecycleUUID", classOf[UUID]))
   }
 
   val byteBuddy = new ByteBuddy()
@@ -234,8 +237,9 @@ object WorldImplementationCodeFactoring {
     }
 
     val matchSetLifecycleUUID: ElementMatcher[MethodDescription] =
-      ElementMatchers.named("setLifecycleUUID")
-    // TODO - why does Java reflection crash when it tries to obtain this method inside a call to 'firstMethodIsOverrideCompatibleWithSecond'?
+      firstMethodIsOverrideCompatibleWithSecond(
+        _,
+        IdentifiedItemsScope.setLifecycleUUIDMethod)
 
     val matchLifecycleUUID: ElementMatcher[MethodDescription] =
       firstMethodIsOverrideCompatibleWithSecond(
@@ -419,34 +423,31 @@ object WorldImplementationCodeFactoring {
         uniqueItemSpecification: UniqueItemSpecification): Any =
       itemFor(uniqueItemSpecification.id)(uniqueItemSpecification.typeTag)
 
-    override def forget(
+    override def noteAnnihilation(
         uniqueItemSpecification: UniqueItemSpecification): Unit = {
-      idToItemsMultiMap.get(uniqueItemSpecification.id) match {
-        case Some(items) =>
-          assert(items.nonEmpty)
+      val items = idToItemsMultiMap(uniqueItemSpecification.id)
 
-          // Have to force evaluation of the stream so that the call to '--=' below does not try to incrementally
-          // evaluate the stream as the underlying source collection, namely 'items' is being mutated. This is
-          // what you get when you go back to imperative programming after too much referential transparency.
-          val itemsSelectedForAnnihilation: Stream[Any] =
-            IdentifiedItemsScope
-              .yieldOnlyItemsOfType(items)(uniqueItemSpecification.typeTag)
-              .force
-          assert(1 == itemsSelectedForAnnihilation.size)
+      assert(items.nonEmpty)
 
-          val itemToBeAnnihilated = itemsSelectedForAnnihilation.head
+      // Have to force evaluation of the stream so that the call to '--=' below does not try to incrementally
+      // evaluate the stream as the underlying source collection, namely 'items' is being mutated. This is
+      // what you get when you go back to imperative programming after too much referential transparency.
+      val itemsSelectedForAnnihilation: Stream[Any] =
+        IdentifiedItemsScope
+          .yieldOnlyItemsOfType(items)(uniqueItemSpecification.typeTag)
+          .force
+      assert(1 == itemsSelectedForAnnihilation.size)
 
-          items -= itemToBeAnnihilated
+      val itemToBeAnnihilated = itemsSelectedForAnnihilation.head
 
-          itemToBeAnnihilated
-            .asInstanceOf[AnnihilationHook]
-            .recordAnnihilation()
+      items -= itemToBeAnnihilated
 
-          if (items.isEmpty) {
-            idToItemsMultiMap.remove(uniqueItemSpecification.id)
-          }
-        case None =>
-          assert(false)
+      itemToBeAnnihilated
+        .asInstanceOf[AnnihilationHook]
+        .recordAnnihilation()
+
+      if (items.isEmpty) {
+        idToItemsMultiMap.remove(uniqueItemSpecification.id)
       }
     }
 
@@ -571,7 +572,9 @@ object WorldImplementationCodeFactoring {
     patchRecorder.noteThatThereAreNoFollowingRecordings()
   }
 
-  trait ScopeImplementation extends com.sageserpent.plutonium.Scope with ItemCacheImplementation {
+  trait ScopeImplementation
+      extends com.sageserpent.plutonium.Scope
+      with ItemCacheImplementation {
     val identifiedItemsScope: IdentifiedItemsScope
 
     override def itemsFor[Item: TypeTag](id: Any): Stream[Item] =

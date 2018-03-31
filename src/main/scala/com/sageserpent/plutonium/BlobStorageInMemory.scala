@@ -116,21 +116,17 @@ case class BlobStorageInMemory[EventId, SnapshotBlob] private (
     class RevisionBuilderImplementation extends RevisionBuilder {
       type Event =
         (Set[EventId],
-         Option[(Unbounded[Instant],
-                 Map[UniqueItemSpecification, Option[SnapshotBlob]])])
+         Unbounded[Instant],
+         Map[UniqueItemSpecification, Option[SnapshotBlob]])
 
       val events = mutable.MutableList.empty[Event]
-
-      override def annulEvent(eventId: EventId): Unit = {
-        events += (Set(eventId) -> None)
-      }
 
       override def recordSnapshotBlobsForEvent(
           eventIds: Set[EventId],
           when: Unbounded[Instant],
           snapshotBlobs: Map[UniqueItemSpecification, Option[SnapshotBlob]])
         : Unit = {
-        events += eventIds -> Some(when -> snapshotBlobs)
+        events += ((eventIds, when, snapshotBlobs))
       }
 
       override def build(): BlobStorage[EventId, SnapshotBlob] = {
@@ -138,14 +134,12 @@ case class BlobStorageInMemory[EventId, SnapshotBlob] private (
 
         val newEventRevisions
           : Map[EventId, Int] = thisBlobStorage.eventRevisions ++ (events flatMap {
-          case (eventIds, _) => eventIds
+          case (eventIds, _, _) => eventIds
         }).distinct.map(_ -> newRevision)
 
         val newLifecycles =
           (thisBlobStorage.lifecycles /: events) {
-            case (lifecycles, (_, None)) =>
-              lifecycles
-            case (lifecycles, (eventIds, Some((when, snapshots)))) =>
+            case (lifecycles, (eventIds, when, snapshots)) =>
               val updatedLifecycles = snapshots map {
                 case (uniqueItemSpecification @ UniqueItemSpecification(
                         id,

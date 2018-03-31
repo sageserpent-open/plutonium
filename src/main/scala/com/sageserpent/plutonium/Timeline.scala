@@ -14,7 +14,6 @@ trait Timeline[EventId] {
   def itemCacheAt(when: Unbounded[Instant]): ItemCache
 }
 
-// TODO - given that we have 'emptyItemCache', I'm not sure if we need this too - let's see how it pans out...
 object emptyTimeline {
   def apply[EventId]() =
     new TimelineImplementation[EventId]

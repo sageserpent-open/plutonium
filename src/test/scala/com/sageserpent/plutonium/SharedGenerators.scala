@@ -15,7 +15,7 @@ trait SharedGenerators {
 
   val instantGenerator = Arbitrary.arbitrary[Long] map Instant.ofEpochMilli
 
-  val unboundedInstantGenerator = Gen.frequency(
+  val unboundedInstantGenerator: Gen[Unbounded[Instant]] = Gen.frequency(
     1  -> Gen.oneOf(NegativeInfinity[Instant], PositiveInfinity[Instant]),
     10 -> (instantGenerator map Finite.apply))
 

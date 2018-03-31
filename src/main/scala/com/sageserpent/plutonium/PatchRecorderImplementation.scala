@@ -3,11 +3,10 @@ package com.sageserpent.plutonium
 import java.lang.reflect.Method
 import java.time.Instant
 
-import com.sageserpent.americium.{Finite, Unbounded}
+import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 
 import scala.collection.mutable
-import scala.reflect.runtime._
 import scala.reflect.runtime.universe._
 
 object PatchRecorderImplementation {
@@ -160,14 +159,6 @@ abstract class PatchRecorderImplementation[EventId](
     def itemWouldConflictWithEarlierLifecyclePriorTo =
       _itemWouldConflictWithEarlierLifecyclePriorTo
 
-    def refineCutoffForEarliestExistence(
-        itemCannotExistEarlierThan: SequenceIndex) = {
-      if (itemCannotExistEarlierThan > _itemWouldConflictWithEarlierLifecyclePriorTo) {
-        _itemWouldConflictWithEarlierLifecyclePriorTo =
-          itemCannotExistEarlierThan
-      }
-    }
-
     def noteAnnihilation(sequenceIndex: SequenceIndex) = {
       _sequenceIndexForAnnihilation = Some(sequenceIndex)
     }
@@ -261,7 +252,7 @@ abstract class PatchRecorderImplementation[EventId](
     mutable.Map[UniqueItemSpecification, ItemState]
 
   implicit val patchBagConfiguration =
-    mutable.HashBag.configuration.compact[AbstractPatch]
+    mutable.HashBag.configuration.keepAll[AbstractPatch]
 
   private val bagOfPatches = mutable.Bag.empty[AbstractPatch]
 
@@ -296,7 +287,9 @@ abstract class PatchRecorderImplementation[EventId](
     val (sequenceIndexForBestPatch, _, whenTheBestPatchOccurs, _) =
       patchRepresentingTheEvent
 
-    bagOfPatches -= bestPatch
+    bagOfPatches.setMultiplicity(bestPatch,
+                                 bagOfPatches.multiplicity(bestPatch) - 1)
+    // HACK: this should be a straight '-=' call, but there is a bug in the referenced library version for the bag implementation.
 
     val reconstitutionDataToItemStateMap =
       if (bagOfPatches.contains(bestPatch)) {
@@ -308,7 +301,7 @@ abstract class PatchRecorderImplementation[EventId](
     for ((UniqueItemSpecification(id, _), itemState) <- reconstitutionDataToItemStateMap) {
       if (itemState.itemWouldConflictWithEarlierLifecyclePriorTo > sequenceIndexForBestPatch) {
         throw new RuntimeException(
-          s"Attempt to execute patch involving id: '$id' of type: '${itemState.lowerBoundTypeTag.tpe}' for a later lifecycle that cannot exist at time: $whenTheBestPatchOccurs, as there is at least one item from a previous lifecycle up until: ${itemState.itemWouldConflictWithEarlierLifecyclePriorTo}.")
+          s"Attempt to execute patch involving id: '$id' of type: '${itemState.lowerBoundTypeTag.tpe}' for a later lifecycle that cannot exist at time: $whenTheBestPatchOccurs and sequence number: $sequenceIndexForBestPatch, as there is at least one item from a previous lifecycle up until sequence number: ${itemState.itemWouldConflictWithEarlierLifecyclePriorTo}.")
       }
     }
 
@@ -395,12 +388,8 @@ abstract class PatchRecorderImplementation[EventId](
       if (compatibleItemStates.nonEmpty) if (1 < compatibleItemStates.size) {
         throw new scala.RuntimeException(
           s"There is more than one item of id: '${id}' compatible with type '${typeTag.tpe}', these have types: '${compatibleItemStates map (_.lowerBoundTypeTag.tpe)}'.")
-      } else {
-        val compatibleItemState = compatibleItemStates.head
-        compatibleItemState.refineCutoffForEarliestExistence(
-          itemCannotExistEarlierThan)
-        compatibleItemState
-      } else {
+      } else compatibleItemStates.head
+      else {
         val itemState = new ItemState(typeTag, itemCannotExistEarlierThan)
         val mutableItemStates =
           idToItemStatesMap.getOrElseUpdate(id, mutable.Set.empty)

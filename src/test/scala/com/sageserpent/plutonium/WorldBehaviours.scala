@@ -11,13 +11,17 @@ import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.seqEnrichment._
 import org.scalacheck.Prop.BooleanOperators
 import org.scalacheck.{Gen, Prop}
+import org.scalatest.exceptions.TestFailedException
 import org.scalatest.prop.Checkers
 import org.scalatest.{FlatSpec, Matchers}
-
-import scala.collection.immutable.{::, TreeMap}
-import scala.util.Random
 import scalaz.std.stream
 import scalaz.syntax.applicativePlus._
+
+import scala.collection.immutable
+import scala.collection.immutable.{::, TreeMap}
+import scala.util.Random
+
+import scala.reflect.runtime.universe.TypeTag
 
 trait WorldBehaviours
     extends FlatSpec
@@ -171,6 +175,89 @@ trait WorldBehaviours
   }
 
   def worldBehaviour = {
+    it should "deduce the most accurate type for items based on the events that refer to them" in {
+      val testCaseGenerator = for {
+        worldResource <- worldResourceGenerator
+        seed          <- seedGenerator
+        random = new Random(seed)
+        fooHistoryIds <- Gen.nonEmptyContainerOf[Set, FooHistory#Id](
+          fooHistoryIdGenerator)
+        numberOfReferrers <- Gen.chooseNum(1, 4)
+        referringHistoryIds: Set[ReferringHistory#Id] <- Gen
+          .containerOfN[Set, ReferringHistory#Id](numberOfReferrers,
+                                                  referringHistoryIdGenerator)
+        if (referringHistoryIds intersect fooHistoryIds).isEmpty
+      } yield (worldResource, random, fooHistoryIds, referringHistoryIds)
+      check(Prop.forAllNoShrink(testCaseGenerator) {
+        case (worldResource, random, fooHistoryIds, referringHistoryIds) =>
+          val sharedAsOf = Instant.ofEpochSecond(0L)
+          worldResource acquireAndGet {
+            world =>
+              val linearizationIndices = fooHistoryIds zip Stream.continually {
+                random.chooseAnyNumberFromZeroToOneLessThan(3)
+              } toMap
+
+              {
+                val events = (for {
+                  fooHistoryId <- fooHistoryIds
+                  selectedReferringHistoryIds <- random.chooseSeveralOf(
+                    referringHistoryIds,
+                    random.chooseAnyNumberFromOneTo(referringHistoryIds.size))
+                } yield {
+                  def referTo[AHistory <: History: TypeTag](
+                      referringHistoryId: ReferringHistory#Id) =
+                    Change.forTwoItems[ReferringHistory, AHistory](
+                      referringHistoryId,
+                      fooHistoryId, {
+                        (referringHistory: ReferringHistory,
+                         history: AHistory) =>
+                          referringHistory.referTo(history)
+                      })
+
+                  val waysOfReferringToAFooHistory
+                    : Array[ReferringHistory#Id => Change] =
+                    Array(
+                      referTo[History] _,
+                      referTo[FooHistory] _,
+                      referTo[MoreSpecificFooHistory] _) take (1 + linearizationIndices(
+                      fooHistoryId))
+
+                  val eventConstructors =
+                    waysOfReferringToAFooHistory.last :: List.fill(
+                      referringHistoryIds.size - 1)(
+                      random.chooseOneOf(waysOfReferringToAFooHistory))
+
+                  random
+                    .shuffle(eventConstructors) zip referringHistoryIds map {
+                    case (eventConstructor, referringHistoryId) =>
+                      eventConstructor(referringHistoryId)
+                  }
+                }).flatten
+
+                for ((event, eventId) <- events zipWithIndex) {
+                  world.revise(eventId, event, sharedAsOf)
+                }
+              }
+
+              val scope =
+                world.scopeFor(NegativeInfinity[Instant](), sharedAsOf)
+
+              Prop.all(fooHistoryIds.toSeq map {
+                fooHistoryId =>
+                  def fetch[AHistory <: History: TypeTag] =
+                    scope.render(Bitemporal.withId[AHistory](fooHistoryId))
+                  val waysOfFetchingHistory =
+                    Array(fetch[History],
+                          fetch[FooHistory],
+                          fetch[MoreSpecificFooHistory])
+                  val Seq(bitemporalWithExpectedFlavourOfHistory) =
+                    waysOfFetchingHistory(linearizationIndices(fooHistoryId))
+                  (bitemporalWithExpectedFlavourOfHistory.id == fooHistoryId) :| s"Expected to have a single bitemporal of id: $fooHistoryId, but got one of id: ${bitemporalWithExpectedFlavourOfHistory.id}"
+              }: _*)
+          }
+      })
+    }
+
     it should "reveal the same lack of history from a scope with an 'asOf' limit that comes at or after that revision but before the following revision" in {
       val testCaseGenerator = for {
         worldResource <- worldResourceGenerator
@@ -1316,10 +1403,10 @@ trait WorldBehaviours
                 referencingEventWhen))
 
               // Have to make sure the referenced item is annihilated *after* the event making the reference to it,
-              // in case that event caused the creation of a new lifecycle for the referenced item.
-              laterQueryWhenAtAnnihilation <- whenAnnihilated.toList
-              if laterQueryWhenAtAnnihilation > referencingEventWhen
-            } yield (referencedHistoryId, laterQueryWhenAtAnnihilation)
+              // otherwise that event will have caused the creation of a new lifecycle for the referenced item instead.
+              whenAnnihilated <- whenAnnihilated.toList
+              if whenAnnihilated > referencingEventWhen
+            } yield (referencedHistoryId, whenAnnihilated)
 
             val theReferrerId = "The Referrer"
 
@@ -1357,6 +1444,122 @@ trait WorldBehaviours
                   }
                   (idOfGhost == referencedHistoryId) :| s"Expected referenced item of id: '$referencedHistoryId' referred to by item of id: '${referringHistory.id}' to reveal its id correctly - but got '$idOfGhost' instead."
                   itIsAGhost :| s"Expected referenced item of id: '$referencedHistoryId' referred to by item of id: '${referringHistory.id}' to be a ghost at time: $laterQueryWhenAtAnnihilation - the event causing referral was at: $referencingEventWhen."
+                }
+              }: _*)
+            else Prop.undecided
+          }
+      })
+    }
+
+    it should "not allow an event to either refer to or to mutate the state of a related item that is a ghost" in {
+      val testCaseGenerator = for {
+        worldResource <- worldResourceGenerator
+        referencedHistoryRecordingsGroupedById <- referencedHistoryRecordingsGroupedByIdGenerator(
+          forbidAnnihilations = false)
+        seed <- seedGenerator
+        random = new Random(seed)
+        bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(
+          shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+            random,
+            referencedHistoryRecordingsGroupedById).zipWithIndex)
+        asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
+                             instantGenerator) map (_.sorted)
+        referencingEventWhen <- unboundedInstantGenerator
+      } yield
+        (worldResource,
+         referencedHistoryRecordingsGroupedById,
+         bigShuffledHistoryOverLotsOfThings,
+         asOfs,
+         referencingEventWhen)
+      check(Prop.forAllNoShrink(testCaseGenerator) {
+        case (worldResource,
+              referencedHistoryRecordingsGroupedById,
+              bigShuffledHistoryOverLotsOfThings,
+              asOfs,
+              referencingEventWhen) =>
+          worldResource acquireAndGet { world =>
+            recordEventsInWorld(
+              liftRecordings(bigShuffledHistoryOverLotsOfThings),
+              asOfs,
+              world)
+
+            val checks = for {
+              RecordingsNoLaterThan(
+                referencedHistoryId: History#Id,
+                _,
+                _,
+                _,
+                whenAnnihilated) <- referencedHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(
+                referencingEventWhen))
+
+              // Have to make sure the referenced item is annihilated *after* the event making the reference to it,
+              // otherwise that event will have caused the creation of a new lifecycle for the referenced item instead.
+              whenAnnihilated <- whenAnnihilated.toList
+              if whenAnnihilated > referencingEventWhen
+            } yield (referencedHistoryId, whenAnnihilated)
+
+            val theReferrerId = "The Referrer"
+
+            for (((referencedHistoryId, _), index) <- checks zipWithIndex) {
+              world.revise(
+                Map(
+                  -1 - index -> Some(
+                    Change.forTwoItems[ReferringHistory, History](
+                      referencingEventWhen)(theReferrerId,
+                                            referencedHistoryId,
+                                            (referringHistory: ReferringHistory,
+                                             referencedItem: History) => {
+                                              referringHistory.referTo(
+                                                referencedItem)
+                                            }))),
+                world.revisionAsOfs.last
+              )
+            }
+
+            if (checks.nonEmpty)
+              Prop.all(checks.zipWithIndex.map {
+                case ((referencedHistoryId, whenAnnihilated), index) => {
+                  try {
+                    intercept[RuntimeException] {
+                      world.revise(
+                        Map(-2 - index -> Some(
+                          Change.forOneItem[ReferringHistory](whenAnnihilated)(
+                            theReferrerId,
+                            (referringHistory: ReferringHistory) => {
+                              referringHistory.mutateRelatedItem(
+                                referencedHistoryId)
+                            }))),
+                        world.revisionAsOfs.last
+                      )
+                    }
+                  } catch {
+                    case exception: TestFailedException =>
+                      println(
+                        s"Failed to detect mutation of a ghost, referring item id: $theReferrerId, referenced item id: $referencedHistoryId, when: $whenAnnihilated, when the relationship was set up: $referencingEventWhen.")
+                      throw exception
+                  }
+
+                  try {
+                    intercept[RuntimeException] {
+                      world.revise(
+                        Map(-3 - index -> Some(
+                          Change.forOneItem[ReferringHistory](whenAnnihilated)(
+                            theReferrerId,
+                            (referringHistory: ReferringHistory) => {
+                              referringHistory.referToRelatedItem(
+                                referencedHistoryId)
+                            }))),
+                        world.revisionAsOfs.last
+                      )
+                    }
+                  } catch {
+                    case exception: TestFailedException =>
+                      println(
+                        s"Failed to detect mutation of a ghost, referring item id: $theReferrerId, referenced item id: $referencedHistoryId, when: $whenAnnihilated, when the relationship was set up: $referencingEventWhen.")
+                      throw exception
+                  }
+
+                  Prop.proved
                 }
               }: _*)
             else Prop.undecided
@@ -2076,11 +2279,11 @@ trait WorldBehaviours
                 if (checks.nonEmpty)
                   Prop.all(checks.map {
                     case (historyId, actualHistory, expectedHistory) =>
-                      ((actualHistory.length == expectedHistory.length) :| s"For ${historyId}, ${actualHistory.length} == expectedHistory.length") &&
+                      ((actualHistory.length == expectedHistory.length) :| s"For ${historyId}, expected to see: ${expectedHistory.length} datums, but got: ${actualHistory.length} - actual history: ${actualHistory.toList}, expected history: ${expectedHistory.toList}.") &&
                         Prop.all(
                           (actualHistory zip expectedHistory zipWithIndex) map {
                             case ((actual, expected), step) =>
-                              (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}"
+                              (actual == expected) :| s"For ${historyId}, @step ${step}, the actual datum: ${actual} was not equal to the expected value: ${expected}."
                           }: _*)
                   }: _*)
                 else Prop.undecided
@@ -2197,7 +2400,7 @@ trait WorldBehaviours
                 if (checks.nonEmpty)
                   Prop.all(checks.map {
                     case (historyId, actualHistory, expectedHistory) =>
-                      ((actualHistory.length == expectedHistory.length) :| s"For ${historyId}, ${actualHistory.length} == expectedHistory.length") &&
+                      ((actualHistory.length == expectedHistory.length) :| s"For ${historyId}, expected to see: ${expectedHistory.length} datums, but got: ${actualHistory.length} - actual history: ${actualHistory.toList}, expected history: ${expectedHistory.toList}.") &&
                         Prop.all(
                           (actualHistory zip expectedHistory zipWithIndex) map {
                             case ((actual, expected), step) =>
@@ -2245,31 +2448,6 @@ trait WorldBehaviours
              .apply(
                implementingHistoryId,
                (implementingHistory: ImplementingHistory) => {
-                 // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
-                 assert(implementingHistoryId == implementingHistory.id)
-                 assertThrows[UnsupportedOperationException](
-                   implementingHistory.datums)
-                 assertThrows[UnsupportedOperationException](
-                   implementingHistory.property)
-
-                 if (faulty) implementingHistory.forceInvariantBreakage() // Modelling breakage of the bitemporal invariant.
-
-                 implementingHistory.property = data
-               }
-           ))
-
-    def negatingImplementingHistoryNegativeIntegerDataSampleGenerator(
-        faulty: Boolean) =
-      for { data <- Gen.negNum[Int] } yield
-        (data,
-         (when: americium.Unbounded[Instant],
-          makeAChange: Boolean,
-          implementingHistoryId: NegatingImplementingHistory#Id) =>
-           eventConstructorReferringToOneItem[NegatingImplementingHistory](
-             makeAChange)(when)
-             .apply(
-               implementingHistoryId,
-               (implementingHistory: NegatingImplementingHistory) => {
                  // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
                  assert(implementingHistoryId == implementingHistory.id)
                  assertThrows[UnsupportedOperationException](
@@ -3492,6 +3670,93 @@ class WorldSpecUsingWorldRedisBasedImplementation
             secondSerializationFailedInExpectedManner && secondRevisionAttemptFailed &&
             queryOk
         }
+    })
+  }
+}
+
+class AllTheWorlds
+    extends FlatSpec
+    with Matchers
+    with Checkers
+    with WorldSpecSupport
+    with WorldRedisBasedImplementationResource {
+  val redisServerPort = 6455
+
+  object worldReferenceImplementationResource
+      extends WorldReferenceImplementationResource
+
+  object worldEfficientInMemoryImplementationResource
+      extends WorldEfficientInMemoryImplementationResource
+
+  "all the world implementations" should "agree" in {
+    val testCaseGenerator = for {
+      worldReferenceImplementationResource         <- worldReferenceImplementationResource.worldResourceGenerator
+      worldEfficientInMemoryImplementationResource <- worldEfficientInMemoryImplementationResource.worldResourceGenerator
+      worldRedisBasedImplementationResource        <- worldResourceGenerator
+      recordingsGroupedById <- recordingsGroupedByIdGenerator(
+        forbidAnnihilations = false)
+      obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
+      seed                          <- seedGenerator
+      random = new Random(seed)
+      shuffledRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+        random,
+        recordingsGroupedById)
+      shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+        random,
+        obsoleteRecordingsGroupedById)
+      bigShuffledHistoryOverLotsOfThings = intersperseObsoleteEvents(
+        random,
+        shuffledRecordings,
+        shuffledObsoleteRecordings)
+      asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
+                           instantGenerator) map (_.sorted)
+      queryWhen <- unboundedInstantGenerator
+    } yield
+      (worldReferenceImplementationResource,
+       worldEfficientInMemoryImplementationResource,
+       worldRedisBasedImplementationResource,
+       recordingsGroupedById,
+       bigShuffledHistoryOverLotsOfThings,
+       asOfs,
+       queryWhen)
+    check(Prop.forAllNoShrink(testCaseGenerator) {
+      case (worldReferenceImplementationResource,
+            worldEfficientInMemoryImplementationResource,
+            worldRedisBasedImplementationResource,
+            recordingsGroupedById,
+            bigShuffledHistoryOverLotsOfThings,
+            asOfs,
+            queryWhen) =>
+        def resultsFrom(world: World[Int]): immutable.Seq[(Any, Seq[Any])] = {
+          recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
+
+          val scope = world.scopeFor(queryWhen, world.nextRevision)
+
+          for {
+            RecordingsNoLaterThan(historyId, historiesFrom, _, _, _) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(
+              queryWhen))
+            Seq(history) = historiesFrom(scope)
+          } yield (historyId, history.datums)
+        }
+
+        val checks = for {
+          worldReferenceImplementation         <- worldReferenceImplementationResource
+          worldEfficientInMemoryImplementation <- worldEfficientInMemoryImplementationResource
+          worldRedisBasedImplementation        <- worldRedisBasedImplementationResource
+        } yield {
+          val worldReferenceImplementationResults =
+            resultsFrom(worldReferenceImplementation)
+          val worldEfficientInMemoryImplementationResults =
+            resultsFrom(worldEfficientInMemoryImplementation)
+          val redisBasedImplementationResults =
+            resultsFrom(worldRedisBasedImplementation)
+
+          ((worldReferenceImplementationResults == worldEfficientInMemoryImplementationResults) :| s"Should have agreement between reference implementation and efficient in-memory implementation.") &&
+          ((worldEfficientInMemoryImplementationResults == redisBasedImplementationResults) :| s"Should have agreement between efficient in-memory implementation and Redis based implementation.") &&
+          ((redisBasedImplementationResults == worldReferenceImplementationResults) :| s"Should have agreement between Redis based implementation and reference implementation.")
+        }
+
+        checks acquireAndGet identity
     })
   }
 }

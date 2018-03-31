@@ -33,5 +33,13 @@ abstract class ReferringHistory extends History {
 
   def referencedHistories: collection.Map[Any, History] = _referencedHistories
 
+  def referToRelatedItem(referencedHistoryId: History#Id): Unit = {
+    val _ = _referencedHistories(referencedHistoryId).datums
+  }
+
+  def mutateRelatedItem(referencedHistoryId: History#Id): Unit = {
+    _referencedHistories(referencedHistoryId).shouldBeUnchanged = false
+  }
+
   private val _referencedHistories = collection.mutable.Map.empty[Any, History]
 }
