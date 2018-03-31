@@ -114,3 +114,9 @@ SHORT TERM GOAL: Use the existing 'IdentifiedItemsScope' along with full unoptim
 Looking at the code, the item state storage abstraction should be similar to 'Timeline' - it has a functional API that yields a new storage object for a new revision, and like timelines,
 each instance pertains to a specific revision. So as with timelines, a world should store multiple storage objects, one per revision. Asking for a scope then selects the appropriate
 storage object.
+
+---------------------------------------------------------------------------------------------------------------------------
+
+13. Support referring to items in events via pure Java interfaces that are mixed in.
+
+14. The same as #1, only this time for Scala traits with implementation - as long as the constructor code isn't run, this should work as for #1.
