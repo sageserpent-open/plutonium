@@ -34,7 +34,7 @@ class BlobStorageSpec
     with SharedGenerators
     with GeneratorDrivenPropertyChecks
     with NoShrinking {
-  type EventId = Int
+  type RecordingId = Int
 
   def mixedIdGenerator(disambiguation: Int) =
     Gen.oneOf(integerIdGenerator map (disambiguation + 2 * _),
@@ -242,39 +242,37 @@ class BlobStorageSpec
   private type ScalaFmtWorkaround =
     Seq[(Option[(Unbounded[Instant],
                  Seq[(UniqueItemSpecification, Option[SnapshotBlob])])],
-         EventId)]
+         RecordingId)]
 
   val gapBetweenBaseTransformedEventIds = 5
 
-  val eventIdDeltas: Seq[Int] = 1 until gapBetweenBaseTransformedEventIds
+  val recordingIdDeltas: Seq[Int] = 1 until gapBetweenBaseTransformedEventIds
 
   def blobStorageFrom(revisions: Seq[ScalaFmtWorkaround],
-                      wrapAround: EventId => EventId,
+                      wrapAround: RecordingId => RecordingId,
                       randomBehaviour: Random) = {
-    ((BlobStorageInMemory[EventId, SnapshotBlob](): BlobStorage[
-      EventId,
+    ((BlobStorageInMemory[RecordingId, SnapshotBlob](): BlobStorage[
+      RecordingId,
       SnapshotBlob]) /: revisions) {
       case (blobStorage, bookingsForRevision) =>
         val builder = blobStorage.openRevision()
-        for ((booking, eventId) <- bookingsForRevision) {
+        for ((booking, recordingId) <- bookingsForRevision) {
           booking match {
             case Some((when, snapshotBlobs)) =>
-              val anchorForTransformedEventIdThatIsPresentInAllRevisions = eventId * gapBetweenBaseTransformedEventIds
+              val anchorForTransformedEventIdThatIsPresentInAllRevisions = recordingId * gapBetweenBaseTransformedEventIds
               val transformedEventIdSet = (0 +: randomBehaviour.chooseSeveralOf(
-                eventIdDeltas,
+                recordingIdDeltas,
                 randomBehaviour.chooseAnyNumberFromZeroToOneLessThan(
-                  1 + eventIdDeltas.size))).toSet
+                  1 + recordingIdDeltas.size))).toSet
                 .map((delta: Int) =>
                   anchorForTransformedEventIdThatIsPresentInAllRevisions + wrapAround(
                     delta))
 
-              builder.recordSnapshotBlobsForEvent(transformedEventIdSet,
-                                                  when,
-                                                  snapshotBlobs.toMap)
+              builder.record(transformedEventIdSet, when, snapshotBlobs.toMap)
             case None =>
               val transformedEventId =
-                eventId * gapBetweenBaseTransformedEventIds + wrapAround(0)
-              builder.annulEvent(transformedEventId)
+                recordingId * gapBetweenBaseTransformedEventIds + wrapAround(0)
+              builder.annul(transformedEventId)
               builder.build()
           }
         }
@@ -365,10 +363,10 @@ class BlobStorageSpec
                                     finalBookings,
                                     obsoleteBookings)
 
-        def wrapAround(delta: EventId): EventId =
+        def wrapAround(delta: RecordingId): RecordingId =
           (delta + wrapAroundShift) % gapBetweenBaseTransformedEventIds
 
-        val blobStorage: BlobStorage[EventId, SnapshotBlob] =
+        val blobStorage: BlobStorage[RecordingId, SnapshotBlob] =
           blobStorageFrom(revisions, wrapAround, randomBehaviour)
 
         for (TimeSeries(uniqueItemSpecification, snapshots, queryTimes) <- lotsOfFinalTimeSeries) {
@@ -476,10 +474,10 @@ class BlobStorageSpec
                                     finalBookings,
                                     obsoleteBookings)
 
-        def wrapAround(delta: EventId): EventId =
+        def wrapAround(delta: RecordingId): RecordingId =
           (delta + wrapAroundShift) % gapBetweenBaseTransformedEventIds
 
-        val blobStorage: BlobStorage[EventId, SnapshotBlob] =
+        val blobStorage: BlobStorage[RecordingId, SnapshotBlob] =
           blobStorageFrom(revisions, wrapAround, randomBehaviour)
 
         for (TimeSeries(uniqueItemSpecification, snapshots, queryTimes) <- lotsOfFinalTimeSeries) {
