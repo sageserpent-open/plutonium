@@ -198,14 +198,12 @@ trait WorldBehaviours
               } toMap
 
               {
-                var eventId = 0
-
-                for {
+                val events = (for {
                   fooHistoryId <- fooHistoryIds
                   selectedReferringHistoryIds <- random.chooseSeveralOf(
                     referringHistoryIds,
                     random.chooseAnyNumberFromOneTo(referringHistoryIds.size))
-                } {
+                } yield {
                   def referTo[AHistory <: History: TypeTag](
                       referringHistoryId: ReferringHistory#Id) =
                     Change.forTwoItems[ReferringHistory, AHistory](
@@ -224,28 +222,20 @@ trait WorldBehaviours
                       referTo[MoreSpecificFooHistory] _) take (1 + derivationDepths(
                       fooHistoryId))
 
-                  def makeAReferencingEvent(
-                      eventConstructor: ReferringHistory#Id => Change,
-                      referringHistoryId: ReferringHistory#Id) = {
-                    val eventWithSomeFlavourOfReferredHistory =
+                  val eventConstructors =
+                    waysOfReferringToAFooHistory.last :: List.fill(
+                      referringHistoryIds.size - 1)(
+                      random.chooseOneOf(waysOfReferringToAFooHistory))
+
+                  random
+                    .shuffle(eventConstructors) zip referringHistoryIds map {
+                    case (eventConstructor, referringHistoryId) =>
                       eventConstructor(referringHistoryId)
-
-                    world.revise(eventId,
-                                 eventWithSomeFlavourOfReferredHistory,
-                                 sharedAsOf)
-
-                    eventId += 1
                   }
+                }).flatten
 
-                  val (firstReferringId :: theOtherReferringIds) =
-                    referringHistoryIds.toList
-
-                  makeAReferencingEvent(waysOfReferringToAFooHistory.last,
-                                        firstReferringId)
-
-                  theOtherReferringIds foreach (makeAReferencingEvent(
-                    random.chooseOneOf(waysOfReferringToAFooHistory),
-                    _))
+                for ((event, eventId) <- events zipWithIndex) {
+                  world.revise(eventId, event, sharedAsOf)
                 }
               }
 
