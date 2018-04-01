@@ -185,7 +185,8 @@ case class BlobStorageInMemory[EventId, SnapshotBlob] private (
     new RevisionBuilderImplementation
   }
 
-  override def timeSlice(when: Unbounded[Instant]): Timeslice[SnapshotBlob] = {
+  override def timeSlice(when: Unbounded[Instant],
+                         inclusive: Boolean): Timeslice[SnapshotBlob] = {
     trait TimesliceImplementation extends Timeslice[SnapshotBlob] {
       override def uniqueItemQueriesFor[Item: TypeTag]
         : Stream[UniqueItemSpecification] =
