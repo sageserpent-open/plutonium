@@ -10,6 +10,7 @@ import scala.collection.generic.IsSeqLike
 import scala.collection.{SeqLike, SeqView, immutable, mutable}
 import scala.reflect.runtime.universe
 import scala.reflect.runtime.universe._
+import scala.math.Ordered.orderingToOrdered
 
 object BlobStorageInMemory {
   type Revision = Int
@@ -23,8 +24,8 @@ object BlobStorageInMemory {
   }
 
   def indexToSearchDownFromOrInsertAt[EventId](
-      when: Unbounded[Instant],
-      snapshotBlobTimes: Seq[Unbounded[Instant]]) = {
+      when: Split[Unbounded[Instant]],
+      snapshotBlobTimes: Seq[Split[Unbounded[Instant]]]) = {
 
     snapshotBlobTimes.search(when) match {
       case Found(foundIndex) =>
@@ -58,9 +59,9 @@ case class BlobStorageInMemory[EventId, SnapshotBlob] private (
 
   case class Lifecycle(
       itemTypeTag: TypeTag[_ <: Any],
-      snapshotBlobs: Vector[(Unbounded[Instant],
+      snapshotBlobs: Vector[(Split[Unbounded[Instant]],
                              (Option[SnapshotBlob], Set[EventId], Revision))] =
-        Vector.empty[(Unbounded[Instant],
+        Vector.empty[(Split[Unbounded[Instant]],
                       (Option[SnapshotBlob], Set[EventId], Revision))]) {
     val snapshotBlobTimes = snapshotBlobs.view.map(_._1)
 
@@ -69,7 +70,7 @@ case class BlobStorageInMemory[EventId, SnapshotBlob] private (
         case (first, second) => first <= second
       }))
 
-    private def indexOf(when: Unbounded[Instant],
+    private def indexOf(when: Split[Unbounded[Instant]],
                         validRevisionFor: EventId => Revision) = {
       snapshotBlobs
         .view(0, indexToSearchDownFromOrInsertAt(when, snapshotBlobTimes))
@@ -80,13 +81,13 @@ case class BlobStorageInMemory[EventId, SnapshotBlob] private (
         })
     }
 
-    def isValid(when: Unbounded[Instant],
+    def isValid(when: Split[Unbounded[Instant]],
                 validRevisionFor: EventId => Revision): Boolean = {
       val index = indexOf(when, validRevisionFor)
       -1 != index && snapshotBlobs(index)._2._1.isDefined
     }
 
-    def snapshotBlobFor(when: Unbounded[Instant],
+    def snapshotBlobFor(when: Split[Unbounded[Instant]],
                         validRevisionFor: EventId => Revision): SnapshotBlob = {
       val index = indexOf(when, validRevisionFor)
 
@@ -98,7 +99,7 @@ case class BlobStorageInMemory[EventId, SnapshotBlob] private (
     }
 
     def addSnapshotBlob(eventIds: Set[EventId],
-                        when: Unbounded[Instant],
+                        when: Split[Unbounded[Instant]],
                         snapshotBlob: Option[SnapshotBlob],
                         revision: Revision): Lifecycle = {
       require(!snapshotBlobs.contains(when))
@@ -155,7 +156,10 @@ case class BlobStorageInMemory[EventId, SnapshotBlob] private (
                       itemTypeTag = itemTypeTag)
 
                     lifecycleForSnapshot
-                      .addSnapshotBlob(eventIds, when, snapshot, newRevision)
+                      .addSnapshotBlob(eventIds,
+                                       Split.alignedWith(when),
+                                       snapshot,
+                                       newRevision)
                   }
               }
 
@@ -188,6 +192,9 @@ case class BlobStorageInMemory[EventId, SnapshotBlob] private (
   override def timeSlice(when: Unbounded[Instant],
                          inclusive: Boolean): Timeslice[SnapshotBlob] = {
     trait TimesliceImplementation extends Timeslice[SnapshotBlob] {
+      val splitWhen =
+        if (inclusive) Split.alignedWith(when) else Split.lowerBoundOf(when)
+
       override def uniqueItemQueriesFor[Item: TypeTag]
         : Stream[UniqueItemSpecification] =
         lifecycles.flatMap {
@@ -195,7 +202,7 @@ case class BlobStorageInMemory[EventId, SnapshotBlob] private (
             lifecyclesForThatId collect {
               case lifecycle
                   if lifecycle.itemTypeTag.tpe <:< typeTag[Item].tpe && lifecycle
-                    .isValid(when, eventRevisions.apply) =>
+                    .isValid(splitWhen, eventRevisions.apply) =>
                 UniqueItemSpecification(id, lifecycle.itemTypeTag)
             }
         }.toStream
@@ -209,7 +216,7 @@ case class BlobStorageInMemory[EventId, SnapshotBlob] private (
             lifecyclesForThatId collect {
               case lifecycle
                   if lifecycle.itemTypeTag.tpe <:< typeTag[Item].tpe && lifecycle
-                    .isValid(when, eventRevisions.apply) =>
+                    .isValid(splitWhen, eventRevisions.apply) =>
                 UniqueItemSpecification(id, lifecycle.itemTypeTag)
             }
           }
@@ -222,8 +229,8 @@ case class BlobStorageInMemory[EventId, SnapshotBlob] private (
           lifecycles <- lifecycles.get(uniqueItemSpecification.id)
           lifecycle <- lifecycles.find(
             uniqueItemSpecification.typeTag == _.itemTypeTag)
-          if lifecycle.isValid(when, eventRevisions.apply)
-        } yield lifecycle.snapshotBlobFor(when, eventRevisions.apply)
+          if lifecycle.isValid(splitWhen, eventRevisions.apply)
+        } yield lifecycle.snapshotBlobFor(splitWhen, eventRevisions.apply)
     }
 
     new TimesliceImplementation with TimesliceContracts[SnapshotBlob]
@@ -235,7 +242,7 @@ case class BlobStorageInMemory[EventId, SnapshotBlob] private (
       revision = this.revision,
       eventRevisions = this.eventRevisions,
       lifecycles = this.lifecycles mapValues (_.flatMap(lifecycle =>
-        lifecycle.snapshotBlobs.filter(when >= _._1) match {
+        lifecycle.snapshotBlobs.filter(Split.alignedWith(when) >= _._1) match {
           case retainedSnapshotBlobs if retainedSnapshotBlobs.nonEmpty =>
             Some(Lifecycle(lifecycle.itemTypeTag, retainedSnapshotBlobs))
           case _ => None
