@@ -33,19 +33,6 @@ case class UpdatePlan[EventId](
     for {
       (when, itemStateUpdates: Seq[(Set[EventId], ItemStateUpdate)]) <- updates
     } {
-      {
-        val microRevisionWithAnullmentsBuilder =
-          microRevisedBlobStorage.openRevision()
-
-        val eventsAtThisTime = itemStateUpdates.flatMap(_._1)
-
-        for (eventId <- eventsAtThisTime) {
-          microRevisionWithAnullmentsBuilder.annulEvent(eventId)
-        }
-
-        microRevisedBlobStorage = microRevisionWithAnullmentsBuilder.build()
-      }
-
       val identifiedItemAccess = new IdentifiedItemAccess
       with itemStateStorageUsingProxies.ReconstitutionContext {
         override def reconstitute(
@@ -53,7 +40,7 @@ case class UpdatePlan[EventId](
           itemFor[Any](uniqueItemSpecification)
 
         private val blobStorageTimeSlice =
-          microRevisedBlobStorage.timeSlice(when)
+          microRevisedBlobStorage.timeSlice(when, inclusive = false)
 
         var allItemsAreLocked = true
 
