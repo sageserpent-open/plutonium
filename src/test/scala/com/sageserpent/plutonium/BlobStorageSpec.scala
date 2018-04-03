@@ -378,7 +378,7 @@ class BlobStorageSpec
             checkExpectationsForNonExistence(timeSlice)(uniqueItemSpecification)
           }
 
-          for ((snapshotBlob: Option[SnapshotBlob], _, queryTime) <- snapshots zip queryTimes map {
+          for ((snapshotBlob: Option[SnapshotBlob], snapshotTime, queryTime) <- snapshots zip queryTimes map {
                  case ((snapshotTime, snapshotBlob), queryTime) =>
                    (snapshotBlob, snapshotTime, queryTime)
                }) {
@@ -412,6 +412,41 @@ class BlobStorageSpec
 
               checkExpectations(
                 UniqueItemSpecification(nonExistentItemId, typeTag[Any]))
+            }
+
+            if (queryTime > snapshotTime) {
+              val timeSlice =
+                blobStorage.timeSlice(queryTime, inclusive = false)
+
+              {
+                val checkExpectations =
+                  checkExpectationsForExistence(timeSlice, snapshotBlob)(_)
+
+                checkExpectations(uniqueItemSpecification)
+
+                checkExpectations(
+                  UniqueItemSpecification(uniqueItemSpecification.id,
+                                          typeTag[Any]))
+              }
+
+              {
+                val checkExpectations =
+                  checkExpectationsForNonExistence(timeSlice)(_)
+
+                checkExpectations(
+                  UniqueItemSpecification(uniqueItemSpecification.id,
+                                          typeTag[NoKindOfThing]))
+
+                val allRetrievedUniqueItemSpecifications =
+                  timeSlice.uniqueItemQueriesFor(typeTag[NoKindOfThing])
+
+                allRetrievedUniqueItemSpecifications shouldBe empty
+
+                val nonExistentItemId = "I do not exist."
+
+                checkExpectations(
+                  UniqueItemSpecification(nonExistentItemId, typeTag[Any]))
+              }
             }
           }
         }
@@ -499,6 +534,71 @@ class BlobStorageSpec
               timeSlice,
               snapshotBlob,
               uniqueItemSpecification)
+          }
+        }
+    }
+  }
+
+  "querying for a unique item's blob snapshot when it was booked when in exclusive mode" should "yield that latest earlier snapshot" in {
+    forAll(
+      seedGenerator,
+      lotsOfTimeSeriesGenerator(
+        uniqueItemSpecificationWithUniqueTypePerIdGenerator),
+      Gen.frequency(10 -> lotsOfTimeSeriesGenerator(
+                      uniqueItemSpecificationWithUniqueTypePerIdGenerator),
+                    1 -> Gen.const(Seq.empty)),
+      Gen.chooseNum(1, gapBetweenBaseTransformedEventIds)
+    ) {
+      (seed,
+       lotsOfFinalTimeSeries,
+       lotsOfObsoleteTimeSeries,
+       wrapAroundShift) =>
+        val randomBehaviour = new Random(seed)
+
+        val finalBookings =
+          shuffledSnapshotBookings(randomBehaviour, lotsOfFinalTimeSeries)
+
+        val obsoleteBookings =
+          shuffledSnapshotBookings(randomBehaviour, lotsOfObsoleteTimeSeries)
+
+        val revisions =
+          intersperseObsoleteEvents(randomBehaviour,
+                                    finalBookings,
+                                    obsoleteBookings)
+
+        def wrapAround(delta: EventId): EventId =
+          (delta + wrapAroundShift) % gapBetweenBaseTransformedEventIds
+
+        val blobStorage: BlobStorage[EventId, SnapshotBlob] =
+          blobStorageFrom(revisions, wrapAround, randomBehaviour)
+
+        for (TimeSeries(uniqueItemSpecification, snapshots, queryTimes) <- lotsOfFinalTimeSeries) {
+          {
+            val timeSlice =
+              blobStorage.timeSlice(snapshots.head._1, inclusive = false)
+
+            checkExpectationsForNonExistence(timeSlice)(uniqueItemSpecification)
+          }
+
+          for ((snapshotTime, previousQueryTime) <- snapshots
+                 .map(_._1)
+                 .tail zip queryTimes) {
+            val previousTimeSlice = blobStorage.timeSlice(previousQueryTime)
+
+            val previousSnapshot =
+              previousTimeSlice.snapshotBlobFor(uniqueItemSpecification)
+
+            val timeSliceInExclusiveMode =
+              blobStorage.timeSlice(snapshotTime, inclusive = false)
+
+            val checkExpectations =
+              checkExpectationsForExistence(timeSliceInExclusiveMode,
+                                            previousSnapshot)(_)
+
+            checkExpectations(uniqueItemSpecification)
+
+            checkExpectations(
+              UniqueItemSpecification(uniqueItemSpecification.id, typeTag[Any]))
           }
         }
     }
