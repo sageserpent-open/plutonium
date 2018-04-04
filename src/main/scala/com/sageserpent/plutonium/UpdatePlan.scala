@@ -25,7 +25,7 @@ case class UpdatePlan[EventId](
       val initialMicroRevisionBuilder = blobStorage.openRevision()
 
       for (eventId <- eventsMadeObsolete) {
-        initialMicroRevisionBuilder.annulEvent(eventId)
+        initialMicroRevisionBuilder.annul(eventId)
       }
       initialMicroRevisionBuilder.build()
     }
@@ -141,9 +141,7 @@ case class UpdatePlan[EventId](
                 .mapValues(Some.apply)
           }
 
-          microRevisionBuilder.recordSnapshotBlobsForEvent(eventIds,
-                                                           when,
-                                                           snapshotBlobs.toMap)
+          microRevisionBuilder.record(eventIds, when, snapshotBlobs.toMap)
         }
 
         microRevisedBlobStorage = microRevisionBuilder.build()

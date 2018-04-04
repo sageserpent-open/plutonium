@@ -23,7 +23,7 @@ object BlobStorageInMemory {
       identity
   }
 
-  def indexToSearchDownFromOrInsertAt[EventId](
+  def indexToSearchDownFromOrInsertAt(
       when: Split[Unbounded[Instant]],
       snapshotBlobTimes: Seq[Split[Unbounded[Instant]]]) = {
 
@@ -40,29 +40,31 @@ object BlobStorageInMemory {
     }
   }
 
-  def apply[EventId, SnapshotBlob]() =
-    new BlobStorageInMemory[EventId, SnapshotBlob](
+  def apply[RecordingId, SnapshotBlob]() =
+    new BlobStorageInMemory[RecordingId, SnapshotBlob](
       revision = 0,
-      eventRevisions = Map.empty,
+      recordingRevisions = Map.empty,
       lifecycles = Map.empty
     )
 }
 
-case class BlobStorageInMemory[EventId, SnapshotBlob] private (
+case class BlobStorageInMemory[RecordingId, SnapshotBlob] private (
     revision: BlobStorageInMemory.Revision,
-    eventRevisions: Map[EventId, BlobStorageInMemory.Revision],
-    lifecycles: Map[Any,
-                    Seq[BlobStorageInMemory[EventId, SnapshotBlob]#Lifecycle]])
-    extends BlobStorage[EventId, SnapshotBlob] { thisBlobStorage =>
+    recordingRevisions: Map[RecordingId, BlobStorageInMemory.Revision],
+    lifecycles: Map[
+      Any,
+      Seq[BlobStorageInMemory[RecordingId, SnapshotBlob]#Lifecycle]])
+    extends BlobStorage[RecordingId, SnapshotBlob] { thisBlobStorage =>
   import BlobStorage._
   import BlobStorageInMemory._
 
   case class Lifecycle(
       itemTypeTag: TypeTag[_ <: Any],
-      snapshotBlobs: Vector[(Split[Unbounded[Instant]],
-                             (Option[SnapshotBlob], Set[EventId], Revision))] =
+      snapshotBlobs: Vector[
+        (Split[Unbounded[Instant]],
+         (Option[SnapshotBlob], Set[RecordingId], Revision))] =
         Vector.empty[(Split[Unbounded[Instant]],
-                      (Option[SnapshotBlob], Set[EventId], Revision))]) {
+                      (Option[SnapshotBlob], Set[RecordingId], Revision))]) {
     val snapshotBlobTimes = snapshotBlobs.view.map(_._1)
 
     require(
@@ -71,24 +73,24 @@ case class BlobStorageInMemory[EventId, SnapshotBlob] private (
       }))
 
     private def indexOf(when: Split[Unbounded[Instant]],
-                        validRevisionFor: EventId => Revision) = {
+                        validRevisionFor: RecordingId => Revision) = {
       snapshotBlobs
         .view(0, indexToSearchDownFromOrInsertAt(when, snapshotBlobTimes))
         .lastIndexWhere(PartialFunction.cond(_) {
-          case (_, (_, eventIds, blobRevision)) =>
-            eventIds.forall(eventId =>
-              blobRevision == validRevisionFor(eventId))
+          case (_, (_, keys, blobRevision)) =>
+            keys.forall(key => blobRevision == validRevisionFor(key))
         })
     }
 
     def isValid(when: Split[Unbounded[Instant]],
-                validRevisionFor: EventId => Revision): Boolean = {
+                validRevisionFor: RecordingId => Revision): Boolean = {
       val index = indexOf(when, validRevisionFor)
       -1 != index && snapshotBlobs(index)._2._1.isDefined
     }
 
-    def snapshotBlobFor(when: Split[Unbounded[Instant]],
-                        validRevisionFor: EventId => Revision): SnapshotBlob = {
+    def snapshotBlobFor(
+        when: Split[Unbounded[Instant]],
+        validRevisionFor: RecordingId => Revision): SnapshotBlob = {
       val index = indexOf(when, validRevisionFor)
 
       assert(-1 != index)
@@ -98,7 +100,7 @@ case class BlobStorageInMemory[EventId, SnapshotBlob] private (
       }
     }
 
-    def addSnapshotBlob(eventIds: Set[EventId],
+    def addSnapshotBlob(keys: Set[RecordingId],
                         when: Split[Unbounded[Instant]],
                         snapshotBlob: Option[SnapshotBlob],
                         revision: Revision): Lifecycle = {
@@ -108,39 +110,39 @@ case class BlobStorageInMemory[EventId, SnapshotBlob] private (
       Lifecycle(itemTypeTag = this.itemTypeTag,
                 snapshotBlobs = snapshotBlobs.patch(
                   insertionPoint,
-                  Seq((when, (snapshotBlob, eventIds, revision))),
+                  Seq((when, (snapshotBlob, keys, revision))),
                   0))
     }
   }
 
   override def openRevision(): RevisionBuilder = {
     class RevisionBuilderImplementation extends RevisionBuilder {
-      type Event =
-        (Set[EventId],
+      type Recording =
+        (Set[RecordingId],
          Unbounded[Instant],
          Map[UniqueItemSpecification, Option[SnapshotBlob]])
 
-      val events = mutable.MutableList.empty[Event]
+      val recordings = mutable.MutableList.empty[Recording]
 
-      override def recordSnapshotBlobsForEvent(
-          eventIds: Set[EventId],
+      override def record(
+          keys: Set[RecordingId],
           when: Unbounded[Instant],
           snapshotBlobs: Map[UniqueItemSpecification, Option[SnapshotBlob]])
         : Unit = {
-        events += ((eventIds, when, snapshotBlobs))
+        recordings += ((keys, when, snapshotBlobs))
       }
 
-      override def build(): BlobStorage[EventId, SnapshotBlob] = {
+      override def build(): BlobStorage[RecordingId, SnapshotBlob] = {
         val newRevision = 1 + thisBlobStorage.revision
 
         val newEventRevisions
-          : Map[EventId, Int] = thisBlobStorage.eventRevisions ++ (events flatMap {
-          case (eventIds, _, _) => eventIds
+          : Map[RecordingId, Int] = thisBlobStorage.recordingRevisions ++ (recordings flatMap {
+          case (keys, _, _) => keys
         }).distinct.map(_ -> newRevision)
 
         val newLifecycles =
-          (thisBlobStorage.lifecycles /: events) {
-            case (lifecycles, (eventIds, when, snapshots)) =>
+          (thisBlobStorage.lifecycles /: recordings) {
+            case (lifecycles, (keys, when, snapshots)) =>
               val updatedLifecycles = snapshots map {
                 case (uniqueItemSpecification @ UniqueItemSpecification(
                         id,
@@ -156,7 +158,7 @@ case class BlobStorageInMemory[EventId, SnapshotBlob] private (
                       itemTypeTag = itemTypeTag)
 
                     lifecycleForSnapshot
-                      .addSnapshotBlob(eventIds,
+                      .addSnapshotBlob(keys,
                                        Split.alignedWith(when),
                                        snapshot,
                                        newRevision)
@@ -181,7 +183,7 @@ case class BlobStorageInMemory[EventId, SnapshotBlob] private (
           }
 
         thisBlobStorage.copy(revision = newRevision,
-                             eventRevisions = newEventRevisions,
+                             recordingRevisions = newEventRevisions,
                              lifecycles = newLifecycles)
       }
     }
@@ -202,7 +204,7 @@ case class BlobStorageInMemory[EventId, SnapshotBlob] private (
             lifecyclesForThatId collect {
               case lifecycle
                   if lifecycle.itemTypeTag.tpe <:< typeTag[Item].tpe && lifecycle
-                    .isValid(splitWhen, eventRevisions.apply) =>
+                    .isValid(splitWhen, recordingRevisions.apply) =>
                 UniqueItemSpecification(id, lifecycle.itemTypeTag)
             }
         }.toStream
@@ -216,7 +218,7 @@ case class BlobStorageInMemory[EventId, SnapshotBlob] private (
             lifecyclesForThatId collect {
               case lifecycle
                   if lifecycle.itemTypeTag.tpe <:< typeTag[Item].tpe && lifecycle
-                    .isValid(splitWhen, eventRevisions.apply) =>
+                    .isValid(splitWhen, recordingRevisions.apply) =>
                 UniqueItemSpecification(id, lifecycle.itemTypeTag)
             }
           }
@@ -229,18 +231,19 @@ case class BlobStorageInMemory[EventId, SnapshotBlob] private (
           lifecycles <- lifecycles.get(uniqueItemSpecification.id)
           lifecycle <- lifecycles.find(
             uniqueItemSpecification.typeTag == _.itemTypeTag)
-          if lifecycle.isValid(splitWhen, eventRevisions.apply)
-        } yield lifecycle.snapshotBlobFor(splitWhen, eventRevisions.apply)
+          if lifecycle.isValid(splitWhen, recordingRevisions.apply)
+        } yield lifecycle.snapshotBlobFor(splitWhen, recordingRevisions.apply)
+
     }
 
     new TimesliceImplementation with TimesliceContracts[SnapshotBlob]
   }
 
-  override def retainUpTo(
-      when: Unbounded[Instant]): BlobStorageInMemory[EventId, SnapshotBlob] =
+  override def retainUpTo(when: Unbounded[Instant])
+    : BlobStorageInMemory[RecordingId, SnapshotBlob] =
     thisBlobStorage.copy(
       revision = this.revision,
-      eventRevisions = this.eventRevisions,
+      recordingRevisions = this.recordingRevisions,
       lifecycles = this.lifecycles mapValues (_.flatMap(lifecycle =>
         lifecycle.snapshotBlobs.filter(Split.alignedWith(when) >= _._1) match {
           case retainedSnapshotBlobs if retainedSnapshotBlobs.nonEmpty =>
