@@ -66,8 +66,8 @@ class LifecyclesStateImplementation[EventId](
     val (itemStateUpdates, itemStateUpdateKeysByEventForNewTimeline) =
       createUpdates(eventsForNewTimeline)
 
-    val obsoleteItemStateUpdateKeys
-      : Set[ItemStateUpdate.Key] = eventsMadeObsolete flatMap itemStateUpdateKeysByEvent.apply
+    val obsoleteItemStateUpdateKeys: Set[ItemStateUpdate.Key] =
+      /*eventsMadeObsolete*/ (this.events.keySet union events.keySet) flatMap itemStateUpdateKeysByEvent.get flatten
 
     val updatePlan =
       UpdatePlan(obsoleteItemStateUpdateKeys, itemStateUpdates)
