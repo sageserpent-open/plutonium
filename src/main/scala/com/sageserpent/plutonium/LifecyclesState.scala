@@ -4,6 +4,7 @@ import java.time.Instant
 
 import com.sageserpent.americium.{PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
+import com.sageserpent.plutonium.ItemStateUpdate.IntraEventIndex
 import com.sageserpent.plutonium.PatchRecorder.UpdateConsumer
 import com.sageserpent.plutonium.World.{Revision, initialRevision}
 import com.sageserpent.plutonium.WorldImplementationCodeFactoring.EventData
@@ -25,8 +26,8 @@ trait LifecyclesState[EventId] {
   // reabsorb the new blob storage instance back into its own revision. If so, then perhaps 'TimelineImplementation' *is*
   // in fact the cutover form of 'LifecyclesState'. Food for thought...
   def revise(events: Map[EventId, Option[Event]],
-             blobStorage: BlobStorage[EventId, SnapshotBlob])
-    : (LifecyclesState[EventId], BlobStorage[EventId, SnapshotBlob])
+             blobStorage: BlobStorage[ItemStateUpdate.Key, SnapshotBlob])
+    : (LifecyclesState[EventId], BlobStorage[ItemStateUpdate.Key, SnapshotBlob])
 
   def retainUpTo(when: Unbounded[Instant]): LifecyclesState[EventId]
 }
@@ -38,11 +39,16 @@ object noLifecyclesState {
 
 class LifecyclesStateImplementation[EventId](
     events: Map[EventId, EventData] = Map.empty[EventId, EventData],
+    itemStateUpdateKeysByEvent: Map[EventId, Set[ItemStateUpdate.Key]] =
+      Map.empty[EventId, Set[ItemStateUpdate.Key]],
     nextRevision: Revision = initialRevision)
     extends LifecyclesState[EventId] {
   override def revise(events: Map[EventId, Option[Event]],
-                      blobStorage: BlobStorage[EventId, SnapshotBlob])
-    : (LifecyclesState[EventId], BlobStorage[EventId, SnapshotBlob]) = {
+                      blobStorage: BlobStorage[
+                        ItemStateUpdate.Key,
+                        SnapshotBlob]): (LifecyclesState[EventId],
+                                         BlobStorage[ItemStateUpdate.Key,
+                                                     SnapshotBlob]) = {
     val (annulledEvents, newEvents) =
       (events.toList map {
         case (eventId, Some(event)) => \/-(eventId -> event)
@@ -57,22 +63,30 @@ class LifecyclesStateImplementation[EventId](
 
     val eventsMadeObsolete = this.events.keySet intersect events.keySet
 
+    val (itemStateUpdates, itemStateUpdateKeysByEventForNewTimeline) =
+      createUpdates(eventsForNewTimeline)
+
+    val obsoleteItemStateUpdateKeys
+      : Set[ItemStateUpdate.Key] = eventsMadeObsolete flatMap itemStateUpdateKeysByEvent.apply
+
     val updatePlan =
-      UpdatePlan(eventsMadeObsolete, createUpdates(eventsForNewTimeline))
+      UpdatePlan(obsoleteItemStateUpdateKeys, itemStateUpdates)
 
     new LifecyclesStateImplementation[EventId](
       events = eventsForNewTimeline,
+      itemStateUpdateKeysByEvent = itemStateUpdateKeysByEventForNewTimeline,
       nextRevision = 1 + nextRevision) -> updatePlan(blobStorage)
   }
 
   private def createUpdates(eventsForNewTimeline: Map[EventId, EventData])
-    : SortedMap[Unbounded[Instant], Seq[(Set[EventId], ItemStateUpdate)]] = {
+    : (Seq[(ItemStateUpdate.Key, ItemStateUpdate)],
+       Map[EventId, Set[ItemStateUpdate.Key]]) = {
     val eventTimeline = WorldImplementationCodeFactoring.eventTimelineFrom(
       eventsForNewTimeline.toSeq)
 
-    val updatePlanBuffer = mutable.SortedMap
+    val itemStateUpdatesByTimeslice = mutable.SortedMap
       .empty[Unbounded[Instant],
-             mutable.MutableList[(Set[EventId], ItemStateUpdate)]]
+             mutable.MutableList[(ItemStateUpdate, Set[EventId])]]
 
     val patchRecorder: PatchRecorder[EventId] =
       new PatchRecorderImplementation[EventId](PositiveInfinity())
@@ -80,35 +94,54 @@ class LifecyclesStateImplementation[EventId](
       with BestPatchSelectionContracts {
         override val updateConsumer: UpdateConsumer[EventId] =
           new UpdateConsumer[EventId] {
-            private def itemStatesFor(when: Unbounded[Instant]) =
-              updatePlanBuffer
+            private def itemStateUpdatesFor(when: Unbounded[Instant]) =
+              itemStateUpdatesByTimeslice
                 .getOrElseUpdate(when,
                                  mutable.MutableList
-                                   .empty[(Set[EventId], ItemStateUpdate)])
+                                   .empty[(ItemStateUpdate, Set[EventId])])
 
             override def captureAnnihilation(
                 eventId: EventId,
                 annihilation: Annihilation): Unit = {
-              itemStatesFor(annihilation.when) += Set(eventId) -> ItemStateAnnihilation(
-                annihilation)
+              val itemStateUpdate = ItemStateAnnihilation(annihilation)
+              itemStateUpdatesFor(annihilation.when) += (itemStateUpdate -> Set(
+                eventId))
             }
 
             override def capturePatch(when: Unbounded[Instant],
                                       eventIds: Set[EventId],
                                       patch: AbstractPatch): Unit = {
-              itemStatesFor(when) += eventIds -> ItemStatePatch(patch)
+              val itemStateUpdate = ItemStatePatch(patch)
+              itemStateUpdatesFor(when) += (itemStateUpdate -> eventIds)
             }
           }
       }
 
     WorldImplementationCodeFactoring.recordPatches(eventTimeline, patchRecorder)
 
-    TreeMap[Unbounded[Instant], Seq[(Set[EventId], ItemStateUpdate)]](
-      updatePlanBuffer.toSeq: _*)
+    val (itemStateUpdates: Seq[(ItemStateUpdate.Key, ItemStateUpdate)],
+         foo: Seq[(ItemStateUpdate.Key, Set[EventId])]) =
+      itemStateUpdatesByTimeslice.toSeq.flatMap {
+        case (when, itemStateUpdates) =>
+          itemStateUpdates.zipWithIndex map {
+            case ((itemStateUpdate, eventIds), intraEventIndex) =>
+              val itemStateUpdateKey = when -> intraEventIndex
+              (itemStateUpdateKey -> itemStateUpdate) -> (itemStateUpdateKey -> eventIds)
+          }
+      }.unzip
+
+    itemStateUpdates -> (foo flatMap {
+      case (itemStateUpdateKey, eventIds) =>
+        eventIds.toSeq map (_ -> itemStateUpdateKey)
+    } groupBy (_._1)).mapValues(_.map(_._2).toSet)
   }
 
   override def retainUpTo(when: Unbounded[Instant]): LifecyclesState[EventId] =
     new LifecyclesStateImplementation[EventId](
       events = this.events filter (when >= _._2.serializableEvent.when),
-      nextRevision = this.nextRevision)
+      itemStateUpdateKeysByEvent = itemStateUpdateKeysByEvent mapValues (_.filter {
+        case (whenUpdateTakesPlace, _) => when >= whenUpdateTakesPlace
+      }) filter { case (_, keys) => keys.nonEmpty },
+      nextRevision = this.nextRevision
+    )
 }

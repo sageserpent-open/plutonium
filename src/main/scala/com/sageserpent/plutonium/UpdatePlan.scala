@@ -3,44 +3,44 @@ package com.sageserpent.plutonium
 import java.time.Instant
 import java.util.UUID
 
-import com.sageserpent.americium.{NegativeInfinity, Unbounded}
+import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
 import com.sageserpent.plutonium.WorldImplementationCodeFactoring.QueryCallbackStuff
 import resource.makeManagedResource
-import scala.reflect.runtime.universe.{Super => _, This => _, _}
 
 import scala.collection.immutable.{Map, SortedMap}
 import scala.collection.mutable
+import scala.reflect.runtime.universe.{Super => _, This => _, _}
 
-case class UpdatePlan[EventId](
-    eventsMadeObsolete: Set[EventId],
-    updates: SortedMap[Unbounded[Instant],
-                       Seq[(Set[EventId], ItemStateUpdate)]]) {
-  def apply(blobStorage: BlobStorage[EventId, (Array[Byte], UUID)])
-    : BlobStorage[EventId, SnapshotBlob] = {
-    val UpdatePlan(eventsMadeObsolete, updates) = this
-
+case class UpdatePlan(
+    obsoleteItemStateUpdateKeys: Set[ItemStateUpdate.Key],
+    itemStateUpdates: Seq[(ItemStateUpdate.Key, ItemStateUpdate)]) {
+  def apply(blobStorage: BlobStorage[ItemStateUpdate.Key, (Array[Byte], UUID)])
+    : BlobStorage[ItemStateUpdate.Key, SnapshotBlob] = {
     var microRevisedBlobStorage = {
       val initialMicroRevisionBuilder = blobStorage.openRevision()
 
-      for (eventId <- eventsMadeObsolete) {
-        initialMicroRevisionBuilder.annul(eventId)
+      for (itemStateUpdateKey <- obsoleteItemStateUpdateKeys) {
+        initialMicroRevisionBuilder.annul(itemStateUpdateKey)
       }
       initialMicroRevisionBuilder.build()
     }
 
+    val itemStateUpdatesGroupedByTimeslice
+      : collection.SortedMap[Unbounded[Instant],
+                             Seq[(ItemStateUpdate.Key, ItemStateUpdate)]] =
+      SortedMap(itemStateUpdates groupBy (_._1._1) toSeq: _*)
+
     for {
-      (when, itemStateUpdates: Seq[(Set[EventId], ItemStateUpdate)]) <- updates
+      (when, itemStateUpdates) <- itemStateUpdatesGroupedByTimeslice
     } {
       {
         val microRevisionWithAnullmentsBuilder =
           microRevisedBlobStorage.openRevision()
 
-        val eventsAtThisTime = itemStateUpdates.flatMap(_._1)
-
-        for (eventId <- eventsAtThisTime) {
-          microRevisionWithAnullmentsBuilder.annul(eventId)
+        for (itemStateUpdateKey <- itemStateUpdates.map(_._1)) {
+          microRevisionWithAnullmentsBuilder.annul(itemStateUpdateKey)
         }
 
         microRevisedBlobStorage = microRevisionWithAnullmentsBuilder.build()
@@ -128,7 +128,7 @@ case class UpdatePlan[EventId](
         val microRevisionBuilder = microRevisedBlobStorage.openRevision()
 
         for {
-          (eventIds, itemStateUpdate) <- itemStateUpdates
+          (itemStateUpdateKey, itemStateUpdate) <- itemStateUpdates
         } {
           val snapshotBlobs =
             mutable.Map
@@ -154,7 +154,9 @@ case class UpdatePlan[EventId](
                 .mapValues(Some.apply)
           }
 
-          microRevisionBuilder.record(eventIds, when, snapshotBlobs.toMap)
+          microRevisionBuilder.record(Set(itemStateUpdateKey),
+                                      when,
+                                      snapshotBlobs.toMap)
         }
 
         microRevisedBlobStorage = microRevisionBuilder.build()
