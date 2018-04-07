@@ -14,7 +14,7 @@ import com.sageserpent.plutonium.WorldImplementationCodeFactoring.{
 }
 
 import scala.collection.immutable.{Map, SortedMap, TreeMap}
-import scala.collection.mutable
+import scala.collection.{immutable, mutable}
 import scalaz.std.list._
 import scalaz.syntax.monadPlus._
 import scalaz.{-\/, \/-}
@@ -67,13 +67,29 @@ class LifecyclesStateImplementation[EventId](
         eventId -> EventData(event, nextRevision, tiebreakerIndex)
     }.toMap
 
-    val eventsMadeObsolete = this.events.keySet intersect events.keySet
-
-    val (itemStateUpdates, itemStateUpdateKeysByEventForNewTimeline) =
+    val (itemStateUpdates: Seq[(ItemStateUpdate.Key[EventId], ItemStateUpdate)],
+         foo: Map[ItemStateUpdate.Key[EventId], Set[EventId]]) =
       createUpdates(eventsForNewTimeline)
+
+    val itemStateUpdateKeysByEventForNewTimeline
+      : Map[EventId, Set[ItemStateUpdate.Key[EventId]]] = (foo flatMap {
+      case (itemStateUpdateKey, eventIds) =>
+        eventIds.toSeq map (_ -> itemStateUpdateKey)
+    } groupBy (_._1)).mapValues(_.map(_._2).toSet)
+
+    val eventsMadeObsolete = this.events.keySet intersect events.keySet
 
     val obsoleteItemStateUpdateKeys: Set[ItemStateUpdate.Key[EventId]] =
       eventsMadeObsolete flatMap itemStateUpdateKeysByEvent.get flatten
+
+    val relatedEventIdsByEvent: Map[EventId, Set[EventId]] =
+      foo.toSeq groupBy (_._1.eventId) map {
+        case (eventId, group) => eventId -> group.flatMap(_._2).toSet
+      }
+
+    val perturbedItemStateUpdateKeys
+      : immutable.Seq[ItemStateUpdate.Key[EventId]] =
+      (newEvents map (_._1) flatMap relatedEventIdsByEvent.get).flatten flatMap itemStateUpdateKeysByEvent.get flatten
 
     implicit val itemStateUpdateKeyOrdering
       : Ordering[ItemStateUpdate.Key[EventId]] =
@@ -83,7 +99,8 @@ class LifecyclesStateImplementation[EventId](
       }
 
     val updatePlan =
-      UpdatePlan(obsoleteItemStateUpdateKeys, TreeMap(itemStateUpdates: _*))
+      UpdatePlan(obsoleteItemStateUpdateKeys ++ perturbedItemStateUpdateKeys,
+                 TreeMap(itemStateUpdates: _*))
 
     new LifecyclesStateImplementation[EventId](
       events = eventsForNewTimeline,
@@ -95,7 +112,7 @@ class LifecyclesStateImplementation[EventId](
 
   private def createUpdates(eventsForNewTimeline: Map[EventId, EventData])
     : (Seq[(ItemStateUpdate.Key[EventId], ItemStateUpdate)],
-       Map[EventId, Set[ItemStateUpdate.Key[EventId]]]) = {
+       Map[ItemStateUpdate.Key[EventId], Set[EventId]]) = {
     val eventTimeline = WorldImplementationCodeFactoring.eventTimelineFrom(
       eventsForNewTimeline.toSeq)
 
@@ -147,10 +164,7 @@ class LifecyclesStateImplementation[EventId](
           (itemStateUpdateKey -> itemStateUpdate) -> (itemStateUpdateKey -> eventIds)
       }).unzip
 
-    itemStateUpdates -> (foo flatMap {
-      case (itemStateUpdateKey, eventIds) =>
-        eventIds.toSeq map (_ -> itemStateUpdateKey)
-    } groupBy (_._1)).mapValues(_.map(_._2).toSet)
+    itemStateUpdates -> foo.toMap
   }
 
   private def whenFor(eventDataFor: EventId => EventData)(
