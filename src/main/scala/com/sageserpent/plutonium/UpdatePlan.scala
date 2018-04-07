@@ -13,11 +13,13 @@ import scala.collection.immutable.{Map, SortedMap}
 import scala.collection.mutable
 import scala.reflect.runtime.universe.{Super => _, This => _, _}
 
-case class UpdatePlan(
-    obsoleteItemStateUpdateKeys: Set[ItemStateUpdate.Key],
-    itemStateUpdates: Seq[(ItemStateUpdate.Key, ItemStateUpdate)]) {
-  def apply(blobStorage: BlobStorage[ItemStateUpdate.Key, (Array[Byte], UUID)])
-    : BlobStorage[ItemStateUpdate.Key, SnapshotBlob] = {
+case class UpdatePlan[EventId](
+    obsoleteItemStateUpdateKeys: Set[ItemStateUpdate.Key[EventId]],
+    itemStateUpdates: SortedMap[ItemStateUpdate.Key[EventId], ItemStateUpdate]) {
+  def apply(blobStorage: BlobStorage[ItemStateUpdate.Key[EventId],
+                                     (Array[Byte], UUID)],
+            whenFor: ItemStateUpdate.Key[EventId] => Unbounded[Instant])
+    : BlobStorage[ItemStateUpdate.Key[EventId], SnapshotBlob] = {
     var microRevisedBlobStorage = {
       val initialMicroRevisionBuilder = blobStorage.openRevision()
 
@@ -27,10 +29,11 @@ case class UpdatePlan(
       initialMicroRevisionBuilder.build()
     }
 
-    val itemStateUpdatesGroupedByTimeslice
-      : collection.SortedMap[Unbounded[Instant],
-                             Seq[(ItemStateUpdate.Key, ItemStateUpdate)]] =
-      SortedMap(itemStateUpdates groupBy (_._1._1) toSeq: _*)
+    val itemStateUpdatesGroupedByTimeslice: collection.SortedMap[
+      Unbounded[Instant],
+      SortedMap[ItemStateUpdate.Key[EventId], ItemStateUpdate]] =
+      SortedMap(
+        itemStateUpdates groupBy { case (key, _) => whenFor(key) } toSeq: _*)
 
     for {
       (when, itemStateUpdates) <- itemStateUpdatesGroupedByTimeslice

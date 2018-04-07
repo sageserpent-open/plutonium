@@ -29,8 +29,8 @@ object itemStateStorageUsingProxies extends ItemStateStorage {
 
 class TimelineImplementation[EventId](
     lifecyclesState: LifecyclesState[EventId] = noLifecyclesState[EventId](),
-    blobStorage: BlobStorage[ItemStateUpdate.Key, SnapshotBlob] =
-      BlobStorageInMemory[ItemStateUpdate.Key, SnapshotBlob]())
+    blobStorage: BlobStorage[ItemStateUpdate.Key[EventId], SnapshotBlob] =
+      BlobStorageInMemory[ItemStateUpdate.Key[EventId], SnapshotBlob]())
     extends Timeline[EventId] {
 
   override def revise(events: Map[EventId, Option[Event]]) = {
@@ -51,5 +51,5 @@ class TimelineImplementation[EventId](
   }
 
   override def itemCacheAt(when: Unbounded[Instant]) =
-    new ItemCacheUsingBlobStorage(blobStorage, when)
+    new ItemCacheUsingBlobStorage[EventId](blobStorage, when)
 }

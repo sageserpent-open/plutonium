@@ -1,12 +1,8 @@
 package com.sageserpent.plutonium
 
-import java.time.Instant
-
-import com.sageserpent.americium.Unbounded
-
 object ItemStateUpdate {
   type IntraEventIndex = Int
-  type Key             = (Unbounded[Instant], IntraEventIndex)
+  case class Key[EventId](eventId: EventId, intraEventIndex: IntraEventIndex)
 }
 
 sealed trait ItemStateUpdate
