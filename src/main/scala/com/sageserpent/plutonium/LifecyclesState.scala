@@ -99,9 +99,9 @@ class LifecyclesStateImplementation[EventId](
     val eventTimeline = WorldImplementationCodeFactoring.eventTimelineFrom(
       eventsForNewTimeline.toSeq)
 
-    val itemStateUpdatesByTimeslice = mutable.SortedMap
-      .empty[Unbounded[Instant],
-             mutable.MutableList[(ItemStateUpdate, EventId, Set[EventId])]]
+    val itemStateUpdatesBuffer
+      : mutable.MutableList[(ItemStateUpdate, EventId, Set[EventId])] =
+      mutable.MutableList.empty[(ItemStateUpdate, EventId, Set[EventId])]
 
     val patchRecorder: PatchRecorder[EventId] =
       new PatchRecorderImplementation[EventId](PositiveInfinity())
@@ -109,20 +109,13 @@ class LifecyclesStateImplementation[EventId](
       with BestPatchSelectionContracts {
         override val updateConsumer: UpdateConsumer[EventId] =
           new UpdateConsumer[EventId] {
-            private def itemStateUpdatesFor(when: Unbounded[Instant]) =
-              itemStateUpdatesByTimeslice
-                .getOrElseUpdate(
-                  when,
-                  mutable.MutableList
-                    .empty[(ItemStateUpdate, EventId, Set[EventId])])
-
             override def captureAnnihilation(
                 eventId: EventId,
                 annihilation: Annihilation): Unit = {
               val itemStateUpdate = ItemStateAnnihilation(annihilation)
-              itemStateUpdatesFor(annihilation.when) += ((itemStateUpdate,
-                                                          eventId,
-                                                          Set(eventId)))
+              itemStateUpdatesBuffer += ((itemStateUpdate,
+                                          eventId,
+                                          Set(eventId)))
             }
 
             override def capturePatch(when: Unbounded[Instant],
@@ -130,28 +123,29 @@ class LifecyclesStateImplementation[EventId](
                                       candidateEventIds: Set[EventId],
                                       patch: AbstractPatch): Unit = {
               val itemStateUpdate = ItemStatePatch(patch)
-              itemStateUpdatesFor(when) += ((itemStateUpdate,
-                                             eventId,
-                                             candidateEventIds))
+              itemStateUpdatesBuffer += ((itemStateUpdate,
+                                          eventId,
+                                          candidateEventIds))
             }
           }
       }
 
     WorldImplementationCodeFactoring.recordPatches(eventTimeline, patchRecorder)
 
+    val rubbish: Seq[
+      (((ItemStateUpdate, EventId, Set[EventId]), Int),
+       ItemStateUpdate.IntraEventIndex)] = ((itemStateUpdatesBuffer.zipWithIndex groupBy {
+      case ((_, eventId, _), _) => eventId
+    }).values flatMap (_.zipWithIndex)).toSeq sortBy (_._1._2)
+
     val (itemStateUpdates: Seq[(ItemStateUpdate.Key[EventId], ItemStateUpdate)],
          foo: Seq[(ItemStateUpdate.Key[EventId], Set[EventId])]) =
-      itemStateUpdatesByTimeslice.toSeq.flatMap {
-        case (when, itemStateUpdates) =>
-          itemStateUpdates groupBy (_._2) flatMap {
-            case (_, group) => group zipWithIndex
-          } map {
-            case (((itemStateUpdate, eventId, eventIds), intraEventIndex)) =>
-              val itemStateUpdateKey =
-                ItemStateUpdate.Key(eventId, intraEventIndex)
-              (itemStateUpdateKey -> itemStateUpdate) -> (itemStateUpdateKey -> eventIds)
-          }
-      }.unzip
+      (rubbish map {
+        case ((((itemStateUpdate, eventId, eventIds), _), intraEventIndex)) =>
+          val itemStateUpdateKey =
+            ItemStateUpdate.Key(eventId, intraEventIndex)
+          (itemStateUpdateKey -> itemStateUpdate) -> (itemStateUpdateKey -> eventIds)
+      }).unzip
 
     itemStateUpdates -> (foo flatMap {
       case (itemStateUpdateKey, eventIds) =>
@@ -167,7 +161,7 @@ class LifecyclesStateImplementation[EventId](
     new LifecyclesStateImplementation[EventId](
       events = this.events filter (when >= _._2.serializableEvent.when),
       itemStateUpdateKeysByEvent = itemStateUpdateKeysByEvent mapValues (_ filter (
-          key => when >= whenFor(events.apply)(key))) filter {
+          key => when >= whenFor(this.events.apply)(key))) filter {
         case (_, keys) => keys.nonEmpty
       },
       nextRevision = this.nextRevision
