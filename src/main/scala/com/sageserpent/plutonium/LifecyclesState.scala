@@ -153,9 +153,9 @@ class LifecyclesStateImplementation[EventId](
     } groupBy (_._1)).mapValues(_.map(_._2).toSet)
   }
 
-  private def whenFor(eventsFor: EventId => EventData)(
+  private def whenFor(eventDataFor: EventId => EventData)(
       key: ItemStateUpdate.Key[EventId]) =
-    eventsFor(key.eventId).serializableEvent.when
+    eventDataFor(key.eventId).serializableEvent.when
 
   override def retainUpTo(when: Unbounded[Instant]): LifecyclesState[EventId] =
     new LifecyclesStateImplementation[EventId](
