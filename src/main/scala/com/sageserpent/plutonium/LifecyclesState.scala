@@ -66,17 +66,10 @@ class LifecyclesStateImplementation[EventId](
     }.toMap
 
     val (itemStateUpdates: Seq[(ItemStateUpdate.Key[EventId], ItemStateUpdate)],
-         eventsRelatedByCandidatePatchesToItemStateUpdate: Map[
-           ItemStateUpdate.Key[EventId],
-           Set[EventId]]) =
+         eventsRelatedByCandidatePatchesToEvent: Map[EventId, Set[EventId]]) =
       createItemStateUpdates(eventsForNewTimeline)
 
     val eventsMadeObsolete = this.events.keySet intersect events.keySet
-
-    val eventsRelatedByCandidatePatchesToEvent: Map[EventId, Set[EventId]] =
-      eventsRelatedByCandidatePatchesToItemStateUpdate.toSeq groupBy (_._1.eventId) map {
-        case (eventId, group) => eventId -> group.flatMap(_._2).toSet
-      }
 
     val eventsRelatedByCandidatePatchesToNewEvents =
       (newEvents map (_._1) flatMap eventsRelatedByCandidatePatchesToEvent.get).flatten
@@ -98,10 +91,10 @@ class LifecyclesStateImplementation[EventId](
 
     val itemStateUpdateKeysByEventForNewTimeline
       : Map[EventId, Set[ItemStateUpdate.Key[EventId]]] =
-      (eventsRelatedByCandidatePatchesToItemStateUpdate flatMap {
-        case (itemStateUpdateKey, eventIds) =>
-          eventIds.toSeq map (_ -> itemStateUpdateKey)
-      } groupBy (_._1)).mapValues(_.values.toSet)
+      itemStateUpdates flatMap {
+        case (itemStateUpdateKey, _) =>
+          eventsRelatedByCandidatePatchesToEvent(itemStateUpdateKey.eventId) map (_ -> itemStateUpdateKey)
+      } groupBy (_._1) mapValues (_.map(_._2).toSet)
 
     new LifecyclesStateImplementation[EventId](
       events = eventsForNewTimeline,
@@ -114,7 +107,7 @@ class LifecyclesStateImplementation[EventId](
   private def createItemStateUpdates(
       eventsForNewTimeline: Map[EventId, EventData])
     : (Seq[(ItemStateUpdate.Key[EventId], ItemStateUpdate)],
-       Map[ItemStateUpdate.Key[EventId], Set[EventId]]) = {
+       Map[EventId, Set[EventId]]) = {
     val eventTimeline = WorldImplementationCodeFactoring.eventTimelineFrom(
       eventsForNewTimeline.toSeq)
 
@@ -157,16 +150,15 @@ class LifecyclesStateImplementation[EventId](
     }).values.toSeq sortBy (_.head._2) map (_.map(_._1))
 
     val (itemStateUpdates: Seq[(ItemStateUpdate.Key[EventId], ItemStateUpdate)],
-         eventsRelatedByCandidatePatchesToItemStateUpdate: Seq[
-           (ItemStateUpdate.Key[EventId], Set[EventId])]) =
+         eventsRelatedByCandidatePatchesToEvent: Seq[(EventId, Set[EventId])]) =
       (itemStateUpdatesGroupedByEventIdPreservingOriginalOrder flatMap (_.zipWithIndex) map {
         case (((itemStateUpdate, eventId, eventIds), intraEventIndex)) =>
           val itemStateUpdateKey =
             ItemStateUpdate.Key(eventId, intraEventIndex)
-          (itemStateUpdateKey -> itemStateUpdate) -> (itemStateUpdateKey -> eventIds)
+          (itemStateUpdateKey -> itemStateUpdate) -> (eventId -> eventIds)
       }).unzip
 
-    itemStateUpdates -> eventsRelatedByCandidatePatchesToItemStateUpdate.toMap
+    itemStateUpdates -> eventsRelatedByCandidatePatchesToEvent.toMap
   }
 
   private def whenFor(eventDataFor: EventId => EventData)(
