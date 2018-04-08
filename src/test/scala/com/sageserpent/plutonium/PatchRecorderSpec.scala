@@ -149,10 +149,12 @@ class PatchRecorderSpec
                                 .once
                               (updateConsumer.capturePatch _)
                                 .expects(Finite(whenForStandIn),
+                                         eventIdsForPatches.head,
                                          eventIdsForPatches.toSet[EventId],
                                          patch)
                                 .onCall {
                                   (_: Unbounded[Instant],
+                                   _: EventId,
                                    _: Set[EventId],
                                    _: AbstractPatch) =>
                                     sequenceIndicesFromAppliedPatches += sequenceIndexOfPatchStandIn: Unit
@@ -161,7 +163,7 @@ class PatchRecorderSpec
                             } else {
                               (patch.rewriteItemTypeTags _).expects(*).never
                               (updateConsumer.capturePatch _)
-                                .expects(*, *, patch)
+                                .expects(*, *, *, patch)
                                 .never
                             }
                         }

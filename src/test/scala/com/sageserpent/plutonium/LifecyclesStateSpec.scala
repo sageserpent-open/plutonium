@@ -30,9 +30,11 @@ class LifecyclesStateSpec
         }: _*)
 
       val itemCache: ItemCache =
-        new ItemCacheUsingBlobStorage[EventId](
+        new ItemCacheUsingBlobStorage(
           noLifecyclesState[EventId]()
-            .revise(events, BlobStorageInMemory[EventId, SnapshotBlob]())
+            .revise(
+              events,
+              BlobStorageInMemory[ItemStateUpdate.Key[EventId], SnapshotBlob]())
             ._2,
           queryWhen)
 
@@ -78,10 +80,11 @@ class LifecyclesStateSpec
         }: _*)
 
       val blobStorageResultingFromBlockBooking
-        : BlobStorage[EventId, SnapshotBlob] =
+        : BlobStorage[ItemStateUpdate.Key[EventId], SnapshotBlob] =
         noLifecyclesState[EventId]()
-          .revise(eventsInOneBlock,
-                  BlobStorageInMemory[EventId, SnapshotBlob]())
+          .revise(
+            eventsInOneBlock,
+            BlobStorageInMemory[ItemStateUpdate.Key[EventId], SnapshotBlob]())
           ._2
 
       val random = new Random(seed)
@@ -92,22 +95,22 @@ class LifecyclesStateSpec
             booking => TreeMap(booking.map(_.swap): _*)) toList
 
       val blobStorageResultingFromIncrementalBookings
-        : BlobStorage[EventId, SnapshotBlob] =
-        ((noLifecyclesState[EventId]() -> (BlobStorageInMemory[EventId,
-                                                               SnapshotBlob](): BlobStorage[
-          EventId,
+        : BlobStorage[ItemStateUpdate.Key[EventId], SnapshotBlob] =
+        ((noLifecyclesState[EventId]() -> (BlobStorageInMemory[
+          ItemStateUpdate.Key[EventId],
+          SnapshotBlob](): BlobStorage[
+          ItemStateUpdate.Key[EventId],
           SnapshotBlob])) /: severalRevisionBookingsWithObsoleteEventsThrownIn) {
           case ((lifecyclesState, blobStorage), booking) =>
             lifecyclesState.revise(booking, blobStorage)
         }._2
 
       val itemCacheFromBlockBooking =
-        new ItemCacheUsingBlobStorage[EventId](
-          blobStorageResultingFromBlockBooking,
-          queryWhen)
+        new ItemCacheUsingBlobStorage(blobStorageResultingFromBlockBooking,
+                                      queryWhen)
 
       val itemCacheFromIncrementalBookings =
-        new ItemCacheUsingBlobStorage[EventId](
+        new ItemCacheUsingBlobStorage(
           blobStorageResultingFromIncrementalBookings,
           queryWhen)
 

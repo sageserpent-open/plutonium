@@ -353,7 +353,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
        else
          Measurement.forOneItem(_: Unbounded[Instant])(historyId,
                                                        (item: History) => {
-                                                         // A useless event: nothing changes - and the event refers to the item type abstractly to boot.
+                                                         // A useless event: nothing is measured - and the event refers to the item type abstractly to boot.
                                                        }))
   }
 

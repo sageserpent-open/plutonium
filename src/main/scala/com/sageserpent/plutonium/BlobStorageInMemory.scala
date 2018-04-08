@@ -7,8 +7,7 @@ import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 
 import scala.collection.Searching._
 import scala.collection.generic.IsSeqLike
-import scala.collection.{SeqLike, SeqView, immutable, mutable}
-import scala.reflect.runtime.universe
+import scala.collection.{SeqLike, SeqView, mutable}
 import scala.reflect.runtime.universe._
 import scala.math.Ordered.orderingToOrdered
 
