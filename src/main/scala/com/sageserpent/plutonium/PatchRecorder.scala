@@ -31,7 +31,7 @@ object PatchRecorder {
 
     def capturePatch(when: Unbounded[Instant],
                      eventId: EventId,
-                     candidateEventIds: Set[EventId],
+                     eventIdsFromCandidatePatches: Set[EventId],
                      patch: AbstractPatch): Unit
   }
 }

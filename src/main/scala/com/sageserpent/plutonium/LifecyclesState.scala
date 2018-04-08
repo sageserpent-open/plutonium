@@ -4,20 +4,18 @@ import java.time.Instant
 
 import com.sageserpent.americium.{PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
-import com.sageserpent.plutonium.ItemStateUpdate.IntraEventIndex
 import com.sageserpent.plutonium.PatchRecorder.UpdateConsumer
 import com.sageserpent.plutonium.World.{Revision, initialRevision}
 import com.sageserpent.plutonium.WorldImplementationCodeFactoring.{
   EventData,
-  EventOrderingTiebreakerIndex,
   eventDataOrdering
 }
-
-import scala.collection.immutable.{Map, SortedMap, TreeMap}
-import scala.collection.{immutable, mutable}
 import scalaz.std.list._
 import scalaz.syntax.monadPlus._
 import scalaz.{-\/, \/-}
+
+import scala.collection.immutable.{Map, TreeMap}
+import scala.collection.mutable
 
 trait LifecyclesState[EventId] {
 
@@ -68,28 +66,24 @@ class LifecyclesStateImplementation[EventId](
     }.toMap
 
     val (itemStateUpdates: Seq[(ItemStateUpdate.Key[EventId], ItemStateUpdate)],
-         foo: Map[ItemStateUpdate.Key[EventId], Set[EventId]]) =
-      createUpdates(eventsForNewTimeline)
-
-    val itemStateUpdateKeysByEventForNewTimeline
-      : Map[EventId, Set[ItemStateUpdate.Key[EventId]]] = (foo flatMap {
-      case (itemStateUpdateKey, eventIds) =>
-        eventIds.toSeq map (_ -> itemStateUpdateKey)
-    } groupBy (_._1)).mapValues(_.map(_._2).toSet)
+         eventsRelatedByCandidatePatchesToItemStateUpdate: Map[
+           ItemStateUpdate.Key[EventId],
+           Set[EventId]]) =
+      createItemStateUpdates(eventsForNewTimeline)
 
     val eventsMadeObsolete = this.events.keySet intersect events.keySet
 
-    val obsoleteItemStateUpdateKeys: Set[ItemStateUpdate.Key[EventId]] =
-      eventsMadeObsolete flatMap itemStateUpdateKeysByEvent.get flatten
-
-    val relatedEventIdsByEvent: Map[EventId, Set[EventId]] =
-      foo.toSeq groupBy (_._1.eventId) map {
+    val eventsRelatedByCandidatePatchesToEvent: Map[EventId, Set[EventId]] =
+      eventsRelatedByCandidatePatchesToItemStateUpdate.toSeq groupBy (_._1.eventId) map {
         case (eventId, group) => eventId -> group.flatMap(_._2).toSet
       }
 
-    val perturbedItemStateUpdateKeys
-      : immutable.Seq[ItemStateUpdate.Key[EventId]] =
-      (newEvents map (_._1) flatMap relatedEventIdsByEvent.get).flatten flatMap itemStateUpdateKeysByEvent.get flatten
+    val eventsRelatedByCandidatePatchesToNewEvents =
+      (newEvents map (_._1) flatMap eventsRelatedByCandidatePatchesToEvent.get).flatten
+
+    val itemStateUpdateKeysThatNeedToBeRevoked
+      : Set[ItemStateUpdate.Key[EventId]] =
+      (eventsMadeObsolete ++ eventsRelatedByCandidatePatchesToNewEvents) flatMap itemStateUpdateKeysByEvent.get flatten
 
     implicit val itemStateUpdateKeyOrdering
       : Ordering[ItemStateUpdate.Key[EventId]] =
@@ -99,8 +93,15 @@ class LifecyclesStateImplementation[EventId](
       }
 
     val updatePlan =
-      UpdatePlan(obsoleteItemStateUpdateKeys ++ perturbedItemStateUpdateKeys,
+      UpdatePlan(itemStateUpdateKeysThatNeedToBeRevoked,
                  TreeMap(itemStateUpdates: _*))
+
+    val itemStateUpdateKeysByEventForNewTimeline
+      : Map[EventId, Set[ItemStateUpdate.Key[EventId]]] =
+      (eventsRelatedByCandidatePatchesToItemStateUpdate flatMap {
+        case (itemStateUpdateKey, eventIds) =>
+          eventIds.toSeq map (_ -> itemStateUpdateKey)
+      } groupBy (_._1)).mapValues(_.values.toSet)
 
     new LifecyclesStateImplementation[EventId](
       events = eventsForNewTimeline,
@@ -110,7 +111,8 @@ class LifecyclesStateImplementation[EventId](
       whenFor(eventsForNewTimeline))
   }
 
-  private def createUpdates(eventsForNewTimeline: Map[EventId, EventData])
+  private def createItemStateUpdates(
+      eventsForNewTimeline: Map[EventId, EventData])
     : (Seq[(ItemStateUpdate.Key[EventId], ItemStateUpdate)],
        Map[ItemStateUpdate.Key[EventId], Set[EventId]]) = {
     val eventTimeline = WorldImplementationCodeFactoring.eventTimelineFrom(
@@ -135,36 +137,36 @@ class LifecyclesStateImplementation[EventId](
                                           Set(eventId)))
             }
 
-            override def capturePatch(when: Unbounded[Instant],
-                                      eventId: EventId,
-                                      candidateEventIds: Set[EventId],
-                                      patch: AbstractPatch): Unit = {
+            override def capturePatch(
+                when: Unbounded[Instant],
+                eventId: EventId,
+                eventIdsFromCandidatePatches: Set[EventId],
+                patch: AbstractPatch): Unit = {
               val itemStateUpdate = ItemStatePatch(patch)
               itemStateUpdatesBuffer += ((itemStateUpdate,
                                           eventId,
-                                          candidateEventIds))
+                                          eventIdsFromCandidatePatches))
             }
           }
       }
 
     WorldImplementationCodeFactoring.recordPatches(eventTimeline, patchRecorder)
 
-    val rubbish: Seq[
-      (((ItemStateUpdate, EventId, Set[EventId]), Int),
-       ItemStateUpdate.IntraEventIndex)] = ((itemStateUpdatesBuffer.zipWithIndex groupBy {
+    val itemStateUpdatesGroupedByEventIdPreservingOriginalOrder = (itemStateUpdatesBuffer.zipWithIndex groupBy {
       case ((_, eventId, _), _) => eventId
-    }).values flatMap (_.zipWithIndex)).toSeq sortBy (_._1._2)
+    }).values.toSeq sortBy (_.head._2) map (_.map(_._1))
 
     val (itemStateUpdates: Seq[(ItemStateUpdate.Key[EventId], ItemStateUpdate)],
-         foo: Seq[(ItemStateUpdate.Key[EventId], Set[EventId])]) =
-      (rubbish map {
-        case ((((itemStateUpdate, eventId, eventIds), _), intraEventIndex)) =>
+         eventsRelatedByCandidatePatchesToItemStateUpdate: Seq[
+           (ItemStateUpdate.Key[EventId], Set[EventId])]) =
+      (itemStateUpdatesGroupedByEventIdPreservingOriginalOrder flatMap (_.zipWithIndex) map {
+        case (((itemStateUpdate, eventId, eventIds), intraEventIndex)) =>
           val itemStateUpdateKey =
             ItemStateUpdate.Key(eventId, intraEventIndex)
           (itemStateUpdateKey -> itemStateUpdate) -> (itemStateUpdateKey -> eventIds)
       }).unzip
 
-    itemStateUpdates -> foo.toMap
+    itemStateUpdates -> eventsRelatedByCandidatePatchesToItemStateUpdate.toMap
   }
 
   private def whenFor(eventDataFor: EventId => EventData)(
