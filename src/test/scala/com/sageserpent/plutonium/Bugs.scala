@@ -312,7 +312,7 @@ class WorldEfficientInMemoryImplementationBugs
     }
   }
 
-  "booking in a measurement event prior to the change event it would effect" should "not affect any other history" in {
+  "booking in a change event affected by a measurement event that has already been booked in" should "not affect any earlier history" in {
     forAll(worldResourceGenerator) { worldResource =>
       val itemId = "Fred"
 
@@ -337,6 +337,45 @@ class WorldEfficientInMemoryImplementationBugs
           item: IntegerHistory =>
             item.integerProperty = 11
         }), sharedAsOf)
+
+        val scope =
+          world.scopeFor(PositiveInfinity[Instant](), world.nextRevision)
+
+        scope
+          .render(Bitemporal.withId[IntegerHistory](itemId))
+          .loneElement
+          .datums should contain theSameElementsInOrderAs (expectedHistory)
+      }
+    }
+  }
+
+  "annulling a change event that is affected by a measurement event" should "affect the earlier history due to another change event that becomes affected" in {
+    forAll(worldResourceGenerator) { worldResource =>
+      val itemId = "Fred"
+
+      val sharedAsOf = Instant.ofEpochSecond(0)
+
+      val expectedHistory = Seq(22)
+
+      worldResource acquireAndGet { world =>
+        world.revise(0,
+                     Measurement.forOneItem(Instant.ofEpochSecond(2L))(itemId, {
+                       item: IntegerHistory =>
+                         item.integerProperty = 22
+                     }),
+                     sharedAsOf)
+
+        world.revise(1, Change.forOneItem(Instant.ofEpochSecond(1L))(itemId, {
+          item: IntegerHistory =>
+            item.integerProperty = -959764091
+        }), sharedAsOf)
+
+        world.revise(2, Change.forOneItem(Instant.ofEpochSecond(0L))(itemId, {
+          item: IntegerHistory =>
+            item.integerProperty = 11
+        }), sharedAsOf)
+
+        world.annul(1, sharedAsOf)
 
         val scope =
           world.scopeFor(PositiveInfinity[Instant](), world.nextRevision)
