@@ -311,8 +311,6 @@ abstract class PatchRecorderImplementation[EventId](
     val itemStatesReferencedByBestPatch =
       reconstitutionDataToItemStateMap.values
 
-    val eventIdsFromAllCandidatePatches = candidatePatchTuples.map(_._4).toSet
-
     actionQueue.enqueue(new IndexedAction {
       override val sequenceIndex: SequenceIndex = sequenceIndexForBestPatch
       override val when: Unbounded[Instant]     = whenTheBestPatchOccurs
@@ -322,7 +320,6 @@ abstract class PatchRecorderImplementation[EventId](
           reconstitutionDataToItemStateMap.mapValues(_.lowerBoundTypeTag))
         updateConsumer.capturePatch(whenTheBestPatchOccurs,
                                     eventIdForBestPatch,
-                                    eventIdsFromAllCandidatePatches,
                                     bestPatchWithLoweredTypeTags)
       }
       override def canProceed() =

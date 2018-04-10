@@ -477,11 +477,9 @@ object WorldImplementationCodeFactoring {
                 annihilation(identifiedItemsScopeThis)
               }
 
-              override def capturePatch(
-                  when: Unbounded[Instant],
-                  eventId: EventId,
-                  eventIdsFromCandidatePatches: Set[EventId],
-                  patch: AbstractPatch): Unit = {
+              override def capturePatch(when: Unbounded[Instant],
+                                        eventId: EventId,
+                                        patch: AbstractPatch): Unit = {
                 patch(identifiedItemsScopeThis)
                 for (_ <- itemsAreLockedResource) {
                   patch.checkInvariants(identifiedItemsScopeThis)
