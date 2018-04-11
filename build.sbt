@@ -16,6 +16,7 @@ lazy val settings = Seq(
   libraryDependencies += "io.reactivex"            %% "rxscala"                     % "0.26.4",
   libraryDependencies += "io.github.nicolasstucki" %% "multisets"                   % "0.4",
   libraryDependencies += "com.twitter"             %% "chill"                       % "0.9.2",
+  libraryDependencies += "io.verizon.quiver"       %% "core"                        % "7.0.19",
   libraryDependencies += "org.slf4j"               % "slf4j-api"                    % "1.7.21" % "provided",
   libraryDependencies += "org.slf4j"               % "slf4j-nop"                    % "1.7.21" % "test",
   libraryDependencies += "org.scalatest"           %% "scalatest"                   % "3.0.1" % "test",
@@ -31,7 +32,7 @@ lazy val settings = Seq(
   publishMavenStyle := true,
   publishTo := Some(
     Resolver.file("file",
-      new File(Path.userHome.absolutePath + "/.m2/repository")))
+                  new File(Path.userHome.absolutePath + "/.m2/repository")))
 )
 
 lazy val Benchmark = config("benchmark") extend Test

@@ -1,18 +1,26 @@
 package com.sageserpent.plutonium
 
 import java.time.Instant
+import java.util.UUID
 
 import com.sageserpent.americium.{PositiveInfinity, Unbounded}
+import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
 import com.sageserpent.plutonium.PatchRecorder.UpdateConsumer
 import com.sageserpent.plutonium.World.{Revision, initialRevision}
-import com.sageserpent.plutonium.WorldImplementationCodeFactoring.EventData
-
-import scala.collection.immutable.{Map, SortedMap, TreeMap}
-import scala.collection.mutable
+import com.sageserpent.plutonium.WorldImplementationCodeFactoring.{
+  EventData,
+  QueryCallbackStuff,
+  eventDataOrdering
+}
+import resource.makeManagedResource
 import scalaz.std.list._
 import scalaz.syntax.monadPlus._
 import scalaz.{-\/, \/-}
+
+import scala.collection.immutable.{Map, SortedMap, TreeMap}
+import scala.collection.mutable
+import scala.reflect.runtime.universe.TypeTag
 
 trait LifecyclesState[EventId] {
 
@@ -24,9 +32,11 @@ trait LifecyclesState[EventId] {
   // encapsulate the former in some way - it could hive off a local 'BlobStorageInMemory' as it revises itself, then
   // reabsorb the new blob storage instance back into its own revision. If so, then perhaps 'TimelineImplementation' *is*
   // in fact the cutover form of 'LifecyclesState'. Food for thought...
-  def revise(events: Map[EventId, Option[Event]],
-             blobStorage: BlobStorage[EventId, SnapshotBlob])
-    : (LifecyclesState[EventId], BlobStorage[EventId, SnapshotBlob])
+  def revise(
+      events: Map[EventId, Option[Event]],
+      blobStorage: BlobStorage[ItemStateUpdate.Key[EventId], SnapshotBlob])
+    : (LifecyclesState[EventId],
+       BlobStorage[ItemStateUpdate.Key[EventId], SnapshotBlob])
 
   def retainUpTo(when: Unbounded[Instant]): LifecyclesState[EventId]
 }
@@ -38,11 +48,15 @@ object noLifecyclesState {
 
 class LifecyclesStateImplementation[EventId](
     events: Map[EventId, EventData] = Map.empty[EventId, EventData],
+    itemStateUpdates: Set[(ItemStateUpdate.Key[EventId], ItemStateUpdate)] =
+      Set.empty[(ItemStateUpdate.Key[EventId], ItemStateUpdate)],
     nextRevision: Revision = initialRevision)
     extends LifecyclesState[EventId] {
-  override def revise(events: Map[EventId, Option[Event]],
-                      blobStorage: BlobStorage[EventId, SnapshotBlob])
-    : (LifecyclesState[EventId], BlobStorage[EventId, SnapshotBlob]) = {
+  override def revise(
+      events: Map[EventId, Option[Event]],
+      blobStorage: BlobStorage[ItemStateUpdate.Key[EventId], SnapshotBlob])
+    : (LifecyclesState[EventId],
+       BlobStorage[ItemStateUpdate.Key[EventId], SnapshotBlob]) = {
     val (annulledEvents, newEvents) =
       (events.toList map {
         case (eventId, Some(event)) => \/-(eventId -> event)
@@ -55,24 +69,48 @@ class LifecyclesStateImplementation[EventId](
         eventId -> EventData(event, nextRevision, tiebreakerIndex)
     }.toMap
 
-    val eventsMadeObsolete = this.events.keySet intersect events.keySet
+    val itemStateUpdatesForNewTimeline
+      : Set[(ItemStateUpdate.Key[EventId], ItemStateUpdate)] =
+      createItemStateUpdates(eventsForNewTimeline)
 
-    val updatePlan =
-      UpdatePlan(eventsMadeObsolete, createUpdates(eventsForNewTimeline))
+    val itemStateUpdateKeysThatNeedToBeRevoked
+      : Set[ItemStateUpdate.Key[EventId]] =
+      (itemStateUpdates -- itemStateUpdatesForNewTimeline).map(_._1)
+
+    // TODO - actually use this, it is a placeholder for the forthcoming incremental recalculation.
+    val newItemStateUpdates: Map[
+      ItemStateUpdate.Key[EventId],
+      ItemStateUpdate] = itemStateUpdatesForNewTimeline.toMap -- itemStateUpdates
+      .map(_._1)
+
+    implicit val itemStateUpdateKeyOrdering
+      : Ordering[ItemStateUpdate.Key[EventId]] =
+      Ordering.by { key: ItemStateUpdate.Key[EventId] =>
+        val eventData = eventsForNewTimeline(key.eventId)
+        (eventData, key.intraEventIndex)
+      }
+
+    val blobStorageForNewTimeline =
+      reviseBlobStorage(itemStateUpdateKeysThatNeedToBeRevoked,
+                        TreeMap(itemStateUpdatesForNewTimeline.toSeq: _*))(
+        blobStorage,
+        whenFor(eventsForNewTimeline))
 
     new LifecyclesStateImplementation[EventId](
       events = eventsForNewTimeline,
-      nextRevision = 1 + nextRevision) -> updatePlan(blobStorage)
+      itemStateUpdates = itemStateUpdatesForNewTimeline,
+      nextRevision = 1 + nextRevision) -> blobStorageForNewTimeline
   }
 
-  private def createUpdates(eventsForNewTimeline: Map[EventId, EventData])
-    : SortedMap[Unbounded[Instant], Seq[(Set[EventId], ItemStateUpdate)]] = {
+  private def createItemStateUpdates(
+      eventsForNewTimeline: Map[EventId, EventData])
+    : Set[(ItemStateUpdate.Key[EventId], ItemStateUpdate)] = {
     val eventTimeline = WorldImplementationCodeFactoring.eventTimelineFrom(
       eventsForNewTimeline.toSeq)
 
-    val updatePlanBuffer = mutable.SortedMap
-      .empty[Unbounded[Instant],
-             mutable.MutableList[(Set[EventId], ItemStateUpdate)]]
+    val itemStateUpdatesBuffer
+      : mutable.MutableList[(ItemStateUpdate, EventId)] =
+      mutable.MutableList.empty[(ItemStateUpdate, EventId)]
 
     val patchRecorder: PatchRecorder[EventId] =
       new PatchRecorderImplementation[EventId](PositiveInfinity())
@@ -80,35 +118,192 @@ class LifecyclesStateImplementation[EventId](
       with BestPatchSelectionContracts {
         override val updateConsumer: UpdateConsumer[EventId] =
           new UpdateConsumer[EventId] {
-            private def itemStatesFor(when: Unbounded[Instant]) =
-              updatePlanBuffer
-                .getOrElseUpdate(when,
-                                 mutable.MutableList
-                                   .empty[(Set[EventId], ItemStateUpdate)])
-
             override def captureAnnihilation(
                 eventId: EventId,
                 annihilation: Annihilation): Unit = {
-              itemStatesFor(annihilation.when) += Set(eventId) -> ItemStateAnnihilation(
-                annihilation)
+              val itemStateUpdate = ItemStateAnnihilation(annihilation)
+              itemStateUpdatesBuffer += ((itemStateUpdate, eventId))
             }
 
             override def capturePatch(when: Unbounded[Instant],
-                                      eventIds: Set[EventId],
+                                      eventId: EventId,
                                       patch: AbstractPatch): Unit = {
-              itemStatesFor(when) += eventIds -> ItemStatePatch(patch)
+              val itemStateUpdate = ItemStatePatch(patch)
+              itemStateUpdatesBuffer += ((itemStateUpdate, eventId))
             }
           }
       }
 
     WorldImplementationCodeFactoring.recordPatches(eventTimeline, patchRecorder)
 
-    TreeMap[Unbounded[Instant], Seq[(Set[EventId], ItemStateUpdate)]](
-      updatePlanBuffer.toSeq: _*)
+    val itemStateUpdatesGroupedByEventIdPreservingOriginalOrder = (itemStateUpdatesBuffer.zipWithIndex groupBy {
+      case ((_, eventId), _) => eventId
+    }).values.toSeq sortBy (_.head._2) map (_.map(_._1))
+
+    (itemStateUpdatesGroupedByEventIdPreservingOriginalOrder flatMap (_.zipWithIndex) map {
+      case (((itemStateUpdate, eventId), intraEventIndex)) =>
+        val itemStateUpdateKey =
+          ItemStateUpdate.Key(eventId, intraEventIndex)
+        (itemStateUpdateKey -> itemStateUpdate)
+    }).toSet
   }
+
+  private def reviseBlobStorage(
+      obsoleteItemStateUpdateKeys: Set[ItemStateUpdate.Key[EventId]],
+      itemStateUpdates: SortedMap[ItemStateUpdate.Key[EventId],
+                                  ItemStateUpdate])(
+      blobStorage: BlobStorage[ItemStateUpdate.Key[EventId], SnapshotBlob],
+      whenFor: ItemStateUpdate.Key[EventId] => Unbounded[Instant])
+    : BlobStorage[ItemStateUpdate.Key[EventId], SnapshotBlob] = {
+    var microRevisedBlobStorage = {
+      val initialMicroRevisionBuilder = blobStorage.openRevision()
+
+      for (itemStateUpdateKey <- obsoleteItemStateUpdateKeys) {
+        initialMicroRevisionBuilder.annul(itemStateUpdateKey)
+      }
+      initialMicroRevisionBuilder.build()
+    }
+
+    val itemStateUpdatesGroupedByTimeslice: collection.SortedMap[
+      Unbounded[Instant],
+      SortedMap[ItemStateUpdate.Key[EventId], ItemStateUpdate]] =
+      SortedMap(
+        itemStateUpdates groupBy { case (key, _) => whenFor(key) } toSeq: _*)
+
+    for {
+      (when, itemStateUpdates) <- itemStateUpdatesGroupedByTimeslice
+    } {
+      val identifiedItemAccess = new IdentifiedItemAccess
+      with itemStateStorageUsingProxies.ReconstitutionContext {
+        override def reconstitute(
+            uniqueItemSpecification: UniqueItemSpecification) =
+          itemFor[Any](uniqueItemSpecification)
+
+        private val blobStorageTimeSlice =
+          microRevisedBlobStorage.timeSlice(when, inclusive = false)
+
+        var allItemsAreLocked = true
+
+        private val itemsMutatedSinceLastSnapshotHarvest =
+          mutable.Map.empty[UniqueItemSpecification, ItemExtensionApi]
+
+        override def blobStorageTimeslice: BlobStorage.Timeslice[SnapshotBlob] =
+          blobStorageTimeSlice
+
+        override protected def createItemFor[Item](
+            _uniqueItemSpecification: UniqueItemSpecification,
+            lifecycleUUID: UUID) = {
+          import QueryCallbackStuff.{AcquiredState, proxyFactory}
+
+          val stateToBeAcquiredByProxy: AcquiredState =
+            new AcquiredState {
+              val uniqueItemSpecification: UniqueItemSpecification =
+                _uniqueItemSpecification
+              def itemIsLocked: Boolean = allItemsAreLocked
+              def recordMutation(item: ItemExtensionApi): Unit = {
+                itemsMutatedSinceLastSnapshotHarvest.update(
+                  item.uniqueItemSpecification,
+                  item)
+              }
+            }
+
+          implicit val typeTagForItem: TypeTag[Item] =
+            _uniqueItemSpecification.typeTag.asInstanceOf[TypeTag[Item]]
+
+          val item = proxyFactory.constructFrom[Item](stateToBeAcquiredByProxy)
+
+          item
+            .asInstanceOf[AnnihilationHook]
+            .setLifecycleUUID(lifecycleUUID)
+
+          item
+        }
+
+        override protected def fallbackItemFor[Item](
+            uniqueItemSpecification: UniqueItemSpecification): Item = {
+          val item =
+            createAndStoreItem[Item](uniqueItemSpecification, UUID.randomUUID())
+          itemsMutatedSinceLastSnapshotHarvest.update(
+            uniqueItemSpecification,
+            item.asInstanceOf[ItemExtensionApi])
+          item
+        }
+
+        override protected def fallbackAnnihilatedItemFor[Item](
+            uniqueItemSpecification: UniqueItemSpecification): Item = {
+          val item =
+            createItemFor[Item](uniqueItemSpecification, UUID.randomUUID())
+          item.asInstanceOf[AnnihilationHook].recordAnnihilation()
+          item
+        }
+
+        def harvestSnapshots(): Map[UniqueItemSpecification, SnapshotBlob] = {
+          val result = itemsMutatedSinceLastSnapshotHarvest map {
+            case (uniqueItemSpecification, item) =>
+              val snapshotBlob = itemStateStorageUsingProxies.snapshotFor(item)
+
+              uniqueItemSpecification -> snapshotBlob
+          } toMap
+
+          itemsMutatedSinceLastSnapshotHarvest.clear()
+
+          result
+        }
+      }
+
+      {
+        val microRevisionBuilder = microRevisedBlobStorage.openRevision()
+
+        for {
+          (itemStateUpdateKey, itemStateUpdate) <- itemStateUpdates
+        } {
+          val snapshotBlobs =
+            mutable.Map
+              .empty[UniqueItemSpecification, Option[SnapshotBlob]]
+
+          itemStateUpdate match {
+            case ItemStateAnnihilation(annihilation) =>
+              annihilation(identifiedItemAccess)
+              snapshotBlobs += (annihilation.uniqueItemSpecification -> None)
+            case ItemStatePatch(patch) =>
+              for (_ <- makeManagedResource {
+                     identifiedItemAccess.allItemsAreLocked = false
+                   } { _ =>
+                     identifiedItemAccess.allItemsAreLocked = true
+                   }(List.empty)) {
+                patch(identifiedItemAccess)
+              }
+
+              patch.checkInvariants(identifiedItemAccess)
+
+              snapshotBlobs ++= identifiedItemAccess
+                .harvestSnapshots()
+                .mapValues(Some.apply)
+          }
+
+          microRevisionBuilder.record(Set(itemStateUpdateKey),
+                                      when,
+                                      snapshotBlobs.toMap)
+        }
+
+        microRevisedBlobStorage = microRevisionBuilder.build()
+      }
+    }
+
+    microRevisedBlobStorage
+  }
+
+  private def whenFor(eventDataFor: EventId => EventData)(
+      key: ItemStateUpdate.Key[EventId]) =
+    eventDataFor(key.eventId).serializableEvent.when
 
   override def retainUpTo(when: Unbounded[Instant]): LifecyclesState[EventId] =
     new LifecyclesStateImplementation[EventId](
       events = this.events filter (when >= _._2.serializableEvent.when),
-      nextRevision = this.nextRevision)
+      itemStateUpdates = itemStateUpdates filter {
+        case (key, _) =>
+          when >= whenFor(this.events.apply)(key)
+      },
+      nextRevision = this.nextRevision
+    )
 }

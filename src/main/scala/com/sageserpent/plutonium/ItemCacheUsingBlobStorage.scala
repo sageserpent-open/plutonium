@@ -11,7 +11,7 @@ import com.sageserpent.plutonium.WorldImplementationCodeFactoring.QueryCallbackS
 import scala.reflect.runtime.universe.{Super => _, This => _, _}
 
 class ItemCacheUsingBlobStorage[EventId](
-    blobStorage: BlobStorage[EventId, SnapshotBlob],
+    blobStorage: BlobStorage[ItemStateUpdate.Key[EventId], SnapshotBlob],
     when: Unbounded[Instant])
     extends ItemCacheImplementation
     with itemStateStorageUsingProxies.ReconstitutionContext {

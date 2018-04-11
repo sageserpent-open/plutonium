@@ -485,7 +485,7 @@ object WorldImplementationCodeFactoring {
               }
 
               override def capturePatch(when: Unbounded[Instant],
-                                        eventIds: Set[EventId],
+                                        eventId: EventId,
                                         patch: AbstractPatch): Unit = {
                 patch(identifiedItemsScopeThis)
                 for (_ <- itemsAreLockedResource) {

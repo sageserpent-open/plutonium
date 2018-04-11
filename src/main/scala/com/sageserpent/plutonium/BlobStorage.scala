@@ -32,22 +32,22 @@ object BlobStorage {
   }
 }
 
-trait BlobStorage[EventId, SnapshotBlob] { blobStorage =>
+trait BlobStorage[RecordingId, SnapshotBlob] { blobStorage =>
 
   import BlobStorage._
 
   trait RevisionBuilder {
     // NOTE: the unique item specification must be exact and consistent for all of an item's snapshots. This implies that snapshots from a previous revision may have to be rewritten
     // if an item's greatest lower bound type changes.
-    def recordSnapshotBlobsForEvent(
-        eventIds: Set[EventId],
+    def record(
+        keys: Set[RecordingId],
         when: Unbounded[Instant],
         snapshotBlobs: Map[UniqueItemSpecification, Option[SnapshotBlob]]): Unit
 
-    def annulEvent(eventId: EventId) =
-      recordSnapshotBlobsForEvent(Set(eventId), PositiveInfinity(), Map.empty)
+    def annul(key: RecordingId): Unit =
+      record(Set(key), PositiveInfinity(), Map.empty)
 
-    def build(): BlobStorage[EventId, SnapshotBlob]
+    def build(): BlobStorage[RecordingId, SnapshotBlob]
   }
 
   def openRevision(): RevisionBuilder
@@ -55,5 +55,6 @@ trait BlobStorage[EventId, SnapshotBlob] { blobStorage =>
   def timeSlice(when: Unbounded[Instant],
                 inclusive: Boolean = true): Timeslice[SnapshotBlob]
 
-  def retainUpTo(when: Unbounded[Instant]): BlobStorage[EventId, SnapshotBlob]
+  def retainUpTo(
+      when: Unbounded[Instant]): BlobStorage[RecordingId, SnapshotBlob]
 }
