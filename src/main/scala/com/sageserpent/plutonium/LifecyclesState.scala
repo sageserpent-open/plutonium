@@ -16,11 +16,13 @@ import com.sageserpent.plutonium.WorldImplementationCodeFactoring.{
 import resource.makeManagedResource
 import scalaz.std.list._
 import scalaz.syntax.monadPlus._
-import scalaz.{-\/, \/-}
+import scalaz.{-\/, \/, \/-}
 
 import scala.collection.immutable.{Map, SortedMap, TreeMap}
 import scala.collection.mutable
 import scala.reflect.runtime.universe.TypeTag
+import quiver._
+import de.ummels.prioritymap.PriorityMap
 
 trait LifecyclesState[EventId] {
 
@@ -46,10 +48,17 @@ object noLifecyclesState {
     new LifecyclesStateImplementation[EventId]
 }
 
+object LifecyclesStateImplementation {
+  type ItemStateUpdatesDag[EventId] =
+    Graph[ItemStateUpdate.Key[EventId], ItemStateUpdate, Unit]
+}
+
 class LifecyclesStateImplementation[EventId](
     events: Map[EventId, EventData] = Map.empty[EventId, EventData],
     itemStateUpdates: Set[(ItemStateUpdate.Key[EventId], ItemStateUpdate)] =
       Set.empty[(ItemStateUpdate.Key[EventId], ItemStateUpdate)],
+    itemStateUpdatesDag: LifecyclesStateImplementation.ItemStateUpdatesDag[
+      EventId] = empty[ItemStateUpdate.Key[EventId], ItemStateUpdate, Unit],
     nextRevision: Revision = initialRevision)
     extends LifecyclesState[EventId] {
   override def revise(
@@ -77,11 +86,10 @@ class LifecyclesStateImplementation[EventId](
       : Set[ItemStateUpdate.Key[EventId]] =
       (itemStateUpdates -- itemStateUpdatesForNewTimeline).map(_._1)
 
-    // TODO - actually use this, it is a placeholder for the forthcoming incremental recalculation.
-    val newItemStateUpdates: Map[
-      ItemStateUpdate.Key[EventId],
-      ItemStateUpdate] = itemStateUpdatesForNewTimeline.toMap -- itemStateUpdates
-      .map(_._1)
+    val newItemStateUpdates
+      : Seq[(ItemStateUpdate.Key[EventId], ItemStateUpdate)] =
+      (itemStateUpdatesForNewTimeline.toMap -- itemStateUpdates
+        .map(_._1)).toSeq
 
     implicit val itemStateUpdateKeyOrdering
       : Ordering[ItemStateUpdate.Key[EventId]] =
@@ -90,16 +98,225 @@ class LifecyclesStateImplementation[EventId](
         (eventData, key.intraEventIndex)
       }
 
-    val blobStorageForNewTimeline =
-      reviseBlobStorage(itemStateUpdateKeysThatNeedToBeRevoked,
-                        TreeMap(itemStateUpdatesForNewTimeline.toSeq: _*))(
-        blobStorage,
-        whenFor(eventsForNewTimeline))
+    {
+      // TODO - extract this block somehow....
+      // WIP.....
 
-    new LifecyclesStateImplementation[EventId](
-      events = eventsForNewTimeline,
-      itemStateUpdates = itemStateUpdatesForNewTimeline,
-      nextRevision = 1 + nextRevision) -> blobStorageForNewTimeline
+      val blobStorageWithRevocations = {
+        val initialMicroRevisionBuilder = blobStorage.openRevision()
+
+        for (itemStateUpdateKey <- itemStateUpdateKeysThatNeedToBeRevoked) {
+          initialMicroRevisionBuilder.annul(itemStateUpdateKey)
+        }
+        initialMicroRevisionBuilder.build()
+      }
+
+      val baseItemStateUpdatesDagToApplyChangesTo
+        : Graph[ItemStateUpdate.Key[EventId], ItemStateUpdate, Unit] =
+        itemStateUpdatesDag.removeNodes(
+          itemStateUpdateKeysThatNeedToBeRevoked.toSeq)
+
+      val itemStateUpdatesDagWithNewNodesAddedIn =
+        baseItemStateUpdatesDagToApplyChangesTo.addNodes(
+          newItemStateUpdates map { case (key, value) => LNode(key, value) })
+
+      val descendantsOfRevokedItemStateUpdates: Seq[
+        (ItemStateUpdate, ItemStateUpdate.Key[EventId])] = itemStateUpdateKeysThatNeedToBeRevoked.toSeq flatMap itemStateUpdatesDag.successors map itemStateUpdatesDag.context map {
+        case Context(_, key, itemStateUpdate, _) => itemStateUpdate -> key
+      }
+
+      val itemStateUpdatesToApply
+        : PriorityMap[ItemStateUpdate, ItemStateUpdate.Key[EventId]] =
+        PriorityMap(
+          descendantsOfRevokedItemStateUpdates ++ newItemStateUpdates.map(
+            _.swap): _*)(
+          implicitly[Ordering[ItemStateUpdate.Key[EventId]]].reverse)
+
+      val whenForItemStateUpdate
+        : ItemStateUpdate.Key[EventId] => Unbounded[Instant] =
+        whenFor(eventsForNewTimeline)(_)
+
+      case class TimesliceState(
+          itemStateUpdatesToApply: PriorityMap[ItemStateUpdate,
+                                               ItemStateUpdate.Key[EventId]],
+          itemStateUpdatesDag: Graph[ItemStateUpdate.Key[EventId],
+                                     ItemStateUpdate,
+                                     Unit],
+          timeSliceWhen: Unbounded[Instant],
+          blobStorage: BlobStorage[ItemStateUpdate.Key[EventId], SnapshotBlob]) {
+        def afterRecalculations: TimesliceState = {
+          val identifiedItemAccess = new IdentifiedItemAccess
+          with itemStateStorageUsingProxies.ReconstitutionContext {
+            override def reconstitute(
+                uniqueItemSpecification: UniqueItemSpecification) =
+              itemFor[Any](uniqueItemSpecification)
+
+            private val blobStorageTimeSlice =
+              blobStorage.timeSlice(timeSliceWhen, inclusive = false)
+
+            var allItemsAreLocked = true
+
+            private val itemsMutatedSinceLastSnapshotHarvest =
+              mutable.Map.empty[UniqueItemSpecification, ItemExtensionApi]
+
+            override def blobStorageTimeslice
+              : BlobStorage.Timeslice[SnapshotBlob] =
+              blobStorageTimeSlice
+
+            override protected def createItemFor[Item](
+                _uniqueItemSpecification: UniqueItemSpecification,
+                lifecycleUUID: UUID) = {
+              import QueryCallbackStuff.{AcquiredState, proxyFactory}
+
+              val stateToBeAcquiredByProxy: AcquiredState =
+                new AcquiredState {
+                  val uniqueItemSpecification: UniqueItemSpecification =
+                    _uniqueItemSpecification
+                  def itemIsLocked: Boolean = allItemsAreLocked
+                  def recordMutation(item: ItemExtensionApi): Unit = {
+                    itemsMutatedSinceLastSnapshotHarvest.update(
+                      item.uniqueItemSpecification,
+                      item)
+                  }
+                }
+
+              implicit val typeTagForItem: TypeTag[Item] =
+                _uniqueItemSpecification.typeTag.asInstanceOf[TypeTag[Item]]
+
+              val item =
+                proxyFactory.constructFrom[Item](stateToBeAcquiredByProxy)
+
+              item
+                .asInstanceOf[AnnihilationHook]
+                .setLifecycleUUID(lifecycleUUID)
+
+              item
+            }
+
+            override protected def fallbackItemFor[Item](
+                uniqueItemSpecification: UniqueItemSpecification): Item = {
+              val item =
+                createAndStoreItem[Item](uniqueItemSpecification,
+                                         UUID.randomUUID())
+              itemsMutatedSinceLastSnapshotHarvest.update(
+                uniqueItemSpecification,
+                item.asInstanceOf[ItemExtensionApi])
+              item
+            }
+
+            override protected def fallbackAnnihilatedItemFor[Item](
+                uniqueItemSpecification: UniqueItemSpecification): Item = {
+              val item =
+                createItemFor[Item](uniqueItemSpecification, UUID.randomUUID())
+              item.asInstanceOf[AnnihilationHook].recordAnnihilation()
+              item
+            }
+
+            def harvestSnapshots()
+              : Map[UniqueItemSpecification, SnapshotBlob] = {
+              val result = itemsMutatedSinceLastSnapshotHarvest map {
+                case (uniqueItemSpecification, item) =>
+                  val snapshotBlob =
+                    itemStateStorageUsingProxies.snapshotFor(item)
+
+                  uniqueItemSpecification -> snapshotBlob
+              } toMap
+
+              itemsMutatedSinceLastSnapshotHarvest.clear()
+
+              result
+            }
+          }
+
+          val revisionBuilder = blobStorage.openRevision()
+
+          def afterRecalculationsWithinTimeslice(
+              itemStateUpdatesToApply: PriorityMap[
+                ItemStateUpdate,
+                ItemStateUpdate.Key[EventId]],
+              itemStateUpdatesDag: Graph[ItemStateUpdate.Key[EventId],
+                                         ItemStateUpdate,
+                                         Unit]): TimesliceState =
+            itemStateUpdatesToApply.headOption match {
+              case Some((itemStateUpdate, itemStateUpdateKey)) =>
+                val when = whenForItemStateUpdate(itemStateUpdateKey)
+                if (when > timeSliceWhen)
+                  TimesliceState(itemStateUpdatesToApply,
+                                 itemStateUpdatesDag,
+                                 when,
+                                 revisionBuilder.build()).afterRecalculations
+                else {
+                  assert(when == timeSliceWhen)
+
+                  // PLAN: harvest the snapshots and update the dag with any discovered dependencies. Put the successors on to the priority queue, after dropping the one we're just worked on.
+
+                  {
+                    val snapshotBlobs =
+                      mutable.Map
+                        .empty[UniqueItemSpecification, Option[SnapshotBlob]]
+
+                    itemStateUpdate match {
+                      case ItemStateAnnihilation(annihilation) =>
+                        annihilation(identifiedItemAccess)
+                        snapshotBlobs += (annihilation.uniqueItemSpecification -> None)
+                      case ItemStatePatch(patch) =>
+                        for (_ <- makeManagedResource {
+                               identifiedItemAccess.allItemsAreLocked = false
+                             } { _ =>
+                               identifiedItemAccess.allItemsAreLocked = true
+                             }(List.empty)) {
+                          patch(identifiedItemAccess)
+                        }
+
+                        patch.checkInvariants(identifiedItemAccess)
+
+                        snapshotBlobs ++= identifiedItemAccess
+                          .harvestSnapshots()
+                          .mapValues(Some.apply)
+                    }
+
+                    revisionBuilder.record(Set(itemStateUpdateKey),
+                                           when,
+                                           snapshotBlobs.toMap)
+                  }
+
+                  // TODO - it's not enough just to drop an entry off 'itemStateUpdatesToApply' - need to add in the successors of the node being examined too.
+                  afterRecalculationsWithinTimeslice(
+                    itemStateUpdatesToApply.drop(1),
+                    ???)
+                }
+              case None =>
+                TimesliceState(itemStateUpdatesToApply,
+                               itemStateUpdatesDag,
+                               timeSliceWhen,
+                               revisionBuilder.build())
+            }
+
+          afterRecalculationsWithinTimeslice(itemStateUpdatesToApply,
+                                             itemStateUpdatesDag)
+        }
+      }
+
+      val initialState = TimesliceState(
+        itemStateUpdatesToApply,
+        itemStateUpdatesDagWithNewNodesAddedIn,
+        whenForItemStateUpdate(itemStateUpdatesToApply.head._2),
+        blobStorageWithRevocations
+      )
+
+      val TimesliceState(_,
+                         itemStateUpdatesDagForNewTimeline,
+                         _,
+                         blobStorageForNewTimeline) =
+        initialState.afterRecalculations
+
+      new LifecyclesStateImplementation[EventId](
+        events = eventsForNewTimeline,
+        itemStateUpdates = itemStateUpdatesForNewTimeline,
+        itemStateUpdatesDag = itemStateUpdatesDagForNewTimeline,
+        nextRevision = 1 + nextRevision
+      ) -> blobStorageForNewTimeline
+    }
   }
 
   private def createItemStateUpdates(
@@ -146,151 +363,6 @@ class LifecyclesStateImplementation[EventId](
           ItemStateUpdate.Key(eventId, intraEventIndex)
         (itemStateUpdateKey -> itemStateUpdate)
     }).toSet
-  }
-
-  private def reviseBlobStorage(
-      obsoleteItemStateUpdateKeys: Set[ItemStateUpdate.Key[EventId]],
-      itemStateUpdates: SortedMap[ItemStateUpdate.Key[EventId],
-                                  ItemStateUpdate])(
-      blobStorage: BlobStorage[ItemStateUpdate.Key[EventId], SnapshotBlob],
-      whenFor: ItemStateUpdate.Key[EventId] => Unbounded[Instant])
-    : BlobStorage[ItemStateUpdate.Key[EventId], SnapshotBlob] = {
-    var microRevisedBlobStorage = {
-      val initialMicroRevisionBuilder = blobStorage.openRevision()
-
-      for (itemStateUpdateKey <- obsoleteItemStateUpdateKeys) {
-        initialMicroRevisionBuilder.annul(itemStateUpdateKey)
-      }
-      initialMicroRevisionBuilder.build()
-    }
-
-    val itemStateUpdatesGroupedByTimeslice: collection.SortedMap[
-      Unbounded[Instant],
-      SortedMap[ItemStateUpdate.Key[EventId], ItemStateUpdate]] =
-      SortedMap(
-        itemStateUpdates groupBy { case (key, _) => whenFor(key) } toSeq: _*)
-
-    for {
-      (when, itemStateUpdates) <- itemStateUpdatesGroupedByTimeslice
-    } {
-      val identifiedItemAccess = new IdentifiedItemAccess
-      with itemStateStorageUsingProxies.ReconstitutionContext {
-        override def reconstitute(
-            uniqueItemSpecification: UniqueItemSpecification) =
-          itemFor[Any](uniqueItemSpecification)
-
-        private val blobStorageTimeSlice =
-          microRevisedBlobStorage.timeSlice(when, inclusive = false)
-
-        var allItemsAreLocked = true
-
-        private val itemsMutatedSinceLastSnapshotHarvest =
-          mutable.Map.empty[UniqueItemSpecification, ItemExtensionApi]
-
-        override def blobStorageTimeslice: BlobStorage.Timeslice[SnapshotBlob] =
-          blobStorageTimeSlice
-
-        override protected def createItemFor[Item](
-            _uniqueItemSpecification: UniqueItemSpecification,
-            lifecycleUUID: UUID) = {
-          import QueryCallbackStuff.{AcquiredState, proxyFactory}
-
-          val stateToBeAcquiredByProxy: AcquiredState =
-            new AcquiredState {
-              val uniqueItemSpecification: UniqueItemSpecification =
-                _uniqueItemSpecification
-              def itemIsLocked: Boolean = allItemsAreLocked
-              def recordMutation(item: ItemExtensionApi): Unit = {
-                itemsMutatedSinceLastSnapshotHarvest.update(
-                  item.uniqueItemSpecification,
-                  item)
-              }
-            }
-
-          implicit val typeTagForItem: TypeTag[Item] =
-            _uniqueItemSpecification.typeTag.asInstanceOf[TypeTag[Item]]
-
-          val item = proxyFactory.constructFrom[Item](stateToBeAcquiredByProxy)
-
-          item
-            .asInstanceOf[AnnihilationHook]
-            .setLifecycleUUID(lifecycleUUID)
-
-          item
-        }
-
-        override protected def fallbackItemFor[Item](
-            uniqueItemSpecification: UniqueItemSpecification): Item = {
-          val item =
-            createAndStoreItem[Item](uniqueItemSpecification, UUID.randomUUID())
-          itemsMutatedSinceLastSnapshotHarvest.update(
-            uniqueItemSpecification,
-            item.asInstanceOf[ItemExtensionApi])
-          item
-        }
-
-        override protected def fallbackAnnihilatedItemFor[Item](
-            uniqueItemSpecification: UniqueItemSpecification): Item = {
-          val item =
-            createItemFor[Item](uniqueItemSpecification, UUID.randomUUID())
-          item.asInstanceOf[AnnihilationHook].recordAnnihilation()
-          item
-        }
-
-        def harvestSnapshots(): Map[UniqueItemSpecification, SnapshotBlob] = {
-          val result = itemsMutatedSinceLastSnapshotHarvest map {
-            case (uniqueItemSpecification, item) =>
-              val snapshotBlob = itemStateStorageUsingProxies.snapshotFor(item)
-
-              uniqueItemSpecification -> snapshotBlob
-          } toMap
-
-          itemsMutatedSinceLastSnapshotHarvest.clear()
-
-          result
-        }
-      }
-
-      {
-        val microRevisionBuilder = microRevisedBlobStorage.openRevision()
-
-        for {
-          (itemStateUpdateKey, itemStateUpdate) <- itemStateUpdates
-        } {
-          val snapshotBlobs =
-            mutable.Map
-              .empty[UniqueItemSpecification, Option[SnapshotBlob]]
-
-          itemStateUpdate match {
-            case ItemStateAnnihilation(annihilation) =>
-              annihilation(identifiedItemAccess)
-              snapshotBlobs += (annihilation.uniqueItemSpecification -> None)
-            case ItemStatePatch(patch) =>
-              for (_ <- makeManagedResource {
-                     identifiedItemAccess.allItemsAreLocked = false
-                   } { _ =>
-                     identifiedItemAccess.allItemsAreLocked = true
-                   }(List.empty)) {
-                patch(identifiedItemAccess)
-              }
-
-              patch.checkInvariants(identifiedItemAccess)
-
-              snapshotBlobs ++= identifiedItemAccess
-                .harvestSnapshots()
-                .mapValues(Some.apply)
-          }
-
-          microRevisionBuilder.record(Set(itemStateUpdateKey),
-                                      when,
-                                      snapshotBlobs.toMap)
-        }
-
-        microRevisedBlobStorage = microRevisionBuilder.build()
-      }
-    }
-
-    microRevisedBlobStorage
   }
 
   private def whenFor(eventDataFor: EventId => EventData)(
