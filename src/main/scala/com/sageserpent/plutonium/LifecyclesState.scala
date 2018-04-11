@@ -236,7 +236,10 @@ class LifecyclesStateImplementation[EventId](
                 ItemStateUpdate.Key[EventId]],
               itemStateUpdatesDag: Graph[ItemStateUpdate.Key[EventId],
                                          ItemStateUpdate,
-                                         Unit]): TimesliceState =
+                                         Unit],
+              itemStateUpdateDependencyByItems: Map[
+                UniqueItemSpecification,
+                ItemStateUpdate.Key[EventId]]): TimesliceState =
             itemStateUpdatesToApply.headOption match {
               case Some((itemStateUpdate, itemStateUpdateKey)) =>
                 val when = whenForItemStateUpdate(itemStateUpdateKey)
@@ -250,15 +253,16 @@ class LifecyclesStateImplementation[EventId](
 
                   // PLAN: harvest the snapshots and update the dag with any discovered dependencies. Put the successors on to the priority queue, after dropping the one we're just worked on.
 
-                  {
-                    val snapshotBlobs =
-                      mutable.Map
-                        .empty[UniqueItemSpecification, Option[SnapshotBlob]]
-
+                  val updatedItemStateUpdateDependencyByItems =
                     itemStateUpdate match {
                       case ItemStateAnnihilation(annihilation) =>
                         annihilation(identifiedItemAccess)
-                        snapshotBlobs += (annihilation.uniqueItemSpecification -> None)
+                        revisionBuilder.record(
+                          Set(itemStateUpdateKey),
+                          when,
+                          Map(annihilation.uniqueItemSpecification -> None))
+                        itemStateUpdateDependencyByItems - annihilation.uniqueItemSpecification
+
                       case ItemStatePatch(patch) =>
                         for (_ <- makeManagedResource {
                                identifiedItemAccess.allItemsAreLocked = false
@@ -270,20 +274,23 @@ class LifecyclesStateImplementation[EventId](
 
                         patch.checkInvariants(identifiedItemAccess)
 
-                        snapshotBlobs ++= identifiedItemAccess
-                          .harvestSnapshots()
-                          .mapValues(Some.apply)
-                    }
+                        val harvestedSnapshots =
+                          identifiedItemAccess.harvestSnapshots
 
-                    revisionBuilder.record(Set(itemStateUpdateKey),
-                                           when,
-                                           snapshotBlobs.toMap)
-                  }
+                        revisionBuilder.record(
+                          Set(itemStateUpdateKey),
+                          when,
+                          harvestedSnapshots.mapValues(Some.apply))
+
+                        itemStateUpdateDependencyByItems ++ harvestedSnapshots
+                          .map(_._1 -> itemStateUpdateKey)
+                    }
 
                   // TODO - it's not enough just to drop an entry off 'itemStateUpdatesToApply' - need to add in the successors of the node being examined too.
                   afterRecalculationsWithinTimeslice(
                     itemStateUpdatesToApply.drop(1),
-                    ???)
+                    ???,
+                    updatedItemStateUpdateDependencyByItems)
                 }
               case None =>
                 TimesliceState(itemStateUpdatesToApply,
@@ -292,8 +299,10 @@ class LifecyclesStateImplementation[EventId](
                                revisionBuilder.build())
             }
 
-          afterRecalculationsWithinTimeslice(itemStateUpdatesToApply,
-                                             itemStateUpdatesDag)
+          afterRecalculationsWithinTimeslice(
+            itemStateUpdatesToApply,
+            itemStateUpdatesDag,
+            Map.empty[UniqueItemSpecification, ItemStateUpdate.Key[EventId]])
         }
       }
 
