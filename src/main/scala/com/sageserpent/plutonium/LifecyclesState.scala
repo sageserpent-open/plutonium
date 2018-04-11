@@ -78,66 +78,16 @@ class LifecyclesStateImplementation[EventId](
         eventId -> EventData(event, nextRevision, tiebreakerIndex)
     }.toMap
 
-    val itemStateUpdatesForNewTimeline
-      : Set[(ItemStateUpdate.Key[EventId], ItemStateUpdate)] =
-      createItemStateUpdates(eventsForNewTimeline)
-
-    val itemStateUpdateKeysThatNeedToBeRevoked
-      : Set[ItemStateUpdate.Key[EventId]] =
-      (itemStateUpdates -- itemStateUpdatesForNewTimeline).map(_._1)
-
-    val newItemStateUpdates
-      : Seq[(ItemStateUpdate.Key[EventId], ItemStateUpdate)] =
-      (itemStateUpdatesForNewTimeline.toMap -- itemStateUpdates
-        .map(_._1)).toSeq
-
-    implicit val itemStateUpdateKeyOrdering
-      : Ordering[ItemStateUpdate.Key[EventId]] =
-      Ordering.by { key: ItemStateUpdate.Key[EventId] =>
-        val eventData = eventsForNewTimeline(key.eventId)
-        (eventData, key.intraEventIndex)
-      }
-
     {
       // TODO - extract this block somehow....
       // WIP.....
-
-      val blobStorageWithRevocations = {
-        val initialMicroRevisionBuilder = blobStorage.openRevision()
-
-        for (itemStateUpdateKey <- itemStateUpdateKeysThatNeedToBeRevoked) {
-          initialMicroRevisionBuilder.annul(itemStateUpdateKey)
-        }
-        initialMicroRevisionBuilder.build()
-      }
-
-      val baseItemStateUpdatesDagToApplyChangesTo
-        : Graph[ItemStateUpdate.Key[EventId], ItemStateUpdate, Unit] =
-        itemStateUpdatesDag.removeNodes(
-          itemStateUpdateKeysThatNeedToBeRevoked.toSeq)
-
-      val itemStateUpdatesDagWithNewNodesAddedIn =
-        baseItemStateUpdatesDagToApplyChangesTo.addNodes(
-          newItemStateUpdates map { case (key, value) => LNode(key, value) })
-
-      val descendantsOfRevokedItemStateUpdates: Seq[
-        (ItemStateUpdate, ItemStateUpdate.Key[EventId])] = itemStateUpdateKeysThatNeedToBeRevoked.toSeq flatMap itemStateUpdatesDag.successors map itemStateUpdatesDag.context map {
-        case Context(_, key, itemStateUpdate, _) => itemStateUpdate -> key
-      }
-
-      val itemStateUpdatesToApply
-        : PriorityMap[ItemStateUpdate, ItemStateUpdate.Key[EventId]] =
-        PriorityMap(
-          descendantsOfRevokedItemStateUpdates ++ newItemStateUpdates.map(
-            _.swap): _*)(
-          implicitly[Ordering[ItemStateUpdate.Key[EventId]]].reverse)
 
       val whenForItemStateUpdate
         : ItemStateUpdate.Key[EventId] => Unbounded[Instant] =
         whenFor(eventsForNewTimeline)(_)
 
       case class TimesliceState(
-          itemStateUpdatesToApply: PriorityMap[ItemStateUpdate,
+          itemStateUpdatesToApply: PriorityMap[Unit,
                                                ItemStateUpdate.Key[EventId]],
           itemStateUpdatesDag: Graph[ItemStateUpdate.Key[EventId],
                                      ItemStateUpdate,
@@ -245,7 +195,7 @@ class LifecyclesStateImplementation[EventId](
 
           def afterRecalculationsWithinTimeslice(
               itemStateUpdatesToApply: PriorityMap[
-                ItemStateUpdate,
+                Unit,
                 ItemStateUpdate.Key[EventId]],
               itemStateUpdatesDag: Graph[ItemStateUpdate.Key[EventId],
                                          ItemStateUpdate,
@@ -254,7 +204,9 @@ class LifecyclesStateImplementation[EventId](
                                                ItemStateUpdate.Key[EventId]])
             : TimesliceState =
             itemStateUpdatesToApply.headOption match {
-              case Some((itemStateUpdate, itemStateUpdateKey)) =>
+              case Some((_, itemStateUpdateKey)) =>
+                val itemStateUpdate =
+                  itemStateUpdatesDag.label(itemStateUpdateKey).get
                 val when = whenForItemStateUpdate(itemStateUpdateKey)
                 if (when > timeSliceWhen)
                   TimesliceState(itemStateUpdatesToApply,
@@ -264,25 +216,24 @@ class LifecyclesStateImplementation[EventId](
                 else {
                   assert(when == timeSliceWhen)
 
-                  // PLAN: harvest the snapshots and update the dag with any discovered dependencies. Put the successors on to the priority queue, after dropping the one we're just worked on.
-
                   itemStateUpdate match {
                     case ItemStateAnnihilation(annihilation) =>
+                      val dependencyOfAnnihilation =
+                        itemStateUpdateDependencies(
+                          annihilation.uniqueItemSpecification)
+
                       annihilation(identifiedItemAccess)
+
                       revisionBuilder.record(
                         Set(itemStateUpdateKey),
                         when,
                         Map(annihilation.uniqueItemSpecification -> None))
 
-                      val dependencyDueToAnnihilation =
-                        itemStateUpdateDependencies(
-                          annihilation.uniqueItemSpecification)
-
                       val itemStateUpdatesDagWithUpdatedDependency =
                         itemStateUpdatesDag.decomp(itemStateUpdateKey) match {
                           case Decomp(Some(context), remainder) =>
                             context.copy(inAdj = Vector(
-                              () -> dependencyDueToAnnihilation)) & remainder
+                              () -> dependencyOfAnnihilation)) & remainder
                         }
 
                       afterRecalculationsWithinTimeslice(
@@ -310,11 +261,9 @@ class LifecyclesStateImplementation[EventId](
                         mutatedItemSnapshots.mapValues(Some.apply))
 
                       val descendants
-                        : immutable.Seq[(ItemStateUpdate,
-                                         ItemStateUpdate.Key[EventId])] = itemStateUpdatesDag
+                        : immutable.Seq[(Unit, ItemStateUpdate.Key[EventId])] = itemStateUpdatesDag
                         .successors(itemStateUpdateKey) map itemStateUpdatesDag.context map {
-                        case Context(_, key, value, _) =>
-                          value -> key
+                        case Context(_, key, _, _) => () -> key
                       }
 
                       val dependenciesDiscoveredByPatchExecution
@@ -350,6 +299,57 @@ class LifecyclesStateImplementation[EventId](
             Map.empty[UniqueItemSpecification, ItemStateUpdate.Key[EventId]])
         }
       }
+
+      val itemStateUpdatesForNewTimeline
+        : Set[(ItemStateUpdate.Key[EventId], ItemStateUpdate)] =
+        createItemStateUpdates(eventsForNewTimeline)
+
+      val itemStateUpdateKeysThatNeedToBeRevoked
+        : Set[ItemStateUpdate.Key[EventId]] =
+        (itemStateUpdates -- itemStateUpdatesForNewTimeline).map(_._1)
+
+      val newAndModifiedItemStateUpdates
+        : Seq[(ItemStateUpdate.Key[EventId], ItemStateUpdate)] =
+        (itemStateUpdatesForNewTimeline -- itemStateUpdates).toSeq
+
+      val blobStorageWithRevocations = {
+        val initialMicroRevisionBuilder = blobStorage.openRevision()
+
+        for (itemStateUpdateKey <- itemStateUpdateKeysThatNeedToBeRevoked) {
+          initialMicroRevisionBuilder.annul(itemStateUpdateKey)
+        }
+        initialMicroRevisionBuilder.build()
+      }
+
+      val baseItemStateUpdatesDagToApplyChangesTo
+        : Graph[ItemStateUpdate.Key[EventId], ItemStateUpdate, Unit] =
+        itemStateUpdatesDag.removeNodes(
+          itemStateUpdateKeysThatNeedToBeRevoked.toSeq)
+
+      val itemStateUpdatesDagWithNewNodesAddedIn =
+        baseItemStateUpdatesDagToApplyChangesTo.addNodes(
+          newAndModifiedItemStateUpdates map {
+            case (key, value) => LNode(key, value)
+          })
+
+      val descendantsOfRevokedItemStateUpdates: Seq[ItemStateUpdate.Key[
+        EventId]] = itemStateUpdateKeysThatNeedToBeRevoked.toSeq flatMap itemStateUpdatesDag.successors map itemStateUpdatesDag.context map {
+        case Context(_, key, _, _) => key
+      }
+
+      implicit val itemStateUpdateKeyOrdering
+        : Ordering[ItemStateUpdate.Key[EventId]] =
+        Ordering.by { key: ItemStateUpdate.Key[EventId] =>
+          val eventData = eventsForNewTimeline(key.eventId)
+          (eventData, key.intraEventIndex)
+        }
+
+      val itemStateUpdatesToApply
+        : PriorityMap[Unit, ItemStateUpdate.Key[EventId]] =
+        PriorityMap(
+          descendantsOfRevokedItemStateUpdates ++ newAndModifiedItemStateUpdates
+            .map(_._1) map (() -> _): _*)(
+          implicitly[Ordering[ItemStateUpdate.Key[EventId]]].reverse)
 
       val initialState = TimesliceState(
         itemStateUpdatesToApply,
