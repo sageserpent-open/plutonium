@@ -233,6 +233,14 @@ object WorldImplementationCodeFactoring {
 
       def recordMutation(item: ItemExtensionApi): Unit
 
+      def lifecycleUUID: UUID = _lifecycleUUID
+
+      def setLifecycleUUID(uuid: UUID): Unit = {
+        _lifecycleUUID = uuid
+      }
+
+      private var _lifecycleUUID: UUID = _
+
       var unlockFullReadAccess: Boolean = false
     }
 
@@ -364,7 +372,6 @@ object WorldImplementationCodeFactoring {
       override protected def configureInterceptions(
           builder: Builder[_]): Builder[_] =
         builder
-          .defineField("lifecycleUUID", classOf[UUID])
           .method(matchUncheckedReadAccess)
           .intercept(MethodDelegation.to(uncheckedReadAccess))
           .method(matchCheckedReadAccess)
@@ -376,9 +383,9 @@ object WorldImplementationCodeFactoring {
           .method(matchRecordAnnihilation)
           .intercept(MethodDelegation.toField("acquiredState"))
           .method(matchLifecycleUUID)
-          .intercept(FieldAccessor.ofField("lifecycleUUID"))
+          .intercept(MethodDelegation.toField("acquiredState"))
           .method(matchSetLifecycleUUID)
-          .intercept(FieldAccessor.ofField("lifecycleUUID"))
+          .intercept(MethodDelegation.toField("acquiredState"))
           .method(matchInvariantCheck)
           .intercept(MethodDelegation.to(checkInvariant))
           .method(matchUniqueItemSpecification)
