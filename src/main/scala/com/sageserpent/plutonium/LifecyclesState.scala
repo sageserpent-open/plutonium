@@ -13,16 +13,16 @@ import com.sageserpent.plutonium.WorldImplementationCodeFactoring.{
   QueryCallbackStuff,
   eventDataOrdering
 }
+import de.ummels.prioritymap.PriorityMap
+import quiver._
 import resource.makeManagedResource
 import scalaz.std.list._
 import scalaz.syntax.monadPlus._
-import scalaz.{-\/, \/, \/-}
+import scalaz.{-\/, \/-}
 
-import scala.collection.immutable.{Map, SortedMap, TreeMap}
-import scala.collection.mutable
+import scala.collection.immutable.Map
+import scala.collection.{immutable, mutable}
 import scala.reflect.runtime.universe.TypeTag
-import quiver._
-import de.ummels.prioritymap.PriorityMap
 
 trait LifecyclesState[EventId] {
 
@@ -156,8 +156,12 @@ class LifecyclesStateImplementation[EventId](
 
             var allItemsAreLocked = true
 
-            private val itemsMutatedSinceLastSnapshotHarvest =
+            private val itemsMutatedSinceLastHarvest =
               mutable.Map.empty[UniqueItemSpecification, ItemExtensionApi]
+
+            private val itemsReadFromSinceLastHarvest
+              : mutable.Set[UniqueItemSpecification] =
+              mutable.Set.empty[UniqueItemSpecification]
 
             override def blobStorageTimeslice
               : BlobStorage.Timeslice[SnapshotBlob] =
@@ -173,10 +177,15 @@ class LifecyclesStateImplementation[EventId](
                   val uniqueItemSpecification: UniqueItemSpecification =
                     _uniqueItemSpecification
                   def itemIsLocked: Boolean = allItemsAreLocked
-                  def recordMutation(item: ItemExtensionApi): Unit = {
-                    itemsMutatedSinceLastSnapshotHarvest.update(
+                  override def recordMutation(item: ItemExtensionApi): Unit = {
+                    itemsMutatedSinceLastHarvest.update(
                       item.uniqueItemSpecification,
                       item)
+                  }
+
+                  override def recordReadOnlyAccess(
+                      item: ItemExtensionApi): Unit = {
+                    itemsReadFromSinceLastHarvest += item.uniqueItemSpecification
                   }
                 }
 
@@ -198,7 +207,7 @@ class LifecyclesStateImplementation[EventId](
               val item =
                 createAndStoreItem[Item](uniqueItemSpecification,
                                          UUID.randomUUID())
-              itemsMutatedSinceLastSnapshotHarvest.update(
+              itemsMutatedSinceLastHarvest.update(
                 uniqueItemSpecification,
                 item.asInstanceOf[ItemExtensionApi])
               item
@@ -212,9 +221,10 @@ class LifecyclesStateImplementation[EventId](
               item
             }
 
-            def harvestSnapshots()
-              : Map[UniqueItemSpecification, SnapshotBlob] = {
-              val result = itemsMutatedSinceLastSnapshotHarvest map {
+            def harvestMutationsAndReadAccesses()
+              : (Map[UniqueItemSpecification, SnapshotBlob],
+                 Set[UniqueItemSpecification]) = {
+              val mutations = itemsMutatedSinceLastHarvest map {
                 case (uniqueItemSpecification, item) =>
                   val snapshotBlob =
                     itemStateStorageUsingProxies.snapshotFor(item)
@@ -222,9 +232,12 @@ class LifecyclesStateImplementation[EventId](
                   uniqueItemSpecification -> snapshotBlob
               } toMap
 
-              itemsMutatedSinceLastSnapshotHarvest.clear()
+              val readAccesses = itemsReadFromSinceLastHarvest.toSet
 
-              result
+              itemsMutatedSinceLastHarvest.clear()
+              itemsReadFromSinceLastHarvest.clear()
+
+              mutations -> readAccesses
             }
           }
 
@@ -237,9 +250,9 @@ class LifecyclesStateImplementation[EventId](
               itemStateUpdatesDag: Graph[ItemStateUpdate.Key[EventId],
                                          ItemStateUpdate,
                                          Unit],
-              itemStateUpdateDependencyByItems: Map[
-                UniqueItemSpecification,
-                ItemStateUpdate.Key[EventId]]): TimesliceState =
+              itemStateUpdateDependencies: Map[UniqueItemSpecification,
+                                               ItemStateUpdate.Key[EventId]])
+            : TimesliceState =
             itemStateUpdatesToApply.headOption match {
               case Some((itemStateUpdate, itemStateUpdateKey)) =>
                 val when = whenForItemStateUpdate(itemStateUpdateKey)
@@ -253,44 +266,76 @@ class LifecyclesStateImplementation[EventId](
 
                   // PLAN: harvest the snapshots and update the dag with any discovered dependencies. Put the successors on to the priority queue, after dropping the one we're just worked on.
 
-                  val updatedItemStateUpdateDependencyByItems =
-                    itemStateUpdate match {
-                      case ItemStateAnnihilation(annihilation) =>
-                        annihilation(identifiedItemAccess)
-                        revisionBuilder.record(
-                          Set(itemStateUpdateKey),
-                          when,
-                          Map(annihilation.uniqueItemSpecification -> None))
-                        itemStateUpdateDependencyByItems - annihilation.uniqueItemSpecification
+                  itemStateUpdate match {
+                    case ItemStateAnnihilation(annihilation) =>
+                      annihilation(identifiedItemAccess)
+                      revisionBuilder.record(
+                        Set(itemStateUpdateKey),
+                        when,
+                        Map(annihilation.uniqueItemSpecification -> None))
 
-                      case ItemStatePatch(patch) =>
-                        for (_ <- makeManagedResource {
-                               identifiedItemAccess.allItemsAreLocked = false
-                             } { _ =>
-                               identifiedItemAccess.allItemsAreLocked = true
-                             }(List.empty)) {
-                          patch(identifiedItemAccess)
+                      val dependencyDueToAnnihilation =
+                        itemStateUpdateDependencies(
+                          annihilation.uniqueItemSpecification)
+
+                      val itemStateUpdatesDagWithUpdatedDependency =
+                        itemStateUpdatesDag.decomp(itemStateUpdateKey) match {
+                          case Decomp(Some(context), remainder) =>
+                            context.copy(inAdj = Vector(
+                              () -> dependencyDueToAnnihilation)) & remainder
                         }
 
-                        patch.checkInvariants(identifiedItemAccess)
+                      afterRecalculationsWithinTimeslice(
+                        itemStateUpdatesToApply.drop(1),
+                        itemStateUpdatesDagWithUpdatedDependency,
+                        itemStateUpdateDependencies - annihilation.uniqueItemSpecification)
 
-                        val harvestedSnapshots =
-                          identifiedItemAccess.harvestSnapshots
+                    case ItemStatePatch(patch) =>
+                      for (_ <- makeManagedResource {
+                             identifiedItemAccess.allItemsAreLocked = false
+                           } { _ =>
+                             identifiedItemAccess.allItemsAreLocked = true
+                           }(List.empty)) {
+                        patch(identifiedItemAccess)
+                      }
 
-                        revisionBuilder.record(
-                          Set(itemStateUpdateKey),
-                          when,
-                          harvestedSnapshots.mapValues(Some.apply))
+                      patch.checkInvariants(identifiedItemAccess)
 
-                        itemStateUpdateDependencyByItems ++ harvestedSnapshots
+                      val (mutatedItemSnapshots, itemsReadFrom) =
+                        identifiedItemAccess.harvestMutationsAndReadAccesses()
+
+                      revisionBuilder.record(
+                        Set(itemStateUpdateKey),
+                        when,
+                        mutatedItemSnapshots.mapValues(Some.apply))
+
+                      val descendants
+                        : immutable.Seq[(ItemStateUpdate,
+                                         ItemStateUpdate.Key[EventId])] = itemStateUpdatesDag
+                        .successors(itemStateUpdateKey) map itemStateUpdatesDag.context map {
+                        case Context(_, key, value, _) =>
+                          value -> key
+                      }
+
+                      val dependenciesDiscoveredByPatchExecution
+                        : Set[ItemStateUpdate.Key[EventId]] =
+                        itemsReadFrom flatMap itemStateUpdateDependencies.get
+
+                      val itemStateUpdatesDagWithUpdatedDependencies =
+                        itemStateUpdatesDag.decomp(itemStateUpdateKey) match {
+                          case Decomp(Some(context), remainder) =>
+                            context.copy(inAdj =
+                              dependenciesDiscoveredByPatchExecution map (() -> _) toVector) & remainder
+                        }
+
+                      afterRecalculationsWithinTimeslice(
+                        itemStateUpdatesToApply.drop(1) ++ descendants,
+                        itemStateUpdatesDagWithUpdatedDependencies,
+                        itemStateUpdateDependencies ++ mutatedItemSnapshots
                           .map(_._1 -> itemStateUpdateKey)
-                    }
+                      )
+                  }
 
-                  // TODO - it's not enough just to drop an entry off 'itemStateUpdatesToApply' - need to add in the successors of the node being examined too.
-                  afterRecalculationsWithinTimeslice(
-                    itemStateUpdatesToApply.drop(1),
-                    ???,
-                    updatedItemStateUpdateDependencyByItems)
                 }
               case None =>
                 TimesliceState(itemStateUpdatesToApply,
@@ -370,7 +415,7 @@ class LifecyclesStateImplementation[EventId](
       case (((itemStateUpdate, eventId), intraEventIndex)) =>
         val itemStateUpdateKey =
           ItemStateUpdate.Key(eventId, intraEventIndex)
-        (itemStateUpdateKey -> itemStateUpdate)
+        itemStateUpdateKey -> itemStateUpdate
     }).toSet
   }
 

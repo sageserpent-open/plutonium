@@ -231,7 +231,9 @@ object WorldImplementationCodeFactoring {
 
       def itemIsLocked: Boolean
 
-      def recordMutation(item: ItemExtensionApi): Unit
+      def recordMutation(item: ItemExtensionApi): Unit = {}
+
+      def recordReadOnlyAccess(item: ItemExtensionApi): Unit = {}
 
       var unlockFullReadAccess: Boolean = false
     }
@@ -305,6 +307,7 @@ object WorldImplementationCodeFactoring {
     object checkedReadAccess {
       @RuntimeType
       def apply(@Origin method: Method,
+                @This target: ItemExtensionApi,
                 @SuperCall superCall: Callable[_],
                 @FieldValue("acquiredState") acquiredState: AcquiredState) = {
         if (acquiredState.isGhost && !acquiredState.unlockFullReadAccess) {
@@ -313,6 +316,7 @@ object WorldImplementationCodeFactoring {
             s"Attempt to read via: '$method' from a ghost item of id: '${uniqueItemSpecification.id}' and type '${uniqueItemSpecification.typeTag}'.")
         }
 
+        acquiredState.recordReadOnlyAccess(target)
         superCall.call()
       }
     }
@@ -320,6 +324,7 @@ object WorldImplementationCodeFactoring {
     object uncheckedReadAccess {
       @RuntimeType
       def apply(@Origin method: Method,
+                @This target: ItemExtensionApi,
                 @SuperCall superCall: Callable[_],
                 @FieldValue("acquiredState") acquiredState: AcquiredState) = {
         if (!acquiredState.unlockFullReadAccess) (for {
@@ -328,8 +333,14 @@ object WorldImplementationCodeFactoring {
           } { _ =>
             acquiredState.unlockFullReadAccess = false
           }(List.empty)
-        } yield superCall.call()) acquireAndGet identity
-        else superCall.call()
+        } yield {
+          acquiredState.recordReadOnlyAccess(target)
+          superCall.call()
+        }) acquireAndGet identity
+        else {
+          acquiredState.recordReadOnlyAccess(target)
+          superCall.call()
+        }
       }
     }
 
@@ -510,7 +521,6 @@ object WorldImplementationCodeFactoring {
               UniqueItemSpecification(id, typeTag[Item])
             def itemIsLocked: Boolean =
               identifiedItemsScopeThis.allItemsAreLocked
-            def recordMutation(item: ItemExtensionApi): Unit = {}
           }
 
         val item = proxyFactory.constructFrom(stateToBeAcquiredByProxy)

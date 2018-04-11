@@ -52,8 +52,7 @@ class ItemCacheUsingBlobStorage[EventId](
       new AcquiredState {
         val uniqueItemSpecification: UniqueItemSpecification =
           _uniqueItemSpecification
-        def itemIsLocked: Boolean                        = true
-        def recordMutation(item: ItemExtensionApi): Unit = {}
+        def itemIsLocked: Boolean = true
       }
 
     implicit val typeTagForItem: TypeTag[Item] =
