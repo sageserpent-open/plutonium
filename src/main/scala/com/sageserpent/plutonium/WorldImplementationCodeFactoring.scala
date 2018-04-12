@@ -105,23 +105,16 @@ object WorldImplementationCodeFactoring {
   val byteBuddy = new ByteBuddy()
 
   object ProxySupport {
-    val matchGetClass: ElementMatcher[MethodDescription] =
-      ElementMatchers.is(classOf[AnyRef].getMethod("getClass"))
-
     private[plutonium] trait StateAcquisition[AcquiredState] {
       def acquire(acquiredState: AcquiredState)
     }
+  }
 
-    trait AcquiredStateCapturingId {
-      val uniqueItemSpecification: UniqueItemSpecification
-    }
+  trait ProxySupport {
+    import ProxySupport._
 
-    object id {
-      @RuntimeType
-      def apply(
-          @FieldValue("acquiredState") acquiredState: AcquiredStateCapturingId) =
-        acquiredState.uniqueItemSpecification.id
-    }
+    val matchGetClass: ElementMatcher[MethodDescription] =
+      ElementMatchers.is(classOf[AnyRef].getMethod("getClass"))
 
     val nonMutableMembersThatCanAlwaysBeReadFrom = (classOf[ItemExtensionApi].getMethods ++ classOf[
       AnyRef].getMethods) map (new MethodDescription.ForLoadedMethod(_))
@@ -135,7 +128,20 @@ object WorldImplementationCodeFactoring {
         firstMethodIsOverrideCompatibleWithSecond(method, exclusionMethod)
       })
 
-    trait ProxyFactory[AcquiredState <: ProxySupport.AcquiredStateCapturingId] {
+    trait AcquiredStateCapturingId {
+      val uniqueItemSpecification: UniqueItemSpecification
+    }
+
+    object id {
+      @RuntimeType
+      def apply(
+          @FieldValue("acquiredState") acquiredState: AcquiredStateCapturingId) =
+        acquiredState.uniqueItemSpecification.id
+    }
+
+    type AcquiredState <: AcquiredStateCapturingId
+
+    trait ProxyFactory {
       val isForRecordingOnly: Boolean
 
       val acquiredStateClazz: Class[_ <: AcquiredState]
@@ -219,9 +225,7 @@ object WorldImplementationCodeFactoring {
     }
   }
 
-  object StatefulItemProxySupport {
-    import ProxySupport._
-
+  object StatefulItemProxySupport extends ProxySupport {
     val additionalInterfaces: Array[Class[_]] =
       Array(classOf[ItemExtensionApi], classOf[AnnihilationHook])
     val cachedProxyClasses =
@@ -381,7 +385,7 @@ object WorldImplementationCodeFactoring {
 
     // TODO - more and more stuff is piling up in here that is specific to just one world implementation.
     // Convert this to a trait and pull down what isn't common.
-    trait Factory extends ProxyFactory[AcquiredState] {
+    trait Factory extends ProxyFactory {
       override val isForRecordingOnly = false
 
       override val acquiredStateClazz = classOf[AcquiredState]
@@ -528,7 +532,7 @@ object WorldImplementationCodeFactoring {
 
     def itemFor[Item: TypeTag](id: Any): Item = {
       def constructAndCacheItem(): Item = {
-        import StatefulItemProxySupport._
+        import StatefulItemProxySupport.AcquiredState
 
         val stateToBeAcquiredByProxy: AcquiredState =
           new AcquiredState {

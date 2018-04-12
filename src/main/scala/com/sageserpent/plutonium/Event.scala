@@ -7,7 +7,10 @@ import java.util.concurrent.Callable
 import com.sageserpent.americium
 import com.sageserpent.americium.{Finite, PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
-import com.sageserpent.plutonium.WorldImplementationCodeFactoring.firstMethodIsOverrideCompatibleWithSecond
+import com.sageserpent.plutonium.WorldImplementationCodeFactoring.{
+  ProxySupport,
+  firstMethodIsOverrideCompatibleWithSecond
+}
 import net.bytebuddy.description.method.MethodDescription
 import net.bytebuddy.dynamic.DynamicType.Builder
 import net.bytebuddy.implementation.MethodDelegation
@@ -28,9 +31,7 @@ sealed trait Event {
 }
 
 object capturePatches {
-  object RecordingProxySupport {
-    import WorldImplementationCodeFactoring.ProxySupport._
-
+  object RecordingProxySupport extends ProxySupport {
     val additionalInterfaces: Array[Class[_]] = Array(classOf[Recorder])
     val cachedProxyClasses =
       mutable.Map.empty[universe.Type, Class[_]]
@@ -119,7 +120,7 @@ object capturePatches {
         else superCall.call()
     }
 
-    object proxyFactory extends ProxyFactory[AcquiredState] {
+    trait Factory extends ProxyFactory {
       val isForRecordingOnly = true
 
       override val acquiredStateClazz = classOf[AcquiredState]
@@ -147,13 +148,15 @@ object capturePatches {
     }
   }
 
+  object proxyFactory extends RecordingProxySupport.Factory
+
   def apply(update: RecorderFactory => Unit): Seq[AbstractPatch] = {
     val capturedPatches =
       mutable.MutableList.empty[AbstractPatch]
 
     class LocalRecorderFactory extends RecorderFactory {
       override def apply[Item: TypeTag](id: Any): Item = {
-        import RecordingProxySupport._
+        import RecordingProxySupport.AcquiredState
 
         val stateToBeAcquiredByProxy = new AcquiredState {
           val uniqueItemSpecification: UniqueItemSpecification =
