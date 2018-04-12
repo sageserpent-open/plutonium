@@ -7,12 +7,7 @@ import java.util.concurrent.Callable
 import com.sageserpent.americium
 import com.sageserpent.americium.{Finite, PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
-import com.sageserpent.plutonium.WorldImplementationCodeFactoring.ProxySupport.AcquiredStateCapturingId
-import com.sageserpent.plutonium.WorldImplementationCodeFactoring.{
-  IdentifiedItemsScope,
-  ProxyFactory,
-  firstMethodIsOverrideCompatibleWithSecond
-}
+import com.sageserpent.plutonium.WorldImplementationCodeFactoring.firstMethodIsOverrideCompatibleWithSecond
 import net.bytebuddy.description.method.MethodDescription
 import net.bytebuddy.dynamic.DynamicType.Builder
 import net.bytebuddy.implementation.MethodDelegation

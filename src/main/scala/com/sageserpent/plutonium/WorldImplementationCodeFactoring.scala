@@ -59,6 +59,26 @@ object WorldImplementationCodeFactoring {
       case (eventId, eventData) => eventData.serializableEvent -> eventId
     }
 
+  def recordPatches[EventId](eventTimeline: Seq[(Event, EventId)],
+                             patchRecorder: PatchRecorder[EventId]) = {
+    for ((event, eventId) <- eventTimeline) event match {
+      case Change(when, patches) =>
+        for (patch <- patches) {
+          patchRecorder.recordPatchFromChange(eventId, when, patch)
+        }
+
+      case Measurement(when, patches) =>
+        for (patch <- patches) {
+          patchRecorder.recordPatchFromMeasurement(eventId, when, patch)
+        }
+
+      case annihilation @ Annihilation(when, id) =>
+        patchRecorder.recordAnnihilation(eventId, annihilation)
+    }
+
+    patchRecorder.noteThatThereAreNoFollowingRecordings()
+  }
+
   def firstMethodIsOverrideCompatibleWithSecond(
       firstMethod: MethodDescription,
       secondMethod: MethodDescription): Boolean =
@@ -114,91 +134,89 @@ object WorldImplementationCodeFactoring {
       nonMutableMembersThatCanAlwaysBeReadFrom.exists(exclusionMethod => {
         firstMethodIsOverrideCompatibleWithSecond(method, exclusionMethod)
       })
-  }
 
-  trait ProxyFactory[AcquiredState <: ProxySupport.AcquiredStateCapturingId] {
-    import ProxySupport._
+    trait ProxyFactory[AcquiredState <: ProxySupport.AcquiredStateCapturingId] {
+      val isForRecordingOnly: Boolean
 
-    val isForRecordingOnly: Boolean
+      val acquiredStateClazz: Class[_ <: AcquiredState]
 
-    val acquiredStateClazz: Class[_ <: AcquiredState]
+      val proxySuffix: String
 
-    val proxySuffix: String
+      private def createProxyClass(clazz: Class[_]): Class[_] = {
+        val builder = byteBuddy
+          .`with`(new NamingStrategy.AbstractBase {
+            override def name(superClass: TypeDescription): String =
+              s"${superClass.getSimpleName}_$proxySuffix"
+          })
+          .subclass(clazz, ConstructorStrategy.Default.DEFAULT_CONSTRUCTOR)
+          .implement(additionalInterfaces.toSeq)
+          .ignoreAlso(ElementMatchers.named[MethodDescription]("_isGhost"))
+          .defineField("acquiredState", acquiredStateClazz)
+          .annotateField(DoNotSerializeAnnotation.annotation)
 
-    private def createProxyClass(clazz: Class[_]): Class[_] = {
-      val builder = byteBuddy
-        .`with`(new NamingStrategy.AbstractBase {
-          override def name(superClass: TypeDescription): String =
-            s"${superClass.getSimpleName}_$proxySuffix"
-        })
-        .subclass(clazz, ConstructorStrategy.Default.DEFAULT_CONSTRUCTOR)
-        .implement(additionalInterfaces.toSeq)
-        .ignoreAlso(ElementMatchers.named[MethodDescription]("_isGhost"))
-        .defineField("acquiredState", acquiredStateClazz)
-        .annotateField(DoNotSerializeAnnotation.annotation)
+        val stateAcquisitionTypeBuilder =
+          TypeDescription.Generic.Builder.parameterizedType(
+            classOf[StateAcquisition[AcquiredState]],
+            Seq(acquiredStateClazz))
 
-      val stateAcquisitionTypeBuilder =
-        TypeDescription.Generic.Builder.parameterizedType(
-          classOf[StateAcquisition[AcquiredState]],
-          Seq(acquiredStateClazz))
+        val builderWithInterceptions = configureInterceptions(builder)
+          .implement(stateAcquisitionTypeBuilder.build)
+          .method(ElementMatchers.named("acquire"))
+          .intercept(FieldAccessor.ofField("acquiredState"))
+          .method(ElementMatchers.named("id"))
+          .intercept(MethodDelegation.to(id))
 
-      val builderWithInterceptions = configureInterceptions(builder)
-        .implement(stateAcquisitionTypeBuilder.build)
-        .method(ElementMatchers.named("acquire"))
-        .intercept(FieldAccessor.ofField("acquiredState"))
-        .method(ElementMatchers.named("id"))
-        .intercept(MethodDelegation.to(id))
-
-      builderWithInterceptions
-        .make()
-        .load(getClass.getClassLoader, ClassLoadingStrategy.Default.INJECTION)
-        .getLoaded
-    }
-
-    protected def configureInterceptions(builder: Builder[_]): Builder[_]
-
-    def constructFrom[Item: TypeTag](
-        stateToBeAcquiredByProxy: AcquiredState) = {
-      // NOTE: this returns items that are proxies to 'Item' rather than direct instances of 'Item' itself. Depending on the
-      // context (using a scope created by a client from a world, as opposed to while building up that scope from patches),
-      // the items may forbid certain operations on them - e.g. for rendering from a client's scope, the items should be
-      // read-only.
-
-      val proxyClazz = proxyClassFor()
-
-      val clazz = proxyClazz.getSuperclass
-
-      if (!isForRecordingOnly && clazz.getMethods.exists(
-            method =>
-              // TODO - cleanup.
-              "id" != method.getName && Modifier.isAbstract(
-                method.getModifiers))) {
-        throw new UnsupportedOperationException(
-          s"Attempt to create an instance of an abstract class '$clazz' for id: '${stateToBeAcquiredByProxy.uniqueItemSpecification.id}'.")
-      }
-      val proxy = proxyClazz.newInstance().asInstanceOf[Item]
-
-      proxy
-        .asInstanceOf[StateAcquisition[AcquiredState]]
-        .acquire(stateToBeAcquiredByProxy)
-
-      proxy
-    }
-
-    def proxyClassFor[Item: TypeTag]()
-      : Class[_] = // NOTE: using 'synchronized' is rather hokey, but there are subtle issues with
-      // using the likes of 'TrieMap.getOrElseUpdate' due to the initialiser block being executed
-      // more than once, even though the map is indeed thread safe. Let's keep it simple for now...
-      synchronized {
-        val typeOfItem = typeOf[Item]
-        cachedProxyClasses.getOrElseUpdate(typeOfItem, {
-          createProxyClass(classFromType(typeOfItem))
-        })
+        builderWithInterceptions
+          .make()
+          .load(getClass.getClassLoader, ClassLoadingStrategy.Default.INJECTION)
+          .getLoaded
       }
 
-    protected val additionalInterfaces: Array[Class[_]]
-    protected val cachedProxyClasses: scala.collection.mutable.Map[Type,
-                                                                   Class[_]]
+      protected def configureInterceptions(builder: Builder[_]): Builder[_]
+
+      def constructFrom[Item: TypeTag](
+          stateToBeAcquiredByProxy: AcquiredState) = {
+        // NOTE: this returns items that are proxies to 'Item' rather than direct instances of 'Item' itself. Depending on the
+        // context (using a scope created by a client from a world, as opposed to while building up that scope from patches),
+        // the items may forbid certain operations on them - e.g. for rendering from a client's scope, the items should be
+        // read-only.
+
+        val proxyClazz = proxyClassFor()
+
+        val clazz = proxyClazz.getSuperclass
+
+        if (!isForRecordingOnly && clazz.getMethods.exists(
+              method =>
+                // TODO - cleanup.
+                "id" != method.getName && Modifier.isAbstract(
+                  method.getModifiers))) {
+          throw new UnsupportedOperationException(
+            s"Attempt to create an instance of an abstract class '$clazz' for id: '${stateToBeAcquiredByProxy.uniqueItemSpecification.id}'.")
+        }
+        val proxy = proxyClazz.newInstance().asInstanceOf[Item]
+
+        proxy
+          .asInstanceOf[StateAcquisition[AcquiredState]]
+          .acquire(stateToBeAcquiredByProxy)
+
+        proxy
+      }
+
+      def proxyClassFor[Item: TypeTag]()
+        : Class[_] = // NOTE: using 'synchronized' is rather hokey, but there are subtle issues with
+        // using the likes of 'TrieMap.getOrElseUpdate' due to the initialiser block being executed
+        // more than once, even though the map is indeed thread safe. Let's keep it simple for now...
+        synchronized {
+          val typeOfItem = typeOf[Item]
+          cachedProxyClasses.getOrElseUpdate(typeOfItem, {
+            createProxyClass(classFromType(typeOfItem))
+          })
+        }
+
+      protected val additionalInterfaces: Array[Class[_]]
+      protected val cachedProxyClasses: scala.collection.mutable.Map[Type,
+                                                                     Class[_]]
+    }
   }
 
   object StatefulItemProxySupport {
@@ -559,26 +577,6 @@ object WorldImplementationCodeFactoring {
     def allItems[Item: TypeTag](): Stream[Item] =
       IdentifiedItemsScope.yieldOnlyItemsOfType(
         idToItemsMultiMap.values.flatten)
-  }
-
-  def recordPatches[EventId](eventTimeline: Seq[(Event, EventId)],
-                             patchRecorder: PatchRecorder[EventId]) = {
-    for ((event, eventId) <- eventTimeline) event match {
-      case Change(when, patches) =>
-        for (patch <- patches) {
-          patchRecorder.recordPatchFromChange(eventId, when, patch)
-        }
-
-      case Measurement(when, patches) =>
-        for (patch <- patches) {
-          patchRecorder.recordPatchFromMeasurement(eventId, when, patch)
-        }
-
-      case annihilation @ Annihilation(when, id) =>
-        patchRecorder.recordAnnihilation(eventId, annihilation)
-    }
-
-    patchRecorder.noteThatThereAreNoFollowingRecordings()
   }
 }
 
