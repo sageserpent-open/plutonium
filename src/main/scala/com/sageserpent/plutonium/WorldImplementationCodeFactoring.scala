@@ -59,6 +59,29 @@ object WorldImplementationCodeFactoring {
       case (eventId, eventData) => eventData.serializableEvent -> eventId
     }
 
+  def firstMethodIsOverrideCompatibleWithSecond(
+      firstMethod: MethodDescription,
+      secondMethod: MethodDescription): Boolean =
+    secondMethod.getName == firstMethod.getName &&
+      secondMethod.getReceiverType.asErasure
+        .isAssignableFrom(firstMethod.getReceiverType.asErasure) &&
+      (secondMethod.getReturnType.asErasure
+        .isAssignableFrom(firstMethod.getReturnType.asErasure) ||
+        secondMethod.getReturnType.asErasure
+          .isAssignableFrom(firstMethod.getReturnType.asErasure.asBoxed)) &&
+      secondMethod.getParameters.size == firstMethod.getParameters.size &&
+      secondMethod.getParameters.toSeq
+        .map(_.getType) == firstMethod.getParameters.toSeq
+        .map(_.getType) // What about contravariance? Hmmm...
+
+  def firstMethodIsOverrideCompatibleWithSecond(
+      firstMethod: Method,
+      secondMethod: Method): Boolean = {
+    firstMethodIsOverrideCompatibleWithSecond(
+      new MethodDescription.ForLoadedMethod(firstMethod),
+      new MethodDescription.ForLoadedMethod(secondMethod))
+  }
+
   val byteBuddy = new ByteBuddy()
 
   object ProxySupport {
@@ -83,14 +106,14 @@ object WorldImplementationCodeFactoring {
     val nonMutableMembersThatCanAlwaysBeReadFrom = (classOf[ItemExtensionApi].getMethods ++ classOf[
       AnyRef].getMethods) map (new MethodDescription.ForLoadedMethod(_))
 
+    val uniqueItemSpecificationPropertyForRecording =
+      new MethodDescription.ForLoadedMethod(
+        classOf[Recorder].getMethod("uniqueItemSpecification"))
+
     def alwaysAllowsReadAccessTo(method: MethodDescription) =
       nonMutableMembersThatCanAlwaysBeReadFrom.exists(exclusionMethod => {
         firstMethodIsOverrideCompatibleWithSecond(method, exclusionMethod)
       })
-
-    val uniqueItemSpecificationPropertyForRecording =
-      new MethodDescription.ForLoadedMethod(
-        classOf[Recorder].getMethod("uniqueItemSpecification"))
   }
 
   trait ProxyFactory[AcquiredState <: ProxySupport.AcquiredStateCapturingId] {
@@ -178,7 +201,6 @@ object WorldImplementationCodeFactoring {
                                                                    Class[_]]
   }
 
-  // TODO - bring in dependencies on 'IdentifiedItemsScope' into here.
   object StatefulItemProxySupport {
     import ProxySupport._
 
@@ -377,29 +399,6 @@ object WorldImplementationCodeFactoring {
     }
   }
 
-  def firstMethodIsOverrideCompatibleWithSecond(
-      firstMethod: MethodDescription,
-      secondMethod: MethodDescription): Boolean =
-    secondMethod.getName == firstMethod.getName &&
-      secondMethod.getReceiverType.asErasure
-        .isAssignableFrom(firstMethod.getReceiverType.asErasure) &&
-      (secondMethod.getReturnType.asErasure
-        .isAssignableFrom(firstMethod.getReturnType.asErasure) ||
-        secondMethod.getReturnType.asErasure
-          .isAssignableFrom(firstMethod.getReturnType.asErasure.asBoxed)) &&
-      secondMethod.getParameters.size == firstMethod.getParameters.size &&
-      secondMethod.getParameters.toSeq
-        .map(_.getType) == firstMethod.getParameters.toSeq
-        .map(_.getType) // What about contravariance? Hmmm...
-
-  def firstMethodIsOverrideCompatibleWithSecond(
-      firstMethod: Method,
-      secondMethod: Method): Boolean = {
-    firstMethodIsOverrideCompatibleWithSecond(
-      new MethodDescription.ForLoadedMethod(firstMethod),
-      new MethodDescription.ForLoadedMethod(secondMethod))
-  }
-
   object IdentifiedItemsScope {
     def yieldOnlyItemsOfSupertypeOf[Item: TypeTag](items: Traversable[Any]) = {
       val reflectedType = typeTag[Item].tpe
@@ -580,18 +579,6 @@ object WorldImplementationCodeFactoring {
     }
 
     patchRecorder.noteThatThereAreNoFollowingRecordings()
-  }
-
-  trait ScopeImplementation
-      extends com.sageserpent.plutonium.Scope
-      with ItemCacheImplementation {
-    val identifiedItemsScope: IdentifiedItemsScope
-
-    override def itemsFor[Item: TypeTag](id: Any): Stream[Item] =
-      identifiedItemsScope.itemsFor(id)
-
-    override def allItems[Item: TypeTag](): Stream[Item] =
-      identifiedItemsScope.allItems()
   }
 }
 
