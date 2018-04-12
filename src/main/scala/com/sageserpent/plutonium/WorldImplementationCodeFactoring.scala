@@ -231,10 +231,18 @@ object WorldImplementationCodeFactoring {
     val matchRecordAnnihilation: ElementMatcher[MethodDescription] =
       firstMethodIsOverrideCompatibleWithSecond(_, recordAnnihilationMethod)
 
+    val matchInvariantCheck: ElementMatcher[MethodDescription] =
+      ElementMatchers
+        .named("checkInvariant")
+        .and(
+          ElementMatchers
+            .takesArguments(0)
+            .and(ElementMatchers.returns(classOf[Unit])))
+
     val matchMutation: ElementMatcher[MethodDescription] = methodDescription =>
       methodDescription.getReturnType
-        .represents(classOf[Unit]) && !WorldImplementationCodeFactoring
-        .isInvariantCheck(methodDescription)
+        .represents(classOf[Unit]) && !matchInvariantCheck.matches(
+        methodDescription)
 
     val isGhostProperty = new MethodDescription.ForLoadedMethod(
       classOf[ItemExtensionApi].getMethod("isGhost"))
@@ -247,9 +255,6 @@ object WorldImplementationCodeFactoring {
 
     val matchCheckedReadAccess: ElementMatcher[MethodDescription] =
       !alwaysAllowsReadAccessTo(_)
-
-    val matchInvariantCheck: ElementMatcher[MethodDescription] =
-      WorldImplementationCodeFactoring.isInvariantCheck(_)
 
     val uniqueItemSpecificationPropertyForItemExtensionApi =
       new MethodDescription.ForLoadedMethod(
@@ -394,12 +399,6 @@ object WorldImplementationCodeFactoring {
       new MethodDescription.ForLoadedMethod(firstMethod),
       new MethodDescription.ForLoadedMethod(secondMethod))
   }
-
-  val invariantCheckMethod = new MethodDescription.ForLoadedMethod(
-    classOf[ItemExtensionApi].getMethod("checkInvariant"))
-
-  def isInvariantCheck(method: MethodDescription): Boolean =
-    "checkInvariant" == method.getName // TODO: this is hokey.
 
   object IdentifiedItemsScope {
     def yieldOnlyItemsOfSupertypeOf[Item: TypeTag](items: Traversable[Any]) = {
