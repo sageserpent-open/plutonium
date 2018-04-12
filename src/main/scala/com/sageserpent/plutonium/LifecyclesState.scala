@@ -48,7 +48,9 @@ object noLifecyclesState {
 }
 
 object LifecyclesStateImplementation {
-  object proxyFactory extends statefulItemProxySupport.Factory
+  object proxyFactory extends statefulItemProxySupport.Factory {
+    override val proxySuffix: String = "lifecyclesStateProxy"
+  }
 }
 
 class LifecyclesStateImplementation[EventId](

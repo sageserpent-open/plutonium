@@ -384,8 +384,6 @@ object WorldImplementationCodeFactoring {
 
       override val acquiredStateClazz = classOf[AcquiredState]
 
-      override val proxySuffix: String = "stateProxy"
-
       override val additionalInterfaces: Array[Class[_]] =
         Array(classOf[ItemExtensionApi], classOf[AnnihilationHook])
       override val cachedProxyClasses: mutable.Map[universe.Type, Class[_]] =
@@ -438,7 +436,9 @@ object WorldImplementationCodeFactoring {
 
     object statefulItemProxySupport extends StatefulItemProxySupport
 
-    object proxyFactory extends statefulItemProxySupport.Factory
+    object proxyFactory extends statefulItemProxySupport.Factory {
+      override val proxySuffix: String = "mutateAndThenLockProxy"
+    }
   }
 
   class IdentifiedItemsScope extends IdentifiedItemAccess {

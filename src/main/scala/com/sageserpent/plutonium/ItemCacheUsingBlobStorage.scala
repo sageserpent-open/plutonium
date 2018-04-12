@@ -11,7 +11,9 @@ import com.sageserpent.plutonium.WorldImplementationCodeFactoring.IdentifiedItem
 import scala.reflect.runtime.universe.{Super => _, This => _, _}
 
 object ItemCacheUsingBlobStorage {
-  object proxyFactory extends statefulItemProxySupport.Factory
+  object proxyFactory extends statefulItemProxySupport.Factory {
+    override val proxySuffix: String = "itemCacheProxy"
+  }
 }
 
 class ItemCacheUsingBlobStorage[EventId](
