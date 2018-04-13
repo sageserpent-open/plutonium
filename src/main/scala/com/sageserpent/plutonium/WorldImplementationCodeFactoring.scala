@@ -400,13 +400,13 @@ object WorldImplementationCodeFactoring {
           .intercept(MethodDelegation.to(mutation))
           .method(matchRecordAnnihilation)
           .intercept(MethodDelegation.toField("acquiredState"))
-          .method(matchLifecycleUUID)
-          .intercept(MethodDelegation.toField("acquiredState"))
-          .method(matchSetLifecycleUUID)
-          .intercept(MethodDelegation.toField("acquiredState"))
           .method(matchInvariantCheck)
           .intercept(MethodDelegation.to(checkInvariant))
           .method(matchUniqueItemSpecification)
+          .intercept(MethodDelegation.toField("acquiredState"))
+          .method(matchLifecycleUUID)
+          .intercept(MethodDelegation.toField("acquiredState"))
+          .method(matchSetLifecycleUUID)
           .intercept(MethodDelegation.toField("acquiredState"))
     }
   }
