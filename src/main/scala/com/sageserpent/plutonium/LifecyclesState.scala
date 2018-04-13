@@ -11,7 +11,7 @@ import com.sageserpent.plutonium.World.{Revision, initialRevision}
 import com.sageserpent.plutonium.WorldImplementationCodeFactoring.IdentifiedItemsScope.statefulItemProxySupport
 import com.sageserpent.plutonium.WorldImplementationCodeFactoring.{
   EventData,
-  StatefulItemProxySupport,
+  PersistentItemProxySupport,
   eventDataOrdering
 }
 import resource.makeManagedResource
@@ -48,7 +48,9 @@ object noLifecyclesState {
 }
 
 object LifecyclesStateImplementation {
-  object proxyFactory extends statefulItemProxySupport.Factory {
+  object proxySuppport extends PersistentItemProxySupport
+
+  object proxyFactory extends proxySuppport.Factory {
     override val proxySuffix: String = "lifecyclesStateProxy"
   }
 }
@@ -200,7 +202,7 @@ class LifecyclesStateImplementation[EventId](
         override protected def createItemFor[Item](
             _uniqueItemSpecification: UniqueItemSpecification,
             lifecycleUUID: UUID) = {
-          import statefulItemProxySupport.AcquiredState
+          import LifecyclesStateImplementation.proxySuppport.AcquiredState
 
           val stateToBeAcquiredByProxy: AcquiredState =
             new AcquiredState {
