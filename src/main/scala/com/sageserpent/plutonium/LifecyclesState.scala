@@ -8,10 +8,8 @@ import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
 import com.sageserpent.plutonium.PatchRecorder.UpdateConsumer
 import com.sageserpent.plutonium.World.{Revision, initialRevision}
-import com.sageserpent.plutonium.WorldImplementationCodeFactoring.PersistentItemProxyFactory.AcquiredState
 import com.sageserpent.plutonium.WorldImplementationCodeFactoring.{
   EventData,
-  PersistentItemProxyFactory,
   eventDataOrdering
 }
 import resource.makeManagedResource

@@ -6,7 +6,6 @@ import java.util.UUID
 import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
-import com.sageserpent.plutonium.WorldImplementationCodeFactoring.PersistentItemProxyFactory
 
 import scala.reflect.runtime.universe.{Super => _, This => _, _}
 

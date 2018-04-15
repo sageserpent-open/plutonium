@@ -2,8 +2,6 @@ package com.sageserpent.plutonium
 
 import scala.collection.JavaConverters._
 
-import scala.reflect.runtime.universe._
-
 trait Scope extends javaApi.Scope {
   val nextRevision: World.Revision
 
