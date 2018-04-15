@@ -14,6 +14,13 @@ import net.bytebuddy.description.method.MethodDescription
 import net.bytebuddy.dynamic.DynamicType.Builder
 import net.bytebuddy.dynamic.loading.ClassLoadingStrategy
 import net.bytebuddy.dynamic.scaffold.subclass.ConstructorStrategy
+import net.bytebuddy.implementation.bind.MethodDelegationBinder.AmbiguityResolver
+import net.bytebuddy.implementation.bind.{
+  ArgumentTypeResolver,
+  DeclaringTypeResolver,
+  MethodNameEqualityResolver,
+  ParameterLengthResolver
+}
 import net.bytebuddy.implementation.bind.annotation._
 import net.bytebuddy.implementation.{FieldAccessor, MethodDelegation}
 import net.bytebuddy.matcher.{ElementMatcher, ElementMatchers}
@@ -217,9 +224,10 @@ object WorldImplementationCodeFactoring {
         })
       }
 
-    protected val additionalInterfaces: Array[Class[_]]
-    protected val cachedProxyClasses: scala.collection.mutable.Map[Type,
-                                                                   Class[_]]
+    protected def additionalInterfaces: Array[Class[_]]
+    protected val cachedProxyClasses
+      : scala.collection.mutable.Map[Type, Class[_]] =
+      mutable.Map.empty[universe.Type, Class[_]]
   }
 
   object StatefulItemProxyFactory {
@@ -239,28 +247,8 @@ object WorldImplementationCodeFactoring {
 
       def recordMutation(item: ItemExtensionApi): Unit
 
-      def lifecycleUUID: UUID = _lifecycleUUID
-
-      def setLifecycleUUID(uuid: UUID): Unit = {
-        _lifecycleUUID = uuid
-      }
-
-      private var _lifecycleUUID: UUID = _
-
       var unlockFullReadAccess: Boolean = false
     }
-
-    val setLifecycleUUIDMethod = new MethodDescription.ForLoadedMethod(
-      classOf[AnnihilationHook].getMethod("setLifecycleUUID", classOf[UUID]))
-
-    val matchSetLifecycleUUID: ElementMatcher[MethodDescription] =
-      firstMethodIsOverrideCompatibleWithSecond(_, setLifecycleUUIDMethod)
-
-    val lifecycleUUIDMethod = new MethodDescription.ForLoadedMethod(
-      classOf[ItemExtensionApi].getMethod("lifecycleUUID"))
-
-    val matchLifecycleUUID: ElementMatcher[MethodDescription] =
-      firstMethodIsOverrideCompatibleWithSecond(_, lifecycleUUIDMethod)
 
     val recordAnnihilationMethod = new MethodDescription.ForLoadedMethod(
       classOf[AnnihilationHook].getMethod("recordAnnihilation"))
@@ -384,10 +372,18 @@ object WorldImplementationCodeFactoring {
 
     override type AcquiredState <: StatefulItemProxyFactory.AcquiredState
 
-    override val additionalInterfaces: Array[Class[_]] =
+    override def additionalInterfaces: Array[Class[_]] =
       Array(classOf[ItemExtensionApi], classOf[AnnihilationHook])
-    override val cachedProxyClasses: mutable.Map[universe.Type, Class[_]] =
-      mutable.Map.empty[universe.Type, Class[_]]
+
+    // HACK: By default, ByteBuddy places the declaring type resolver early in the chain of resolvers, which can lead
+    // to either insane resolutions or pointless ambiguities. Move it down to the end to workaround this when necessary.
+    val saneAmbiguityResolver = new AmbiguityResolver.Compound(
+      BindingPriority.Resolver.INSTANCE,
+      ArgumentTypeResolver.INSTANCE,
+      MethodNameEqualityResolver.INSTANCE,
+      ParameterLengthResolver.INSTANCE,
+      DeclaringTypeResolver.INSTANCE,
+    )
 
     override protected def configureInterceptions(
         builder: Builder[_]): Builder[_] =
@@ -401,23 +397,59 @@ object WorldImplementationCodeFactoring {
         .method(matchMutation)
         .intercept(MethodDelegation.to(mutation))
         .method(matchRecordAnnihilation)
-        .intercept(MethodDelegation.toField("acquiredState"))
+        .intercept(
+          MethodDelegation
+            .withEmptyConfiguration()
+            .withResolvers(saneAmbiguityResolver) // HACK: otherwise 'recordAnnihilation' won't see its obvious counterpart
+            // if it tries to bind against 'StatefulItemProxyFactory.AcquiredState.recordAnnihilation'
+            // when it binds against a *subclass*. Ugh!
+            .toField("acquiredState"))
         .method(matchInvariantCheck)
         .intercept(MethodDelegation.to(checkInvariant))
         .method(matchUniqueItemSpecification)
         .intercept(MethodDelegation.toField("acquiredState"))
+
+  }
+  object PersistentItemProxyFactory {
+    trait AcquiredState extends StatefulItemProxyFactory.AcquiredState {
+      def lifecycleUUID: UUID = _lifecycleUUID
+
+      def setLifecycleUUID(uuid: UUID): Unit = {
+        _lifecycleUUID = uuid
+      }
+
+      private var _lifecycleUUID: UUID = _
+    }
+
+    val setLifecycleUUIDMethod = new MethodDescription.ForLoadedMethod(
+      classOf[LifecycleUUIDApi].getMethod("setLifecycleUUID", classOf[UUID]))
+
+    val matchSetLifecycleUUID: ElementMatcher[MethodDescription] =
+      firstMethodIsOverrideCompatibleWithSecond(_, setLifecycleUUIDMethod)
+
+    val lifecycleUUIDMethod = new MethodDescription.ForLoadedMethod(
+      classOf[LifecycleUUIDApi].getMethod("lifecycleUUID"))
+
+    val matchLifecycleUUID: ElementMatcher[MethodDescription] =
+      firstMethodIsOverrideCompatibleWithSecond(_, lifecycleUUIDMethod)
+  }
+
+  trait PersistentItemProxyFactory extends StatefulItemProxyFactory {
+    import PersistentItemProxyFactory._
+
+    override type AcquiredState <: PersistentItemProxyFactory.AcquiredState
+
+    override def additionalInterfaces: Array[Class[_]] =
+      super.additionalInterfaces :+ classOf[LifecycleUUIDApi]
+
+    override protected def configureInterceptions(
+        builder: Builder[_]): Builder[_] =
+      super
+        .configureInterceptions(builder)
         .method(matchLifecycleUUID)
         .intercept(MethodDelegation.toField("acquiredState"))
         .method(matchSetLifecycleUUID)
         .intercept(MethodDelegation.toField("acquiredState"))
-  }
-
-  object PersistentItemProxyFactory {
-    trait AcquiredState extends StatefulItemProxyFactory.AcquiredState {}
-  }
-
-  trait PersistentItemProxyFactory extends StatefulItemProxyFactory {
-    override type AcquiredState <: PersistentItemProxyFactory.AcquiredState
   }
 
   object IdentifiedItemsScope {

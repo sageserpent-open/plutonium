@@ -18,7 +18,7 @@ object itemStateStorageUsingProxies extends ItemStateStorage {
     item.uniqueItemSpecification
 
   override protected def lifecycleUUID(item: ItemSuperType): UUID =
-    item.lifecycleUUID
+    item.asInstanceOf[LifecycleUUIDApi].lifecycleUUID
 
   override protected def noteAnnihilationOnItem(item: ItemSuperType): Unit = {
     item

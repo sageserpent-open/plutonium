@@ -44,8 +44,6 @@ object capturePatches {
 
     override val additionalInterfaces: Array[Class[_]] =
       Array(classOf[Recorder])
-    override val cachedProxyClasses: mutable.Map[Type, Class[_]] =
-      mutable.Map.empty[universe.Type, Class[_]]
 
     override protected def configureInterceptions(
         builder: Builder[_]): Builder[_] =

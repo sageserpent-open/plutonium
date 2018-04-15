@@ -73,7 +73,7 @@ class ItemCacheUsingBlobStorage[EventId](
       .constructFrom[Item](stateToBeAcquiredByProxy)
 
     item
-      .asInstanceOf[AnnihilationHook]
+      .asInstanceOf[LifecycleUUIDApi]
       .setLifecycleUUID(lifecycleUUID)
 
     item
