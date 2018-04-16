@@ -15,7 +15,8 @@ trait PersistentItemProxyFactory extends StatefulItemProxyFactory {
   override type AcquiredState <: PersistentItemProxyFactory.AcquiredState[_]
 
   override def additionalInterfaces: Array[Class[_]] =
-    super.additionalInterfaces :+ classOf[LifecycleUUIDApi]
+    super.additionalInterfaces ++ Seq(classOf[LifecycleUUIDApi],
+                                      classOf[ItemStateUpdateKeyTrackingApi[_]])
 
   override protected def configureInterceptions(
       builder: Builder[_]): Builder[_] =
@@ -24,6 +25,10 @@ trait PersistentItemProxyFactory extends StatefulItemProxyFactory {
       .method(matchLifecycleUUID)
       .intercept(MethodDelegation.toField("acquiredState"))
       .method(matchSetLifecycleUUID)
+      .intercept(MethodDelegation.toField("acquiredState"))
+      .method(matchItemStateUpdateKey)
+      .intercept(MethodDelegation.toField("acquiredState"))
+      .method(matchSetItemStateUpdateKey)
       .intercept(MethodDelegation.toField("acquiredState"))
 }
 
@@ -65,7 +70,7 @@ object PersistentItemProxyFactory {
     classOf[ItemStateUpdateKeyTrackingApi[_]]
       .getMethod("setItemStateUpdateKey", classOf[ItemStateUpdate.Key[_]]))
 
-  val matchItemStateUpdateKeyUID: ElementMatcher[MethodDescription] =
+  val matchSetItemStateUpdateKey: ElementMatcher[MethodDescription] =
     firstMethodIsOverrideCompatibleWithSecond(_, setItemStateUpdateKeyMethod)
 
   val ItemStateUpdateKeyMethod = new MethodDescription.ForLoadedMethod(

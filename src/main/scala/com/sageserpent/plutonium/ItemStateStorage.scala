@@ -66,6 +66,9 @@ trait ItemStateStorage { itemStateStorageObject =>
 
   protected def lifecycleUUID(item: ItemSuperType): UUID
 
+  protected def itemStateUpdateKey[EventId](
+      item: ItemSuperType): ItemStateUpdate.Key[EventId]
+
   protected def noteAnnihilationOnItem(item: ItemSuperType): Unit
 
   val serializerThatDirectlyEncodesInterItemReferences =
@@ -166,12 +169,14 @@ trait ItemStateStorage { itemStateStorageObject =>
   private val kryoPool =
     KryoPool.withByteArrayOutputStream(40, kryoInstantiator)
 
-  def snapshotFor[EventId](item: Any): SnapshotBlob[EventId] =
+  def snapshotFor[EventId](item: Any): SnapshotBlob[EventId] = {
+    val itemAsSupertype = item.asInstanceOf[ItemSuperType]
     SnapshotBlob[EventId](
       payload = kryoPool.toBytesWithClass(item),
-      lifecycleUUID = lifecycleUUID(item.asInstanceOf[ItemSuperType]),
-      itemStateUpdateKey = null.asInstanceOf[ItemStateUpdate.Key[EventId]] // TODO - sort this out pronto!!!!!!!!!!
+      lifecycleUUID = lifecycleUUID(itemAsSupertype),
+      itemStateUpdateKey = itemStateUpdateKey[EventId](itemAsSupertype)
     )
+  }
 
   private def itemFor[Item](
       uniqueItemSpecification: UniqueItemSpecification): Item =

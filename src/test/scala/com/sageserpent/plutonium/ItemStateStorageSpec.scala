@@ -21,6 +21,8 @@ object MarkSyntax {
 object GraphNode {
   implicit val ordering = Ordering.by[GraphNode, Int](_.mark)
   val noGraphNodes      = Set.empty[GraphNode]
+
+  type EventId = String
 }
 
 case class Payload(x: Int, y: String)
@@ -68,6 +70,9 @@ trait GraphNode {
   val payload = Payload(12345, "STUFF")
 
   var lifecycleUUID: UUID = UUID.randomUUID()
+
+  var itemStateUpdateKey: ItemStateUpdate.Key[EventId] =
+    ItemStateUpdate.Key(UUID.randomUUID().toString, 0)
 }
 
 class OddGraphNode(@transient override val id: OddGraphNode#Id)
@@ -105,8 +110,7 @@ class ItemStateStorageSpec
     with SharedGenerators {
   import MarkSyntax._
   import ItemStateStorage.SnapshotBlob
-
-  type EventId = String
+  import GraphNode.EventId
 
   val oddGraphNodeTypeTag = typeTag[OddGraphNode]
 
@@ -157,6 +161,10 @@ class ItemStateStorageSpec
 
     override protected def lifecycleUUID(item: ItemSuperType): UUID =
       item.lifecycleUUID
+
+    override protected def itemStateUpdateKey[EventId](
+        item: ItemSuperType): ItemStateUpdate.Key[EventId] =
+      item.itemStateUpdateKey.asInstanceOf[ItemStateUpdate.Key[EventId]]
 
     override protected def noteAnnihilationOnItem(item: ItemSuperType): Unit =
       ???
