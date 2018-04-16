@@ -71,8 +71,8 @@ trait GraphNode {
 
   var lifecycleUUID: UUID = UUID.randomUUID()
 
-  var itemStateUpdateKey: ItemStateUpdate.Key[EventId] =
-    ItemStateUpdate.Key(UUID.randomUUID().toString, 0)
+  var itemStateUpdateKey: Option[ItemStateUpdate.Key[EventId]] =
+    Some(ItemStateUpdate.Key(UUID.randomUUID().toString, 0))
 }
 
 class OddGraphNode(@transient override val id: OddGraphNode#Id)
@@ -163,8 +163,8 @@ class ItemStateStorageSpec
       item.lifecycleUUID
 
     override protected def itemStateUpdateKey[EventId](
-        item: ItemSuperType): ItemStateUpdate.Key[EventId] =
-      item.itemStateUpdateKey.asInstanceOf[ItemStateUpdate.Key[EventId]]
+        item: ItemSuperType): Option[ItemStateUpdate.Key[EventId]] =
+      item.itemStateUpdateKey.asInstanceOf[Option[ItemStateUpdate.Key[EventId]]]
 
     override protected def noteAnnihilationOnItem(item: ItemSuperType): Unit =
       ???
@@ -243,7 +243,8 @@ class ItemStateStorageSpec
           override protected def createItemFor[Item](
               uniqueItemSpecification: UniqueItemSpecification,
               lifecycleUUID: UUID,
-              itemStateUpdateKey: ItemStateUpdate.Key[EventId]): Item = {
+              itemStateUpdateKey: Option[ItemStateUpdate.Key[EventId]])
+            : Item = {
             val item = uniqueItemSpecification match {
               case UniqueItemSpecification(id: OddGraphNode#Id, itemTypeTag)
                   if itemTypeTag == oddGraphNodeTypeTag =>

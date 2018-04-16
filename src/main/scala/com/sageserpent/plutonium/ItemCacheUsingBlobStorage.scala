@@ -48,7 +48,7 @@ class ItemCacheUsingBlobStorage[EventId](
   override protected def fallbackAnnihilatedItemFor[Item](
       uniqueItemSpecification: UniqueItemSpecification): Item = {
     val item =
-      createItemFor[Item](uniqueItemSpecification, UUID.randomUUID(), ???)
+      createItemFor[Item](uniqueItemSpecification, UUID.randomUUID(), None)
     item.asInstanceOf[AnnihilationHook].recordAnnihilation()
     item
   }
@@ -57,7 +57,7 @@ class ItemCacheUsingBlobStorage[EventId](
   override protected def createItemFor[Item](
       _uniqueItemSpecification: UniqueItemSpecification,
       lifecycleUUID: UUID,
-      itemStateUpdateKey: ItemStateUpdate.Key[EventId]) = {
+      itemStateUpdateKey: Option[ItemStateUpdate.Key[EventId]]) = {
     import ItemCacheUsingBlobStorage.proxyFactory.AcquiredState
 
     val stateToBeAcquiredByProxy: AcquiredState =

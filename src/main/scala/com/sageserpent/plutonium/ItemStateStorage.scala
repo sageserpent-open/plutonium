@@ -25,7 +25,7 @@ object ItemStateStorage {
   case class SnapshotBlob[EventId](
       payload: Array[Byte],
       lifecycleUUID: UUID,
-      itemStateUpdateKey: ItemStateUpdate.Key[EventId])
+      itemStateUpdateKey: Option[ItemStateUpdate.Key[EventId]])
 }
 
 trait ItemStateStorage { itemStateStorageObject =>
@@ -67,7 +67,7 @@ trait ItemStateStorage { itemStateStorageObject =>
   protected def lifecycleUUID(item: ItemSuperType): UUID
 
   protected def itemStateUpdateKey[EventId](
-      item: ItemSuperType): ItemStateUpdate.Key[EventId]
+      item: ItemSuperType): Option[ItemStateUpdate.Key[EventId]]
 
   protected def noteAnnihilationOnItem(item: ItemSuperType): Unit
 
@@ -225,7 +225,8 @@ trait ItemStateStorage { itemStateStorageObject =>
       val uniqueItemSpecificationAccess =
         new DynamicVariable[Option[(UniqueItemSpecification,
                                     UUID,
-                                    ItemStateUpdate.Key[EventId])]](None)
+                                    Option[ItemStateUpdate.Key[EventId]])]](
+          None)
 
       def itemFor[Item](
           uniqueItemSpecification: UniqueItemSpecification): Item = {
@@ -343,7 +344,7 @@ trait ItemStateStorage { itemStateStorageObject =>
     protected def createAndStoreItem[Item](
         uniqueItemSpecification: UniqueItemSpecification,
         lifecycleUUID: UUID,
-        itemStateUpdateKey: ItemStateUpdate.Key[EventId]): Item = {
+        itemStateUpdateKey: Option[ItemStateUpdate.Key[EventId]]): Item = {
       val item: Item = createItemFor(uniqueItemSpecification,
                                      lifecycleUUID,
                                      itemStateUpdateKey)
@@ -360,7 +361,7 @@ trait ItemStateStorage { itemStateStorageObject =>
     protected def createItemFor[Item](
         uniqueItemSpecification: UniqueItemSpecification,
         lifecycleUUID: UUID,
-        itemStateUpdateKey: ItemStateUpdate.Key[EventId]): Item
+        itemStateUpdateKey: Option[ItemStateUpdate.Key[EventId]]): Item
 
     private class StorageKeyedByUniqueItemSpecification
         extends mutable.HashMap[UniqueItemSpecification, Any]
