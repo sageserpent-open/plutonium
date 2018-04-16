@@ -102,12 +102,12 @@ object WorldImplementationCodeFactoring {
       new MethodDescription.ForLoadedMethod(secondMethod))
   }
 
-  val byteBuddy = new ByteBuddy()
-
   object ProxySupport {
     private[plutonium] trait StateAcquisition[AcquiredState] {
       def acquire(acquiredState: AcquiredState)
     }
+
+    val byteBuddy = new ByteBuddy()
   }
 
   trait ProxySupport {
@@ -141,7 +141,7 @@ object WorldImplementationCodeFactoring {
 
     type AcquiredState <: AcquiredStateCapturingId
 
-    trait ProxyFactory {
+    trait Factory {
       val isForRecordingOnly: Boolean
 
       val acquiredStateClazz: Class[_ <: AcquiredState]
@@ -377,9 +377,7 @@ object WorldImplementationCodeFactoring {
       }
     }
 
-    // TODO - more and more stuff is piling up in here that is specific to just one world implementation.
-    // Convert this to a trait and pull down what isn't common.
-    trait Factory extends ProxyFactory {
+    trait Factory extends super.Factory {
       override val isForRecordingOnly = false
 
       override val acquiredStateClazz = classOf[AcquiredState]
@@ -411,6 +409,12 @@ object WorldImplementationCodeFactoring {
           .method(matchUniqueItemSpecification)
           .intercept(MethodDelegation.toField("acquiredState"))
     }
+  }
+
+  trait PersistentItemProxySupport extends StatefulItemProxySupport {
+    trait AcquiredState extends super.AcquiredState
+
+    trait Factory extends super.Factory
   }
 
   object IdentifiedItemsScope {

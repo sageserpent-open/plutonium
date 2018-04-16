@@ -116,7 +116,7 @@ object capturePatches {
         else superCall.call()
     }
 
-    trait Factory extends ProxyFactory {
+    trait Factory extends super.Factory {
       val isForRecordingOnly = true
 
       override val acquiredStateClazz = classOf[AcquiredState]

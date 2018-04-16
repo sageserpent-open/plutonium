@@ -6,12 +6,13 @@ import java.util.UUID
 import com.sageserpent.americium.{PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
+import com.sageserpent.plutonium.LifecyclesStateImplementation.proxySuppport
 import com.sageserpent.plutonium.PatchRecorder.UpdateConsumer
 import com.sageserpent.plutonium.World.{Revision, initialRevision}
 import com.sageserpent.plutonium.WorldImplementationCodeFactoring.IdentifiedItemsScope.statefulItemProxySupport
 import com.sageserpent.plutonium.WorldImplementationCodeFactoring.{
   EventData,
-  StatefulItemProxySupport,
+  PersistentItemProxySupport,
   eventDataOrdering
 }
 import resource.makeManagedResource
@@ -53,7 +54,9 @@ object LifecyclesStateImplementation {
   type ItemStateUpdatesDag[EventId] =
     Graph[ItemStateUpdate.Key[EventId], ItemStateUpdate, Unit]
 
-  object proxyFactory extends statefulItemProxySupport.Factory {
+  object proxySuppport extends PersistentItemProxySupport
+
+  object proxyFactory extends proxySuppport.Factory {
     override val proxySuffix: String = "lifecyclesStateProxy"
   }
 }
@@ -171,7 +174,7 @@ class LifecyclesStateImplementation[EventId](
             override protected def createItemFor[Item](
                 _uniqueItemSpecification: UniqueItemSpecification,
                 lifecycleUUID: UUID) = {
-              import statefulItemProxySupport.AcquiredState
+              import LifecyclesStateImplementation.proxySuppport.AcquiredState
 
               val stateToBeAcquiredByProxy: AcquiredState =
                 new AcquiredState {
