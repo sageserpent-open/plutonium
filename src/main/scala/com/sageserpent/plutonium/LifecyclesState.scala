@@ -10,7 +10,6 @@ import com.sageserpent.plutonium.PatchRecorder.UpdateConsumer
 import com.sageserpent.plutonium.World.{Revision, initialRevision}
 import com.sageserpent.plutonium.WorldImplementationCodeFactoring.{
   EventData,
-  PersistentItemProxyFactory,
   eventDataOrdering
 }
 import de.ummels.prioritymap.PriorityMap
@@ -34,11 +33,11 @@ trait LifecyclesState[EventId] {
   // encapsulate the former in some way - it could hive off a local 'BlobStorageInMemory' as it revises itself, then
   // reabsorb the new blob storage instance back into its own revision. If so, then perhaps 'TimelineImplementation' *is*
   // in fact the cutover form of 'LifecyclesState'. Food for thought...
-  def revise(
-      events: Map[EventId, Option[Event]],
-      blobStorage: BlobStorage[ItemStateUpdate.Key[EventId], SnapshotBlob])
+  def revise(events: Map[EventId, Option[Event]],
+             blobStorage: BlobStorage[ItemStateUpdate.Key[EventId],
+                                      SnapshotBlob[EventId]])
     : (LifecyclesState[EventId],
-       BlobStorage[ItemStateUpdate.Key[EventId], SnapshotBlob])
+       BlobStorage[ItemStateUpdate.Key[EventId], SnapshotBlob[EventId]])
 
   def retainUpTo(when: Unbounded[Instant]): LifecyclesState[EventId]
 }
@@ -55,7 +54,7 @@ object LifecyclesStateImplementation {
   object proxyFactory extends PersistentItemProxyFactory {
     override val proxySuffix: String = "lifecyclesStateProxy"
     override type AcquiredState =
-      PersistentItemProxyFactory.AcquiredState
+      PersistentItemProxyFactory.AcquiredState[_]
     override val acquiredStateClazz: Class[_ <: AcquiredState] =
       classOf[AcquiredState]
   }
@@ -69,11 +68,11 @@ class LifecyclesStateImplementation[EventId](
       EventId] = empty[ItemStateUpdate.Key[EventId], ItemStateUpdate, Unit],
     nextRevision: Revision = initialRevision)
     extends LifecyclesState[EventId] {
-  override def revise(
-      events: Map[EventId, Option[Event]],
-      blobStorage: BlobStorage[ItemStateUpdate.Key[EventId], SnapshotBlob])
+  override def revise(events: Map[EventId, Option[Event]],
+                      blobStorage: BlobStorage[ItemStateUpdate.Key[EventId],
+                                               SnapshotBlob[EventId]])
     : (LifecyclesState[EventId],
-       BlobStorage[ItemStateUpdate.Key[EventId], SnapshotBlob]) = {
+       BlobStorage[ItemStateUpdate.Key[EventId], SnapshotBlob[EventId]]) = {
     val (annulledEvents, newEvents) =
       (events.toList map {
         case (eventId, Some(event)) => \/-(eventId -> event)
@@ -151,10 +150,11 @@ class LifecyclesStateImplementation[EventId](
                                      ItemStateUpdate,
                                      Unit],
           timeSliceWhen: Unbounded[Instant],
-          blobStorage: BlobStorage[ItemStateUpdate.Key[EventId], SnapshotBlob]) {
+          blobStorage: BlobStorage[ItemStateUpdate.Key[EventId],
+                                   SnapshotBlob[EventId]]) {
         def afterRecalculations: TimesliceState = {
           val identifiedItemAccess = new IdentifiedItemAccess
-          with itemStateStorageUsingProxies.ReconstitutionContext {
+          with itemStateStorageUsingProxies.ReconstitutionContext[EventId] {
             override def reconstitute(
                 uniqueItemSpecification: UniqueItemSpecification) =
               itemFor[Any](uniqueItemSpecification)
@@ -168,16 +168,17 @@ class LifecyclesStateImplementation[EventId](
               mutable.Map.empty[UniqueItemSpecification, ItemExtensionApi]
 
             override def blobStorageTimeslice
-              : BlobStorage.Timeslice[SnapshotBlob] =
+              : BlobStorage.Timeslice[SnapshotBlob[EventId]] =
               blobStorageTimeSlice
 
             override protected def createItemFor[Item](
                 _uniqueItemSpecification: UniqueItemSpecification,
-                lifecycleUUID: UUID) = {
+                lifecycleUUID: UUID,
+                itemStateUpdateKey: Option[ItemStateUpdate.Key[EventId]]) = {
               import LifecyclesStateImplementation.proxyFactory.AcquiredState
 
               val stateToBeAcquiredByProxy: AcquiredState =
-                new AcquiredState {
+                new PersistentItemProxyFactory.AcquiredState[EventId] {
                   val uniqueItemSpecification: UniqueItemSpecification =
                     _uniqueItemSpecification
                   def itemIsLocked: Boolean = allItemsAreLocked
@@ -195,8 +196,12 @@ class LifecyclesStateImplementation[EventId](
                 .constructFrom[Item](stateToBeAcquiredByProxy)
 
               item
-                .asInstanceOf[AnnihilationHook]
+                .asInstanceOf[LifecycleUUIDApi]
                 .setLifecycleUUID(lifecycleUUID)
+
+              item
+                .asInstanceOf[ItemStateUpdateKeyTrackingApi[EventId]]
+                .setItemStateUpdateKey(itemStateUpdateKey)
 
               item
             }
@@ -205,7 +210,8 @@ class LifecyclesStateImplementation[EventId](
                 uniqueItemSpecification: UniqueItemSpecification): Item = {
               val item =
                 createAndStoreItem[Item](uniqueItemSpecification,
-                                         UUID.randomUUID())
+                                         UUID.randomUUID(),
+                                         None)
               itemsMutatedSinceLastSnapshotHarvest.update(
                 uniqueItemSpecification,
                 item.asInstanceOf[ItemExtensionApi])
@@ -215,17 +221,19 @@ class LifecyclesStateImplementation[EventId](
             override protected def fallbackAnnihilatedItemFor[Item](
                 uniqueItemSpecification: UniqueItemSpecification): Item = {
               val item =
-                createItemFor[Item](uniqueItemSpecification, UUID.randomUUID())
+                createItemFor[Item](uniqueItemSpecification,
+                                    UUID.randomUUID(),
+                                    None)
               item.asInstanceOf[AnnihilationHook].recordAnnihilation()
               item
             }
 
             def harvestSnapshots()
-              : Map[UniqueItemSpecification, SnapshotBlob] = {
+              : Map[UniqueItemSpecification, SnapshotBlob[EventId]] = {
               val result = itemsMutatedSinceLastSnapshotHarvest map {
                 case (uniqueItemSpecification, item) =>
                   val snapshotBlob =
-                    itemStateStorageUsingProxies.snapshotFor(item)
+                    itemStateStorageUsingProxies.snapshotFor[EventId](item)
 
                   uniqueItemSpecification -> snapshotBlob
               } toMap
@@ -261,7 +269,8 @@ class LifecyclesStateImplementation[EventId](
                   {
                     val snapshotBlobs =
                       mutable.Map
-                        .empty[UniqueItemSpecification, Option[SnapshotBlob]]
+                        .empty[UniqueItemSpecification,
+                               Option[SnapshotBlob[EventId]]]
 
                     itemStateUpdate match {
                       case ItemStateAnnihilation(annihilation) =>

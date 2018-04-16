@@ -7,11 +7,6 @@ import java.util.concurrent.Callable
 import com.sageserpent.americium
 import com.sageserpent.americium.{Finite, PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
-import com.sageserpent.plutonium.WorldImplementationCodeFactoring.{
-  ProxyFactory,
-  firstMethodIsOverrideCompatibleWithSecond,
-}
-
 import net.bytebuddy.description.method.MethodDescription
 import net.bytebuddy.dynamic.DynamicType.Builder
 import net.bytebuddy.implementation.MethodDelegation
@@ -20,7 +15,6 @@ import net.bytebuddy.matcher.ElementMatcher
 import resource._
 
 import scala.collection.mutable
-import scala.reflect.runtime.universe
 import scala.reflect.runtime.universe.{This => _, _}
 
 // NOTE: if 'when' is 'NegativeInfinity', the event is taken to be 'at the beginning of time' - this is a way of introducing
@@ -44,8 +38,6 @@ object capturePatches {
 
     override val additionalInterfaces: Array[Class[_]] =
       Array(classOf[Recorder])
-    override val cachedProxyClasses: mutable.Map[Type, Class[_]] =
-      mutable.Map.empty[universe.Type, Class[_]]
 
     override protected def configureInterceptions(
         builder: Builder[_]): Builder[_] =
@@ -102,7 +94,7 @@ object capturePatches {
     methodDescription.getReturnType.represents(classOf[Unit])
 
   val matchUniqueItemSpecification: ElementMatcher[MethodDescription] =
-    firstMethodIsOverrideCompatibleWithSecond(
+    WorldImplementationCodeFactoring.firstMethodIsOverrideCompatibleWithSecond(
       _,
       ProxyFactory.uniqueItemSpecificationPropertyForRecording)
 
