@@ -10,7 +10,7 @@ import com.sageserpent.plutonium.PatchRecorder.UpdateConsumer
 import com.sageserpent.plutonium.World.{Revision, initialRevision}
 import com.sageserpent.plutonium.WorldImplementationCodeFactoring.{
   EventData,
-  QueryCallbackStuff,
+  StatefulItemProxySupport,
   eventDataOrdering
 }
 import resource.makeManagedResource
@@ -51,6 +51,8 @@ object noLifecyclesState {
 object LifecyclesStateImplementation {
   type ItemStateUpdatesDag[EventId] =
     Graph[ItemStateUpdate.Key[EventId], ItemStateUpdate, Unit]
+
+  object proxyFactory extends StatefulItemProxySupport.Factory
 }
 
 class LifecyclesStateImplementation[EventId](
@@ -166,7 +168,7 @@ class LifecyclesStateImplementation[EventId](
             override protected def createItemFor[Item](
                 _uniqueItemSpecification: UniqueItemSpecification,
                 lifecycleUUID: UUID) = {
-              import QueryCallbackStuff.{AcquiredState, proxyFactory}
+              import StatefulItemProxySupport.AcquiredState
 
               val stateToBeAcquiredByProxy: AcquiredState =
                 new AcquiredState {
@@ -183,8 +185,8 @@ class LifecyclesStateImplementation[EventId](
               implicit val typeTagForItem: TypeTag[Item] =
                 _uniqueItemSpecification.typeTag.asInstanceOf[TypeTag[Item]]
 
-              val item =
-                proxyFactory.constructFrom[Item](stateToBeAcquiredByProxy)
+              val item = LifecyclesStateImplementation.proxyFactory
+                .constructFrom[Item](stateToBeAcquiredByProxy)
 
               item
                 .asInstanceOf[AnnihilationHook]

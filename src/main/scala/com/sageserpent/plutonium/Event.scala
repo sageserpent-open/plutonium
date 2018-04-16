@@ -7,8 +7,8 @@ import java.util.concurrent.Callable
 import com.sageserpent.americium
 import com.sageserpent.americium.{Finite, PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
+import com.sageserpent.plutonium.WorldImplementationCodeFactoring.ProxySupport.AcquiredStateCapturingId
 import com.sageserpent.plutonium.WorldImplementationCodeFactoring.{
-  AcquiredStateCapturingId,
   IdentifiedItemsScope,
   ProxyFactory,
   firstMethodIsOverrideCompatibleWithSecond
@@ -33,7 +33,9 @@ sealed trait Event {
 }
 
 object capturePatches {
-  object RecordingCallbackStuff {
+  object RecordingProxySupport {
+    import WorldImplementationCodeFactoring.ProxySupport._
+
     val additionalInterfaces: Array[Class[_]] = Array(classOf[Recorder])
     val cachedProxyClasses =
       mutable.Map.empty[universe.Type, Class[_]]
@@ -54,7 +56,7 @@ object capturePatches {
     val matchUniqueItemSpecification: ElementMatcher[MethodDescription] =
       firstMethodIsOverrideCompatibleWithSecond(
         _,
-        IdentifiedItemsScope.uniqueItemSpecificationPropertyForRecording)
+        uniqueItemSpecificationPropertyForRecording)
 
     val matchAbstractForbiddenReadAccess: ElementMatcher[MethodDescription] =
       methodDescription =>
@@ -63,13 +65,12 @@ object capturePatches {
 
     val matchForbiddenReadAccess: ElementMatcher[MethodDescription] =
       methodDescription =>
-        !IdentifiedItemsScope
-          .alwaysAllowsReadAccessTo(methodDescription) && !RecordingCallbackStuff
+        !alwaysAllowsReadAccessTo(methodDescription) && !RecordingProxySupport
           .isFinalizer(methodDescription) && !methodDescription.getReturnType
           .represents(classOf[Unit])
 
     val matchPermittedReadAccess: ElementMatcher[MethodDescription] =
-      IdentifiedItemsScope.alwaysAllowsReadAccessTo(_)
+      alwaysAllowsReadAccessTo(_)
 
     object mutation {
       @RuntimeType
@@ -131,9 +132,9 @@ object capturePatches {
       override val proxySuffix: String = "_recordingProxy"
 
       override val additionalInterfaces: Array[Class[_]] =
-        RecordingCallbackStuff.additionalInterfaces
+        RecordingProxySupport.additionalInterfaces
       override val cachedProxyClasses: mutable.Map[Type, Class[_]] =
-        RecordingCallbackStuff.cachedProxyClasses
+        RecordingProxySupport.cachedProxyClasses
 
       override protected def configureInterceptions(
           builder: Builder[_]): Builder[_] =
@@ -157,7 +158,7 @@ object capturePatches {
 
     class LocalRecorderFactory extends RecorderFactory {
       override def apply[Item: TypeTag](id: Any): Item = {
-        import RecordingCallbackStuff._
+        import RecordingProxySupport._
 
         val stateToBeAcquiredByProxy = new AcquiredState {
           val uniqueItemSpecification: UniqueItemSpecification =
