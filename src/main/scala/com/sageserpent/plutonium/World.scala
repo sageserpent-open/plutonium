@@ -6,6 +6,8 @@ import java.util.Optional
 import com.sageserpent.americium.{Finite, NegativeInfinity, Unbounded}
 import com.sageserpent.plutonium.World.Revision
 
+import scala.collection.JavaConversions._
+
 object World {
   type Revision = Int
   val initialRevision
@@ -22,11 +24,19 @@ trait World[EventId] extends javaApi.World[EventId] {
   def revise(events: Map[EventId, Option[Event]], asOf: Instant): Revision
 
   def revise(events: java.util.Map[EventId, Optional[Event]],
-             asOf: Instant): Revision
+             asOf: Instant): Revision = {
+    val sam: java.util.function.Function[Event, Option[Event]] = event =>
+      Some(event): Option[Event]
+    val eventsAsScalaImmutableMap = Map(
+      events mapValues (_.map[Option[Event]](sam).orElse(None)) toSeq: _*)
+    revise(eventsAsScalaImmutableMap, asOf)
+  }
 
-  def revise(eventId: EventId, event: Event, asOf: Instant): Revision
+  def revise(eventId: EventId, event: Event, asOf: Instant): Revision =
+    revise(Map(eventId -> Some(event)), asOf)
 
-  def annul(eventId: EventId, asOf: Instant): Revision
+  def annul(eventId: EventId, asOf: Instant): Revision =
+    revise(Map(eventId -> None), asOf)
 
   def scopeFor(when: Unbounded[Instant], nextRevision: World.Revision): Scope
 

@@ -18,7 +18,11 @@ object itemStateStorageUsingProxies extends ItemStateStorage {
     item.uniqueItemSpecification
 
   override protected def lifecycleUUID(item: ItemSuperType): UUID =
-    item.lifecycleUUID
+    item.asInstanceOf[LifecycleUUIDApi].lifecycleUUID
+
+  override protected def itemStateUpdateKey[EventId](
+      item: ItemExtensionApi): Option[ItemStateUpdate.Key[EventId]] =
+    item.asInstanceOf[ItemStateUpdateKeyTrackingApi[EventId]].itemStateUpdateKey
 
   override protected def noteAnnihilationOnItem(item: ItemSuperType): Unit = {
     item
@@ -29,8 +33,10 @@ object itemStateStorageUsingProxies extends ItemStateStorage {
 
 class TimelineImplementation[EventId](
     lifecyclesState: LifecyclesState[EventId] = noLifecyclesState[EventId](),
-    blobStorage: BlobStorage[ItemStateUpdate.Key[EventId], SnapshotBlob] =
-      BlobStorageInMemory[ItemStateUpdate.Key[EventId], SnapshotBlob]())
+    blobStorage: BlobStorage[ItemStateUpdate.Key[EventId],
+                             SnapshotBlob[EventId]] =
+      BlobStorageInMemory[ItemStateUpdate.Key[EventId],
+                          SnapshotBlob[EventId]]())
     extends Timeline[EventId] {
 
   override def revise(events: Map[EventId, Option[Event]]) = {
