@@ -53,7 +53,9 @@ object LifecyclesStateImplementation {
   type ItemStateUpdatesDag[EventId] =
     Graph[ItemStateUpdate.Key[EventId], ItemStateUpdate, Unit]
 
-  object proxyFactory extends statefulItemProxySupport.Factory
+  object proxyFactory extends statefulItemProxySupport.Factory {
+    override val proxySuffix: String = "lifecyclesStateProxy"
+  }
 }
 
 class LifecyclesStateImplementation[EventId](
