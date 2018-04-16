@@ -59,15 +59,74 @@ object WorldImplementationCodeFactoring {
       case (eventId, eventData) => eventData.serializableEvent -> eventId
     }
 
+  def recordPatches[EventId](eventTimeline: Seq[(Event, EventId)],
+                             patchRecorder: PatchRecorder[EventId]) = {
+    for ((event, eventId) <- eventTimeline) event match {
+      case Change(when, patches) =>
+        for (patch <- patches) {
+          patchRecorder.recordPatchFromChange(eventId, when, patch)
+        }
+
+      case Measurement(when, patches) =>
+        for (patch <- patches) {
+          patchRecorder.recordPatchFromMeasurement(eventId, when, patch)
+        }
+
+      case annihilation @ Annihilation(when, id) =>
+        patchRecorder.recordAnnihilation(eventId, annihilation)
+    }
+
+    patchRecorder.noteThatThereAreNoFollowingRecordings()
+  }
+
+  def firstMethodIsOverrideCompatibleWithSecond(
+      firstMethod: MethodDescription,
+      secondMethod: MethodDescription): Boolean =
+    secondMethod.getName == firstMethod.getName &&
+      secondMethod.getReceiverType.asErasure
+        .isAssignableFrom(firstMethod.getReceiverType.asErasure) &&
+      (secondMethod.getReturnType.asErasure
+        .isAssignableFrom(firstMethod.getReturnType.asErasure) ||
+        secondMethod.getReturnType.asErasure
+          .isAssignableFrom(firstMethod.getReturnType.asErasure.asBoxed)) &&
+      secondMethod.getParameters.size == firstMethod.getParameters.size &&
+      secondMethod.getParameters.toSeq
+        .map(_.getType) == firstMethod.getParameters.toSeq
+        .map(_.getType) // What about contravariance? Hmmm...
+
+  def firstMethodIsOverrideCompatibleWithSecond(
+      firstMethod: Method,
+      secondMethod: Method): Boolean = {
+    firstMethodIsOverrideCompatibleWithSecond(
+      new MethodDescription.ForLoadedMethod(firstMethod),
+      new MethodDescription.ForLoadedMethod(secondMethod))
+  }
+
   val byteBuddy = new ByteBuddy()
 
   object ProxySupport {
-    val matchGetClass: ElementMatcher[MethodDescription] =
-      ElementMatchers.is(classOf[AnyRef].getMethod("getClass"))
-
     private[plutonium] trait StateAcquisition[AcquiredState] {
       def acquire(acquiredState: AcquiredState)
     }
+  }
+
+  trait ProxySupport {
+    import ProxySupport._
+
+    val matchGetClass: ElementMatcher[MethodDescription] =
+      ElementMatchers.is(classOf[AnyRef].getMethod("getClass"))
+
+    val nonMutableMembersThatCanAlwaysBeReadFrom = (classOf[ItemExtensionApi].getMethods ++ classOf[
+      AnyRef].getMethods) map (new MethodDescription.ForLoadedMethod(_))
+
+    val uniqueItemSpecificationPropertyForRecording =
+      new MethodDescription.ForLoadedMethod(
+        classOf[Recorder].getMethod("uniqueItemSpecification"))
+
+    def alwaysAllowsReadAccessTo(method: MethodDescription) =
+      nonMutableMembersThatCanAlwaysBeReadFrom.exists(exclusionMethod => {
+        firstMethodIsOverrideCompatibleWithSecond(method, exclusionMethod)
+      })
 
     trait AcquiredStateCapturingId {
       val uniqueItemSpecification: UniqueItemSpecification
@@ -80,108 +139,93 @@ object WorldImplementationCodeFactoring {
         acquiredState.uniqueItemSpecification.id
     }
 
-    val nonMutableMembersThatCanAlwaysBeReadFrom = (classOf[ItemExtensionApi].getMethods ++ classOf[
-      AnyRef].getMethods) map (new MethodDescription.ForLoadedMethod(_))
+    type AcquiredState <: AcquiredStateCapturingId
 
-    def alwaysAllowsReadAccessTo(method: MethodDescription) =
-      nonMutableMembersThatCanAlwaysBeReadFrom.exists(exclusionMethod => {
-        firstMethodIsOverrideCompatibleWithSecond(method, exclusionMethod)
-      })
+    trait ProxyFactory {
+      val isForRecordingOnly: Boolean
 
-    val uniqueItemSpecificationPropertyForRecording =
-      new MethodDescription.ForLoadedMethod(
-        classOf[Recorder].getMethod("uniqueItemSpecification"))
-  }
+      val acquiredStateClazz: Class[_ <: AcquiredState]
 
-  trait ProxyFactory[AcquiredState <: ProxySupport.AcquiredStateCapturingId] {
-    import ProxySupport._
+      val proxySuffix: String
 
-    val isForRecordingOnly: Boolean
+      private def createProxyClass(clazz: Class[_]): Class[_] = {
+        val builder = byteBuddy
+          .`with`(new NamingStrategy.AbstractBase {
+            override def name(superClass: TypeDescription): String =
+              s"${superClass.getSimpleName}_$proxySuffix"
+          })
+          .subclass(clazz, ConstructorStrategy.Default.DEFAULT_CONSTRUCTOR)
+          .implement(additionalInterfaces.toSeq)
+          .ignoreAlso(ElementMatchers.named[MethodDescription]("_isGhost"))
+          .defineField("acquiredState", acquiredStateClazz)
+          .annotateField(DoNotSerializeAnnotation.annotation)
 
-    val acquiredStateClazz: Class[_ <: AcquiredState]
+        val stateAcquisitionTypeBuilder =
+          TypeDescription.Generic.Builder.parameterizedType(
+            classOf[StateAcquisition[AcquiredState]],
+            Seq(acquiredStateClazz))
 
-    val proxySuffix: String
+        val builderWithInterceptions = configureInterceptions(builder)
+          .implement(stateAcquisitionTypeBuilder.build)
+          .method(ElementMatchers.named("acquire"))
+          .intercept(FieldAccessor.ofField("acquiredState"))
+          .method(ElementMatchers.named("id"))
+          .intercept(MethodDelegation.to(id))
 
-    private def createProxyClass(clazz: Class[_]): Class[_] = {
-      val builder = byteBuddy
-        .`with`(new NamingStrategy.AbstractBase {
-          override def name(superClass: TypeDescription): String =
-            s"${superClass.getSimpleName}_$proxySuffix"
-        })
-        .subclass(clazz, ConstructorStrategy.Default.DEFAULT_CONSTRUCTOR)
-        .implement(additionalInterfaces.toSeq)
-        .ignoreAlso(ElementMatchers.named[MethodDescription]("_isGhost"))
-        .defineField("acquiredState", acquiredStateClazz)
-        .annotateField(DoNotSerializeAnnotation.annotation)
-
-      val stateAcquisitionTypeBuilder =
-        TypeDescription.Generic.Builder.parameterizedType(
-          classOf[StateAcquisition[AcquiredState]],
-          Seq(acquiredStateClazz))
-
-      val builderWithInterceptions = configureInterceptions(builder)
-        .implement(stateAcquisitionTypeBuilder.build)
-        .method(ElementMatchers.named("acquire"))
-        .intercept(FieldAccessor.ofField("acquiredState"))
-        .method(ElementMatchers.named("id"))
-        .intercept(MethodDelegation.to(id))
-
-      builderWithInterceptions
-        .make()
-        .load(getClass.getClassLoader, ClassLoadingStrategy.Default.INJECTION)
-        .getLoaded
-    }
-
-    protected def configureInterceptions(builder: Builder[_]): Builder[_]
-
-    def constructFrom[Item: TypeTag](
-        stateToBeAcquiredByProxy: AcquiredState) = {
-      // NOTE: this returns items that are proxies to 'Item' rather than direct instances of 'Item' itself. Depending on the
-      // context (using a scope created by a client from a world, as opposed to while building up that scope from patches),
-      // the items may forbid certain operations on them - e.g. for rendering from a client's scope, the items should be
-      // read-only.
-
-      val proxyClazz = proxyClassFor()
-
-      val clazz = proxyClazz.getSuperclass
-
-      if (!isForRecordingOnly && clazz.getMethods.exists(
-            method =>
-              // TODO - cleanup.
-              "id" != method.getName && Modifier.isAbstract(
-                method.getModifiers))) {
-        throw new UnsupportedOperationException(
-          s"Attempt to create an instance of an abstract class '$clazz' for id: '${stateToBeAcquiredByProxy.uniqueItemSpecification.id}'.")
-      }
-      val proxy = proxyClazz.newInstance().asInstanceOf[Item]
-
-      proxy
-        .asInstanceOf[StateAcquisition[AcquiredState]]
-        .acquire(stateToBeAcquiredByProxy)
-
-      proxy
-    }
-
-    def proxyClassFor[Item: TypeTag]()
-      : Class[_] = // NOTE: using 'synchronized' is rather hokey, but there are subtle issues with
-      // using the likes of 'TrieMap.getOrElseUpdate' due to the initialiser block being executed
-      // more than once, even though the map is indeed thread safe. Let's keep it simple for now...
-      synchronized {
-        val typeOfItem = typeOf[Item]
-        cachedProxyClasses.getOrElseUpdate(typeOfItem, {
-          createProxyClass(classFromType(typeOfItem))
-        })
+        builderWithInterceptions
+          .make()
+          .load(getClass.getClassLoader, ClassLoadingStrategy.Default.INJECTION)
+          .getLoaded
       }
 
-    protected val additionalInterfaces: Array[Class[_]]
-    protected val cachedProxyClasses: scala.collection.mutable.Map[Type,
-                                                                   Class[_]]
+      protected def configureInterceptions(builder: Builder[_]): Builder[_]
+
+      def constructFrom[Item: TypeTag](
+          stateToBeAcquiredByProxy: AcquiredState) = {
+        // NOTE: this returns items that are proxies to 'Item' rather than direct instances of 'Item' itself. Depending on the
+        // context (using a scope created by a client from a world, as opposed to while building up that scope from patches),
+        // the items may forbid certain operations on them - e.g. for rendering from a client's scope, the items should be
+        // read-only.
+
+        val proxyClazz = proxyClassFor()
+
+        val clazz = proxyClazz.getSuperclass
+
+        if (!isForRecordingOnly && clazz.getMethods.exists(
+              method =>
+                // TODO - cleanup.
+                "id" != method.getName && Modifier.isAbstract(
+                  method.getModifiers))) {
+          throw new UnsupportedOperationException(
+            s"Attempt to create an instance of an abstract class '$clazz' for id: '${stateToBeAcquiredByProxy.uniqueItemSpecification.id}'.")
+        }
+        val proxy = proxyClazz.newInstance().asInstanceOf[Item]
+
+        proxy
+          .asInstanceOf[StateAcquisition[AcquiredState]]
+          .acquire(stateToBeAcquiredByProxy)
+
+        proxy
+      }
+
+      def proxyClassFor[Item: TypeTag]()
+        : Class[_] = // NOTE: using 'synchronized' is rather hokey, but there are subtle issues with
+        // using the likes of 'TrieMap.getOrElseUpdate' due to the initialiser block being executed
+        // more than once, even though the map is indeed thread safe. Let's keep it simple for now...
+        synchronized {
+          val typeOfItem = typeOf[Item]
+          cachedProxyClasses.getOrElseUpdate(typeOfItem, {
+            createProxyClass(classFromType(typeOfItem))
+          })
+        }
+
+      protected val additionalInterfaces: Array[Class[_]]
+      protected val cachedProxyClasses: scala.collection.mutable.Map[Type,
+                                                                     Class[_]]
+    }
   }
 
-  // TODO - bring in dependencies on 'IdentifiedItemsScope' into here.
-  object StatefulItemProxySupport {
-    import ProxySupport._
-
+  object StatefulItemProxySupport extends ProxySupport {
     val additionalInterfaces: Array[Class[_]] =
       Array(classOf[ItemExtensionApi], classOf[AnnihilationHook])
     val cachedProxyClasses =
@@ -231,10 +275,18 @@ object WorldImplementationCodeFactoring {
     val matchRecordAnnihilation: ElementMatcher[MethodDescription] =
       firstMethodIsOverrideCompatibleWithSecond(_, recordAnnihilationMethod)
 
+    val matchInvariantCheck: ElementMatcher[MethodDescription] =
+      ElementMatchers
+        .named("checkInvariant")
+        .and(
+          ElementMatchers
+            .takesArguments(0)
+            .and(ElementMatchers.returns(classOf[Unit])))
+
     val matchMutation: ElementMatcher[MethodDescription] = methodDescription =>
       methodDescription.getReturnType
-        .represents(classOf[Unit]) && !WorldImplementationCodeFactoring
-        .isInvariantCheck(methodDescription)
+        .represents(classOf[Unit]) && !matchInvariantCheck.matches(
+        methodDescription)
 
     val isGhostProperty = new MethodDescription.ForLoadedMethod(
       classOf[ItemExtensionApi].getMethod("isGhost"))
@@ -247,9 +299,6 @@ object WorldImplementationCodeFactoring {
 
     val matchCheckedReadAccess: ElementMatcher[MethodDescription] =
       !alwaysAllowsReadAccessTo(_)
-
-    val matchInvariantCheck: ElementMatcher[MethodDescription] =
-      WorldImplementationCodeFactoring.isInvariantCheck(_)
 
     val uniqueItemSpecificationPropertyForItemExtensionApi =
       new MethodDescription.ForLoadedMethod(
@@ -336,7 +385,7 @@ object WorldImplementationCodeFactoring {
 
     // TODO - more and more stuff is piling up in here that is specific to just one world implementation.
     // Convert this to a trait and pull down what isn't common.
-    trait Factory extends ProxyFactory[AcquiredState] {
+    trait Factory extends ProxyFactory {
       override val isForRecordingOnly = false
 
       override val acquiredStateClazz = classOf[AcquiredState]
@@ -371,35 +420,6 @@ object WorldImplementationCodeFactoring {
           .intercept(MethodDelegation.toField("acquiredState"))
     }
   }
-
-  def firstMethodIsOverrideCompatibleWithSecond(
-      firstMethod: MethodDescription,
-      secondMethod: MethodDescription): Boolean =
-    secondMethod.getName == firstMethod.getName &&
-      secondMethod.getReceiverType.asErasure
-        .isAssignableFrom(firstMethod.getReceiverType.asErasure) &&
-      (secondMethod.getReturnType.asErasure
-        .isAssignableFrom(firstMethod.getReturnType.asErasure) ||
-        secondMethod.getReturnType.asErasure
-          .isAssignableFrom(firstMethod.getReturnType.asErasure.asBoxed)) &&
-      secondMethod.getParameters.size == firstMethod.getParameters.size &&
-      secondMethod.getParameters.toSeq
-        .map(_.getType) == firstMethod.getParameters.toSeq
-        .map(_.getType) // What about contravariance? Hmmm...
-
-  def firstMethodIsOverrideCompatibleWithSecond(
-      firstMethod: Method,
-      secondMethod: Method): Boolean = {
-    firstMethodIsOverrideCompatibleWithSecond(
-      new MethodDescription.ForLoadedMethod(firstMethod),
-      new MethodDescription.ForLoadedMethod(secondMethod))
-  }
-
-  val invariantCheckMethod = new MethodDescription.ForLoadedMethod(
-    classOf[ItemExtensionApi].getMethod("checkInvariant"))
-
-  def isInvariantCheck(method: MethodDescription): Boolean =
-    "checkInvariant" == method.getName // TODO: this is hokey.
 
   object IdentifiedItemsScope {
     def yieldOnlyItemsOfSupertypeOf[Item: TypeTag](items: Traversable[Any]) = {
@@ -512,7 +532,7 @@ object WorldImplementationCodeFactoring {
 
     def itemFor[Item: TypeTag](id: Any): Item = {
       def constructAndCacheItem(): Item = {
-        import StatefulItemProxySupport._
+        import StatefulItemProxySupport.AcquiredState
 
         val stateToBeAcquiredByProxy: AcquiredState =
           new AcquiredState {
@@ -561,38 +581,6 @@ object WorldImplementationCodeFactoring {
     def allItems[Item: TypeTag](): Stream[Item] =
       IdentifiedItemsScope.yieldOnlyItemsOfType(
         idToItemsMultiMap.values.flatten)
-  }
-
-  def recordPatches[EventId](eventTimeline: Seq[(Event, EventId)],
-                             patchRecorder: PatchRecorder[EventId]) = {
-    for ((event, eventId) <- eventTimeline) event match {
-      case Change(when, patches) =>
-        for (patch <- patches) {
-          patchRecorder.recordPatchFromChange(eventId, when, patch)
-        }
-
-      case Measurement(when, patches) =>
-        for (patch <- patches) {
-          patchRecorder.recordPatchFromMeasurement(eventId, when, patch)
-        }
-
-      case annihilation @ Annihilation(when, id) =>
-        patchRecorder.recordAnnihilation(eventId, annihilation)
-    }
-
-    patchRecorder.noteThatThereAreNoFollowingRecordings()
-  }
-
-  trait ScopeImplementation
-      extends com.sageserpent.plutonium.Scope
-      with ItemCacheImplementation {
-    val identifiedItemsScope: IdentifiedItemsScope
-
-    override def itemsFor[Item: TypeTag](id: Any): Stream[Item] =
-      identifiedItemsScope.itemsFor(id)
-
-    override def allItems[Item: TypeTag](): Stream[Item] =
-      identifiedItemsScope.allItems()
   }
 }
 

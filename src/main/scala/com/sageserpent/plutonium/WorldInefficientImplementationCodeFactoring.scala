@@ -4,14 +4,23 @@ import java.time.Instant
 
 import com.sageserpent.americium.{PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.World.Revision
+import scala.reflect.runtime.universe.TypeTag
 
 abstract class WorldInefficientImplementationCodeFactoring[EventId]
     extends WorldImplementationCodeFactoring[EventId] {
 
   import WorldImplementationCodeFactoring._
 
-  trait SelfPopulatedScope extends ScopeImplementation {
+  trait SelfPopulatedScope
+      extends com.sageserpent.plutonium.Scope
+      with ItemCacheImplementation {
     val identifiedItemsScope = new IdentifiedItemsScope
+
+    override def itemsFor[Item: TypeTag](id: Any): Stream[Item] =
+      identifiedItemsScope.itemsFor(id)
+
+    override def allItems[Item: TypeTag](): Stream[Item] =
+      identifiedItemsScope.allItems()
 
     identifiedItemsScope.populate(when, eventTimeline(nextRevision))
   }
