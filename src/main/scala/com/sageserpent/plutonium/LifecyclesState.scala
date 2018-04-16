@@ -6,25 +6,23 @@ import java.util.UUID
 import com.sageserpent.americium.{PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
-import com.sageserpent.plutonium.LifecyclesStateImplementation.proxySuppport
 import com.sageserpent.plutonium.PatchRecorder.UpdateConsumer
 import com.sageserpent.plutonium.World.{Revision, initialRevision}
-import com.sageserpent.plutonium.WorldImplementationCodeFactoring.IdentifiedItemsScope.statefulItemProxySupport
 import com.sageserpent.plutonium.WorldImplementationCodeFactoring.{
   EventData,
-  PersistentItemProxySupport,
+  PersistentItemProxyFactory,
   eventDataOrdering
 }
+import de.ummels.prioritymap.PriorityMap
+import quiver._
 import resource.makeManagedResource
 import scalaz.std.list._
 import scalaz.syntax.monadPlus._
-import scalaz.{-\/, \/, \/-}
+import scalaz.{-\/, \/-}
 
-import scala.collection.immutable.{Map, SortedMap, TreeMap}
+import scala.collection.immutable.Map
 import scala.collection.mutable
 import scala.reflect.runtime.universe.TypeTag
-import quiver._
-import de.ummels.prioritymap.PriorityMap
 
 trait LifecyclesState[EventId] {
 
@@ -54,10 +52,12 @@ object LifecyclesStateImplementation {
   type ItemStateUpdatesDag[EventId] =
     Graph[ItemStateUpdate.Key[EventId], ItemStateUpdate, Unit]
 
-  object proxySuppport extends PersistentItemProxySupport
-
-  object proxyFactory extends proxySuppport.Factory {
+  object proxyFactory extends PersistentItemProxyFactory {
     override val proxySuffix: String = "lifecyclesStateProxy"
+    override type AcquiredState =
+      PersistentItemProxyFactory.AcquiredState
+    override val acquiredStateClazz: Class[_ <: AcquiredState] =
+      classOf[AcquiredState]
   }
 }
 
@@ -174,7 +174,7 @@ class LifecyclesStateImplementation[EventId](
             override protected def createItemFor[Item](
                 _uniqueItemSpecification: UniqueItemSpecification,
                 lifecycleUUID: UUID) = {
-              import LifecyclesStateImplementation.proxySuppport.AcquiredState
+              import LifecyclesStateImplementation.proxyFactory.AcquiredState
 
               val stateToBeAcquiredByProxy: AcquiredState =
                 new AcquiredState {
