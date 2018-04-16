@@ -106,6 +106,8 @@ class ItemStateStorageSpec
   import MarkSyntax._
   import ItemStateStorage.SnapshotBlob
 
+  type EventId = String
+
   val oddGraphNodeTypeTag = typeTag[OddGraphNode]
 
   val evenGraphNodeTypeTag = typeTag[EvenGraphNode]
@@ -189,7 +191,7 @@ class ItemStateStorageSpec
       println(
         s"Not to be roundtripped: ${nodesThatAreNotToBeRoundtripped.map(_.id).toList}")
 
-      val snapshotBlobs: Map[UniqueItemSpecification, SnapshotBlob] =
+      val snapshotBlobs: Map[UniqueItemSpecification, SnapshotBlob[EventId]] =
         nodesThatAreToBeRoundtripped map (node =>
           (node.id match {
             case oddId: String =>
@@ -197,9 +199,9 @@ class ItemStateStorageSpec
             case eventId: Int =>
               UniqueItemSpecification(eventId, evenGraphNodeTypeTag)
           }) -> itemStateStorage
-            .snapshotFor(node)) toMap
+            .snapshotFor[EventId](node)) toMap
 
-      val stubTimeslice = new BlobStorage.Timeslice[SnapshotBlob] {
+      val stubTimeslice = new BlobStorage.Timeslice[SnapshotBlob[EventId]] {
         override def uniqueItemQueriesFor[Item: TypeTag]
           : Stream[UniqueItemSpecification] = snapshotBlobs.keys.toStream
 
@@ -209,43 +211,44 @@ class ItemStateStorageSpec
 
         override def snapshotBlobFor(
             uniqueItemSpecification: UniqueItemSpecification)
-          : Option[SnapshotBlob] =
+          : Option[SnapshotBlob[EventId]] =
           snapshotBlobs.get(uniqueItemSpecification)
       }
 
-      val reconstitutionContext = new itemStateStorage.ReconstitutionContext() {
-        override val blobStorageTimeslice = stubTimeslice
+      val reconstitutionContext =
+        new itemStateStorage.ReconstitutionContext[EventId]() {
+          override val blobStorageTimeslice = stubTimeslice
 
-        // The following implementation is also the epitome of hokeyness. Can there be more than epitome?
-        val idToFallbackItemMap = nodesThatAreNotToBeRoundtripped map (item =>
-          (item.id: Any) -> item) toMap
+          // The following implementation is also the epitome of hokeyness. Can there be more than epitome?
+          val idToFallbackItemMap = nodesThatAreNotToBeRoundtripped map (item =>
+            (item.id: Any) -> item) toMap
 
-        override protected def fallbackItemFor[Item](
-            uniqueItemSpecification: UniqueItemSpecification): Item =
-          idToFallbackItemMap(uniqueItemSpecification.id).asInstanceOf[Item]
+          override protected def fallbackItemFor[Item](
+              uniqueItemSpecification: UniqueItemSpecification): Item =
+            idToFallbackItemMap(uniqueItemSpecification.id).asInstanceOf[Item]
 
-        override protected def fallbackAnnihilatedItemFor[Item](
-            uniqueItemSpecification: UniqueItemSpecification): Item =
-          idToFallbackItemMap(uniqueItemSpecification.id).asInstanceOf[Item]
+          override protected def fallbackAnnihilatedItemFor[Item](
+              uniqueItemSpecification: UniqueItemSpecification): Item =
+            idToFallbackItemMap(uniqueItemSpecification.id).asInstanceOf[Item]
 
-        // The following implementation is the epitome of hokeyness. Well, it's just test code... Hmmm.
-        override protected def createItemFor[Item](
-            uniqueItemSpecification: UniqueItemSpecification,
-            lifecycleUUID: UUID): Item = {
-          val item = uniqueItemSpecification match {
-            case UniqueItemSpecification(id: OddGraphNode#Id, itemTypeTag)
-                if itemTypeTag == oddGraphNodeTypeTag =>
-              new OddGraphNode(id)
-            case UniqueItemSpecification(id: EvenGraphNode#Id, itemTypeTag)
-                if itemTypeTag == evenGraphNodeTypeTag =>
-              new EvenGraphNode(id)
+          // The following implementation is the epitome of hokeyness. Well, it's just test code... Hmmm.
+          override protected def createItemFor[Item](
+              uniqueItemSpecification: UniqueItemSpecification,
+              lifecycleUUID: UUID): Item = {
+            val item = uniqueItemSpecification match {
+              case UniqueItemSpecification(id: OddGraphNode#Id, itemTypeTag)
+                  if itemTypeTag == oddGraphNodeTypeTag =>
+                new OddGraphNode(id)
+              case UniqueItemSpecification(id: EvenGraphNode#Id, itemTypeTag)
+                  if itemTypeTag == evenGraphNodeTypeTag =>
+                new EvenGraphNode(id)
+            }
+
+            item.lifecycleUUID = lifecycleUUID
+
+            item.asInstanceOf[Item]
           }
-
-          item.lifecycleUUID = lifecycleUUID
-
-          item.asInstanceOf[Item]
         }
-      }
 
       val individuallyReconstitutedGraphNodes = graphNodes
         .map(_.id match {

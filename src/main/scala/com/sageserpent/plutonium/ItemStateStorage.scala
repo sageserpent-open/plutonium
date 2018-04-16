@@ -22,7 +22,10 @@ import scala.collection.mutable
 import scala.util.DynamicVariable
 
 object ItemStateStorage {
-  case class SnapshotBlob(payload: Array[Byte], lifecycleUUID: UUID)
+  case class SnapshotBlob[EventId](
+      payload: Array[Byte],
+      lifecycleUUID: UUID,
+      itemStateUpdateKey: ItemStateUpdate.Key[EventId])
 }
 
 trait ItemStateStorage { itemStateStorageObject =>
@@ -30,7 +33,7 @@ trait ItemStateStorage { itemStateStorageObject =>
 
   private val itemDeserializationThreadContextAccess =
     new DynamicVariable[
-      Option[ReconstitutionContext#ItemDeserializationThreadContext]](None)
+      Option[ReconstitutionContext[_]#ItemDeserializationThreadContext]](None)
 
   private val defaultSerializerFactory =
     new ReflectionSerializerFactory(classOf[FieldSerializer[_]])
@@ -163,10 +166,12 @@ trait ItemStateStorage { itemStateStorageObject =>
   private val kryoPool =
     KryoPool.withByteArrayOutputStream(40, kryoInstantiator)
 
-  def snapshotFor(item: Any): SnapshotBlob =
-    SnapshotBlob(
+  def snapshotFor[EventId](item: Any): SnapshotBlob[EventId] =
+    SnapshotBlob[EventId](
       payload = kryoPool.toBytesWithClass(item),
-      lifecycleUUID = lifecycleUUID(item.asInstanceOf[ItemSuperType]))
+      lifecycleUUID = lifecycleUUID(item.asInstanceOf[ItemSuperType]),
+      itemStateUpdateKey = null.asInstanceOf[ItemStateUpdate.Key[EventId]] // TODO - sort this out pronto!!!!!!!!!!
+    )
 
   private def itemFor[Item](
       uniqueItemSpecification: UniqueItemSpecification): Item =
@@ -189,9 +194,9 @@ trait ItemStateStorage { itemStateStorageObject =>
     itemDeserializationThreadContextAccess.value.get
       .createDeserializationTargetItem[Item]
 
-  trait ReconstitutionContext {
+  trait ReconstitutionContext[EventId] {
     def blobStorageTimeslice
-      : BlobStorage.Timeslice[SnapshotBlob] // NOTE: abstracting this allows the prospect of a 'moving' timeslice for use when executing an update plan.
+      : BlobStorage.Timeslice[SnapshotBlob[EventId]] // NOTE: abstracting this allows the prospect of a 'moving' timeslice for use when executing an update plan.
 
     def itemFor[Item](
         uniqueItemSpecification: UniqueItemSpecification): Item = {
@@ -224,7 +229,7 @@ trait ItemStateStorage { itemStateStorageObject =>
                 blobStorageTimeslice.snapshotBlobFor(uniqueItemSpecification)
 
               snapshot match {
-                case Some(SnapshotBlob(payload, lifecycleUUID))
+                case Some(SnapshotBlob(payload, lifecycleUUID, _))
                     if !annihilatedItemsKeyedByLifecycleUUID.contains(
                       lifecycleUUID) =>
                   uniqueItemSpecificationAccess
@@ -247,7 +252,7 @@ trait ItemStateStorage { itemStateStorageObject =>
                 blobStorageTimeslice.snapshotBlobFor(uniqueItemSpecification)
 
               snapshot match {
-                case Some(SnapshotBlob(payload, lifecycleUUID)) =>
+                case Some(SnapshotBlob(payload, lifecycleUUID, _)) =>
                   uniqueItemSpecificationAccess
                     .withValue(Some(uniqueItemSpecification -> lifecycleUUID)) {
                       kryoPool.fromBytes(payload)
@@ -282,7 +287,7 @@ trait ItemStateStorage { itemStateStorageObject =>
                         uniqueItemSpecification)
 
                     snapshot.collect {
-                      case SnapshotBlob(payload, lifecycleUUIDFromSnapshot)
+                      case SnapshotBlob(payload, lifecycleUUIDFromSnapshot, _)
                           if lifecycleUUID == lifecycleUUIDFromSnapshot =>
                         uniqueItemSpecificationAccess
                           .withValue(

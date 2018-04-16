@@ -20,10 +20,11 @@ object ItemCacheUsingBlobStorage {
 }
 
 class ItemCacheUsingBlobStorage[EventId](
-    blobStorage: BlobStorage[ItemStateUpdate.Key[EventId], SnapshotBlob],
+    blobStorage: BlobStorage[ItemStateUpdate.Key[EventId],
+                             SnapshotBlob[EventId]],
     when: Unbounded[Instant])
     extends ItemCacheImplementation
-    with itemStateStorageUsingProxies.ReconstitutionContext {
+    with itemStateStorageUsingProxies.ReconstitutionContext[EventId] {
   override def itemsFor[Item: TypeTag](id: Any): Stream[Item] =
     for {
       uniqueItemSpecification <- blobStorageTimeslice.uniqueItemQueriesFor(id)
@@ -35,7 +36,8 @@ class ItemCacheUsingBlobStorage[EventId](
         .uniqueItemQueriesFor[Item]
     } yield itemFor[Item](uniqueItemSpecification)
 
-  override val blobStorageTimeslice: BlobStorage.Timeslice[SnapshotBlob] =
+  override val blobStorageTimeslice
+    : BlobStorage.Timeslice[SnapshotBlob[EventId]] =
     blobStorage.timeSlice(when)
 
   override protected def fallbackItemFor[Item](

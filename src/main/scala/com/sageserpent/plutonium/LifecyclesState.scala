@@ -31,11 +31,11 @@ trait LifecyclesState[EventId] {
   // encapsulate the former in some way - it could hive off a local 'BlobStorageInMemory' as it revises itself, then
   // reabsorb the new blob storage instance back into its own revision. If so, then perhaps 'TimelineImplementation' *is*
   // in fact the cutover form of 'LifecyclesState'. Food for thought...
-  def revise(
-      events: Map[EventId, Option[Event]],
-      blobStorage: BlobStorage[ItemStateUpdate.Key[EventId], SnapshotBlob])
+  def revise(events: Map[EventId, Option[Event]],
+             blobStorage: BlobStorage[ItemStateUpdate.Key[EventId],
+                                      SnapshotBlob[EventId]])
     : (LifecyclesState[EventId],
-       BlobStorage[ItemStateUpdate.Key[EventId], SnapshotBlob])
+       BlobStorage[ItemStateUpdate.Key[EventId], SnapshotBlob[EventId]])
 
   def retainUpTo(when: Unbounded[Instant]): LifecyclesState[EventId]
 }
@@ -61,11 +61,11 @@ class LifecyclesStateImplementation[EventId](
       Set.empty[(ItemStateUpdate.Key[EventId], ItemStateUpdate)],
     nextRevision: Revision = initialRevision)
     extends LifecyclesState[EventId] {
-  override def revise(
-      events: Map[EventId, Option[Event]],
-      blobStorage: BlobStorage[ItemStateUpdate.Key[EventId], SnapshotBlob])
+  override def revise(events: Map[EventId, Option[Event]],
+                      blobStorage: BlobStorage[ItemStateUpdate.Key[EventId],
+                                               SnapshotBlob[EventId]])
     : (LifecyclesState[EventId],
-       BlobStorage[ItemStateUpdate.Key[EventId], SnapshotBlob]) = {
+       BlobStorage[ItemStateUpdate.Key[EventId], SnapshotBlob[EventId]]) = {
     val (annulledEvents, newEvents) =
       (events.toList map {
         case (eventId, Some(event)) => \/-(eventId -> event)
@@ -161,9 +161,10 @@ class LifecyclesStateImplementation[EventId](
       obsoleteItemStateUpdateKeys: Set[ItemStateUpdate.Key[EventId]],
       itemStateUpdates: SortedMap[ItemStateUpdate.Key[EventId],
                                   ItemStateUpdate])(
-      blobStorage: BlobStorage[ItemStateUpdate.Key[EventId], SnapshotBlob],
+      blobStorage: BlobStorage[ItemStateUpdate.Key[EventId],
+                               SnapshotBlob[EventId]],
       whenFor: ItemStateUpdate.Key[EventId] => Unbounded[Instant])
-    : BlobStorage[ItemStateUpdate.Key[EventId], SnapshotBlob] = {
+    : BlobStorage[ItemStateUpdate.Key[EventId], SnapshotBlob[EventId]] = {
     var microRevisedBlobStorage = {
       val initialMicroRevisionBuilder = blobStorage.openRevision()
 
@@ -183,7 +184,7 @@ class LifecyclesStateImplementation[EventId](
       (when, itemStateUpdates) <- itemStateUpdatesGroupedByTimeslice
     } {
       val identifiedItemAccess = new IdentifiedItemAccess
-      with itemStateStorageUsingProxies.ReconstitutionContext {
+      with itemStateStorageUsingProxies.ReconstitutionContext[EventId] {
         override def reconstitute(
             uniqueItemSpecification: UniqueItemSpecification) =
           itemFor[Any](uniqueItemSpecification)
@@ -196,7 +197,8 @@ class LifecyclesStateImplementation[EventId](
         private val itemsMutatedSinceLastSnapshotHarvest =
           mutable.Map.empty[UniqueItemSpecification, ItemExtensionApi]
 
-        override def blobStorageTimeslice: BlobStorage.Timeslice[SnapshotBlob] =
+        override def blobStorageTimeslice
+          : BlobStorage.Timeslice[SnapshotBlob[EventId]] =
           blobStorageTimeSlice
 
         override protected def createItemFor[Item](
@@ -247,10 +249,12 @@ class LifecyclesStateImplementation[EventId](
           item
         }
 
-        def harvestSnapshots(): Map[UniqueItemSpecification, SnapshotBlob] = {
+        def harvestSnapshots()
+          : Map[UniqueItemSpecification, SnapshotBlob[EventId]] = {
           val result = itemsMutatedSinceLastSnapshotHarvest map {
             case (uniqueItemSpecification, item) =>
-              val snapshotBlob = itemStateStorageUsingProxies.snapshotFor(item)
+              val snapshotBlob =
+                itemStateStorageUsingProxies.snapshotFor[EventId](item)
 
               uniqueItemSpecification -> snapshotBlob
           } toMap
@@ -269,7 +273,7 @@ class LifecyclesStateImplementation[EventId](
         } {
           val snapshotBlobs =
             mutable.Map
-              .empty[UniqueItemSpecification, Option[SnapshotBlob]]
+              .empty[UniqueItemSpecification, Option[SnapshotBlob[EventId]]]
 
           itemStateUpdate match {
             case ItemStateAnnihilation(annihilation) =>

@@ -32,9 +32,9 @@ class LifecyclesStateSpec
       val itemCache: ItemCache =
         new ItemCacheUsingBlobStorage(
           noLifecyclesState[EventId]()
-            .revise(
-              events,
-              BlobStorageInMemory[ItemStateUpdate.Key[EventId], SnapshotBlob]())
+            .revise(events,
+                    BlobStorageInMemory[ItemStateUpdate.Key[EventId],
+                                        SnapshotBlob[EventId]]())
             ._2,
           queryWhen)
 
@@ -80,11 +80,11 @@ class LifecyclesStateSpec
         }: _*)
 
       val blobStorageResultingFromBlockBooking
-        : BlobStorage[ItemStateUpdate.Key[EventId], SnapshotBlob] =
+        : BlobStorage[ItemStateUpdate.Key[EventId], SnapshotBlob[EventId]] =
         noLifecyclesState[EventId]()
-          .revise(
-            eventsInOneBlock,
-            BlobStorageInMemory[ItemStateUpdate.Key[EventId], SnapshotBlob]())
+          .revise(eventsInOneBlock,
+                  BlobStorageInMemory[ItemStateUpdate.Key[EventId],
+                                      SnapshotBlob[EventId]]())
           ._2
 
       val random = new Random(seed)
@@ -95,12 +95,11 @@ class LifecyclesStateSpec
             booking => TreeMap(booking.map(_.swap): _*)) toList
 
       val blobStorageResultingFromIncrementalBookings
-        : BlobStorage[ItemStateUpdate.Key[EventId], SnapshotBlob] =
+        : BlobStorage[ItemStateUpdate.Key[EventId], SnapshotBlob[EventId]] =
         ((noLifecyclesState[EventId]() -> (BlobStorageInMemory[
           ItemStateUpdate.Key[EventId],
-          SnapshotBlob](): BlobStorage[
-          ItemStateUpdate.Key[EventId],
-          SnapshotBlob])) /: severalRevisionBookingsWithObsoleteEventsThrownIn) {
+          SnapshotBlob[EventId]](): BlobStorage[ItemStateUpdate.Key[EventId],
+                                                SnapshotBlob[EventId]])) /: severalRevisionBookingsWithObsoleteEventsThrownIn) {
           case ((lifecyclesState, blobStorage), booking) =>
             lifecyclesState.revise(booking, blobStorage)
         }._2
