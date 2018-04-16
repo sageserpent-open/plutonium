@@ -19,12 +19,10 @@ import org.objenesis.instantiator.ObjectInstantiator
 import org.objenesis.strategy.InstantiatorStrategy
 
 import scala.collection.mutable
-import scala.reflect.runtime.universe
-import scala.reflect.runtime.universe.TypeTag
 import scala.util.DynamicVariable
 
 object ItemStateStorage {
-  type SnapshotBlob = (Array[Byte], UUID)
+  case class SnapshotBlob(payload: Array[Byte], lifecycleUUID: UUID)
 }
 
 trait ItemStateStorage { itemStateStorageObject =>
@@ -166,8 +164,9 @@ trait ItemStateStorage { itemStateStorageObject =>
     KryoPool.withByteArrayOutputStream(40, kryoInstantiator)
 
   def snapshotFor(item: Any): SnapshotBlob =
-    kryoPool.toBytesWithClass(item) -> lifecycleUUID(
-      item.asInstanceOf[ItemSuperType])
+    SnapshotBlob(
+      payload = kryoPool.toBytesWithClass(item),
+      lifecycleUUID = lifecycleUUID(item.asInstanceOf[ItemSuperType]))
 
   private def itemFor[Item](
       uniqueItemSpecification: UniqueItemSpecification): Item =
@@ -225,7 +224,7 @@ trait ItemStateStorage { itemStateStorageObject =>
                 blobStorageTimeslice.snapshotBlobFor(uniqueItemSpecification)
 
               snapshot match {
-                case Some((payload, lifecycleUUID))
+                case Some(SnapshotBlob(payload, lifecycleUUID))
                     if !annihilatedItemsKeyedByLifecycleUUID.contains(
                       lifecycleUUID) =>
                   uniqueItemSpecificationAccess
@@ -248,7 +247,7 @@ trait ItemStateStorage { itemStateStorageObject =>
                 blobStorageTimeslice.snapshotBlobFor(uniqueItemSpecification)
 
               snapshot match {
-                case Some((payload, lifecycleUUID)) =>
+                case Some(SnapshotBlob(payload, lifecycleUUID)) =>
                   uniqueItemSpecificationAccess
                     .withValue(Some(uniqueItemSpecification -> lifecycleUUID)) {
                       kryoPool.fromBytes(payload)
@@ -283,7 +282,7 @@ trait ItemStateStorage { itemStateStorageObject =>
                         uniqueItemSpecification)
 
                     snapshot.collect {
-                      case (payload, lifecycleUUIDFromSnapshot)
+                      case SnapshotBlob(payload, lifecycleUUIDFromSnapshot)
                           if lifecycleUUID == lifecycleUUIDFromSnapshot =>
                         uniqueItemSpecificationAccess
                           .withValue(
