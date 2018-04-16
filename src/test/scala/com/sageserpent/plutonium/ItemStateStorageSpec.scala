@@ -242,7 +242,8 @@ class ItemStateStorageSpec
           // The following implementation is the epitome of hokeyness. Well, it's just test code... Hmmm.
           override protected def createItemFor[Item](
               uniqueItemSpecification: UniqueItemSpecification,
-              lifecycleUUID: UUID): Item = {
+              lifecycleUUID: UUID,
+              itemStateUpdateKey: ItemStateUpdate.Key[EventId]): Item = {
             val item = uniqueItemSpecification match {
               case UniqueItemSpecification(id: OddGraphNode#Id, itemTypeTag)
                   if itemTypeTag == oddGraphNodeTypeTag =>
@@ -253,6 +254,8 @@ class ItemStateStorageSpec
             }
 
             item.lifecycleUUID = lifecycleUUID
+
+            item.itemStateUpdateKey = itemStateUpdateKey
 
             item.asInstanceOf[Item]
           }

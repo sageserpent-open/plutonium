@@ -48,7 +48,7 @@ class ItemCacheUsingBlobStorage[EventId](
   override protected def fallbackAnnihilatedItemFor[Item](
       uniqueItemSpecification: UniqueItemSpecification): Item = {
     val item =
-      createItemFor[Item](uniqueItemSpecification, UUID.randomUUID())
+      createItemFor[Item](uniqueItemSpecification, UUID.randomUUID(), ???)
     item.asInstanceOf[AnnihilationHook].recordAnnihilation()
     item
   }
@@ -56,7 +56,8 @@ class ItemCacheUsingBlobStorage[EventId](
   // TODO - either fuse this back with the other code duplicate above or make it its own thing. Do we really need the 'itemIsLocked'? If we do, then let's fuse...
   override protected def createItemFor[Item](
       _uniqueItemSpecification: UniqueItemSpecification,
-      lifecycleUUID: UUID) = {
+      lifecycleUUID: UUID,
+      itemStateUpdateKey: ItemStateUpdate.Key[EventId]) = {
     import ItemCacheUsingBlobStorage.proxyFactory.AcquiredState
 
     val stateToBeAcquiredByProxy: AcquiredState =
@@ -76,6 +77,10 @@ class ItemCacheUsingBlobStorage[EventId](
     item
       .asInstanceOf[LifecycleUUIDApi]
       .setLifecycleUUID(lifecycleUUID)
+
+    item
+      .asInstanceOf[ItemStateUpdateKeyTrackingApi[EventId]]
+      .setItemStateUpdateKey(itemStateUpdateKey)
 
     item
   }

@@ -203,7 +203,8 @@ class LifecyclesStateImplementation[EventId](
 
         override protected def createItemFor[Item](
             _uniqueItemSpecification: UniqueItemSpecification,
-            lifecycleUUID: UUID) = {
+            lifecycleUUID: UUID,
+            itemStateUpdateKey: ItemStateUpdate.Key[EventId]) = {
           import LifecyclesStateImplementation.proxyFactory.AcquiredState
 
           val stateToBeAcquiredByProxy: AcquiredState =
@@ -229,12 +230,18 @@ class LifecyclesStateImplementation[EventId](
             .setLifecycleUUID(lifecycleUUID)
 
           item
+            .asInstanceOf[ItemStateUpdateKeyTrackingApi[EventId]]
+            .setItemStateUpdateKey(itemStateUpdateKey)
+
+          item
         }
 
         override protected def fallbackItemFor[Item](
             uniqueItemSpecification: UniqueItemSpecification): Item = {
           val item =
-            createAndStoreItem[Item](uniqueItemSpecification, UUID.randomUUID())
+            createAndStoreItem[Item](uniqueItemSpecification,
+                                     UUID.randomUUID(),
+                                     ???)
           itemsMutatedSinceLastSnapshotHarvest.update(
             uniqueItemSpecification,
             item.asInstanceOf[ItemExtensionApi])
@@ -244,7 +251,7 @@ class LifecyclesStateImplementation[EventId](
         override protected def fallbackAnnihilatedItemFor[Item](
             uniqueItemSpecification: UniqueItemSpecification): Item = {
           val item =
-            createItemFor[Item](uniqueItemSpecification, UUID.randomUUID())
+            createItemFor[Item](uniqueItemSpecification, UUID.randomUUID(), ???)
           item.asInstanceOf[AnnihilationHook].recordAnnihilation()
           item
         }

@@ -223,7 +223,9 @@ trait ItemStateStorage { itemStateStorageObject =>
 
     class ItemDeserializationThreadContext {
       val uniqueItemSpecificationAccess =
-        new DynamicVariable[Option[(UniqueItemSpecification, UUID)]](None)
+        new DynamicVariable[Option[(UniqueItemSpecification,
+                                    UUID,
+                                    ItemStateUpdate.Key[EventId])]](None)
 
       def itemFor[Item](
           uniqueItemSpecification: UniqueItemSpecification): Item = {
@@ -234,11 +236,16 @@ trait ItemStateStorage { itemStateStorageObject =>
                 blobStorageTimeslice.snapshotBlobFor(uniqueItemSpecification)
 
               snapshot match {
-                case Some(SnapshotBlob(payload, lifecycleUUID, _))
+                case Some(
+                    SnapshotBlob(payload, lifecycleUUID, itemStateUpdateKey))
                     if !annihilatedItemsKeyedByLifecycleUUID.contains(
                       lifecycleUUID) =>
                   uniqueItemSpecificationAccess
-                    .withValue(Some(uniqueItemSpecification -> lifecycleUUID)) {
+                    .withValue(
+                      Some(
+                        (uniqueItemSpecification,
+                         lifecycleUUID,
+                         itemStateUpdateKey))) {
                       kryoPool.fromBytes(payload)
                     }
                 case _ => fallbackItemFor[Item](uniqueItemSpecification)
@@ -257,9 +264,14 @@ trait ItemStateStorage { itemStateStorageObject =>
                 blobStorageTimeslice.snapshotBlobFor(uniqueItemSpecification)
 
               snapshot match {
-                case Some(SnapshotBlob(payload, lifecycleUUID, _)) =>
+                case Some(
+                    SnapshotBlob(payload, lifecycleUUID, itemStateUpdateKey)) =>
                   uniqueItemSpecificationAccess
-                    .withValue(Some(uniqueItemSpecification -> lifecycleUUID)) {
+                    .withValue(
+                      Some(
+                        (uniqueItemSpecification,
+                         lifecycleUUID,
+                         itemStateUpdateKey))) {
                       kryoPool.fromBytes(payload)
                     }
                 case None =>
@@ -292,11 +304,15 @@ trait ItemStateStorage { itemStateStorageObject =>
                         uniqueItemSpecification)
 
                     snapshot.collect {
-                      case SnapshotBlob(payload, lifecycleUUIDFromSnapshot, _)
+                      case SnapshotBlob(payload,
+                                        lifecycleUUIDFromSnapshot,
+                                        itemStateUpdateKey)
                           if lifecycleUUID == lifecycleUUIDFromSnapshot =>
                         uniqueItemSpecificationAccess
                           .withValue(
-                            Some(uniqueItemSpecification -> lifecycleUUID)) {
+                            Some((uniqueItemSpecification,
+                                  lifecycleUUID,
+                                  itemStateUpdateKey))) {
                             kryoPool.fromBytes(payload)
                           }
                     }
@@ -317,15 +333,20 @@ trait ItemStateStorage { itemStateStorageObject =>
       private[ItemStateStorage] def createDeserializationTargetItem[Item]
         : Item =
         uniqueItemSpecificationAccess.value.get match {
-          case (uniqueItemSpecification, lifecycleUUID) =>
-            createAndStoreItem(uniqueItemSpecification, lifecycleUUID)
+          case (uniqueItemSpecification, lifecycleUUID, itemStateUpdateKey) =>
+            createAndStoreItem(uniqueItemSpecification,
+                               lifecycleUUID,
+                               itemStateUpdateKey)
         }
     }
 
     protected def createAndStoreItem[Item](
         uniqueItemSpecification: UniqueItemSpecification,
-        lifecycleUUID: UUID): Item = {
-      val item: Item = createItemFor(uniqueItemSpecification, lifecycleUUID)
+        lifecycleUUID: UUID,
+        itemStateUpdateKey: ItemStateUpdate.Key[EventId]): Item = {
+      val item: Item = createItemFor(uniqueItemSpecification,
+                                     lifecycleUUID,
+                                     itemStateUpdateKey)
       itemsKeyedByUniqueItemSpecification.update(uniqueItemSpecification, item)
       item
     }
@@ -338,7 +359,8 @@ trait ItemStateStorage { itemStateStorageObject =>
 
     protected def createItemFor[Item](
         uniqueItemSpecification: UniqueItemSpecification,
-        lifecycleUUID: UUID): Item
+        lifecycleUUID: UUID,
+        itemStateUpdateKey: ItemStateUpdate.Key[EventId]): Item
 
     private class StorageKeyedByUniqueItemSpecification
         extends mutable.HashMap[UniqueItemSpecification, Any]
