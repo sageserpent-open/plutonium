@@ -225,13 +225,7 @@ object WorldImplementationCodeFactoring {
     }
   }
 
-  object StatefulItemProxySupport extends ProxySupport {
-    val additionalInterfaces: Array[Class[_]] =
-      Array(classOf[ItemExtensionApi], classOf[AnnihilationHook])
-    val cachedProxyClasses =
-      mutable.Map
-        .empty[universe.Type, Class[_]]
-
+  trait StatefulItemProxySupport extends ProxySupport {
     trait AcquiredState extends AcquiredStateCapturingId {
       var _isGhost = false
 
@@ -393,9 +387,9 @@ object WorldImplementationCodeFactoring {
       override val proxySuffix: String = "stateProxy"
 
       override val additionalInterfaces: Array[Class[_]] =
-        StatefulItemProxySupport.additionalInterfaces
+        Array(classOf[ItemExtensionApi], classOf[AnnihilationHook])
       override val cachedProxyClasses: mutable.Map[universe.Type, Class[_]] =
-        StatefulItemProxySupport.cachedProxyClasses
+        mutable.Map.empty[universe.Type, Class[_]]
 
       override protected def configureInterceptions(
           builder: Builder[_]): Builder[_] =
@@ -442,7 +436,9 @@ object WorldImplementationCodeFactoring {
         _))
     }
 
-    object proxyFactory extends StatefulItemProxySupport.Factory
+    object statefulItemProxySupport extends StatefulItemProxySupport
+
+    object proxyFactory extends statefulItemProxySupport.Factory
   }
 
   class IdentifiedItemsScope extends IdentifiedItemAccess {
@@ -532,7 +528,7 @@ object WorldImplementationCodeFactoring {
 
     def itemFor[Item: TypeTag](id: Any): Item = {
       def constructAndCacheItem(): Item = {
-        import StatefulItemProxySupport.AcquiredState
+        import IdentifiedItemsScope.statefulItemProxySupport.AcquiredState
 
         val stateToBeAcquiredByProxy: AcquiredState =
           new AcquiredState {

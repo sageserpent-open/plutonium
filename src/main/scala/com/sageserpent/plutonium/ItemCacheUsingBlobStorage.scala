@@ -6,12 +6,12 @@ import java.util.UUID
 import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
-import com.sageserpent.plutonium.WorldImplementationCodeFactoring.StatefulItemProxySupport
+import com.sageserpent.plutonium.WorldImplementationCodeFactoring.IdentifiedItemsScope.statefulItemProxySupport
 
 import scala.reflect.runtime.universe.{Super => _, This => _, _}
 
 object ItemCacheUsingBlobStorage {
-  object proxyFactory extends StatefulItemProxySupport.Factory
+  object proxyFactory extends statefulItemProxySupport.Factory
 }
 
 class ItemCacheUsingBlobStorage[EventId](
@@ -50,7 +50,7 @@ class ItemCacheUsingBlobStorage[EventId](
   override protected def createItemFor[Item](
       _uniqueItemSpecification: UniqueItemSpecification,
       lifecycleUUID: UUID) = {
-    import StatefulItemProxySupport.AcquiredState
+    import statefulItemProxySupport.AcquiredState
 
     val stateToBeAcquiredByProxy: AcquiredState =
       new AcquiredState {
