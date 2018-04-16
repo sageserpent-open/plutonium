@@ -12,7 +12,7 @@ import scala.reflect.runtime.universe.{Super => _, This => _}
 trait PersistentItemProxyFactory extends StatefulItemProxyFactory {
   import PersistentItemProxyFactory._
 
-  override type AcquiredState <: PersistentItemProxyFactory.AcquiredState
+  override type AcquiredState <: PersistentItemProxyFactory.AcquiredState[_]
 
   override def additionalInterfaces: Array[Class[_]] =
     super.additionalInterfaces :+ classOf[LifecycleUUIDApi]
@@ -30,7 +30,7 @@ trait PersistentItemProxyFactory extends StatefulItemProxyFactory {
 object PersistentItemProxyFactory {
   import WorldImplementationCodeFactoring.firstMethodIsOverrideCompatibleWithSecond
 
-  trait AcquiredState extends StatefulItemProxyFactory.AcquiredState {
+  trait AcquiredState[EventId] extends StatefulItemProxyFactory.AcquiredState {
     def lifecycleUUID: UUID = _lifecycleUUID
 
     def setLifecycleUUID(uuid: UUID): Unit = {

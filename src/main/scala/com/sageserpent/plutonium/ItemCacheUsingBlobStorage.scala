@@ -13,7 +13,7 @@ object ItemCacheUsingBlobStorage {
   object proxyFactory extends PersistentItemProxyFactory {
     override val proxySuffix: String = "itemCacheProxy"
     override type AcquiredState =
-      PersistentItemProxyFactory.AcquiredState
+      PersistentItemProxyFactory.AcquiredState[_]
     override val acquiredStateClazz: Class[_ <: AcquiredState] =
       classOf[AcquiredState]
   }
@@ -58,7 +58,7 @@ class ItemCacheUsingBlobStorage[EventId](
     import ItemCacheUsingBlobStorage.proxyFactory.AcquiredState
 
     val stateToBeAcquiredByProxy: AcquiredState =
-      new AcquiredState {
+      new PersistentItemProxyFactory.AcquiredState[EventId] {
         val uniqueItemSpecification: UniqueItemSpecification =
           _uniqueItemSpecification
         def itemIsLocked: Boolean                        = true
