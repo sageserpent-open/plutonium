@@ -21,7 +21,7 @@ object Patch {
 
   def apply(targetRecorder: Recorder,
             method: Method,
-            arguments: Array[AnyRef]) = {
+            arguments: Seq[AnyRef]) = {
     val methodPieces = MethodPieces(method.getDeclaringClass,
                                     method.getName,
                                     method.getParameterTypes)
@@ -41,7 +41,7 @@ object Patch {
 
 case class Patch(methodPieces: MethodPieces,
                  override val targetItemSpecification: UniqueItemSpecification,
-                 wrappedArguments: Array[Patch.WrappedArgument])
+                 wrappedArguments: Seq[Patch.WrappedArgument])
     extends AbstractPatch {
   import Patch._
 
@@ -56,8 +56,7 @@ case class Patch(methodPieces: MethodPieces,
       UniqueItemSpecification(
         targetItemSpecification.id,
         uniqueItemSpecificationToTypeTagMap(targetItemSpecification))
-    val rewrittenArguments
-      : Array[WrappedArgument] = wrappedArguments map (_.map(
+    val rewrittenArguments: Seq[WrappedArgument] = wrappedArguments map (_.map(
       argumentUniqueItemSpecification =>
         UniqueItemSpecification(argumentUniqueItemSpecification.id,
                                 uniqueItemSpecificationToTypeTagMap(
