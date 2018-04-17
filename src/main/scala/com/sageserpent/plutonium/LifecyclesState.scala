@@ -14,7 +14,6 @@ import com.sageserpent.plutonium.WorldImplementationCodeFactoring.{
 }
 import de.ummels.prioritymap.PriorityMap
 import quiver._
-import resource.makeManagedResource
 import scalaz.std.list._
 import scalaz.syntax.monadPlus._
 import scalaz.{-\/, \/-}
@@ -22,6 +21,7 @@ import scalaz.{-\/, \/-}
 import scala.collection.immutable.Map
 import scala.collection.{immutable, mutable}
 import scala.reflect.runtime.universe.TypeTag
+import scala.util.DynamicVariable
 
 trait LifecyclesState[EventId] {
 
@@ -112,14 +112,15 @@ class LifecyclesStateImplementation[EventId](
             private val blobStorageTimeSlice =
               blobStorage.timeSlice(timeSliceWhen, inclusive = false)
 
-            var allItemsAreLocked = true
+            val itemStateUpdateKeyOfPatchBeingApplied =
+              new DynamicVariable[Option[ItemStateUpdate.Key[EventId]]](None)
 
             private val itemsMutatedSinceLastHarvest =
               mutable.Map.empty[UniqueItemSpecification, ItemExtensionApi]
 
-            private val itemsReadFromSinceLastHarvest
-              : mutable.Set[UniqueItemSpecification] =
-              mutable.Set.empty[UniqueItemSpecification]
+            private val itemStateUpdateReadDependenciesDiscoveredSinceLastHarvest
+              : mutable.Set[ItemStateUpdate.Key[EventId]] =
+              mutable.Set.empty[ItemStateUpdate.Key[EventId]]
 
             override def blobStorageTimeslice
               : BlobStorage.Timeslice[SnapshotBlob[EventId]] =
@@ -135,8 +136,14 @@ class LifecyclesStateImplementation[EventId](
                 new PersistentItemProxyFactory.AcquiredState[EventId] {
                   val uniqueItemSpecification: UniqueItemSpecification =
                     _uniqueItemSpecification
-                  def itemIsLocked: Boolean = allItemsAreLocked
+                  def itemIsLocked: Boolean =
+                    itemStateUpdateKeyOfPatchBeingApplied.value.isEmpty
                   override def recordMutation(item: ItemExtensionApi): Unit = {
+                    item
+                      .asInstanceOf[ItemStateUpdateKeyTrackingApi[EventId]]
+                      .setItemStateUpdateKey(
+                        itemStateUpdateKeyOfPatchBeingApplied.value)
+
                     itemsMutatedSinceLastHarvest.update(
                       item.uniqueItemSpecification,
                       item)
@@ -144,7 +151,13 @@ class LifecyclesStateImplementation[EventId](
 
                   override def recordReadOnlyAccess(
                       item: ItemExtensionApi): Unit = {
-                    itemsReadFromSinceLastHarvest += item.uniqueItemSpecification
+                    item
+                      .asInstanceOf[ItemStateUpdateKeyTrackingApi[EventId]]
+                      .itemStateUpdateKey match {
+                      case Some(key) =>
+                        itemStateUpdateReadDependenciesDiscoveredSinceLastHarvest += key
+                      case None =>
+                    }
                   }
                 }
 
@@ -187,9 +200,9 @@ class LifecyclesStateImplementation[EventId](
               item
             }
 
-            def harvestMutationsAndReadAccesses()
+            def harvestMutationsAndReadDependencies()
               : (Map[UniqueItemSpecification, SnapshotBlob[EventId]],
-                 Set[UniqueItemSpecification]) = {
+                 Set[ItemStateUpdate.Key[EventId]]) = {
               val mutations = itemsMutatedSinceLastHarvest map {
                 case (uniqueItemSpecification, item) =>
                   val snapshotBlob =
@@ -198,12 +211,22 @@ class LifecyclesStateImplementation[EventId](
                   uniqueItemSpecification -> snapshotBlob
               } toMap
 
-              val readAccesses = itemsReadFromSinceLastHarvest.toSet
+              val dependenciesCreatedByMutations =
+                itemsMutatedSinceLastHarvest map {
+                  case (_, item) =>
+                    item
+                      .asInstanceOf[ItemStateUpdateKeyTrackingApi[EventId]]
+                      .itemStateUpdateKey
+                } toSet
+
+              val dependenciesPriorToMutations
+                : Set[ItemStateUpdate.Key[EventId]] =
+                itemStateUpdateReadDependenciesDiscoveredSinceLastHarvest.toSet diff dependenciesCreatedByMutations.flatten
 
               itemsMutatedSinceLastHarvest.clear()
-              itemsReadFromSinceLastHarvest.clear()
+              itemStateUpdateReadDependenciesDiscoveredSinceLastHarvest.clear()
 
-              mutations -> readAccesses
+              mutations -> dependenciesPriorToMutations
             }
           }
 
@@ -215,10 +238,7 @@ class LifecyclesStateImplementation[EventId](
                 ItemStateUpdate.Key[EventId]],
               itemStateUpdatesDag: Graph[ItemStateUpdate.Key[EventId],
                                          ItemStateUpdate,
-                                         Unit],
-              itemStateUpdateDependencies: Map[UniqueItemSpecification,
-                                               ItemStateUpdate.Key[EventId]])
-            : TimesliceState =
+                                         Unit]): TimesliceState =
             itemStateUpdatesToApply.headOption match {
               case Some((_, itemStateUpdateKey)) =>
                 val itemStateUpdate =
@@ -234,9 +254,13 @@ class LifecyclesStateImplementation[EventId](
 
                   itemStateUpdate match {
                     case ItemStateAnnihilation(annihilation) =>
-                      val dependencyOfAnnihilation =
-                        itemStateUpdateDependencies(
-                          annihilation.uniqueItemSpecification)
+                      // TODO: having to reconstitute the item here is hokey when the act of applying the annihilation just afterwards will also do that too. Sort it out!
+                      val dependencyOfAnnihilation
+                        : Option[ItemStateUpdate.Key[EventId]] =
+                        identifiedItemAccess
+                          .reconstitute(annihilation.uniqueItemSpecification)
+                          .asInstanceOf[ItemStateUpdateKeyTrackingApi[EventId]]
+                          .itemStateUpdateKey
 
                       annihilation(identifiedItemAccess)
 
@@ -246,30 +270,30 @@ class LifecyclesStateImplementation[EventId](
                         Map(annihilation.uniqueItemSpecification -> None))
 
                       val itemStateUpdatesDagWithUpdatedDependency =
-                        itemStateUpdatesDag.decomp(itemStateUpdateKey) match {
-                          case Decomp(Some(context), remainder) =>
-                            context.copy(inAdj = Vector(
-                              () -> dependencyOfAnnihilation)) & remainder
-                        }
+                        dependencyOfAnnihilation.fold(itemStateUpdatesDag)(
+                          dependency =>
+                            itemStateUpdatesDag
+                              .decomp(itemStateUpdateKey) match {
+                              case Decomp(Some(context), remainder) =>
+                                context
+                                  .copy(inAdj = Vector(() -> dependency)) & remainder
+                          })
 
                       afterRecalculationsWithinTimeslice(
                         itemStateUpdatesToApply.drop(1),
-                        itemStateUpdatesDagWithUpdatedDependency,
-                        itemStateUpdateDependencies - annihilation.uniqueItemSpecification)
+                        itemStateUpdatesDagWithUpdatedDependency)
 
                     case ItemStatePatch(patch) =>
-                      for (_ <- makeManagedResource {
-                             identifiedItemAccess.allItemsAreLocked = false
-                           } { _ =>
-                             identifiedItemAccess.allItemsAreLocked = true
-                           }(List.empty)) {
-                        patch(identifiedItemAccess)
-                      }
+                      identifiedItemAccess.itemStateUpdateKeyOfPatchBeingApplied
+                        .withValue(Some(itemStateUpdateKey)) {
+                          patch(identifiedItemAccess)
+                        }
 
                       patch.checkInvariants(identifiedItemAccess)
 
-                      val (mutatedItemSnapshots, itemsReadFrom) =
-                        identifiedItemAccess.harvestMutationsAndReadAccesses()
+                      val (mutatedItemSnapshots, discoveredReadDependencies) =
+                        identifiedItemAccess
+                          .harvestMutationsAndReadDependencies()
 
                       revisionBuilder.record(
                         Set(itemStateUpdateKey),
@@ -282,22 +306,16 @@ class LifecyclesStateImplementation[EventId](
                         case Context(_, key, _, _) => () -> key
                       }
 
-                      val dependenciesDiscoveredByPatchExecution
-                        : Set[ItemStateUpdate.Key[EventId]] =
-                        itemsReadFrom flatMap itemStateUpdateDependencies.get
-
                       val itemStateUpdatesDagWithUpdatedDependencies =
                         itemStateUpdatesDag.decomp(itemStateUpdateKey) match {
                           case Decomp(Some(context), remainder) =>
                             context.copy(inAdj =
-                              dependenciesDiscoveredByPatchExecution map (() -> _) toVector) & remainder
+                              discoveredReadDependencies map (() -> _) toVector) & remainder
                         }
 
                       afterRecalculationsWithinTimeslice(
                         itemStateUpdatesToApply.drop(1) ++ descendants,
-                        itemStateUpdatesDagWithUpdatedDependencies,
-                        itemStateUpdateDependencies ++ mutatedItemSnapshots
-                          .map(_._1 -> itemStateUpdateKey)
+                        itemStateUpdatesDagWithUpdatedDependencies
                       )
                   }
 
@@ -309,10 +327,8 @@ class LifecyclesStateImplementation[EventId](
                                revisionBuilder.build())
             }
 
-          afterRecalculationsWithinTimeslice(
-            itemStateUpdatesToApply,
-            itemStateUpdatesDag,
-            Map.empty[UniqueItemSpecification, ItemStateUpdate.Key[EventId]])
+          afterRecalculationsWithinTimeslice(itemStateUpdatesToApply,
+                                             itemStateUpdatesDag)
         }
       }
 
