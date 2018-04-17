@@ -349,9 +349,7 @@ class LifecyclesStateImplementation[EventId](
           })
 
       val descendantsOfRevokedItemStateUpdates: Seq[ItemStateUpdate.Key[
-        EventId]] = itemStateUpdateKeysThatNeedToBeRevoked.toSeq flatMap itemStateUpdatesDag.successors map itemStateUpdatesDag.context map {
-        case Context(_, key, _, _) => key
-      }
+        EventId]] = itemStateUpdateKeysThatNeedToBeRevoked.toSeq flatMap itemStateUpdatesDag.successors
 
       implicit val itemStateUpdateKeyOrdering
         : Ordering[ItemStateUpdate.Key[EventId]] =
