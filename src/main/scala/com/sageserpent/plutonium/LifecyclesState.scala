@@ -381,25 +381,33 @@ class LifecyclesStateImplementation[EventId](
             .map(_._1) map (() -> _): _*)(
           implicitly[Ordering[ItemStateUpdate.Key[EventId]]].reverse)
 
-      val initialState = TimesliceState(
-        itemStateUpdatesToApply,
-        itemStateUpdatesDagWithNewNodesAddedIn,
-        whenForItemStateUpdate(itemStateUpdatesToApply.head._2),
-        blobStorageWithRevocations
-      )
+      if (itemStateUpdatesToApply.nonEmpty) {
+        val initialState = TimesliceState(
+          itemStateUpdatesToApply,
+          itemStateUpdatesDagWithNewNodesAddedIn,
+          whenForItemStateUpdate(itemStateUpdatesToApply.head._2),
+          blobStorageWithRevocations
+        )
 
-      val TimesliceState(_,
-                         itemStateUpdatesDagForNewTimeline,
-                         _,
-                         blobStorageForNewTimeline) =
-        initialState.afterRecalculations
+        val TimesliceState(_,
+                           itemStateUpdatesDagForNewTimeline,
+                           _,
+                           blobStorageForNewTimeline) =
+          initialState.afterRecalculations
 
-      new LifecyclesStateImplementation[EventId](
-        events = eventsForNewTimeline,
-        itemStateUpdates = itemStateUpdatesForNewTimeline,
-        itemStateUpdatesDag = itemStateUpdatesDagForNewTimeline,
-        nextRevision = 1 + nextRevision
-      ) -> blobStorageForNewTimeline
+        new LifecyclesStateImplementation[EventId](
+          events = eventsForNewTimeline,
+          itemStateUpdates = itemStateUpdatesForNewTimeline,
+          itemStateUpdatesDag = itemStateUpdatesDagForNewTimeline,
+          nextRevision = 1 + nextRevision
+        ) -> blobStorageForNewTimeline
+      } else
+        new LifecyclesStateImplementation[EventId](
+          events = eventsForNewTimeline,
+          itemStateUpdates = itemStateUpdatesForNewTimeline,
+          itemStateUpdatesDag = itemStateUpdatesDagWithNewNodesAddedIn,
+          nextRevision = 1 + nextRevision
+        ) -> blobStorageWithRevocations
     }
   }
 
