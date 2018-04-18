@@ -2,10 +2,10 @@ package com.sageserpent.plutonium
 
 import java.time.Instant
 
+import com.sageserpent.americium.PositiveInfinity
 import com.sageserpent.plutonium.intersperseObsoleteEvents.EventId
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{FlatSpec, LoneElement, Matchers}
-import com.sageserpent.americium.PositiveInfinity
 
 class WorldEfficientInMemoryImplementationBugs
     extends FlatSpec
@@ -384,6 +384,49 @@ class WorldEfficientInMemoryImplementationBugs
           .render(Bitemporal.withId[IntegerHistory](itemId))
           .loneElement
           .datums should contain theSameElementsInOrderAs (expectedHistory)
+      }
+    }
+  }
+
+  "booking in simple changes in the same single revision" should "work" in {
+    forAll(worldResourceGenerator) { worldResource =>
+      val fooId = "Name: 50"
+
+      val barId = 9
+
+      val asOf = Instant.ofEpochSecond(0)
+
+      val barChangeWhen = Instant.ofEpochSecond(0L)
+      val fooChangeWhen = barChangeWhen plusSeconds 1L
+
+      worldResource acquireAndGet { world =>
+        world.revise(
+          Map(
+            0 -> Some(Change.forOneItem(barChangeWhen)(barId, {
+              bar: BarHistory =>
+                bar.property1 = -7.81198542653286E87
+            })),
+            1 -> Some(Change.forOneItem(fooChangeWhen)(fooId, {
+              foo: FooHistory =>
+                foo.property2 = true
+            }))
+          ),
+          asOf
+        )
+
+        val scope =
+          world.scopeFor(fooChangeWhen, asOf)
+
+        scope
+          .render(Bitemporal.withId[BarHistory](barId))
+          .loneElement
+          .datums should contain theSameElementsInOrderAs Seq(
+          -7.81198542653286E87)
+
+        scope
+          .render(Bitemporal.withId[FooHistory](fooId))
+          .loneElement
+          .datums should contain theSameElementsInOrderAs Seq(true)
       }
     }
   }
