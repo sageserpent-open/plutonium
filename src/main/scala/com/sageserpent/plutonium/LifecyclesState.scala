@@ -94,7 +94,7 @@ class LifecyclesStateImplementation[EventId](
         whenFor(eventsForNewTimeline)(_)
 
       case class TimesliceState(
-          itemStateUpdatesToApply: PriorityMap[Unit,
+          itemStateUpdatesToApply: PriorityMap[UUID,
                                                ItemStateUpdate.Key[EventId]],
           itemStateUpdatesDag: Graph[ItemStateUpdate.Key[EventId],
                                      ItemStateUpdate,
@@ -234,7 +234,7 @@ class LifecyclesStateImplementation[EventId](
 
           def afterRecalculationsWithinTimeslice(
               itemStateUpdatesToApply: PriorityMap[
-                Unit,
+                UUID,
                 ItemStateUpdate.Key[EventId]],
               itemStateUpdatesDag: Graph[ItemStateUpdate.Key[EventId],
                                          ItemStateUpdate,
@@ -301,9 +301,9 @@ class LifecyclesStateImplementation[EventId](
                         mutatedItemSnapshots.mapValues(Some.apply))
 
                       val descendants
-                        : immutable.Seq[(Unit, ItemStateUpdate.Key[EventId])] = itemStateUpdatesDag
+                        : immutable.Seq[(UUID, ItemStateUpdate.Key[EventId])] = itemStateUpdatesDag
                         .successors(itemStateUpdateKey) map itemStateUpdatesDag.context map {
-                        case Context(_, key, _, _) => () -> key
+                        case Context(_, key, _, _) => UUID.randomUUID() -> key
                       }
 
                       val itemStateUpdatesDagWithUpdatedDependencies =
@@ -375,11 +375,10 @@ class LifecyclesStateImplementation[EventId](
         }
 
       val itemStateUpdatesToApply
-        : PriorityMap[Unit, ItemStateUpdate.Key[EventId]] =
+        : PriorityMap[UUID, ItemStateUpdate.Key[EventId]] =
         PriorityMap(
           descendantsOfRevokedItemStateUpdates ++ newAndModifiedItemStateUpdates
-            .map(_._1) map (() -> _): _*)(
-          implicitly[Ordering[ItemStateUpdate.Key[EventId]]].reverse)
+            .map(_._1) map (UUID.randomUUID() -> _): _*)
 
       if (itemStateUpdatesToApply.nonEmpty) {
         val initialState = TimesliceState(
