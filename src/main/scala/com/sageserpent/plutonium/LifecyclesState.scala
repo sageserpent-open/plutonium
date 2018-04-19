@@ -54,7 +54,7 @@ object LifecyclesStateImplementation {
   object proxyFactory extends PersistentItemProxyFactory {
     override val proxySuffix: String = "lifecyclesStateProxy"
     override type AcquiredState =
-      PersistentItemProxyFactory.AcquiredState[_]
+      PersistentItemProxyFactory.AcquiredState
     override val acquiredStateClazz: Class[_ <: AcquiredState] =
       classOf[AcquiredState]
   }
@@ -133,7 +133,7 @@ class LifecyclesStateImplementation[EventId](
               import LifecyclesStateImplementation.proxyFactory.AcquiredState
 
               val stateToBeAcquiredByProxy: AcquiredState =
-                new PersistentItemProxyFactory.AcquiredState[EventId] {
+                new PersistentItemProxyFactory.AcquiredState {
                   val uniqueItemSpecification: UniqueItemSpecification =
                     _uniqueItemSpecification
                   def itemIsLocked: Boolean =

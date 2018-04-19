@@ -12,7 +12,7 @@ import scala.reflect.runtime.universe.{Super => _, This => _}
 trait PersistentItemProxyFactory extends StatefulItemProxyFactory {
   import PersistentItemProxyFactory._
 
-  override type AcquiredState <: PersistentItemProxyFactory.AcquiredState[_]
+  override type AcquiredState <: PersistentItemProxyFactory.AcquiredState
 
   override def additionalInterfaces: Array[Class[_]] =
     super.additionalInterfaces ++ Seq(classOf[LifecycleUUIDApi],
@@ -35,7 +35,9 @@ trait PersistentItemProxyFactory extends StatefulItemProxyFactory {
 object PersistentItemProxyFactory {
   import WorldImplementationCodeFactoring.firstMethodIsOverrideCompatibleWithSecond
 
-  trait AcquiredState[EventId] extends StatefulItemProxyFactory.AcquiredState {
+  type ItemStateUpdateKey = ItemStateUpdate.Key[_]
+
+  trait AcquiredState extends StatefulItemProxyFactory.AcquiredState {
     def lifecycleUUID: UUID = _lifecycleUUID
 
     def setLifecycleUUID(uuid: UUID): Unit = {
@@ -44,15 +46,15 @@ object PersistentItemProxyFactory {
 
     private var _lifecycleUUID: UUID = _
 
-    def setItemStateUpdateKey(
-        itemStateUpdateKey: Option[ItemStateUpdate.Key[EventId]]): Unit = {
-      _itemStateUpdateKey = itemStateUpdateKey
+    def setItemStateUpdateKey(itemStateUpdateKey: Any): Unit = {
+      _itemStateUpdateKey =
+        itemStateUpdateKey.asInstanceOf[Option[ItemStateUpdateKey]]
     }
 
-    def itemStateUpdateKey: Option[ItemStateUpdate.Key[EventId]] =
+    def itemStateUpdateKey: Option[ItemStateUpdateKey] =
       _itemStateUpdateKey
 
-    private var _itemStateUpdateKey: Option[ItemStateUpdate.Key[EventId]] = None
+    private var _itemStateUpdateKey: Option[ItemStateUpdateKey] = None
   }
 
   val setLifecycleUUIDMethod = new MethodDescription.ForLoadedMethod(
@@ -69,8 +71,7 @@ object PersistentItemProxyFactory {
 
   val setItemStateUpdateKeyMethod = new MethodDescription.ForLoadedMethod(
     classOf[ItemStateUpdateKeyTrackingApi[_]]
-      .getMethod("setItemStateUpdateKey",
-                 classOf[Option[ItemStateUpdate.Key[_]]]))
+      .getMethod("setItemStateUpdateKey", classOf[Any]))
 
   val matchSetItemStateUpdateKey: ElementMatcher[MethodDescription] =
     firstMethodIsOverrideCompatibleWithSecond(_, setItemStateUpdateKeyMethod)
