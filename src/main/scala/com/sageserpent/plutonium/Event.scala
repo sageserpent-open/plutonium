@@ -7,12 +7,6 @@ import java.util.concurrent.Callable
 import com.sageserpent.americium
 import com.sageserpent.americium.{Finite, PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
-import com.sageserpent.plutonium.WorldImplementationCodeFactoring.{
-  AcquiredStateCapturingId,
-  IdentifiedItemsScope,
-  ProxyFactory,
-  firstMethodIsOverrideCompatibleWithSecond
-}
 import net.bytebuddy.description.method.MethodDescription
 import net.bytebuddy.dynamic.DynamicType.Builder
 import net.bytebuddy.implementation.MethodDelegation
@@ -21,7 +15,6 @@ import net.bytebuddy.matcher.ElementMatcher
 import resource._
 
 import scala.collection.mutable
-import scala.reflect.runtime.universe
 import scala.reflect.runtime.universe.{This => _, _}
 
 // NOTE: if 'when' is 'NegativeInfinity', the event is taken to be 'at the beginning of time' - this is a way of introducing
@@ -33,122 +26,32 @@ sealed trait Event {
 }
 
 object capturePatches {
-  object RecordingCallbackStuff {
-    val additionalInterfaces: Array[Class[_]] = Array(classOf[Recorder])
-    val cachedProxyClasses =
-      mutable.Map.empty[universe.Type, Class[_]]
+  object proxyFactory extends ProxyFactory {
+    val isForRecordingOnly = true
 
-    def isFinalizer(methodDescription: MethodDescription): Boolean =
-      methodDescription.getName == "finalize" && methodDescription.getParameters.isEmpty && methodDescription.getReturnType
-        .represents(classOf[Unit])
+    override type AcquiredState = RecordingProxyAcquiredState
 
-    trait AcquiredState extends AcquiredStateCapturingId {
-      def capturePatch(patch: AbstractPatch): Unit
+    override val acquiredStateClazz: Class[_ <: AcquiredState] =
+      classOf[AcquiredState]
 
-      var unlockFullReadAccess: Boolean = false
-    }
+    override val proxySuffix: String = "_recordingProxy"
 
-    val matchMutation: ElementMatcher[MethodDescription] = methodDescription =>
-      methodDescription.getReturnType.represents(classOf[Unit])
+    override val additionalInterfaces: Array[Class[_]] =
+      Array(classOf[Recorder])
 
-    val matchUniqueItemSpecification: ElementMatcher[MethodDescription] =
-      firstMethodIsOverrideCompatibleWithSecond(
-        _,
-        IdentifiedItemsScope.uniqueItemSpecificationPropertyForRecording)
-
-    val matchAbstractForbiddenReadAccess: ElementMatcher[MethodDescription] =
-      methodDescription =>
-        methodDescription.isAbstract && matchForbiddenReadAccess.matches(
-          methodDescription)
-
-    val matchForbiddenReadAccess: ElementMatcher[MethodDescription] =
-      methodDescription =>
-        !IdentifiedItemsScope
-          .alwaysAllowsReadAccessTo(methodDescription) && !RecordingCallbackStuff
-          .isFinalizer(methodDescription) && !methodDescription.getReturnType
-          .represents(classOf[Unit])
-
-    val matchPermittedReadAccess: ElementMatcher[MethodDescription] =
-      IdentifiedItemsScope.alwaysAllowsReadAccessTo(_)
-
-    object mutation {
-      @RuntimeType
-      def apply(@Origin method: Method,
-                @AllArguments arguments: Array[AnyRef],
-                @This target: AnyRef,
-                @FieldValue("acquiredState") acquiredState: AcquiredState) = {
-        val item = target.asInstanceOf[Recorder]
-        // Remember, the outer context is making a proxy of type 'Item'.
-        acquiredState.capturePatch(Patch(item, method, arguments))
-        null // Representation of a unit value by a ByteBuddy interceptor.
-      }
-    }
-
-    object uniqueItemSpecification {
-      @RuntimeType
-      def apply(@FieldValue("acquiredState") acquiredState: AcquiredState) =
-        acquiredState.uniqueItemSpecification
-    }
-
-    object forbiddenAbstractReadAccess {
-      @RuntimeType
-      def apply(@Origin method: Method, @This target: AnyRef) =
-        throw new UnsupportedOperationException(
-          s"Attempt to call abstract method: '$method' with a non-unit return type on a recorder proxy: '$target' while capturing a change or measurement.")
-    }
-
-    object forbiddenReadAccess {
-      @RuntimeType
-      def apply(@Origin method: Method,
-                @This target: AnyRef,
-                @SuperCall superCall: Callable[_],
-                @FieldValue("acquiredState") acquiredState: AcquiredState) =
-        if (!acquiredState.unlockFullReadAccess) {
-          throw new UnsupportedOperationException(
-            s"Attempt to call method: '$method' with a non-unit return type on a recorder proxy: '$target' while capturing a change or measurement.")
-        } else superCall.call()
-    }
-
-    object permittedReadAccess {
-      @RuntimeType
-      def apply(@SuperCall superCall: Callable[_],
-                @FieldValue("acquiredState") acquiredState: AcquiredState) =
-        if (!acquiredState.unlockFullReadAccess) (for {
-          _ <- makeManagedResource {
-            acquiredState.unlockFullReadAccess = true
-          } { _ =>
-            acquiredState.unlockFullReadAccess = false
-          }(List.empty)
-        } yield superCall.call()) acquireAndGet identity
-        else superCall.call()
-    }
-
-    object proxyFactory extends ProxyFactory[AcquiredState] {
-      val isForRecordingOnly = true
-
-      override val acquiredStateClazz = classOf[AcquiredState]
-
-      override val proxySuffix: String = "_recordingProxy"
-
-      override val additionalInterfaces: Array[Class[_]] =
-        RecordingCallbackStuff.additionalInterfaces
-      override val cachedProxyClasses: mutable.Map[Type, Class[_]] =
-        RecordingCallbackStuff.cachedProxyClasses
-
-      override protected def configureInterceptions(
-          builder: Builder[_]): Builder[_] =
-        builder
-          .method(matchPermittedReadAccess)
-          .intercept(MethodDelegation.to(permittedReadAccess))
-          .method(matchForbiddenReadAccess)
-          .intercept(MethodDelegation.to(forbiddenReadAccess))
-          .method(matchAbstractForbiddenReadAccess)
-          .intercept(MethodDelegation.to(forbiddenAbstractReadAccess))
-          .method(matchUniqueItemSpecification)
-          .intercept(MethodDelegation.to(uniqueItemSpecification))
-          .method(matchMutation)
-          .intercept(MethodDelegation.to(mutation))
-    }
+    override protected def configureInterceptions(
+        builder: Builder[_]): Builder[_] =
+      builder
+        .method(matchPermittedReadAccess)
+        .intercept(MethodDelegation.to(permittedReadAccess))
+        .method(matchForbiddenReadAccess)
+        .intercept(MethodDelegation.to(forbiddenReadAccess))
+        .method(matchAbstractForbiddenReadAccess)
+        .intercept(MethodDelegation.to(forbiddenAbstractReadAccess))
+        .method(matchUniqueItemSpecification)
+        .intercept(MethodDelegation.to(uniqueItemSpecification))
+        .method(matchMutation)
+        .intercept(MethodDelegation.to(mutation))
   }
 
   def apply(update: RecorderFactory => Unit): Seq[AbstractPatch] = {
@@ -157,7 +60,7 @@ object capturePatches {
 
     class LocalRecorderFactory extends RecorderFactory {
       override def apply[Item: TypeTag](id: Any): Item = {
-        import RecordingCallbackStuff._
+        import proxyFactory.AcquiredState
 
         val stateToBeAcquiredByProxy = new AcquiredState {
           val uniqueItemSpecification: UniqueItemSpecification =
@@ -175,6 +78,94 @@ object capturePatches {
     update(new LocalRecorderFactory)
 
     capturedPatches
+  }
+
+  def isFinalizer(methodDescription: MethodDescription): Boolean =
+    methodDescription.getName == "finalize" && methodDescription.getParameters.isEmpty && methodDescription.getReturnType
+      .represents(classOf[Unit])
+
+  trait RecordingProxyAcquiredState extends ProxyFactory.AcquiredState {
+    def capturePatch(patch: AbstractPatch): Unit
+
+    var unlockFullReadAccess: Boolean = false
+  }
+
+  val matchMutation: ElementMatcher[MethodDescription] = methodDescription =>
+    methodDescription.getReturnType.represents(classOf[Unit])
+
+  val matchUniqueItemSpecification: ElementMatcher[MethodDescription] =
+    WorldImplementationCodeFactoring.firstMethodIsOverrideCompatibleWithSecond(
+      _,
+      ProxyFactory.uniqueItemSpecificationPropertyForRecording)
+
+  val matchAbstractForbiddenReadAccess: ElementMatcher[MethodDescription] =
+    methodDescription =>
+      methodDescription.isAbstract && matchForbiddenReadAccess.matches(
+        methodDescription)
+
+  val matchForbiddenReadAccess: ElementMatcher[MethodDescription] =
+    methodDescription =>
+      !ProxyFactory.alwaysAllowsReadAccessTo(methodDescription) && !isFinalizer(
+        methodDescription) && !methodDescription.getReturnType
+        .represents(classOf[Unit])
+
+  val matchPermittedReadAccess: ElementMatcher[MethodDescription] =
+    ProxyFactory.alwaysAllowsReadAccessTo(_)
+
+  object mutation {
+    @RuntimeType
+    def apply(
+        @Origin method: Method,
+        @AllArguments arguments: Array[AnyRef],
+        @This target: AnyRef,
+        @FieldValue("acquiredState") acquiredState: RecordingProxyAcquiredState) = {
+      val item = target.asInstanceOf[Recorder]
+      // Remember, the outer context is making a proxy of type 'Item'.
+      acquiredState.capturePatch(Patch(item, method, arguments))
+      null // Representation of a unit value by a ByteBuddy interceptor.
+    }
+  }
+
+  object uniqueItemSpecification {
+    @RuntimeType
+    def apply(
+        @FieldValue("acquiredState") acquiredState: RecordingProxyAcquiredState) =
+      acquiredState.uniqueItemSpecification
+  }
+
+  object forbiddenAbstractReadAccess {
+    @RuntimeType
+    def apply(@Origin method: Method, @This target: AnyRef) =
+      throw new UnsupportedOperationException(
+        s"Attempt to call abstract method: '$method' with a non-unit return type on a recorder proxy: '$target' while capturing a change or measurement.")
+  }
+
+  object forbiddenReadAccess {
+    @RuntimeType
+    def apply(
+        @Origin method: Method,
+        @This target: AnyRef,
+        @SuperCall superCall: Callable[_],
+        @FieldValue("acquiredState") acquiredState: RecordingProxyAcquiredState) =
+      if (!acquiredState.unlockFullReadAccess) {
+        throw new UnsupportedOperationException(
+          s"Attempt to call method: '$method' with a non-unit return type on a recorder proxy: '$target' while capturing a change or measurement.")
+      } else superCall.call()
+  }
+
+  object permittedReadAccess {
+    @RuntimeType
+    def apply(
+        @SuperCall superCall: Callable[_],
+        @FieldValue("acquiredState") acquiredState: RecordingProxyAcquiredState) =
+      if (!acquiredState.unlockFullReadAccess) (for {
+        _ <- makeManagedResource {
+          acquiredState.unlockFullReadAccess = true
+        } { _ =>
+          acquiredState.unlockFullReadAccess = false
+        }(List.empty)
+      } yield superCall.call()) acquireAndGet identity
+      else superCall.call()
   }
 }
 
@@ -298,7 +289,7 @@ case class Annihilation(definiteWhen: Instant,
         uniqueItemSpecification.copy(typeTag = itemTypeTag))
 
   def apply(identifiedItemAccess: IdentifiedItemAccess): Unit = {
-    identifiedItemAccess.forget(uniqueItemSpecification)
+    identifiedItemAccess.noteAnnihilation(uniqueItemSpecification)
   }
 }
 

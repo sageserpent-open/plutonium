@@ -93,9 +93,13 @@ trait BitemporalBehaviours
                 Arbitrary(Gen.frequency(generatorsThatAlwaysWork: _*))
               }
 
-              implicit def equal[Item]: Equal[Bitemporal[Item]] =
+              implicit def equal[Item]: Equal[Bitemporal[Item]] = {
                 (lhs: Bitemporal[Item], rhs: Bitemporal[Item]) =>
-                  scope.render(lhs) == scope.render(rhs)
+                  val areEqual = scope.render(lhs) == scope.render(rhs)
+                  if (areEqual)
+                    assert(scope.numberOf(lhs) == scope.numberOf(rhs))
+                  areEqual
+              }
 
               val properties = new Properties("applicativePlusEmpty")
 
@@ -566,8 +570,8 @@ trait BitemporalBehaviours
                   Prop.all(ids.toSeq map (id => {
                     val itemsFromGenericQueryById =
                       scope.render(Bitemporal.withId[History](id)).toSet
-                    (itemsFromGenericQueryById.size == scope.numberOf[History](
-                      id)) :| s""
+                    (itemsFromGenericQueryById.size == scope.numberOf(
+                      Bitemporal.withId[History](id))) :| s""
                   }): _*)
                 } else Prop.undecided
               }

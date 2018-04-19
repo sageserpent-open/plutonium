@@ -3,9 +3,17 @@ package com.sageserpent.plutonium
 import scala.reflect.runtime.universe.{Super => _, This => _, _}
 
 trait ItemCache {
-  def itemsFor[Item: TypeTag](id: Any): Stream[Item]
+  // Why a stream for the result type? - two reasons that overlap - we may have no instance in force for the scope, or we might have several that share the same id, albeit with
+  // different runtime subtypes of 'Item'. What's more, if 'bitemporal' was cooked using 'Bitemporal.wildcard', we'll have every single instance of a runtime subtype of 'Item'.
+  def render[Item](bitemporal: Bitemporal[Item]): Stream[Item]
 
-  def allItems[Item: TypeTag](): Stream[Item]
+  def numberOf[Item](bitemporal: Bitemporal[Item]): Int
+}
+
+trait ItemCacheImplementation extends ItemCache {
+  protected def itemsFor[Item: TypeTag](id: Any): Stream[Item]
+
+  protected def allItems[Item: TypeTag](): Stream[Item]
 
   def render[Item](bitemporal: Bitemporal[Item]): Stream[Item] = {
     bitemporal match {
@@ -45,7 +53,7 @@ trait ItemCache {
   }
 }
 
-object emptyItemCache extends ItemCache {
+object emptyItemCache extends ItemCacheImplementation {
   override def itemsFor[Item: TypeTag](id: Any): Stream[Item] = Stream.empty
 
   override def allItems[Item: TypeTag](): Stream[Item] =
