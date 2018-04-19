@@ -430,4 +430,41 @@ class WorldEfficientInMemoryImplementationBugs
       }
     }
   }
+
+  "booking in a measurement after a change event that becomes affected" should "also incorporate following history" in {
+    forAll(worldResourceGenerator) { worldResource =>
+      val itemId = "Fred"
+
+      val sharedAsOf = Instant.ofEpochSecond(0)
+
+      val expectedHistory = Seq("The Real Thing", true)
+
+      worldResource acquireAndGet { world =>
+        world.revise(0, Change.forOneItem(Instant.ofEpochSecond(0L))(itemId, {
+          item: FooHistory =>
+            item.property1 = "Strawman"
+        }), sharedAsOf)
+
+        world.revise(1, Change.forOneItem(Instant.ofEpochSecond(1L))(itemId, {
+          item: FooHistory =>
+            item.property2 = true
+        }), sharedAsOf)
+
+        world.revise(2,
+                     Measurement.forOneItem(Instant.ofEpochSecond(2L))(itemId, {
+                       item: FooHistory =>
+                         item.property1 = "The Real Thing"
+                     }),
+                     sharedAsOf)
+
+        val scope =
+          world.scopeFor(PositiveInfinity[Instant](), world.nextRevision)
+
+        scope
+          .render(Bitemporal.withId[FooHistory](itemId))
+          .loneElement
+          .datums should contain theSameElementsInOrderAs (expectedHistory)
+      }
+    }
+  }
 }
