@@ -5,6 +5,7 @@ import java.time.Instant
 
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.{Finite, Unbounded}
+import com.sageserpent.plutonium
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.PatchRecorder.UpdateConsumer
 import org.scalacheck.Prop.BooleanOperators
@@ -34,12 +35,10 @@ class PatchRecorderSpec
   type EventId = Int
 
   type RecordingAction =
-    (PatchRecorder[EventId],
-     Int,
-     scala.collection.mutable.ListBuffer[Int]) => Unit
+    (PatchRecorder, Int, scala.collection.mutable.ListBuffer[Int]) => Unit
 
   case class TestCase(recordingActions: Seq[RecordingAction],
-                      updateConsumer: UpdateConsumer[EventId],
+                      updateConsumer: UpdateConsumer,
                       bestPatchSelection: BestPatchSelection,
                       eventsHaveEffectNoLaterThan: Unbounded[Instant])
 
@@ -65,7 +64,7 @@ class PatchRecorderSpec
 
   def recordingActionFactoriesGenerator(
       seed: Long,
-      updateConsumer: UpdateConsumer[EventId],
+      updateConsumer: UpdateConsumer,
       bestPatchSelection: BestPatchSelection,
       eventsHaveEffectNoLaterThan: Unbounded[Instant])
     : Gen[Seq[RecordingActionFactory]] = inAnyOrder {
@@ -110,7 +109,7 @@ class PatchRecorderSpec
 
               val recordingActionFactories = clumpsOfPatches zip bestPatches zip changeInsteadOfMeasurementDecisionsInClumps map {
                 case ((clumpOfPatches, bestPatch), decisions) =>
-                  val eventIdsForPatches: Array[EventId] =
+                  val eventIdsForPatches: Array[plutonium.EventId] =
                     clumpOfPatches map (System.identityHashCode) toArray
 
                   // HACK: this next variable and how it is used is truly horrible...
@@ -153,7 +152,7 @@ class PatchRecorderSpec
                                          patch)
                                 .onCall {
                                   (_: Unbounded[Instant],
-                                   _: EventId,
+                                   _: plutonium.EventId,
                                    _: AbstractPatch) =>
                                     sequenceIndicesFromAppliedPatches += sequenceIndexOfPatchStandIn: Unit
                                 }
@@ -168,7 +167,7 @@ class PatchRecorderSpec
                       }
 
                       def recordingChange(patch: AbstractPatch)(when: Instant)(
-                          patchRecorder: PatchRecorder[EventId],
+                          patchRecorder: PatchRecorder,
                           masterSequenceIndex: Int,
                           sequenceIndicesFromAppliedPatches: scala.collection.mutable.ListBuffer[
                             Int]): Unit = {
@@ -186,7 +185,7 @@ class PatchRecorderSpec
 
                       def recordingMeasurement(patch: AbstractPatch)(
                           when: Instant)(
-                          patchRecorder: PatchRecorder[EventId],
+                          patchRecorder: PatchRecorder,
                           masterSequenceIndex: Int,
                           sequenceIndicesFromAppliedPatches: scala.collection.mutable.ListBuffer[
                             Int]): Unit = {
@@ -229,7 +228,7 @@ class PatchRecorderSpec
             recordingActionFactories <- lifecycleForAnIdGenerator(id)
           } yield {
             def recordingFinalAnnihilation(when: Instant)(
-                patchRecorder: PatchRecorder[EventId],
+                patchRecorder: PatchRecorder,
                 masterSequenceIndex: Int,
                 sequenceIndicesFromAppliedPatches: scala.collection.mutable.ListBuffer[
                   Int]): Unit = {
@@ -241,7 +240,7 @@ class PatchRecorderSpec
                            Annihilation(
                              when,
                              UniqueItemSpecification(id, typeTag[FooHistory])))
-                  .onCall { (_: EventId, _: Annihilation) =>
+                  .onCall { (_: plutonium.EventId, _: Annihilation) =>
                     sequenceIndicesFromAppliedPatches += masterSequenceIndex: Unit
                   }
                   .once
@@ -290,7 +289,7 @@ class PatchRecorderSpec
   val testCaseGenerator: Gen[TestCase] = inSequence {
     for {
       seed <- seedGenerator
-      updateConsumer     = mock[UpdateConsumer[EventId]]
+      updateConsumer     = mock[UpdateConsumer]
       bestPatchSelection = mock[BestPatchSelection]
       eventsHaveEffectNoLaterThan <- unboundedInstantGenerator
       recordingActionFactories <- recordingActionFactoriesGenerator(
@@ -330,11 +329,11 @@ class PatchRecorderSpec
           }
 
           val patchRecorder =
-            new PatchRecorderImplementation[Int](eventsHaveEffectNoLaterThan)
-            with PatchRecorderContracts[Int]
+            new PatchRecorderImplementation(eventsHaveEffectNoLaterThan)
+            with PatchRecorderContracts
             with DelegatingBestPatchSelectionImplementation
             with BestPatchSelectionContracts {
-              override val updateConsumer: UpdateConsumer[EventId] =
+              override val updateConsumer: UpdateConsumer =
                 updateConsumerFromTestCase
             }
 

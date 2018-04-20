@@ -26,7 +26,7 @@ trait BestPatchSelectionContracts extends BestPatchSelection {
 }
 
 object PatchRecorder {
-  trait UpdateConsumer[EventId] {
+  trait UpdateConsumer {
     def captureAnnihilation(eventId: EventId, annihilation: Annihilation): Unit
 
     def capturePatch(when: Unbounded[Instant],
@@ -35,10 +35,10 @@ object PatchRecorder {
   }
 }
 
-trait PatchRecorder[EventId] {
+trait PatchRecorder {
   import PatchRecorder._
 
-  val updateConsumer: UpdateConsumer[EventId]
+  val updateConsumer: UpdateConsumer
 
   def whenEventPertainedToByLastRecordingTookPlace: Option[Unbounded[Instant]]
 
@@ -57,7 +57,7 @@ trait PatchRecorder[EventId] {
   def noteThatThereAreNoFollowingRecordings(): Unit
 }
 
-trait PatchRecorderContracts[EventId] extends PatchRecorder[EventId] {
+trait PatchRecorderContracts extends PatchRecorder {
   require(whenEventPertainedToByLastRecordingTookPlace.isEmpty)
   require(!allRecordingsAreCaptured)
 

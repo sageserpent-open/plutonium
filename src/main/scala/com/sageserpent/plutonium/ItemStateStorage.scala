@@ -22,10 +22,9 @@ import scala.collection.mutable
 import scala.util.DynamicVariable
 
 object ItemStateStorage {
-  case class SnapshotBlob[EventId](
-      payload: Array[Byte],
-      lifecycleUUID: UUID,
-      itemStateUpdateKey: Option[ItemStateUpdate.Key[EventId]])
+  case class SnapshotBlob(payload: Array[Byte],
+                          lifecycleUUID: UUID,
+                          itemStateUpdateKey: Option[ItemStateUpdate.Key])
 }
 
 trait ItemStateStorage { itemStateStorageObject =>
@@ -33,7 +32,7 @@ trait ItemStateStorage { itemStateStorageObject =>
 
   private val itemDeserializationThreadContextAccess =
     new DynamicVariable[
-      Option[ReconstitutionContext[_]#ItemDeserializationThreadContext]](None)
+      Option[ReconstitutionContext#ItemDeserializationThreadContext]](None)
 
   private val defaultSerializerFactory =
     new ReflectionSerializerFactory(classOf[FieldSerializer[_]])
@@ -66,8 +65,8 @@ trait ItemStateStorage { itemStateStorageObject =>
 
   protected def lifecycleUUID(item: ItemSuperType): UUID
 
-  protected def itemStateUpdateKey[EventId](
-      item: ItemSuperType): Option[ItemStateUpdate.Key[EventId]]
+  protected def itemStateUpdateKey(
+      item: ItemSuperType): Option[ItemStateUpdate.Key]
 
   protected def noteAnnihilationOnItem(item: ItemSuperType): Unit
 
@@ -169,12 +168,12 @@ trait ItemStateStorage { itemStateStorageObject =>
   private val kryoPool =
     KryoPool.withByteArrayOutputStream(40, kryoInstantiator)
 
-  def snapshotFor[EventId](item: Any): SnapshotBlob[EventId] = {
+  def snapshotFor(item: Any): SnapshotBlob = {
     val itemAsSupertype = item.asInstanceOf[ItemSuperType]
-    SnapshotBlob[EventId](
+    SnapshotBlob(
       payload = kryoPool.toBytesWithClass(item),
       lifecycleUUID = lifecycleUUID(itemAsSupertype),
-      itemStateUpdateKey = itemStateUpdateKey[EventId](itemAsSupertype)
+      itemStateUpdateKey = itemStateUpdateKey(itemAsSupertype)
     )
   }
 
@@ -199,9 +198,9 @@ trait ItemStateStorage { itemStateStorageObject =>
     itemDeserializationThreadContextAccess.value.get
       .createDeserializationTargetItem[Item]
 
-  trait ReconstitutionContext[EventId] {
+  trait ReconstitutionContext {
     def blobStorageTimeslice
-      : BlobStorage.Timeslice[SnapshotBlob[EventId]] // NOTE: abstracting this allows the prospect of a 'moving' timeslice for use when executing an update plan.
+      : BlobStorage.Timeslice[SnapshotBlob] // NOTE: abstracting this allows the prospect of a 'moving' timeslice for use when executing an update plan.
 
     def itemFor[Item](
         uniqueItemSpecification: UniqueItemSpecification): Item = {
@@ -223,9 +222,8 @@ trait ItemStateStorage { itemStateStorageObject =>
 
     class ItemDeserializationThreadContext {
       val uniqueItemSpecificationAccess =
-        new DynamicVariable[Option[(UniqueItemSpecification,
-                                    UUID,
-                                    Option[ItemStateUpdate.Key[EventId]])]](
+        new DynamicVariable[
+          Option[(UniqueItemSpecification, UUID, Option[ItemStateUpdate.Key])]](
           None)
 
       def itemFor[Item](
@@ -344,7 +342,7 @@ trait ItemStateStorage { itemStateStorageObject =>
     protected def createAndStoreItem[Item](
         uniqueItemSpecification: UniqueItemSpecification,
         lifecycleUUID: UUID,
-        itemStateUpdateKey: Option[ItemStateUpdate.Key[EventId]]): Item = {
+        itemStateUpdateKey: Option[ItemStateUpdate.Key]): Item = {
       val item: Item = createItemFor(uniqueItemSpecification,
                                      lifecycleUUID,
                                      itemStateUpdateKey)
@@ -361,7 +359,7 @@ trait ItemStateStorage { itemStateStorageObject =>
     protected def createItemFor[Item](
         uniqueItemSpecification: UniqueItemSpecification,
         lifecycleUUID: UUID,
-        itemStateUpdateKey: Option[ItemStateUpdate.Key[EventId]]): Item
+        itemStateUpdateKey: Option[ItemStateUpdate.Key]): Item
 
     private class StorageKeyedByUniqueItemSpecification
         extends mutable.HashMap[UniqueItemSpecification, Any]

@@ -708,8 +708,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
         _)))
   }
 
-  def historyFrom(world: World[_],
-                  recordingsGroupedById: List[RecordingsForAnId])(
+  def historyFrom(world: World, recordingsGroupedById: List[RecordingsForAnId])(
       scope: Scope): List[(Any, Any)] =
     (for (recordingsForAnId <- recordingsGroupedById)
       yield
@@ -718,8 +717,8 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
   def recordEventsInWorld(bigShuffledHistoryOverLotsOfThings: Stream[
                             Traversable[(Option[(Unbounded[Instant], Event)],
                                          intersperseObsoleteEvents.EventId)]],
-                          asOfs: List[Instant],
-                          world: World[Int]) = {
+      asOfs: List[Instant],
+      world: World) = {
     revisionActions(bigShuffledHistoryOverLotsOfThings, asOfs, world) map (_.apply) force // Actually a piece of imperative code that looks functional - 'world' is being mutated as a side-effect; but the revisions are harvested functionally.
   }
 
@@ -739,7 +738,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
         Traversable[(Option[(Unbounded[Instant], Event)],
                      intersperseObsoleteEvents.EventId)]],
       asOfs: List[Instant],
-      world: World[Int]) = {
+      world: World) = {
     for (revisionAction <- revisionActions(bigShuffledHistoryOverLotsOfThings,
                                            asOfs,
                                            world)) try {
@@ -752,8 +751,8 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
   def revisionActions(bigShuffledHistoryOverLotsOfThings: Stream[
                         Traversable[(Option[(Unbounded[Instant], Event)],
                                      intersperseObsoleteEvents.EventId)]],
-                      asOfs: List[Instant],
-                      world: World[Int]): Stream[() => Revision] = {
+      asOfs: List[Instant],
+      world: World): Stream[() => Revision] = {
     assert(bigShuffledHistoryOverLotsOfThings.length == asOfs.length)
     revisionActions(bigShuffledHistoryOverLotsOfThings, asOfs.iterator, world)
   }
@@ -761,8 +760,8 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
   def revisionActions(bigShuffledHistoryOverLotsOfThings: Stream[
                         Traversable[(Option[(Unbounded[Instant], Event)],
                                      intersperseObsoleteEvents.EventId)]],
-                      asOfsIterator: Iterator[Instant],
-                      world: World[Int]): Stream[() => Revision] = {
+      asOfsIterator: Iterator[Instant],
+      world: World): Stream[() => Revision] = {
     for {
       pieceOfHistory <- bigShuffledHistoryOverLotsOfThings
       _ = require(
@@ -897,27 +896,27 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
 }
 
 trait WorldResource {
-  val worldResourceGenerator: Gen[ManagedResource[World[Int]]]
+  val worldResourceGenerator: Gen[ManagedResource[World]]
 }
 
 trait WorldReferenceImplementationResource extends WorldResource {
-  val worldResourceGenerator: Gen[ManagedResource[World[Int]]] =
+  val worldResourceGenerator: Gen[ManagedResource[World]] =
     Gen.const(
-      makeManagedResource(new WorldReferenceImplementation[Int]
-      with WorldContracts[Int])(_ => {})(List.empty))
+      makeManagedResource(new WorldReferenceImplementation with WorldContracts)(
+        _ => {})(List.empty))
 }
 
 trait WorldEfficientInMemoryImplementationResource extends WorldResource {
-  val worldResourceGenerator: Gen[ManagedResource[World[Int]]] =
+  val worldResourceGenerator: Gen[ManagedResource[World]] =
     Gen.const(
-      makeManagedResource(new WorldEfficientInMemoryImplementation[Int]
-      with WorldContracts[Int])(_ => {})(List.empty))
+      makeManagedResource(new WorldEfficientInMemoryImplementation
+      with WorldContracts)(_ => {})(List.empty))
 }
 
 trait WorldRedisBasedImplementationResource
     extends WorldResource
     with RedisServerFixture {
-  val worldResourceGenerator: Gen[ManagedResource[World[Int]]] =
+  val worldResourceGenerator: Gen[ManagedResource[World]] =
     Gen.const {
       for {
         redisClient <- makeManagedResource(
@@ -925,9 +924,9 @@ trait WorldRedisBasedImplementationResource
             RedisURI.Builder.redis("localhost", redisServerPort).build()))(
           _.shutdown())(List.empty)
         worldResource <- makeManagedResource(
-          new WorldRedisBasedImplementation[Int](redisClient,
-                                                 UUID.randomUUID().toString)
-          with WorldContracts[Int])(_ => {})(List.empty)
+          new WorldRedisBasedImplementation(redisClient,
+                                            UUID.randomUUID().toString)
+          with WorldContracts)(_ => {})(List.empty)
       } yield worldResource
     }
 }

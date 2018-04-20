@@ -1,8 +1,8 @@
 package com.sageserpent.plutonium
 
-trait ItemStateUpdateKeyTrackingApi[EventId] {
+trait ItemStateUpdateKeyTrackingApi {
   def setItemStateUpdateKey(
-      itemStateUpdateKey: Option[ItemStateUpdate.Key[EventId]]): Unit
+      itemStateUpdateKey: Option[ItemStateUpdate.Key]): Unit
 
-  def itemStateUpdateKey: Option[ItemStateUpdate.Key[EventId]]
+  def itemStateUpdateKey: Option[ItemStateUpdate.Key]
 }

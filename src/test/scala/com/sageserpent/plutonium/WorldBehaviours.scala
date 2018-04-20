@@ -3727,7 +3727,7 @@ class AllTheWorlds
             bigShuffledHistoryOverLotsOfThings,
             asOfs,
             queryWhen) =>
-        def resultsFrom(world: World[Int]): immutable.Seq[(Any, Seq[Any])] = {
+        def resultsFrom(world: World): immutable.Seq[(Any, Seq[Any])] = {
           recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
 
           val scope = world.scopeFor(queryWhen, world.nextRevision)

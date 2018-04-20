@@ -20,9 +20,9 @@ object itemStateStorageUsingProxies extends ItemStateStorage {
   override protected def lifecycleUUID(item: ItemSuperType): UUID =
     item.asInstanceOf[LifecycleUUIDApi].lifecycleUUID
 
-  override protected def itemStateUpdateKey[EventId](
-      item: ItemExtensionApi): Option[ItemStateUpdate.Key[EventId]] =
-    item.asInstanceOf[ItemStateUpdateKeyTrackingApi[EventId]].itemStateUpdateKey
+  override protected def itemStateUpdateKey(
+      item: ItemExtensionApi): Option[ItemStateUpdate.Key] =
+    item.asInstanceOf[ItemStateUpdateKeyTrackingApi].itemStateUpdateKey
 
   override protected def noteAnnihilationOnItem(item: ItemSuperType): Unit = {
     item
@@ -31,15 +31,13 @@ object itemStateStorageUsingProxies extends ItemStateStorage {
   }
 }
 
-class TimelineImplementation[EventId](
-    lifecyclesState: LifecyclesState[EventId] = noLifecyclesState[EventId](),
-    blobStorage: BlobStorage[ItemStateUpdate.Key[EventId],
-                             SnapshotBlob[EventId]] =
-      BlobStorageInMemory[ItemStateUpdate.Key[EventId],
-                          SnapshotBlob[EventId]]())
-    extends Timeline[EventId] {
+class TimelineImplementation(
+    lifecyclesState: LifecyclesState = noLifecyclesState(),
+    blobStorage: BlobStorage[ItemStateUpdate.Key, SnapshotBlob] =
+      BlobStorageInMemory[ItemStateUpdate.Key, SnapshotBlob]())
+    extends Timeline {
 
-  override def revise(events: Map[EventId, Option[Event]]) = {
+  override def revise(events: Map[_ <: EventId, Option[Event]]) = {
     val (newLifecyclesState, blobStorageForNewTimeline) = lifecyclesState
       .revise(events, blobStorage)
 
@@ -50,12 +48,12 @@ class TimelineImplementation[EventId](
   }
 
   override def retainUpTo(when: Unbounded[Instant]) = {
-    new TimelineImplementation[EventId](
+    new TimelineImplementation(
       lifecyclesState = this.lifecyclesState.retainUpTo(when),
       blobStorage = this.blobStorage.retainUpTo(when)
     )
   }
 
   override def itemCacheAt(when: Unbounded[Instant]) =
-    new ItemCacheUsingBlobStorage[EventId](blobStorage, when)
+    new ItemCacheUsingBlobStorage(blobStorage, when)
 }

@@ -21,7 +21,7 @@ import scala.collection.immutable.{Map, SortedMap, TreeMap}
 import scala.collection.mutable
 import scala.reflect.runtime.universe.TypeTag
 
-trait LifecyclesState[EventId] {
+trait LifecyclesState {
 
   // NOTE: one might be tempted to think that as a revision of a 'LifecyclesState' also simultaneously revises
   // a 'BlobStorage', then the two things should be fused into one. It seems obvious, doesn't it? - Especially
@@ -31,41 +31,38 @@ trait LifecyclesState[EventId] {
   // encapsulate the former in some way - it could hive off a local 'BlobStorageInMemory' as it revises itself, then
   // reabsorb the new blob storage instance back into its own revision. If so, then perhaps 'TimelineImplementation' *is*
   // in fact the cutover form of 'LifecyclesState'. Food for thought...
-  def revise(events: Map[EventId, Option[Event]],
-             blobStorage: BlobStorage[ItemStateUpdate.Key[EventId],
-                                      SnapshotBlob[EventId]])
-    : (LifecyclesState[EventId],
-       BlobStorage[ItemStateUpdate.Key[EventId], SnapshotBlob[EventId]])
+  def revise(events: Map[_ <: EventId, Option[Event]],
+             blobStorage: BlobStorage[ItemStateUpdate.Key, SnapshotBlob])
+    : (LifecyclesState, BlobStorage[ItemStateUpdate.Key, SnapshotBlob])
 
-  def retainUpTo(when: Unbounded[Instant]): LifecyclesState[EventId]
+  def retainUpTo(when: Unbounded[Instant]): LifecyclesState
 }
 
 object noLifecyclesState {
-  def apply[EventId](): LifecyclesState[EventId] =
-    new LifecyclesStateImplementation[EventId]
+  def apply(): LifecyclesState =
+    new LifecyclesStateImplementation
 }
 
 object LifecyclesStateImplementation {
   object proxyFactory extends PersistentItemProxyFactory {
     override val proxySuffix: String = "lifecyclesStateProxy"
     override type AcquiredState =
-      PersistentItemProxyFactory.AcquiredState[_]
+      PersistentItemProxyFactory.AcquiredState
     override val acquiredStateClazz: Class[_ <: AcquiredState] =
       classOf[AcquiredState]
   }
 }
 
-class LifecyclesStateImplementation[EventId](
+class LifecyclesStateImplementation(
     events: Map[EventId, EventData] = Map.empty[EventId, EventData],
-    itemStateUpdates: Set[(ItemStateUpdate.Key[EventId], ItemStateUpdate)] =
-      Set.empty[(ItemStateUpdate.Key[EventId], ItemStateUpdate)],
+    itemStateUpdates: Set[(ItemStateUpdate.Key, ItemStateUpdate)] =
+      Set.empty[(ItemStateUpdate.Key, ItemStateUpdate)],
     nextRevision: Revision = initialRevision)
-    extends LifecyclesState[EventId] {
-  override def revise(events: Map[EventId, Option[Event]],
-                      blobStorage: BlobStorage[ItemStateUpdate.Key[EventId],
-                                               SnapshotBlob[EventId]])
-    : (LifecyclesState[EventId],
-       BlobStorage[ItemStateUpdate.Key[EventId], SnapshotBlob[EventId]]) = {
+    extends LifecyclesState {
+  override def revise(
+      events: Map[_ <: EventId, Option[Event]],
+      blobStorage: BlobStorage[ItemStateUpdate.Key, SnapshotBlob])
+    : (LifecyclesState, BlobStorage[ItemStateUpdate.Key, SnapshotBlob]) = {
     val (annulledEvents, newEvents) =
       (events.toList map {
         case (eventId, Some(event)) => \/-(eventId -> event)
@@ -79,22 +76,19 @@ class LifecyclesStateImplementation[EventId](
     }.toMap
 
     val itemStateUpdatesForNewTimeline
-      : Set[(ItemStateUpdate.Key[EventId], ItemStateUpdate)] =
+      : Set[(ItemStateUpdate.Key, ItemStateUpdate)] =
       createItemStateUpdates(eventsForNewTimeline)
 
-    val itemStateUpdateKeysThatNeedToBeRevoked
-      : Set[ItemStateUpdate.Key[EventId]] =
+    val itemStateUpdateKeysThatNeedToBeRevoked: Set[ItemStateUpdate.Key] =
       (itemStateUpdates -- itemStateUpdatesForNewTimeline).map(_._1)
 
     // TODO - actually use this, it is a placeholder for the forthcoming incremental recalculation.
-    val newItemStateUpdates: Map[
-      ItemStateUpdate.Key[EventId],
-      ItemStateUpdate] = itemStateUpdatesForNewTimeline.toMap -- itemStateUpdates
+    val newItemStateUpdates
+      : Map[ItemStateUpdate.Key, ItemStateUpdate] = itemStateUpdatesForNewTimeline.toMap -- itemStateUpdates
       .map(_._1)
 
-    implicit val itemStateUpdateKeyOrdering
-      : Ordering[ItemStateUpdate.Key[EventId]] =
-      Ordering.by { key: ItemStateUpdate.Key[EventId] =>
+    implicit val itemStateUpdateKeyOrdering: Ordering[ItemStateUpdate.Key] =
+      Ordering.by { key: ItemStateUpdate.Key =>
         val eventData = eventsForNewTimeline(key.eventId)
         (eventData, key.intraEventIndex)
       }
@@ -105,7 +99,7 @@ class LifecyclesStateImplementation[EventId](
         blobStorage,
         whenFor(eventsForNewTimeline))
 
-    new LifecyclesStateImplementation[EventId](
+    new LifecyclesStateImplementation(
       events = eventsForNewTimeline,
       itemStateUpdates = itemStateUpdatesForNewTimeline,
       nextRevision = 1 + nextRevision) -> blobStorageForNewTimeline
@@ -113,7 +107,7 @@ class LifecyclesStateImplementation[EventId](
 
   private def createItemStateUpdates(
       eventsForNewTimeline: Map[EventId, EventData])
-    : Set[(ItemStateUpdate.Key[EventId], ItemStateUpdate)] = {
+    : Set[(ItemStateUpdate.Key, ItemStateUpdate)] = {
     val eventTimeline = WorldImplementationCodeFactoring.eventTimelineFrom(
       eventsForNewTimeline.toSeq)
 
@@ -121,12 +115,12 @@ class LifecyclesStateImplementation[EventId](
       : mutable.MutableList[(ItemStateUpdate, EventId)] =
       mutable.MutableList.empty[(ItemStateUpdate, EventId)]
 
-    val patchRecorder: PatchRecorder[EventId] =
-      new PatchRecorderImplementation[EventId](PositiveInfinity())
-      with PatchRecorderContracts[EventId] with BestPatchSelectionImplementation
+    val patchRecorder: PatchRecorder =
+      new PatchRecorderImplementation(PositiveInfinity())
+      with PatchRecorderContracts with BestPatchSelectionImplementation
       with BestPatchSelectionContracts {
-        override val updateConsumer: UpdateConsumer[EventId] =
-          new UpdateConsumer[EventId] {
+        override val updateConsumer: UpdateConsumer =
+          new UpdateConsumer {
             override def captureAnnihilation(
                 eventId: EventId,
                 annihilation: Annihilation): Unit = {
@@ -158,13 +152,11 @@ class LifecyclesStateImplementation[EventId](
   }
 
   private def reviseBlobStorage(
-      obsoleteItemStateUpdateKeys: Set[ItemStateUpdate.Key[EventId]],
-      itemStateUpdates: SortedMap[ItemStateUpdate.Key[EventId],
-                                  ItemStateUpdate])(
-      blobStorage: BlobStorage[ItemStateUpdate.Key[EventId],
-                               SnapshotBlob[EventId]],
-      whenFor: ItemStateUpdate.Key[EventId] => Unbounded[Instant])
-    : BlobStorage[ItemStateUpdate.Key[EventId], SnapshotBlob[EventId]] = {
+      obsoleteItemStateUpdateKeys: Set[ItemStateUpdate.Key],
+      itemStateUpdates: SortedMap[ItemStateUpdate.Key, ItemStateUpdate])(
+      blobStorage: BlobStorage[ItemStateUpdate.Key, SnapshotBlob],
+      whenFor: ItemStateUpdate.Key => Unbounded[Instant])
+    : BlobStorage[ItemStateUpdate.Key, SnapshotBlob] = {
     var microRevisedBlobStorage = {
       val initialMicroRevisionBuilder = blobStorage.openRevision()
 
@@ -174,9 +166,9 @@ class LifecyclesStateImplementation[EventId](
       initialMicroRevisionBuilder.build()
     }
 
-    val itemStateUpdatesGroupedByTimeslice: collection.SortedMap[
-      Unbounded[Instant],
-      SortedMap[ItemStateUpdate.Key[EventId], ItemStateUpdate]] =
+    val itemStateUpdatesGroupedByTimeslice
+      : collection.SortedMap[Unbounded[Instant],
+                             SortedMap[ItemStateUpdate.Key, ItemStateUpdate]] =
       SortedMap(
         itemStateUpdates groupBy { case (key, _) => whenFor(key) } toSeq: _*)
 
@@ -184,7 +176,7 @@ class LifecyclesStateImplementation[EventId](
       (when, itemStateUpdates) <- itemStateUpdatesGroupedByTimeslice
     } {
       val identifiedItemAccess = new IdentifiedItemAccess
-      with itemStateStorageUsingProxies.ReconstitutionContext[EventId] {
+      with itemStateStorageUsingProxies.ReconstitutionContext {
         override def reconstitute(
             uniqueItemSpecification: UniqueItemSpecification) =
           itemFor[Any](uniqueItemSpecification)
@@ -197,18 +189,17 @@ class LifecyclesStateImplementation[EventId](
         private val itemsMutatedSinceLastSnapshotHarvest =
           mutable.Map.empty[UniqueItemSpecification, ItemExtensionApi]
 
-        override def blobStorageTimeslice
-          : BlobStorage.Timeslice[SnapshotBlob[EventId]] =
+        override def blobStorageTimeslice: BlobStorage.Timeslice[SnapshotBlob] =
           blobStorageTimeSlice
 
         override protected def createItemFor[Item](
             _uniqueItemSpecification: UniqueItemSpecification,
             lifecycleUUID: UUID,
-            itemStateUpdateKey: Option[ItemStateUpdate.Key[EventId]]) = {
+            itemStateUpdateKey: Option[ItemStateUpdate.Key]) = {
           import LifecyclesStateImplementation.proxyFactory.AcquiredState
 
           val stateToBeAcquiredByProxy: AcquiredState =
-            new PersistentItemProxyFactory.AcquiredState[EventId] {
+            new PersistentItemProxyFactory.AcquiredState {
               val uniqueItemSpecification: UniqueItemSpecification =
                 _uniqueItemSpecification
               def itemIsLocked: Boolean = allItemsAreLocked
@@ -230,7 +221,7 @@ class LifecyclesStateImplementation[EventId](
             .setLifecycleUUID(lifecycleUUID)
 
           item
-            .asInstanceOf[ItemStateUpdateKeyTrackingApi[EventId]]
+            .asInstanceOf[ItemStateUpdateKeyTrackingApi]
             .setItemStateUpdateKey(itemStateUpdateKey)
 
           item
@@ -258,12 +249,11 @@ class LifecyclesStateImplementation[EventId](
           item
         }
 
-        def harvestSnapshots()
-          : Map[UniqueItemSpecification, SnapshotBlob[EventId]] = {
+        def harvestSnapshots(): Map[UniqueItemSpecification, SnapshotBlob] = {
           val result = itemsMutatedSinceLastSnapshotHarvest map {
             case (uniqueItemSpecification, item) =>
               val snapshotBlob =
-                itemStateStorageUsingProxies.snapshotFor[EventId](item)
+                itemStateStorageUsingProxies.snapshotFor(item)
 
               uniqueItemSpecification -> snapshotBlob
           } toMap
@@ -282,7 +272,7 @@ class LifecyclesStateImplementation[EventId](
         } {
           val snapshotBlobs =
             mutable.Map
-              .empty[UniqueItemSpecification, Option[SnapshotBlob[EventId]]]
+              .empty[UniqueItemSpecification, Option[SnapshotBlob]]
 
           itemStateUpdate match {
             case ItemStateAnnihilation(annihilation) =>
@@ -317,11 +307,11 @@ class LifecyclesStateImplementation[EventId](
   }
 
   private def whenFor(eventDataFor: EventId => EventData)(
-      key: ItemStateUpdate.Key[EventId]) =
+      key: ItemStateUpdate.Key) =
     eventDataFor(key.eventId).serializableEvent.when
 
-  override def retainUpTo(when: Unbounded[Instant]): LifecyclesState[EventId] =
-    new LifecyclesStateImplementation[EventId](
+  override def retainUpTo(when: Unbounded[Instant]): LifecyclesState =
+    new LifecyclesStateImplementation(
       events = this.events filter (when >= _._2.serializableEvent.when),
       itemStateUpdates = itemStateUpdates filter {
         case (key, _) =>

@@ -31,10 +31,9 @@ class LifecyclesStateSpec
 
       val itemCache: ItemCache =
         new ItemCacheUsingBlobStorage(
-          noLifecyclesState[EventId]()
+          noLifecyclesState()
             .revise(events,
-                    BlobStorageInMemory[ItemStateUpdate.Key[EventId],
-                                        SnapshotBlob[EventId]]())
+                    BlobStorageInMemory[ItemStateUpdate.Key, SnapshotBlob]())
             ._2,
           queryWhen)
 
@@ -80,11 +79,10 @@ class LifecyclesStateSpec
         }: _*)
 
       val blobStorageResultingFromBlockBooking
-        : BlobStorage[ItemStateUpdate.Key[EventId], SnapshotBlob[EventId]] =
-        noLifecyclesState[EventId]()
+        : BlobStorage[ItemStateUpdate.Key, SnapshotBlob] =
+        noLifecyclesState()
           .revise(eventsInOneBlock,
-                  BlobStorageInMemory[ItemStateUpdate.Key[EventId],
-                                      SnapshotBlob[EventId]]())
+                  BlobStorageInMemory[ItemStateUpdate.Key, SnapshotBlob]())
           ._2
 
       val random = new Random(seed)
@@ -95,11 +93,11 @@ class LifecyclesStateSpec
             booking => TreeMap(booking.map(_.swap): _*)) toList
 
       val blobStorageResultingFromIncrementalBookings
-        : BlobStorage[ItemStateUpdate.Key[EventId], SnapshotBlob[EventId]] =
-        ((noLifecyclesState[EventId]() -> (BlobStorageInMemory[
-          ItemStateUpdate.Key[EventId],
-          SnapshotBlob[EventId]](): BlobStorage[ItemStateUpdate.Key[EventId],
-                                                SnapshotBlob[EventId]])) /: severalRevisionBookingsWithObsoleteEventsThrownIn) {
+        : BlobStorage[ItemStateUpdate.Key, SnapshotBlob] =
+        ((noLifecyclesState() -> (BlobStorageInMemory[ItemStateUpdate.Key,
+                                                      SnapshotBlob](): BlobStorage[
+          ItemStateUpdate.Key,
+          SnapshotBlob])) /: severalRevisionBookingsWithObsoleteEventsThrownIn) {
           case ((lifecyclesState, blobStorage), booking) =>
             lifecyclesState.revise(booking, blobStorage)
         }._2

@@ -13,18 +13,17 @@ object ItemCacheUsingBlobStorage {
   object proxyFactory extends PersistentItemProxyFactory {
     override val proxySuffix: String = "itemCacheProxy"
     override type AcquiredState =
-      PersistentItemProxyFactory.AcquiredState[_]
+      PersistentItemProxyFactory.AcquiredState
     override val acquiredStateClazz: Class[_ <: AcquiredState] =
       classOf[AcquiredState]
   }
 }
 
-class ItemCacheUsingBlobStorage[EventId](
-    blobStorage: BlobStorage[ItemStateUpdate.Key[EventId],
-                             SnapshotBlob[EventId]],
+class ItemCacheUsingBlobStorage(
+    blobStorage: BlobStorage[ItemStateUpdate.Key, SnapshotBlob],
     when: Unbounded[Instant])
     extends ItemCacheImplementation
-    with itemStateStorageUsingProxies.ReconstitutionContext[EventId] {
+    with itemStateStorageUsingProxies.ReconstitutionContext {
   override def itemsFor[Item: TypeTag](id: Any): Stream[Item] =
     for {
       uniqueItemSpecification <- blobStorageTimeslice.uniqueItemQueriesFor(id)
@@ -36,8 +35,7 @@ class ItemCacheUsingBlobStorage[EventId](
         .uniqueItemQueriesFor[Item]
     } yield itemFor[Item](uniqueItemSpecification)
 
-  override val blobStorageTimeslice
-    : BlobStorage.Timeslice[SnapshotBlob[EventId]] =
+  override val blobStorageTimeslice: BlobStorage.Timeslice[SnapshotBlob] =
     blobStorage.timeSlice(when)
 
   override protected def fallbackItemFor[Item](
@@ -57,11 +55,11 @@ class ItemCacheUsingBlobStorage[EventId](
   override protected def createItemFor[Item](
       _uniqueItemSpecification: UniqueItemSpecification,
       lifecycleUUID: UUID,
-      itemStateUpdateKey: Option[ItemStateUpdate.Key[EventId]]) = {
+      itemStateUpdateKey: Option[ItemStateUpdate.Key]) = {
     import ItemCacheUsingBlobStorage.proxyFactory.AcquiredState
 
     val stateToBeAcquiredByProxy: AcquiredState =
-      new PersistentItemProxyFactory.AcquiredState[EventId] {
+      new PersistentItemProxyFactory.AcquiredState {
         val uniqueItemSpecification: UniqueItemSpecification =
           _uniqueItemSpecification
         def itemIsLocked: Boolean                        = true
@@ -79,7 +77,7 @@ class ItemCacheUsingBlobStorage[EventId](
       .setLifecycleUUID(lifecycleUUID)
 
     item
-      .asInstanceOf[ItemStateUpdateKeyTrackingApi[EventId]]
+      .asInstanceOf[ItemStateUpdateKeyTrackingApi]
       .setItemStateUpdateKey(itemStateUpdateKey)
 
     item

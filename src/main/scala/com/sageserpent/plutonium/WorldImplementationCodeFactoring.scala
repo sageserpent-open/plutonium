@@ -44,8 +44,8 @@ object WorldImplementationCodeFactoring {
       case (eventId, eventData) => eventData.serializableEvent -> eventId
     }
 
-  def recordPatches[EventId](eventTimeline: Seq[(Event, EventId)],
-                             patchRecorder: PatchRecorder[EventId]) = {
+  def recordPatches(eventTimeline: Seq[(Event, EventId)],
+                    patchRecorder: PatchRecorder) = {
     for ((event, eventId) <- eventTimeline) event match {
       case Change(when, patches) =>
         for (patch <- patches) {
@@ -88,8 +88,7 @@ object WorldImplementationCodeFactoring {
   }
 }
 
-abstract class WorldImplementationCodeFactoring[EventId]
-    extends World[EventId] {
+abstract class WorldImplementationCodeFactoring extends World {
   abstract class ScopeBasedOnNextRevision(val when: Unbounded[Instant],
                                           val nextRevision: Revision)
       extends com.sageserpent.plutonium.Scope {

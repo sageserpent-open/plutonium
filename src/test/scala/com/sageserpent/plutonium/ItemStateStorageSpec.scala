@@ -71,7 +71,7 @@ trait GraphNode {
 
   var lifecycleUUID: UUID = UUID.randomUUID()
 
-  var itemStateUpdateKey: Option[ItemStateUpdate.Key[EventId]] =
+  var itemStateUpdateKey: Option[ItemStateUpdate.Key] =
     Some(ItemStateUpdate.Key(UUID.randomUUID().toString, 0))
 }
 
@@ -162,9 +162,9 @@ class ItemStateStorageSpec
     override protected def lifecycleUUID(item: ItemSuperType): UUID =
       item.lifecycleUUID
 
-    override protected def itemStateUpdateKey[EventId](
-        item: ItemSuperType): Option[ItemStateUpdate.Key[EventId]] =
-      item.itemStateUpdateKey.asInstanceOf[Option[ItemStateUpdate.Key[EventId]]]
+    override protected def itemStateUpdateKey(
+        item: ItemSuperType): Option[ItemStateUpdate.Key] =
+      item.itemStateUpdateKey
 
     override protected def noteAnnihilationOnItem(item: ItemSuperType): Unit =
       ???
@@ -199,7 +199,7 @@ class ItemStateStorageSpec
       println(
         s"Not to be roundtripped: ${nodesThatAreNotToBeRoundtripped.map(_.id).toList}")
 
-      val snapshotBlobs: Map[UniqueItemSpecification, SnapshotBlob[EventId]] =
+      val snapshotBlobs: Map[UniqueItemSpecification, SnapshotBlob] =
         nodesThatAreToBeRoundtripped map (node =>
           (node.id match {
             case oddId: String =>
@@ -207,9 +207,9 @@ class ItemStateStorageSpec
             case eventId: Int =>
               UniqueItemSpecification(eventId, evenGraphNodeTypeTag)
           }) -> itemStateStorage
-            .snapshotFor[EventId](node)) toMap
+            .snapshotFor(node)) toMap
 
-      val stubTimeslice = new BlobStorage.Timeslice[SnapshotBlob[EventId]] {
+      val stubTimeslice = new BlobStorage.Timeslice[SnapshotBlob] {
         override def uniqueItemQueriesFor[Item: TypeTag]
           : Stream[UniqueItemSpecification] = snapshotBlobs.keys.toStream
 
@@ -219,12 +219,12 @@ class ItemStateStorageSpec
 
         override def snapshotBlobFor(
             uniqueItemSpecification: UniqueItemSpecification)
-          : Option[SnapshotBlob[EventId]] =
+          : Option[SnapshotBlob] =
           snapshotBlobs.get(uniqueItemSpecification)
       }
 
       val reconstitutionContext =
-        new itemStateStorage.ReconstitutionContext[EventId]() {
+        new itemStateStorage.ReconstitutionContext() {
           override val blobStorageTimeslice = stubTimeslice
 
           // The following implementation is also the epitome of hokeyness. Can there be more than epitome?
@@ -243,8 +243,7 @@ class ItemStateStorageSpec
           override protected def createItemFor[Item](
               uniqueItemSpecification: UniqueItemSpecification,
               lifecycleUUID: UUID,
-              itemStateUpdateKey: Option[ItemStateUpdate.Key[EventId]])
-            : Item = {
+              itemStateUpdateKey: Option[ItemStateUpdate.Key]): Item = {
             val item = uniqueItemSpecification match {
               case UniqueItemSpecification(id: OddGraphNode#Id, itemTypeTag)
                   if itemTypeTag == oddGraphNodeTypeTag =>
