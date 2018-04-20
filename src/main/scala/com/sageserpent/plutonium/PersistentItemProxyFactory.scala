@@ -9,32 +9,7 @@ import net.bytebuddy.matcher.ElementMatcher
 
 import scala.reflect.runtime.universe.{Super => _, This => _}
 
-trait PersistentItemProxyFactory extends StatefulItemProxyFactory {
-  import PersistentItemProxyFactory._
-
-  override type AcquiredState <: PersistentItemProxyFactory.AcquiredState[_]
-
-  override def additionalInterfaces: Array[Class[_]] =
-    super.additionalInterfaces ++ Seq(classOf[LifecycleUUIDApi],
-                                      classOf[ItemStateUpdateKeyTrackingApi[_]])
-
-  override protected def configureInterceptions(
-      builder: Builder[_]): Builder[_] =
-    super
-      .configureInterceptions(builder)
-      .method(matchLifecycleUUID)
-      .intercept(MethodDelegation.toField("acquiredState"))
-      .method(matchSetLifecycleUUID)
-      .intercept(MethodDelegation.toField("acquiredState"))
-      .method(matchItemStateUpdateKey)
-      .intercept(MethodDelegation.toField("acquiredState"))
-      .method(matchSetItemStateUpdateKey)
-      .intercept(MethodDelegation.toField("acquiredState"))
-}
-
 object PersistentItemProxyFactory {
-  import WorldImplementationCodeFactoring.firstMethodIsOverrideCompatibleWithSecond
-
   trait AcquiredState[EventId] extends StatefulItemProxyFactory.AcquiredState {
     def lifecycleUUID: UUID = _lifecycleUUID
 
@@ -54,6 +29,29 @@ object PersistentItemProxyFactory {
 
     private var _itemStateUpdateKey: Option[ItemStateUpdate.Key[EventId]] = None
   }
+}
+
+trait PersistentItemProxyFactory extends StatefulItemProxyFactory {
+  import WorldImplementationCodeFactoring.firstMethodIsOverrideCompatibleWithSecond
+
+  override type AcquiredState <: PersistentItemProxyFactory.AcquiredState[_]
+
+  override def additionalInterfaces: Array[Class[_]] =
+    super.additionalInterfaces ++ Seq(classOf[LifecycleUUIDApi],
+                                      classOf[ItemStateUpdateKeyTrackingApi[_]])
+
+  override protected def configureInterceptions(
+      builder: Builder[_]): Builder[_] =
+    super
+      .configureInterceptions(builder)
+      .method(matchLifecycleUUID)
+      .intercept(MethodDelegation.toField("acquiredState"))
+      .method(matchSetLifecycleUUID)
+      .intercept(MethodDelegation.toField("acquiredState"))
+      .method(matchItemStateUpdateKey)
+      .intercept(MethodDelegation.toField("acquiredState"))
+      .method(matchSetItemStateUpdateKey)
+      .intercept(MethodDelegation.toField("acquiredState"))
 
   val setLifecycleUUIDMethod = new MethodDescription.ForLoadedMethod(
     classOf[LifecycleUUIDApi].getMethod("setLifecycleUUID", classOf[UUID]))

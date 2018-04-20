@@ -25,30 +25,8 @@ object ProxyFactory {
 
   val byteBuddy = new ByteBuddy()
 
-  val matchGetClass: ElementMatcher[MethodDescription] =
-    ElementMatchers.is(classOf[AnyRef].getMethod("getClass"))
-
-  val nonMutableMembersThatCanAlwaysBeReadFrom = (classOf[ItemExtensionApi].getMethods ++ classOf[
-    AnyRef].getMethods) map (new MethodDescription.ForLoadedMethod(_))
-
-  val uniqueItemSpecificationPropertyForRecording =
-    new MethodDescription.ForLoadedMethod(
-      classOf[Recorder].getMethod("uniqueItemSpecification"))
-
-  def alwaysAllowsReadAccessTo(method: MethodDescription) =
-    nonMutableMembersThatCanAlwaysBeReadFrom.exists(exclusionMethod => {
-      WorldImplementationCodeFactoring
-        .firstMethodIsOverrideCompatibleWithSecond(method, exclusionMethod)
-    })
-
   trait AcquiredState {
     val uniqueItemSpecification: UniqueItemSpecification
-  }
-
-  object id {
-    @RuntimeType
-    def apply(@FieldValue("acquiredState") acquiredState: AcquiredState) =
-      acquiredState.uniqueItemSpecification.id
   }
 }
 
@@ -135,4 +113,26 @@ trait ProxyFactory {
   protected val cachedProxyClasses
     : scala.collection.mutable.Map[Type, Class[_]] =
     mutable.Map.empty[universe.Type, Class[_]]
+
+  val matchGetClass: ElementMatcher[MethodDescription] =
+    ElementMatchers.is(classOf[AnyRef].getMethod("getClass"))
+
+  val nonMutableMembersThatCanAlwaysBeReadFrom = (classOf[ItemExtensionApi].getMethods ++ classOf[
+    AnyRef].getMethods) map (new MethodDescription.ForLoadedMethod(_))
+
+  val uniqueItemSpecificationPropertyForRecording =
+    new MethodDescription.ForLoadedMethod(
+      classOf[Recorder].getMethod("uniqueItemSpecification"))
+
+  def alwaysAllowsReadAccessTo(method: MethodDescription) =
+    nonMutableMembersThatCanAlwaysBeReadFrom.exists(exclusionMethod => {
+      WorldImplementationCodeFactoring
+        .firstMethodIsOverrideCompatibleWithSecond(method, exclusionMethod)
+    })
+
+  object id {
+    @RuntimeType
+    def apply(@FieldValue("acquiredState") acquiredState: AcquiredState) =
+      acquiredState.uniqueItemSpecification.id
+  }
 }

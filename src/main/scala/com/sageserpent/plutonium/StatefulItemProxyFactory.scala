@@ -19,8 +19,27 @@ import resource.makeManagedResource
 
 import scala.reflect.runtime.universe.{Super => _, This => _}
 
+object StatefulItemProxyFactory {
+  trait AcquiredState extends ProxyFactory.AcquiredState {
+    var _isGhost = false
+
+    def recordAnnihilation(): Unit = {
+      require(!_isGhost)
+      _isGhost = true
+    }
+
+    def isGhost: Boolean = _isGhost
+
+    def itemIsLocked: Boolean
+
+    def recordMutation(item: ItemExtensionApi): Unit
+
+    var unlockFullReadAccess: Boolean = false
+  }
+}
+
 trait StatefulItemProxyFactory extends ProxyFactory {
-  import StatefulItemProxyFactory._
+  import WorldImplementationCodeFactoring.firstMethodIsOverrideCompatibleWithSecond
 
   override val isForRecordingOnly = false
 
@@ -62,29 +81,6 @@ trait StatefulItemProxyFactory extends ProxyFactory {
       .intercept(MethodDelegation.to(checkInvariant))
       .method(matchUniqueItemSpecification)
       .intercept(MethodDelegation.toField("acquiredState"))
-
-}
-
-object StatefulItemProxyFactory {
-  import ProxyFactory._
-  import WorldImplementationCodeFactoring.firstMethodIsOverrideCompatibleWithSecond
-
-  trait AcquiredState extends ProxyFactory.AcquiredState {
-    var _isGhost = false
-
-    def recordAnnihilation(): Unit = {
-      require(!_isGhost)
-      _isGhost = true
-    }
-
-    def isGhost: Boolean = _isGhost
-
-    def itemIsLocked: Boolean
-
-    def recordMutation(item: ItemExtensionApi): Unit
-
-    var unlockFullReadAccess: Boolean = false
-  }
 
   val recordAnnihilationMethod = new MethodDescription.ForLoadedMethod(
     classOf[AnnihilationHook].getMethod("recordAnnihilation"))
