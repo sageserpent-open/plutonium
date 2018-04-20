@@ -3,6 +3,7 @@ package com.sageserpent
 import scalaz.ApplicativePlus
 
 package object plutonium {
+  type EventId = Any
 
   implicit val applicativePlus: ApplicativePlus[Bitemporal] =
     new ApplicativePlus[Bitemporal] {

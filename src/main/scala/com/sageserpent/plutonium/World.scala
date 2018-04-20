@@ -12,16 +12,16 @@ object World {
     : Revision = 0 // NOTE: this is the revision defined when the world is first revised.
 }
 
-trait World[EventId] extends javaApi.World[EventId] {
+trait World extends javaApi.World {
   def nextRevision
     : Revision // NOTE: this is the number of *revisions* that have all been made via 'revise'.
 
   def revisionAsOfs
     : Array[Instant] // Adjacent duplicates are permitted - this is taken to mean that successive revisions were booked in faster than than the time resolution.
 
-  def revise(events: Map[EventId, Option[Event]], asOf: Instant): Revision
+  def revise(events: Map[_ <: EventId, Option[Event]], asOf: Instant): Revision
 
-  def revise(events: java.util.Map[EventId, Optional[Event]],
+  def revise(events: java.util.Map[_ <: EventId, Optional[Event]],
              asOf: Instant): Revision
 
   def revise(eventId: EventId, event: Event, asOf: Instant): Revision
@@ -38,10 +38,10 @@ trait World[EventId] extends javaApi.World[EventId] {
   def scopeFor(when: Instant, asOf: Instant): Scope =
     scopeFor(Finite(when), asOf)
 
-  def forkExperimentalWorld(scope: javaApi.Scope): World[EventId]
+  def forkExperimentalWorld(scope: javaApi.Scope): World
 }
 
-trait WorldContracts[EventId] extends World[EventId] {
+trait WorldContracts extends World {
   def checkInvariant: Unit = {
     require(revisionAsOfs.size == nextRevision)
     require(
@@ -51,7 +51,7 @@ trait WorldContracts[EventId] extends World[EventId] {
   }
 
   // NOTE: this increments 'nextRevision' if it succeeds, associating the new revision with 'asOf'.
-  abstract override def revise(events: Map[EventId, Option[Event]],
+  abstract override def revise(events: Map[_ <: EventId, Option[Event]],
                                asOf: Instant): Revision = {
     require(revisionAsOfs.isEmpty || !asOf.isBefore(revisionAsOfs.last))
     val revisionAsOfsBeforehand = revisionAsOfs

@@ -451,8 +451,8 @@ object WorldImplementationCodeFactoring {
       }
     }
 
-    def populate[EventId](_when: Unbounded[Instant],
-                          eventTimeline: Seq[(Event, EventId)]) = {
+    def populate(_when: Unbounded[Instant],
+                 eventTimeline: Seq[(Event, EventId)]) = {
       idToItemsMultiMap.clear()
 
       for (_ <- makeManagedResource {
@@ -460,17 +460,17 @@ object WorldImplementationCodeFactoring {
            } { _ =>
              allItemsAreLocked = true
            }(List.empty)) {
-        val patchRecorder = new PatchRecorderImplementation[EventId](_when)
-        with PatchRecorderContracts[EventId]
-        with BestPatchSelectionImplementation with BestPatchSelectionContracts {
+        val patchRecorder = new PatchRecorderImplementation(_when)
+        with PatchRecorderContracts with BestPatchSelectionImplementation
+        with BestPatchSelectionContracts {
           val itemsAreLockedResource: ManagedResource[Unit] =
             makeManagedResource {
               allItemsAreLocked = true
             } { _ =>
               allItemsAreLocked = false
             }(List.empty)
-          override val updateConsumer: UpdateConsumer[EventId] =
-            new UpdateConsumer[EventId] {
+          override val updateConsumer: UpdateConsumer =
+            new UpdateConsumer {
               override def captureAnnihilation(
                   eventId: EventId,
                   annihilation: Annihilation): Unit = {
@@ -478,7 +478,7 @@ object WorldImplementationCodeFactoring {
               }
 
               override def capturePatch(when: Unbounded[Instant],
-                                        eventIds: Set[EventId],
+                                        eventIds: Set[_ <: EventId],
                                         patch: AbstractPatch): Unit = {
                 patch(identifiedItemsScopeThis)
                 for (_ <- itemsAreLockedResource) {
@@ -552,8 +552,8 @@ object WorldImplementationCodeFactoring {
         idToItemsMultiMap.values.flatten)
   }
 
-  def recordPatches[EventId](eventTimeline: Seq[(Event, EventId)],
-                             patchRecorder: PatchRecorder[EventId]) = {
+  def recordPatches(eventTimeline: Seq[(Event, EventId)],
+                    patchRecorder: PatchRecorder) = {
     for ((event, eventId) <- eventTimeline) event match {
       case Change(when, patches) =>
         for (patch <- patches) {
@@ -585,8 +585,7 @@ object WorldImplementationCodeFactoring {
   }
 }
 
-abstract class WorldImplementationCodeFactoring[EventId]
-    extends World[EventId] {
+abstract class WorldImplementationCodeFactoring extends World {
   abstract class ScopeBasedOnNextRevision(val when: Unbounded[Instant],
                                           val nextRevision: Revision)
       extends com.sageserpent.plutonium.Scope {
@@ -620,7 +619,7 @@ abstract class WorldImplementationCodeFactoring[EventId]
     }
   }
 
-  def revise(events: java.util.Map[EventId, Optional[Event]],
+  def revise(events: java.util.Map[_ <: EventId, Optional[Event]],
              asOf: Instant): Revision = {
     val sam: java.util.function.Function[Event, Option[Event]] = event =>
       Some(event): Option[Event]

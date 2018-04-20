@@ -251,9 +251,7 @@ class BlobStorageSpec
   def blobStorageFrom(revisions: Seq[ScalaFmtWorkaround],
                       wrapAround: EventId => EventId,
                       randomBehaviour: Random) = {
-    ((BlobStorageInMemory[EventId, SnapshotBlob](): BlobStorage[
-      EventId,
-      SnapshotBlob]) /: revisions) {
+    ((BlobStorageInMemory[SnapshotBlob](): BlobStorage[SnapshotBlob]) /: revisions) {
       case (blobStorage, bookingsForRevision) =>
         val builder = blobStorage.openRevision()
         for ((booking, eventId) <- bookingsForRevision) {
@@ -368,7 +366,7 @@ class BlobStorageSpec
         def wrapAround(delta: EventId): EventId =
           (delta + wrapAroundShift) % gapBetweenBaseTransformedEventIds
 
-        val blobStorage: BlobStorage[EventId, SnapshotBlob] =
+        val blobStorage: BlobStorage[SnapshotBlob] =
           blobStorageFrom(revisions, wrapAround, randomBehaviour)
 
         for (TimeSeries(uniqueItemSpecification, snapshots, queryTimes) <- lotsOfFinalTimeSeries) {
@@ -514,7 +512,7 @@ class BlobStorageSpec
         def wrapAround(delta: EventId): EventId =
           (delta + wrapAroundShift) % gapBetweenBaseTransformedEventIds
 
-        val blobStorage: BlobStorage[EventId, SnapshotBlob] =
+        val blobStorage: BlobStorage[SnapshotBlob] =
           blobStorageFrom(revisions, wrapAround, randomBehaviour)
 
         for (TimeSeries(uniqueItemSpecification, snapshots, queryTimes) <- lotsOfFinalTimeSeries) {
@@ -569,7 +567,7 @@ class BlobStorageSpec
         def wrapAround(delta: EventId): EventId =
           (delta + wrapAroundShift) % gapBetweenBaseTransformedEventIds
 
-        val blobStorage: BlobStorage[EventId, SnapshotBlob] =
+        val blobStorage: BlobStorage[SnapshotBlob] =
           blobStorageFrom(revisions, wrapAround, randomBehaviour)
 
         for (TimeSeries(uniqueItemSpecification, snapshots, queryTimes) <- lotsOfFinalTimeSeries) {

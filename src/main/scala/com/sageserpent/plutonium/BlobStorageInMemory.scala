@@ -40,20 +40,19 @@ object BlobStorageInMemory {
     }
   }
 
-  def apply[EventId, SnapshotBlob]() =
-    new BlobStorageInMemory[EventId, SnapshotBlob](
+  def apply[SnapshotBlob]() =
+    new BlobStorageInMemory[SnapshotBlob](
       revision = 0,
       eventRevisions = Map.empty,
       lifecycles = Map.empty
     )
 }
 
-case class BlobStorageInMemory[EventId, SnapshotBlob] private (
+case class BlobStorageInMemory[SnapshotBlob] private (
     revision: BlobStorageInMemory.Revision,
     eventRevisions: Map[EventId, BlobStorageInMemory.Revision],
-    lifecycles: Map[Any,
-                    Seq[BlobStorageInMemory[EventId, SnapshotBlob]#Lifecycle]])
-    extends BlobStorage[EventId, SnapshotBlob] { thisBlobStorage =>
+    lifecycles: Map[Any, Seq[BlobStorageInMemory[SnapshotBlob]#Lifecycle]])
+    extends BlobStorage[SnapshotBlob] { thisBlobStorage =>
   import BlobStorage._
   import BlobStorageInMemory._
 
@@ -123,14 +122,14 @@ case class BlobStorageInMemory[EventId, SnapshotBlob] private (
       val events = mutable.MutableList.empty[Event]
 
       override def recordSnapshotBlobsForEvent(
-          eventIds: Set[EventId],
+          eventIds: Set[_ <: EventId],
           when: Unbounded[Instant],
           snapshotBlobs: Map[UniqueItemSpecification, Option[SnapshotBlob]])
         : Unit = {
-        events += ((eventIds, when, snapshotBlobs))
+        events += ((eventIds.asInstanceOf[Set[EventId]], when, snapshotBlobs))
       }
 
-      override def build(): BlobStorage[EventId, SnapshotBlob] = {
+      override def build(): BlobStorage[SnapshotBlob] = {
         val newRevision = 1 + thisBlobStorage.revision
 
         val newEventRevisions
@@ -237,7 +236,7 @@ case class BlobStorageInMemory[EventId, SnapshotBlob] private (
   }
 
   override def retainUpTo(
-      when: Unbounded[Instant]): BlobStorageInMemory[EventId, SnapshotBlob] =
+      when: Unbounded[Instant]): BlobStorageInMemory[SnapshotBlob] =
     thisBlobStorage.copy(
       revision = this.revision,
       eventRevisions = this.eventRevisions,

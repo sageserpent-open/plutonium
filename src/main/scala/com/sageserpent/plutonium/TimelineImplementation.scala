@@ -27,13 +27,13 @@ object itemStateStorageUsingProxies extends ItemStateStorage {
   }
 }
 
-class TimelineImplementation[EventId](
-    lifecyclesState: LifecyclesState[EventId] = noLifecyclesState[EventId](),
-    blobStorage: BlobStorage[EventId, SnapshotBlob] =
-      BlobStorageInMemory[EventId, SnapshotBlob]())
-    extends Timeline[EventId] {
+class TimelineImplementation(lifecyclesState: LifecyclesState =
+                               noLifecyclesState(),
+                             blobStorage: BlobStorage[SnapshotBlob] =
+                               BlobStorageInMemory[SnapshotBlob]())
+    extends Timeline {
 
-  override def revise(events: Map[EventId, Option[Event]]) = {
+  override def revise(events: Map[_ <: EventId, Option[Event]]) = {
     val (newLifecyclesState, blobStorageForNewTimeline) = lifecyclesState
       .revise(events, blobStorage)
 
@@ -44,12 +44,12 @@ class TimelineImplementation[EventId](
   }
 
   override def retainUpTo(when: Unbounded[Instant]) = {
-    new TimelineImplementation[EventId](
+    new TimelineImplementation(
       lifecyclesState = this.lifecyclesState.retainUpTo(when),
       blobStorage = this.blobStorage.retainUpTo(when)
     )
   }
 
   override def itemCacheAt(when: Unbounded[Instant]) =
-    new ItemCacheUsingBlobStorage[EventId](blobStorage, when)
+    new ItemCacheUsingBlobStorage(blobStorage, when)
 }

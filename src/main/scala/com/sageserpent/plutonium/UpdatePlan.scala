@@ -13,12 +13,12 @@ import scala.reflect.runtime.universe.{Super => _, This => _, _}
 import scala.collection.immutable.{Map, SortedMap}
 import scala.collection.mutable
 
-case class UpdatePlan[EventId](
+case class UpdatePlan(
     eventsMadeObsolete: Set[EventId],
     updates: SortedMap[Unbounded[Instant],
                        Seq[(Set[EventId], ItemStateUpdate)]]) {
-  def apply(blobStorage: BlobStorage[EventId, (Array[Byte], UUID)])
-    : BlobStorage[EventId, SnapshotBlob] = {
+  def apply(blobStorage: BlobStorage[(Array[Byte], UUID)])
+    : BlobStorage[SnapshotBlob] = {
     val UpdatePlan(eventsMadeObsolete, updates) = this
 
     var microRevisedBlobStorage = {
