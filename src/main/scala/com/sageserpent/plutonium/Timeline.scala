@@ -6,15 +6,15 @@ import com.sageserpent.americium.Unbounded
 
 import scala.collection.immutable.Map
 
-trait Timeline[EventId] {
-  def revise(events: Map[EventId, Option[Event]]): Timeline[EventId]
+trait Timeline {
+  def revise(events: Map[_ <: EventId, Option[Event]]): Timeline
 
-  def retainUpTo(when: Unbounded[Instant]): Timeline[EventId]
+  def retainUpTo(when: Unbounded[Instant]): Timeline
 
   def itemCacheAt(when: Unbounded[Instant]): ItemCache
 }
 
 object emptyTimeline {
   def apply[EventId]() =
-    new TimelineImplementation[EventId]
+    new TimelineImplementation
 }

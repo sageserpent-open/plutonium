@@ -47,9 +47,9 @@ object WorldRedisBasedImplementation {
   }
 }
 
-class WorldRedisBasedImplementation[EventId](redisClient: RedisClient,
-                                             identityGuid: String)
-    extends WorldInefficientImplementationCodeFactoring[EventId] {
+class WorldRedisBasedImplementation(redisClient: RedisClient,
+                                    identityGuid: String)
+    extends WorldInefficientImplementationCodeFactoring {
   parentWorld =>
 
   import World._
@@ -85,8 +85,8 @@ class WorldRedisBasedImplementation[EventId](redisClient: RedisClient,
   protected def nextRevisionObservable: Observable[Revision] =
     toScalaObservable(redisApi.llen(asOfsKey)) map (_.toInt)
 
-  override def forkExperimentalWorld(scope: javaApi.Scope): World[EventId] =
-    new WorldRedisBasedImplementation[EventId](
+  override def forkExperimentalWorld(scope: javaApi.Scope): World =
+    new WorldRedisBasedImplementation(
       redisClient = parentWorld.redisClient,
       identityGuid =
         s"${parentWorld.identityGuid}-experimental-${UUID.randomUUID()}") {

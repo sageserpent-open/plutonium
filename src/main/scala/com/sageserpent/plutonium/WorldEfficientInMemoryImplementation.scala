@@ -7,21 +7,21 @@ import com.sageserpent.plutonium.World.Revision
 
 import scala.collection.mutable.MutableList
 
-class WorldEfficientInMemoryImplementation[EventId](
-    timelines: MutableList[(Instant, Timeline[EventId])])
-    extends WorldImplementationCodeFactoring[EventId] {
-  def this() = this(MutableList.empty[(Instant, Timeline[EventId])])
+class WorldEfficientInMemoryImplementation(
+    timelines: MutableList[(Instant, Timeline)])
+    extends WorldImplementationCodeFactoring {
+  def this() = this(MutableList.empty[(Instant, Timeline)])
 
   override def revisionAsOfs: Array[Instant] = timelines.map(_._1).toArray
 
   override def nextRevision: Revision = timelines.size
 
-  override def revise(events: Map[EventId, Option[Event]],
+  override def revise(events: Map[_ <: EventId, Option[Event]],
                       asOf: Instant): Revision = {
     val resultCapturedBeforeMutation = nextRevision
 
     val baseTimeline
-      : Timeline[EventId] = timelines.lastOption map (_._2) getOrElse emptyTimeline()
+      : Timeline = timelines.lastOption map (_._2) getOrElse emptyTimeline()
 
     val newTimeline = baseTimeline.revise(events)
 
@@ -30,14 +30,14 @@ class WorldEfficientInMemoryImplementation[EventId](
     resultCapturedBeforeMutation
   }
 
-  override def forkExperimentalWorld(scope: javaApi.Scope): World[EventId] = {
+  override def forkExperimentalWorld(scope: javaApi.Scope): World = {
     val relevantTimelines = timelines.take(scope.nextRevision)
 
     val relevantTimelinesEachWithHistorySharedWithThis = relevantTimelines map {
       case (asOf, timeline) => asOf -> timeline.retainUpTo(scope.when)
     }
 
-    new WorldEfficientInMemoryImplementation[EventId](
+    new WorldEfficientInMemoryImplementation(
       relevantTimelinesEachWithHistorySharedWithThis)
   }
 

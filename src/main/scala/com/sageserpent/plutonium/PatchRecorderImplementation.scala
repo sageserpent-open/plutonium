@@ -14,9 +14,9 @@ object PatchRecorderImplementation {
   val initialSequenceIndex: SequenceIndex = 0L
 }
 
-abstract class PatchRecorderImplementation[EventId](
+abstract class PatchRecorderImplementation(
     eventsHaveEffectNoLaterThan: Unbounded[Instant])
-    extends PatchRecorder[EventId] {
+    extends PatchRecorder {
   // This class makes no pretence at exception safety - it doesn't need to in the context
   // of the client 'WorldReferenceImplementation', which provides exception safety at a higher level.
   self: BestPatchSelection =>

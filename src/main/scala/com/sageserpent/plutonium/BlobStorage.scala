@@ -48,6 +48,7 @@ trait BlobStorage[RecordingId, SnapshotBlob] { blobStorage =>
       record(Set(key), PositiveInfinity(), Map.empty)
 
     def build(): BlobStorage[RecordingId, SnapshotBlob]
+
   }
 
   def openRevision(): RevisionBuilder
@@ -57,4 +58,5 @@ trait BlobStorage[RecordingId, SnapshotBlob] { blobStorage =>
 
   def retainUpTo(
       when: Unbounded[Instant]): BlobStorage[RecordingId, SnapshotBlob]
+
 }

@@ -3,7 +3,6 @@ package com.sageserpent.plutonium
 import java.time.Instant
 
 import com.sageserpent.americium.PositiveInfinity
-import com.sageserpent.plutonium.intersperseObsoleteEvents.EventId
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{FlatSpec, LoneElement, Matchers}
 
