@@ -131,8 +131,7 @@ class LifecyclesStateImplementation(
                   val uniqueItemSpecification: UniqueItemSpecification =
                     _uniqueItemSpecification
 
-                  def itemIsLocked: Boolean =
-                    itemStateUpdateKeyOfPatchBeingApplied.value.isEmpty
+                  def itemIsLocked: Boolean = false
 
                   override def recordMutation(item: ItemExtensionApi): Unit = {
                     itemsMutatedSinceLastHarvest.update(
