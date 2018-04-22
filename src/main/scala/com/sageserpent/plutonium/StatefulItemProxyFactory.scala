@@ -133,7 +133,6 @@ trait StatefulItemProxyFactory extends ProxyFactory {
     @RuntimeType
     def apply(@Origin method: Method,
               @This target: ItemExtensionApi,
-              @AllArguments arguments: Array[Any],
               @SuperCall superCall: Callable[_],
               @FieldValue("acquiredState") acquiredState: AcquiredState) = {
       if (acquiredState.itemIsLocked || acquiredState.invariantCheckInProgress) {
