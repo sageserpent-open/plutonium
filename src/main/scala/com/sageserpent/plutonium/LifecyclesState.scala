@@ -203,10 +203,28 @@ class LifecyclesStateImplementation(
               item
             }
 
-            def harvestMutationsAndReadDependencies(
-                itemStateUpdateKeyOfPatchBeingApplied: ItemStateUpdate.Key)
+            def apply(patch: AbstractPatch,
+                      itemStateUpdateKey: ItemStateUpdate.Key)
               : (Map[UniqueItemSpecification, SnapshotBlob],
                  Set[ItemStateUpdate.Key]) = {
+              itemStateUpdateKeyOfPatchBeingApplied
+                .withValue(
+                  Some(
+                    PatchApplicationContext(itemStateUpdateKey =
+                                              itemStateUpdateKey,
+                                            checkingInvariant = false))) {
+                  patch(this)
+                }
+
+              itemStateUpdateKeyOfPatchBeingApplied
+                .withValue(
+                  Some(
+                    PatchApplicationContext(itemStateUpdateKey =
+                                              itemStateUpdateKey,
+                                            checkingInvariant = true))) {
+                  patch.checkInvariants(this)
+                }
+
               val readDependencies: Set[ItemStateUpdate.Key] =
                 itemStateUpdateReadDependenciesDiscoveredSinceLastHarvest.toSet
 
@@ -215,8 +233,7 @@ class LifecyclesStateImplementation(
               for (item <- itemsMutatedSinceLastHarvest.values) {
                 item
                   .asInstanceOf[ItemStateUpdateKeyTrackingApi]
-                  .setItemStateUpdateKey(
-                    Some(itemStateUpdateKeyOfPatchBeingApplied))
+                  .setItemStateUpdateKey(Some(itemStateUpdateKey))
               }
 
               // ... but make sure this happens *before* the snapshots are obtained. Imperative code, got to love it, eh!
@@ -287,28 +304,8 @@ class LifecyclesStateImplementation(
                         itemStateUpdatesDagWithUpdatedDependency)
 
                     case ItemStatePatch(patch) =>
-                      identifiedItemAccess.itemStateUpdateKeyOfPatchBeingApplied
-                        .withValue(
-                          Some(
-                            PatchApplicationContext(
-                              itemStateUpdateKey = itemStateUpdateKey,
-                              checkingInvariant = false))) {
-                          patch(identifiedItemAccess)
-                        }
-
-                      identifiedItemAccess.itemStateUpdateKeyOfPatchBeingApplied
-                        .withValue(
-                          Some(
-                            PatchApplicationContext(
-                              itemStateUpdateKey = itemStateUpdateKey,
-                              checkingInvariant = true))) {
-                          patch.checkInvariants(identifiedItemAccess)
-                        }
-
                       val (mutatedItemSnapshots, discoveredReadDependencies) =
-                        identifiedItemAccess
-                          .harvestMutationsAndReadDependencies(
-                            itemStateUpdateKey)
+                        identifiedItemAccess(patch, itemStateUpdateKey)
 
                       revisionBuilder.record(
                         Set(itemStateUpdateKey),
