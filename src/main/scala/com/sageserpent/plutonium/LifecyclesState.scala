@@ -89,10 +89,6 @@ class LifecyclesStateImplementation(
       val whenForItemStateUpdate: ItemStateUpdate.Key => Unbounded[Instant] =
         whenFor(eventsForNewTimeline)(_)
 
-      case class PatchApplicationContext(
-          itemStateUpdateKey: ItemStateUpdate.Key,
-          checkingInvariant: Boolean)
-
       case class TimesliceState(
           itemStateUpdatesToApply: PriorityMap[UUID, ItemStateUpdate.Key],
           itemStateUpdatesDag: Graph[ItemStateUpdate.Key,
@@ -111,7 +107,7 @@ class LifecyclesStateImplementation(
               blobStorage.timeSlice(timeSliceWhen, inclusive = false)
 
             val itemStateUpdateKeyOfPatchBeingApplied =
-              new DynamicVariable[Option[PatchApplicationContext]](None)
+              new DynamicVariable[Option[ItemStateUpdate.Key]](None)
 
             private val itemsMutatedSinceLastHarvest =
               mutable.Map.empty[UniqueItemSpecification, ItemExtensionApi]
@@ -136,8 +132,7 @@ class LifecyclesStateImplementation(
                     _uniqueItemSpecification
 
                   def itemIsLocked: Boolean =
-                    itemStateUpdateKeyOfPatchBeingApplied.value.fold(true)(
-                      _.checkingInvariant)
+                    itemStateUpdateKeyOfPatchBeingApplied.value.isEmpty
 
                   override def recordMutation(item: ItemExtensionApi): Unit = {
                     itemsMutatedSinceLastHarvest.update(
@@ -152,8 +147,7 @@ class LifecyclesStateImplementation(
                       .itemStateUpdateKey
 
                     assert(
-                      itemStateUpdateKeyOfPatchBeingApplied.value.map(
-                        _.itemStateUpdateKey) != itemStateUpdateKeyThatLastUpdatedItem)
+                      itemStateUpdateKeyOfPatchBeingApplied.value != itemStateUpdateKeyThatLastUpdatedItem)
 
                     itemStateUpdateKeyThatLastUpdatedItem match {
                       case Some(key) =>
@@ -208,20 +202,8 @@ class LifecyclesStateImplementation(
               : (Map[UniqueItemSpecification, SnapshotBlob],
                  Set[ItemStateUpdate.Key]) = {
               itemStateUpdateKeyOfPatchBeingApplied
-                .withValue(
-                  Some(
-                    PatchApplicationContext(itemStateUpdateKey =
-                                              itemStateUpdateKey,
-                                            checkingInvariant = false))) {
+                .withValue(Some(itemStateUpdateKey)) {
                   patch(this)
-                }
-
-              itemStateUpdateKeyOfPatchBeingApplied
-                .withValue(
-                  Some(
-                    PatchApplicationContext(itemStateUpdateKey =
-                                              itemStateUpdateKey,
-                                            checkingInvariant = true))) {
                   patch.checkInvariants(this)
                 }
 

@@ -32,6 +32,8 @@ object StatefulItemProxyFactory {
 
     def itemIsLocked: Boolean
 
+    var invariantCheckInProgress = false
+
     def recordMutation(item: ItemExtensionApi): Unit
 
     def recordReadOnlyAccess(item: ItemExtensionApi): Unit
@@ -134,7 +136,7 @@ trait StatefulItemProxyFactory extends ProxyFactory {
               @AllArguments arguments: Array[Any],
               @SuperCall superCall: Callable[_],
               @FieldValue("acquiredState") acquiredState: AcquiredState) = {
-      if (acquiredState.itemIsLocked) {
+      if (acquiredState.itemIsLocked || acquiredState.invariantCheckInProgress) {
         throw new UnsupportedOperationException(
           s"Attempt to write via: '$method' to an item: '$target' rendered from a bitemporal query.")
       }
@@ -209,7 +211,17 @@ trait StatefulItemProxyFactory extends ProxyFactory {
     def apply(@FieldValue("acquiredState") acquiredState: AcquiredState,
               @SuperCall superCall: Callable[Unit]): Unit = {
       apply(acquiredState)
-      superCall.call()
+      if (!acquiredState.invariantCheckInProgress) {
+        for {
+          _ <- makeManagedResource {
+            acquiredState.invariantCheckInProgress = true
+          } { _ =>
+            acquiredState.invariantCheckInProgress = false
+          }(List.empty)
+        } {
+          superCall.call()
+        }
+      } else superCall.call()
     }
   }
 }
