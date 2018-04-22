@@ -89,6 +89,10 @@ class LifecyclesStateImplementation(
       val whenForItemStateUpdate: ItemStateUpdate.Key => Unbounded[Instant] =
         whenFor(eventsForNewTimeline)(_)
 
+      case class PatchApplicationContext(
+          itemStateUpdateKey: ItemStateUpdate.Key,
+          checkingInvariant: Boolean)
+
       case class TimesliceState(
           itemStateUpdatesToApply: PriorityMap[UUID, ItemStateUpdate.Key],
           itemStateUpdatesDag: Graph[ItemStateUpdate.Key,
@@ -107,7 +111,7 @@ class LifecyclesStateImplementation(
               blobStorage.timeSlice(timeSliceWhen, inclusive = false)
 
             val itemStateUpdateKeyOfPatchBeingApplied =
-              new DynamicVariable[Option[ItemStateUpdate.Key]](None)
+              new DynamicVariable[Option[PatchApplicationContext]](None)
 
             private val itemsMutatedSinceLastHarvest =
               mutable.Map.empty[UniqueItemSpecification, ItemExtensionApi]
@@ -130,14 +134,12 @@ class LifecyclesStateImplementation(
                 new PersistentItemProxyFactory.AcquiredState {
                   val uniqueItemSpecification: UniqueItemSpecification =
                     _uniqueItemSpecification
-                  def itemIsLocked: Boolean =
-                    itemStateUpdateKeyOfPatchBeingApplied.value.isEmpty
-                  override def recordMutation(item: ItemExtensionApi): Unit = {
-                    item
-                      .asInstanceOf[ItemStateUpdateKeyTrackingApi]
-                      .setItemStateUpdateKey(
-                        itemStateUpdateKeyOfPatchBeingApplied.value)
 
+                  def itemIsLocked: Boolean =
+                    itemStateUpdateKeyOfPatchBeingApplied.value.fold(true)(
+                      _.checkingInvariant)
+
+                  override def recordMutation(item: ItemExtensionApi): Unit = {
                     itemsMutatedSinceLastHarvest.update(
                       item.uniqueItemSpecification,
                       item)
@@ -145,13 +147,20 @@ class LifecyclesStateImplementation(
 
                   override def recordReadOnlyAccess(
                       item: ItemExtensionApi): Unit = {
-                    item
+                    val itemStateUpdateKeyThatLastUpdatedItem = item
                       .asInstanceOf[ItemStateUpdateKeyTrackingApi]
-                      .itemStateUpdateKey match {
+                      .itemStateUpdateKey
+
+                    assert(
+                      itemStateUpdateKeyOfPatchBeingApplied.value.map(
+                        _.itemStateUpdateKey) != itemStateUpdateKeyThatLastUpdatedItem)
+
+                    itemStateUpdateKeyThatLastUpdatedItem match {
                       case Some(key) =>
                         itemStateUpdateReadDependenciesDiscoveredSinceLastHarvest += key
                       case None =>
                     }
+
                   }
                 }
 
@@ -194,10 +203,24 @@ class LifecyclesStateImplementation(
               item
             }
 
-            def harvestMutationsAndReadDependencies()
+            def harvestMutationsAndReadDependencies(
+                itemStateUpdateKeyOfPatchBeingApplied: ItemStateUpdate.Key)
               : (Map[UniqueItemSpecification, SnapshotBlob],
                  Set[ItemStateUpdate.Key]) = {
-              val mutations = itemsMutatedSinceLastHarvest map {
+              val readDependencies: Set[ItemStateUpdate.Key] =
+                itemStateUpdateReadDependenciesDiscoveredSinceLastHarvest.toSet
+
+              // NOTE: set this *after* getting the read dependencies, because mutations caused by the item state update being applied
+              // can themselves discover read dependencies that would otherwise be clobbered by the following block...
+              for (item <- itemsMutatedSinceLastHarvest.values) {
+                item
+                  .asInstanceOf[ItemStateUpdateKeyTrackingApi]
+                  .setItemStateUpdateKey(
+                    Some(itemStateUpdateKeyOfPatchBeingApplied))
+              }
+
+              // ... but make sure this happens *before* the snapshots are obtained. Imperative code, got to love it, eh!
+              val mutationSnapshots = itemsMutatedSinceLastHarvest map {
                 case (uniqueItemSpecification, item) =>
                   val snapshotBlob =
                     itemStateStorageUsingProxies.snapshotFor(item)
@@ -205,21 +228,10 @@ class LifecyclesStateImplementation(
                   uniqueItemSpecification -> snapshotBlob
               } toMap
 
-              val dependenciesCreatedByMutations =
-                itemsMutatedSinceLastHarvest map {
-                  case (_, item) =>
-                    item
-                      .asInstanceOf[ItemStateUpdateKeyTrackingApi]
-                      .itemStateUpdateKey
-                } toSet
-
-              val dependenciesPriorToMutations: Set[ItemStateUpdate.Key] =
-                itemStateUpdateReadDependenciesDiscoveredSinceLastHarvest.toSet diff dependenciesCreatedByMutations.flatten
-
               itemsMutatedSinceLastHarvest.clear()
               itemStateUpdateReadDependenciesDiscoveredSinceLastHarvest.clear()
 
-              mutations -> dependenciesPriorToMutations
+              mutationSnapshots -> readDependencies
             }
           }
 
@@ -276,15 +288,27 @@ class LifecyclesStateImplementation(
 
                     case ItemStatePatch(patch) =>
                       identifiedItemAccess.itemStateUpdateKeyOfPatchBeingApplied
-                        .withValue(Some(itemStateUpdateKey)) {
+                        .withValue(
+                          Some(
+                            PatchApplicationContext(
+                              itemStateUpdateKey = itemStateUpdateKey,
+                              checkingInvariant = false))) {
                           patch(identifiedItemAccess)
                         }
 
-                      patch.checkInvariants(identifiedItemAccess)
+                      identifiedItemAccess.itemStateUpdateKeyOfPatchBeingApplied
+                        .withValue(
+                          Some(
+                            PatchApplicationContext(
+                              itemStateUpdateKey = itemStateUpdateKey,
+                              checkingInvariant = true))) {
+                          patch.checkInvariants(identifiedItemAccess)
+                        }
 
                       val (mutatedItemSnapshots, discoveredReadDependencies) =
                         identifiedItemAccess
-                          .harvestMutationsAndReadDependencies()
+                          .harvestMutationsAndReadDependencies(
+                            itemStateUpdateKey)
 
                       revisionBuilder.record(
                         Set(itemStateUpdateKey),
