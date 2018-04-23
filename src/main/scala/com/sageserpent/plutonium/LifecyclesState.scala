@@ -342,13 +342,22 @@ class LifecyclesStateImplementation(
                               sortedKeys
                                 .until(itemStateUpdateKey)
                                 .lastOption
-                                .toSeq
-                                .flatMap(successorsOf)
-                                .filter(
-                                  successorOfAncestor =>
-                                    Ordering[ItemStateUpdate.Key].gt(
-                                      successorOfAncestor,
-                                      itemStateUpdateKey))
+                                .fold {
+                                  sortedKeys
+                                    .from(itemStateUpdateKey)
+                                    .takeWhile(key =>
+                                      !Ordering[ItemStateUpdate.Key]
+                                        .gt(key, itemStateUpdateKey))
+                                    .headOption
+                                    .toSet
+                                }(
+                                  ancestorItemStateUpdateKey =>
+                                    successorsOf(ancestorItemStateUpdateKey)
+                                      .filter(
+                                        successorOfAncestor =>
+                                          Ordering[ItemStateUpdate.Key].gt(
+                                            successorOfAncestor,
+                                            itemStateUpdateKey)))
                         )).toSet
 
                       val itemStateUpdatesDagWithUpdatedDependencies =
