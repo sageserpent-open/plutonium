@@ -434,7 +434,7 @@ class LifecyclesStateImplementation(
           })
 
       val descendantsOfRevokedItemStateUpdates
-        : Seq[ItemStateUpdate.Key] = itemStateUpdateKeysThatNeedToBeRevoked.toSeq flatMap itemStateUpdatesDag.successors
+        : Seq[ItemStateUpdate.Key] = itemStateUpdateKeysThatNeedToBeRevoked.toSeq flatMap itemStateUpdatesDag.successors filterNot itemStateUpdateKeysThatNeedToBeRevoked.contains
 
       val baseItemStateUpdateKeysPerItemToApplyChangesTo = itemStateUpdateKeysPerItem mapValues (_ -- itemStateUpdateKeysThatNeedToBeRevoked) filter (_._2.nonEmpty) mapValues (
           keys => SortedSet(keys.toSeq: _*)(itemStateUpdateKeyOrdering))
