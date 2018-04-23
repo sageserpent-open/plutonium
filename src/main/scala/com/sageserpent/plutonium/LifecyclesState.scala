@@ -335,16 +335,21 @@ class LifecyclesStateImplementation(
 
                       val mutatedItems = mutatedItemSnapshots.map(_._1)
 
-                      val successorsAccordingToThisRevision
+                      val successorsTakenOverFromAPreviousItemStateUpdate
                         : Set[ItemStateUpdate.Key] =
-                        (Set
-                          .empty[ItemStateUpdate.Key] /: (mutatedItems flatMap itemStateUpdateKeysPerItem.get flatMap (
+                        (mutatedItems flatMap itemStateUpdateKeysPerItem.get flatMap (
                             (sortedKeys: SortedSet[ItemStateUpdate.Key]) =>
                               sortedKeys
                                 .until(itemStateUpdateKey)
                                 .lastOption
-                                .map(successorsOf)
-                        )))(_ ++ _)
+                                .toSeq
+                                .flatMap(successorsOf)
+                                .filter(
+                                  successorOfAncestor =>
+                                    Ordering[ItemStateUpdate.Key].gt(
+                                      successorOfAncestor,
+                                      itemStateUpdateKey))
+                        )).toSet
 
                       val itemStateUpdatesDagWithUpdatedDependencies =
                         itemStateUpdatesDag.decomp(itemStateUpdateKey) match {
@@ -359,7 +364,7 @@ class LifecyclesStateImplementation(
 
                       afterRecalculationsWithinTimeslice(
                         itemStateUpdatesToApply
-                          .drop(1) ++ ((successorsAccordingToPreviousRevision ++ successorsAccordingToThisRevision) map (UUID
+                          .drop(1) ++ ((successorsAccordingToPreviousRevision ++ successorsTakenOverFromAPreviousItemStateUpdate) map (UUID
                           .randomUUID() -> _)),
                         itemStateUpdatesDagWithUpdatedDependencies,
                         itemStateUpdateKeysPerItemWithNewKeyForPatch
