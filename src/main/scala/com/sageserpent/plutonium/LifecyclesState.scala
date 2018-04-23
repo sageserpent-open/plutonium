@@ -90,16 +90,22 @@ class LifecyclesStateImplementation(
       val whenForItemStateUpdate: ItemStateUpdate.Key => Unbounded[Instant] =
         whenFor(eventsForNewTimeline)(_)
 
+      implicit val itemStateUpdateKeyOrdering: Ordering[ItemStateUpdate.Key] =
+        Ordering.by { key: ItemStateUpdate.Key =>
+          val eventData = eventsForNewTimeline(key.eventId)
+          (eventData, key.intraEventIndex)
+        }
+
       case class TimesliceState(
-          itemStateUpdatesToApply: PriorityMap[UUID, ItemStateUpdate.Key],
+          itemStateUpdatesToApply: PriorityMap[ItemStateUpdate.Key,
+                                               ItemStateUpdate.Key],
           itemStateUpdatesDag: Graph[ItemStateUpdate.Key,
                                      ItemStateUpdate,
                                      Unit],
           itemStateUpdateKeysPerItem: Map[UniqueItemSpecification,
                                           SortedSet[ItemStateUpdate.Key]],
           timeSliceWhen: Unbounded[Instant],
-          blobStorage: BlobStorage[ItemStateUpdate.Key, SnapshotBlob])(
-          implicit val ordering: Ordering[ItemStateUpdate.Key]) {
+          blobStorage: BlobStorage[ItemStateUpdate.Key, SnapshotBlob]) {
         def afterRecalculations: TimesliceState = {
           val identifiedItemAccess = new IdentifiedItemAccess
           with itemStateStorageUsingProxies.ReconstitutionContext {
@@ -240,7 +246,8 @@ class LifecyclesStateImplementation(
           val revisionBuilder = blobStorage.openRevision()
 
           def afterRecalculationsWithinTimeslice(
-              itemStateUpdatesToApply: PriorityMap[UUID, ItemStateUpdate.Key],
+              itemStateUpdatesToApply: PriorityMap[ItemStateUpdate.Key,
+                                                   ItemStateUpdate.Key],
               itemStateUpdatesDag: Graph[ItemStateUpdate.Key,
                                          ItemStateUpdate,
                                          Unit],
@@ -345,7 +352,7 @@ class LifecyclesStateImplementation(
                                 .fold {
                                   sortedKeys
                                     .from(itemStateUpdateKey)
-                                    .takeWhile(key =>
+                                    .dropWhile(key =>
                                       !Ordering[ItemStateUpdate.Key]
                                         .gt(key, itemStateUpdateKey))
                                     .headOption
@@ -373,8 +380,8 @@ class LifecyclesStateImplementation(
 
                       afterRecalculationsWithinTimeslice(
                         itemStateUpdatesToApply
-                          .drop(1) ++ ((successorsAccordingToPreviousRevision ++ successorsTakenOverFromAPreviousItemStateUpdate) map (UUID
-                          .randomUUID() -> _)),
+                          .drop(1) ++ ((successorsAccordingToPreviousRevision ++ successorsTakenOverFromAPreviousItemStateUpdate) map (
+                            key => (key, key))),
                         itemStateUpdatesDagWithUpdatedDependencies,
                         itemStateUpdateKeysPerItemWithNewKeyForPatch
                       )
@@ -429,20 +436,14 @@ class LifecyclesStateImplementation(
       val descendantsOfRevokedItemStateUpdates
         : Seq[ItemStateUpdate.Key] = itemStateUpdateKeysThatNeedToBeRevoked.toSeq flatMap itemStateUpdatesDag.successors
 
-      val itemStateUpdateKeyOrdering: Ordering[ItemStateUpdate.Key] =
-        Ordering.by { key: ItemStateUpdate.Key =>
-          val eventData = eventsForNewTimeline(key.eventId)
-          (eventData, key.intraEventIndex)
-        }
-
       val baseItemStateUpdateKeysPerItemToApplyChangesTo = itemStateUpdateKeysPerItem mapValues (_ -- itemStateUpdateKeysThatNeedToBeRevoked) filter (_._2.nonEmpty) mapValues (
           keys => SortedSet(keys.toSeq: _*)(itemStateUpdateKeyOrdering))
 
-      val itemStateUpdatesToApply: PriorityMap[UUID, ItemStateUpdate.Key] =
+      val itemStateUpdatesToApply
+        : PriorityMap[ItemStateUpdate.Key, ItemStateUpdate.Key] =
         PriorityMap(
           descendantsOfRevokedItemStateUpdates ++ newAndModifiedItemStateUpdates
-            .map(_._1) map (UUID.randomUUID() -> _): _*)(
-          itemStateUpdateKeyOrdering)
+            .map(_._1) map (key => (key, key)): _*)(itemStateUpdateKeyOrdering)
 
       if (itemStateUpdatesToApply.nonEmpty) {
         val initialState = TimesliceState(
@@ -451,7 +452,7 @@ class LifecyclesStateImplementation(
           baseItemStateUpdateKeysPerItemToApplyChangesTo,
           whenForItemStateUpdate(itemStateUpdatesToApply.head._2),
           blobStorageWithRevocations
-        )(itemStateUpdateKeyOrdering)
+        )
 
         val TimesliceState(_,
                            itemStateUpdatesDagForNewTimeline,
