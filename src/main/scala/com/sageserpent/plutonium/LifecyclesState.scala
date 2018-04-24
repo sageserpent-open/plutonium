@@ -332,9 +332,7 @@ class LifecyclesStateImplementation(
                       def successorsOf(
                           itemStateUpdateKey: ItemStateUpdate.Key) =
                         itemStateUpdatesDag
-                          .successors(itemStateUpdateKey) map itemStateUpdatesDag.context map {
-                          case Context(_, key, _, _) => key
-                        } toSet
+                          .successors(itemStateUpdateKey) toSet
 
                       val successorsAccordingToPreviousRevision
                         : Set[ItemStateUpdate.Key] =
@@ -349,6 +347,15 @@ class LifecyclesStateImplementation(
                               sortedKeys
                                 .until(itemStateUpdateKey)
                                 .lastOption
+                                .filter { ancestorItemStateUpdateKey =>
+                                  val ancestorItemStateUpdate =
+                                    itemStateUpdatesDag.label(
+                                      ancestorItemStateUpdateKey)
+                                  ancestorItemStateUpdate.get match {
+                                    case _: ItemStateAnnihilation => false
+                                    case _                        => true
+                                  }
+                                }
                                 .fold {
                                   sortedKeys
                                     .from(itemStateUpdateKey)
