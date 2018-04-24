@@ -343,7 +343,7 @@ class WorldEfficientInMemoryImplementationBugs
         scope
           .render(Bitemporal.withId[IntegerHistory](itemId))
           .loneElement
-          .datums should contain theSameElementsInOrderAs (expectedHistory)
+          .datums should contain theSameElementsInOrderAs expectedHistory
       }
     }
   }
@@ -382,7 +382,7 @@ class WorldEfficientInMemoryImplementationBugs
         scope
           .render(Bitemporal.withId[IntegerHistory](itemId))
           .loneElement
-          .datums should contain theSameElementsInOrderAs (expectedHistory)
+          .datums should contain theSameElementsInOrderAs expectedHistory
       }
     }
   }
@@ -462,7 +462,103 @@ class WorldEfficientInMemoryImplementationBugs
         scope
           .render(Bitemporal.withId[FooHistory](itemId))
           .loneElement
-          .datums should contain theSameElementsInOrderAs (expectedHistory)
+          .datums should contain theSameElementsInOrderAs expectedHistory
+      }
+    }
+  }
+
+  "booking in events in reverse order of physical time" should "work" in {
+    forAll(worldResourceGenerator) { worldResource =>
+      val itemId = "Fred"
+
+      val sharedAsOf = Instant.ofEpochSecond(0)
+
+      val expectedHistory = Seq("The Real Thing", true)
+
+      worldResource acquireAndGet { world =>
+        world.revise(0, Change.forOneItem(Instant.ofEpochSecond(1L))(itemId, {
+          item: FooHistory =>
+            item.property2 = true
+        }), sharedAsOf)
+
+        world.revise(1,
+                     Measurement.forOneItem(Instant.ofEpochSecond(0L))(itemId, {
+                       item: FooHistory =>
+                         item.property1 = "The Real Thing"
+                     }),
+                     sharedAsOf)
+
+        val scope =
+          world.scopeFor(PositiveInfinity[Instant](), world.nextRevision)
+
+        scope
+          .render(Bitemporal.withId[FooHistory](itemId))
+          .loneElement
+          .datums should contain theSameElementsInOrderAs expectedHistory
+      }
+    }
+  }
+
+  "annihilating an item" should "not affect events occurring in a subsequent lifecycle" in {
+    forAll(worldResourceGenerator) { worldResource =>
+      val itemId = "Fred"
+
+      val sharedAsOf = Instant.ofEpochSecond(0)
+
+      val expectedHistory = Seq(1, 2)
+
+      worldResource acquireAndGet { world =>
+        world.revise(0, Change.forOneItem(Instant.ofEpochSecond(0L))(itemId, {
+          item: IntegerHistory =>
+            item.integerProperty = -999
+        }), sharedAsOf)
+
+        world.revise(1,
+                     Annihilation[IntegerHistory](Instant.ofEpochSecond(1L),
+                                                  itemId),
+                     sharedAsOf)
+
+        world.revise(2, Change.forOneItem(Instant.ofEpochSecond(3L))(itemId, {
+          item: IntegerHistory =>
+            item.integerProperty = 2
+        }), sharedAsOf)
+
+        world.revise(3, Change.forOneItem(Instant.ofEpochSecond(2L))(itemId, {
+          item: IntegerHistory =>
+            item.integerProperty = 1
+        }), sharedAsOf)
+
+        val scope =
+          world.scopeFor(PositiveInfinity[Instant](), world.nextRevision)
+
+        scope
+          .render(Bitemporal.withId[IntegerHistory](itemId))
+          .loneElement
+          .datums should contain theSameElementsInOrderAs expectedHistory
+      }
+    }
+  }
+
+  "forgetting to supply a type tag when annihilating an item" should "result in a useful diagnostic" in {
+    forAll(worldResourceGenerator) { worldResource =>
+      val itemId = "Fred"
+
+      val sharedAsOf = Instant.ofEpochSecond(0)
+
+      worldResource acquireAndGet { world =>
+        world.revise(0, Change.forOneItem(Instant.ofEpochSecond(0L))(itemId, {
+          item: IntegerHistory =>
+            item.integerProperty = 1
+        }), sharedAsOf)
+
+        val exception = intercept[RuntimeException] {
+          world.revise(1,
+                       Annihilation(Instant.ofEpochSecond(1L), itemId),
+                       sharedAsOf)
+        }
+
+        exception.getMessage should include(
+          "attempt to annihilate an item.*without an explicit type")
       }
     }
   }
