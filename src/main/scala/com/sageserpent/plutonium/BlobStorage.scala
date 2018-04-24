@@ -40,12 +40,12 @@ trait BlobStorage[RecordingId, SnapshotBlob] { blobStorage =>
     // NOTE: the unique item specification must be exact and consistent for all of an item's snapshots. This implies that snapshots from a previous revision may have to be rewritten
     // if an item's greatest lower bound type changes.
     def record(
-        keys: Set[RecordingId],
+        key: RecordingId,
         when: Unbounded[Instant],
         snapshotBlobs: Map[UniqueItemSpecification, Option[SnapshotBlob]]): Unit
 
     def annul(key: RecordingId): Unit =
-      record(Set(key), PositiveInfinity(), Map.empty)
+      record(key, PositiveInfinity(), Map.empty)
 
     def build(): BlobStorage[RecordingId, SnapshotBlob]
 

@@ -162,7 +162,7 @@ class LifecyclesStateImplementation(
                       annihilation(identifiedItemAccess)
 
                       revisionBuilder.record(
-                        Set(itemStateUpdateKey),
+                        itemStateUpdateKey,
                         when,
                         Map(annihilation.uniqueItemSpecification -> None))
 
@@ -192,7 +192,7 @@ class LifecyclesStateImplementation(
                         identifiedItemAccess(patch, itemStateUpdateKey)
 
                       revisionBuilder.record(
-                        Set(itemStateUpdateKey),
+                        itemStateUpdateKey,
                         when,
                         mutatedItemSnapshots.mapValues(Some.apply))
 

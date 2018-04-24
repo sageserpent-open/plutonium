@@ -260,15 +260,10 @@ class BlobStorageSpec
           booking match {
             case Some((when, snapshotBlobs)) =>
               val anchorForTransformedEventIdThatIsPresentInAllRevisions = recordingId * gapBetweenBaseTransformedEventIds
-              val transformedEventIdSet = (0 +: randomBehaviour.chooseSeveralOf(
-                recordingIdDeltas,
-                randomBehaviour.chooseAnyNumberFromZeroToOneLessThan(
-                  1 + recordingIdDeltas.size))).toSet
-                .map((delta: Int) =>
-                  anchorForTransformedEventIdThatIsPresentInAllRevisions + wrapAround(
-                    delta))
+              val transformedEventId = anchorForTransformedEventIdThatIsPresentInAllRevisions + wrapAround(
+                0)
 
-              builder.record(transformedEventIdSet, when, snapshotBlobs.toMap)
+              builder.record(transformedEventId, when, snapshotBlobs.toMap)
             case None =>
               val transformedEventId =
                 recordingId * gapBetweenBaseTransformedEventIds + wrapAround(0)

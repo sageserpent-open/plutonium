@@ -59,11 +59,9 @@ case class BlobStorageInMemory[RecordingId, SnapshotBlob] private (
 
   case class Lifecycle(
       itemTypeTag: TypeTag[_ <: Any],
-      snapshotBlobs: Vector[
-        (Split[Unbounded[Instant]],
-         (Option[SnapshotBlob], Set[RecordingId], Revision))] =
-        Vector.empty[(Split[Unbounded[Instant]],
-                      (Option[SnapshotBlob], Set[RecordingId], Revision))]) {
+      snapshotBlobs: Vector[(Split[Unbounded[Instant]],
+                             (Option[SnapshotBlob], RecordingId, Revision))] =
+        Vector.empty) {
     val snapshotBlobTimes = snapshotBlobs.view.map(_._1)
 
     require(
@@ -76,8 +74,8 @@ case class BlobStorageInMemory[RecordingId, SnapshotBlob] private (
       snapshotBlobs
         .view(0, indexToSearchDownFromOrInsertAt(when, snapshotBlobTimes))
         .lastIndexWhere(PartialFunction.cond(_) {
-          case (_, (_, keys, blobRevision)) =>
-            keys.forall(key => blobRevision == validRevisionFor(key))
+          case (_, (_, key, blobRevision)) =>
+            blobRevision == validRevisionFor(key)
         })
     }
 
@@ -99,7 +97,7 @@ case class BlobStorageInMemory[RecordingId, SnapshotBlob] private (
       }
     }
 
-    def addSnapshotBlob(keys: Set[RecordingId],
+    def addSnapshotBlob(key: RecordingId,
                         when: Split[Unbounded[Instant]],
                         snapshotBlob: Option[SnapshotBlob],
                         revision: Revision): Lifecycle = {
@@ -109,7 +107,7 @@ case class BlobStorageInMemory[RecordingId, SnapshotBlob] private (
       Lifecycle(itemTypeTag = this.itemTypeTag,
                 snapshotBlobs = snapshotBlobs.patch(
                   insertionPoint,
-                  Seq((when, (snapshotBlob, keys, revision))),
+                  Seq((when, (snapshotBlob, key, revision))),
                   0))
     }
   }
@@ -117,26 +115,26 @@ case class BlobStorageInMemory[RecordingId, SnapshotBlob] private (
   override def openRevision(): RevisionBuilder = {
     class RevisionBuilderImplementation extends RevisionBuilder {
       type Recording =
-        (Set[RecordingId],
+        (RecordingId,
          Unbounded[Instant],
          Map[UniqueItemSpecification, Option[SnapshotBlob]])
 
       val recordings = mutable.MutableList.empty[Recording]
 
       override def record(
-          keys: Set[RecordingId],
+          key: RecordingId,
           when: Unbounded[Instant],
           snapshotBlobs: Map[UniqueItemSpecification, Option[SnapshotBlob]])
         : Unit = {
-        recordings += ((keys, when, snapshotBlobs))
+        recordings += ((key, when, snapshotBlobs))
       }
 
       override def build(): BlobStorage[RecordingId, SnapshotBlob] = {
         val newRevision = 1 + thisBlobStorage.revision
 
         val newEventRevisions
-          : Map[RecordingId, Int] = thisBlobStorage.recordingRevisions ++ (recordings flatMap {
-          case (keys, _, _) => keys
+          : Map[RecordingId, Int] = thisBlobStorage.recordingRevisions ++ (recordings map {
+          case (key, _, _) => key
         }).distinct.map(_ -> newRevision)
 
         val newLifecycles =
