@@ -1,7 +1,6 @@
 package com.sageserpent.plutonium
 
 import java.time.Instant
-import java.util.UUID
 
 import com.sageserpent.americium.{PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
@@ -19,9 +18,7 @@ import scalaz.syntax.monadPlus._
 import scalaz.{-\/, \/-}
 
 import scala.collection.immutable.{Map, SortedSet}
-import scala.collection.{immutable, mutable}
-import scala.reflect.runtime.universe.TypeTag
-import scala.util.DynamicVariable
+import scala.collection.mutable
 
 trait LifecyclesState {
 
