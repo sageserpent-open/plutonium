@@ -2,7 +2,7 @@ package com.sageserpent.plutonium
 
 import java.util.UUID
 
-import com.sageserpent.plutonium.BlobStorage.Timeslice
+import com.sageserpent.plutonium.BlobStorage.{SnapshotRetrievalApi, Timeslice}
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
 
@@ -11,13 +11,23 @@ import scala.collection.mutable
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.DynamicVariable
 
+object IdentifiedItemAccessUsingBlobStorage {
+  object proxyFactory extends PersistentItemProxyFactory {
+    override val proxySuffix: String = "lifecyclesStateProxy"
+    override type AcquiredState =
+      PersistentItemProxyFactory.AcquiredState
+    override val acquiredStateClazz: Class[_ <: AcquiredState] =
+      classOf[AcquiredState]
+  }
+}
+
 trait IdentifiedItemAccessUsingBlobStorage
     extends IdentifiedItemAccess
     with itemStateStorageUsingProxies.ReconstitutionContext {
   override def reconstitute(uniqueItemSpecification: UniqueItemSpecification) =
     itemFor[Any](uniqueItemSpecification)
 
-  protected val blobStorageTimeSlice: Timeslice[SnapshotBlob]
+  protected val blobStorageTimeSlice: SnapshotRetrievalApi[SnapshotBlob]
 
   val itemStateUpdateKeyOfPatchBeingApplied =
     new DynamicVariable[Option[ItemStateUpdate.Key]](None)
@@ -29,14 +39,14 @@ trait IdentifiedItemAccessUsingBlobStorage
     : mutable.Set[ItemStateUpdate.Key] =
     mutable.Set.empty[ItemStateUpdate.Key]
 
-  override def blobStorageTimeslice: BlobStorage.Timeslice[SnapshotBlob] =
+  override def blobStorageTimeslice: SnapshotRetrievalApi[SnapshotBlob] =
     blobStorageTimeSlice
 
   override protected def createItemFor[Item](
       _uniqueItemSpecification: UniqueItemSpecification,
       lifecycleUUID: UUID,
       itemStateUpdateKey: Option[ItemStateUpdate.Key]) = {
-    import LifecyclesStateImplementation.proxyFactory.AcquiredState
+    import IdentifiedItemAccessUsingBlobStorage.proxyFactory.AcquiredState
 
     val stateToBeAcquiredByProxy: AcquiredState =
       new PersistentItemProxyFactory.AcquiredState {
@@ -70,7 +80,7 @@ trait IdentifiedItemAccessUsingBlobStorage
     implicit val typeTagForItem: TypeTag[Item] =
       _uniqueItemSpecification.typeTag.asInstanceOf[TypeTag[Item]]
 
-    val item = LifecyclesStateImplementation.proxyFactory
+    val item = IdentifiedItemAccessUsingBlobStorage.proxyFactory
       .constructFrom[Item](stateToBeAcquiredByProxy)
 
     item

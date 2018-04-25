@@ -3,6 +3,7 @@ package com.sageserpent.plutonium
 import java.time.Instant
 
 import com.sageserpent.americium.{PositiveInfinity, Unbounded}
+import com.sageserpent.plutonium.BlobStorage.SnapshotRetrievalApi
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
 import com.sageserpent.plutonium.PatchRecorder.UpdateConsumer
@@ -17,7 +18,7 @@ import scalaz.std.list._
 import scalaz.syntax.monadPlus._
 import scalaz.{-\/, \/-}
 
-import scala.collection.immutable.{Map, SortedSet}
+import scala.collection.immutable.{Map, SortedMap}
 import scala.collection.mutable
 
 trait LifecyclesState {
@@ -45,14 +46,6 @@ object noLifecyclesState {
 object LifecyclesStateImplementation {
   type ItemStateUpdatesDag =
     Graph[ItemStateUpdate.Key, ItemStateUpdate, Unit]
-
-  object proxyFactory extends PersistentItemProxyFactory {
-    override val proxySuffix: String = "lifecyclesStateProxy"
-    override type AcquiredState =
-      PersistentItemProxyFactory.AcquiredState
-    override val acquiredStateClazz: Class[_ <: AcquiredState] =
-      classOf[AcquiredState]
-  }
 }
 
 class LifecyclesStateImplementation(
@@ -60,8 +53,9 @@ class LifecyclesStateImplementation(
     itemStateUpdates: Set[(ItemStateUpdate.Key, ItemStateUpdate)] = Set.empty, // TODO - remove this when the item lifecycle abstraction is fully cooked; this is just to allow the use of the patch recorder for now.
     itemStateUpdatesDag: LifecyclesStateImplementation.ItemStateUpdatesDag =
       empty,
-    itemStateUpdateKeysPerItem: Map[UniqueItemSpecification,
-                                    SortedSet[ItemStateUpdate.Key]] = Map.empty,
+    itemStateUpdateKeysPerItem: Map[
+      UniqueItemSpecification,
+      SortedMap[ItemStateUpdate.Key, Option[SnapshotBlob]]] = Map.empty,
     nextRevision: Revision = initialRevision)
     extends LifecyclesState {
   override def revise(
@@ -99,17 +93,12 @@ class LifecyclesStateImplementation(
           itemStateUpdatesDag: Graph[ItemStateUpdate.Key,
                                      ItemStateUpdate,
                                      Unit],
-          itemStateUpdateKeysPerItem: Map[UniqueItemSpecification,
-                                          SortedSet[ItemStateUpdate.Key]],
+          itemStateUpdateKeysPerItem: Map[
+            UniqueItemSpecification,
+            SortedMap[ItemStateUpdate.Key, Option[SnapshotBlob]]],
           timeSliceWhen: Unbounded[Instant],
           blobStorage: BlobStorage[ItemStateUpdate.Key, SnapshotBlob]) {
         def afterRecalculations: TimesliceState = {
-          val identifiedItemAccess = new IdentifiedItemAccessUsingBlobStorage {
-            override protected val blobStorageTimeSlice
-              : BlobStorage.Timeslice[SnapshotBlob] =
-              blobStorage.timeSlice(timeSliceWhen, inclusive = false)
-          }
-
           val revisionBuilder = blobStorage.openRevision()
 
           def afterRecalculationsWithinTimeslice(
@@ -118,8 +107,9 @@ class LifecyclesStateImplementation(
               itemStateUpdatesDag: Graph[ItemStateUpdate.Key,
                                          ItemStateUpdate,
                                          Unit],
-              itemStateUpdateKeysPerItem: Map[UniqueItemSpecification,
-                                              SortedSet[ItemStateUpdate.Key]])
+              itemStateUpdateKeysPerItem: Map[
+                UniqueItemSpecification,
+                SortedMap[ItemStateUpdate.Key, Option[SnapshotBlob]]])
             : TimesliceState =
             itemStateUpdatesToApply.headOption match {
               case Some((_, itemStateUpdateKey)) =>
@@ -135,19 +125,40 @@ class LifecyclesStateImplementation(
                 else {
                   assert(when == timeSliceWhen)
 
-                  def addKeyTo(itemStateUpdateKeysPerItem: Map[
-                                 UniqueItemSpecification,
-                                 SortedSet[ItemStateUpdate.Key]],
-                               uniqueItemSpecification: UniqueItemSpecification,
-                               itemStateUpdateKey: ItemStateUpdate.Key) =
+                  def addKeyTo(
+                      itemStateUpdateKeysPerItem: Map[
+                        UniqueItemSpecification,
+                        SortedMap[ItemStateUpdate.Key, Option[SnapshotBlob]]],
+                      uniqueItemSpecification: UniqueItemSpecification,
+                      itemStateUpdateKey: ItemStateUpdate.Key,
+                      snapshotBlob: Option[SnapshotBlob]): Map[
+                    UniqueItemSpecification,
+                    SortedMap[ItemStateUpdate.Key, Option[SnapshotBlob]]] =
                     itemStateUpdateKeysPerItem.updated(
                       uniqueItemSpecification,
                       itemStateUpdateKeysPerItem
-                        .getOrElse(
-                          uniqueItemSpecification,
-                          SortedSet
-                            .empty[ItemStateUpdate.Key]) + itemStateUpdateKey
+                        .getOrElse(uniqueItemSpecification,
+                                   SortedMap
+                                     .empty[ItemStateUpdate.Key,
+                                            Option[SnapshotBlob]]) + (itemStateUpdateKey -> snapshotBlob)
                     )
+
+                  val identifiedItemAccess =
+                    new IdentifiedItemAccessUsingBlobStorage {
+                      override protected val blobStorageTimeSlice
+                        : SnapshotRetrievalApi[SnapshotBlob] =
+                        (uniqueItemSpecification: UniqueItemSpecification) => {
+                          for {
+                            sortedKeyValuePairs <- itemStateUpdateKeysPerItem
+                              .get(uniqueItemSpecification)
+
+                            (_, optionalSnapshot) <- sortedKeyValuePairs
+                              .until(itemStateUpdateKey)
+                              .lastOption
+                            snapshot <- optionalSnapshot
+                          } yield snapshot
+                        }
+                    }
 
                   itemStateUpdate match {
                     case ItemStateAnnihilation(annihilation) =>
@@ -179,7 +190,8 @@ class LifecyclesStateImplementation(
                       val itemStateUpdateKeysPerItemWithNewKeyForAnnihilation =
                         addKeyTo(itemStateUpdateKeysPerItem,
                                  annihilation.uniqueItemSpecification,
-                                 itemStateUpdateKey)
+                                 itemStateUpdateKey,
+                                 None)
 
                       afterRecalculationsWithinTimeslice(
                         itemStateUpdatesToApply.drop(1),
@@ -207,38 +219,40 @@ class LifecyclesStateImplementation(
 
                       val mutatedItems = mutatedItemSnapshots.map(_._1)
 
+                      // TODO - this code is, ahem, a tad prolix, not to mention completely incomprehensible...
                       val successorsTakenOverFromAPreviousItemStateUpdate
                         : Set[ItemStateUpdate.Key] =
                         (mutatedItems flatMap itemStateUpdateKeysPerItem.get flatMap (
-                            (sortedKeys: SortedSet[ItemStateUpdate.Key]) =>
-                              sortedKeys
+                            (sortedKeyValuePairs: SortedMap[
+                              ItemStateUpdate.Key,
+                              Option[SnapshotBlob]]) =>
+                              sortedKeyValuePairs
                                 .until(itemStateUpdateKey)
                                 .lastOption
-                                .filter { ancestorItemStateUpdateKey =>
-                                  val ancestorItemStateUpdate =
-                                    itemStateUpdatesDag.label(
-                                      ancestorItemStateUpdateKey)
-                                  ancestorItemStateUpdate.get match {
-                                    case _: ItemStateAnnihilation => false
-                                    case _                        => true
-                                  }
+                                .filter {
+                                  case (_, Some(_)) => true
+                                  case _            => false
                                 }
                                 .fold {
-                                  sortedKeys
+                                  sortedKeyValuePairs
                                     .from(itemStateUpdateKey)
-                                    .dropWhile(key =>
-                                      !Ordering[ItemStateUpdate.Key]
-                                        .gt(key, itemStateUpdateKey))
+                                    .dropWhile {
+                                      case (key, _) =>
+                                        !Ordering[ItemStateUpdate.Key]
+                                          .gt(key, itemStateUpdateKey)
+                                    }
                                     .headOption
+                                    .map(_._1)
                                     .toSet
-                                }(
-                                  ancestorItemStateUpdateKey =>
+                                } {
+                                  case (ancestorItemStateUpdateKey, _) =>
                                     successorsOf(ancestorItemStateUpdateKey)
                                       .filter(
                                         successorOfAncestor =>
                                           Ordering[ItemStateUpdate.Key].gt(
                                             successorOfAncestor,
-                                            itemStateUpdateKey)))
+                                            itemStateUpdateKey))
+                                }
                         )).toSet
 
                       val itemStateUpdatesDagWithUpdatedDependencies =
@@ -249,8 +263,14 @@ class LifecyclesStateImplementation(
                         }
 
                       val itemStateUpdateKeysPerItemWithNewKeyForPatch =
-                        (itemStateUpdateKeysPerItem /: mutatedItems)(
-                          addKeyTo(_, _, itemStateUpdateKey))
+                        (itemStateUpdateKeysPerItem /: mutatedItemSnapshots) {
+                          case (itemStateUpdateKeysPerItem,
+                                (uniqueItemSpecification, snapshot)) =>
+                            addKeyTo(itemStateUpdateKeysPerItem,
+                                     uniqueItemSpecification,
+                                     itemStateUpdateKey,
+                                     Some(snapshot))
+                        }
 
                       afterRecalculationsWithinTimeslice(
                         itemStateUpdatesToApply
@@ -310,8 +330,11 @@ class LifecyclesStateImplementation(
       val descendantsOfRevokedItemStateUpdates
         : Seq[ItemStateUpdate.Key] = itemStateUpdateKeysThatNeedToBeRevoked.toSeq flatMap itemStateUpdatesDag.successors filterNot itemStateUpdateKeysThatNeedToBeRevoked.contains
 
-      val baseItemStateUpdateKeysPerItemToApplyChangesTo = itemStateUpdateKeysPerItem mapValues (_ -- itemStateUpdateKeysThatNeedToBeRevoked) filter (_._2.nonEmpty) mapValues (
-          keys => SortedSet(keys.toSeq: _*)(itemStateUpdateKeyOrdering))
+      val baseItemStateUpdateKeysPerItemToApplyChangesTo: Map[
+        UniqueItemSpecification,
+        SortedMap[ItemStateUpdate.Key, Option[SnapshotBlob]]] = itemStateUpdateKeysPerItem mapValues (_ -- itemStateUpdateKeysThatNeedToBeRevoked) filter (_._2.nonEmpty) mapValues (
+          keyValuePairs =>
+            SortedMap(keyValuePairs.toSeq: _*)(itemStateUpdateKeyOrdering))
 
       val itemStateUpdatesToApply
         : PriorityMap[ItemStateUpdate.Key, ItemStateUpdate.Key] =
@@ -411,8 +434,9 @@ class LifecyclesStateImplementation(
         case (key, _) =>
           when >= whenFor(this.events.apply)(key)
       },
-      itemStateUpdateKeysPerItem = itemStateUpdateKeysPerItem mapValues (_.filter(
-        key => when >= whenFor(this.events.apply)(key))) filter (_._2.nonEmpty),
+      itemStateUpdateKeysPerItem = itemStateUpdateKeysPerItem mapValues (_.filter {
+        case (key, _) => when >= whenFor(this.events.apply)(key)
+      }) filter (_._2.nonEmpty),
       nextRevision = this.nextRevision
     )
 }

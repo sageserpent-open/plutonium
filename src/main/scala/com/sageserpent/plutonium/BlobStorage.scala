@@ -8,13 +8,15 @@ import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import scala.reflect.runtime.universe.TypeTag
 
 object BlobStorage {
-  trait Timeslice[SnapshotBlob] {
+  trait SnapshotRetrievalApi[SnapshotBlob] {
+    def snapshotBlobFor(
+        uniqueItemSpecification: UniqueItemSpecification): Option[SnapshotBlob]
+  }
+
+  trait Timeslice[SnapshotBlob] extends SnapshotRetrievalApi[SnapshotBlob] {
     def uniqueItemQueriesFor[Item: TypeTag]: Stream[UniqueItemSpecification]
     def uniqueItemQueriesFor[Item: TypeTag](
         id: Any): Stream[UniqueItemSpecification]
-
-    def snapshotBlobFor(
-        uniqueItemSpecification: UniqueItemSpecification): Option[SnapshotBlob]
   }
 
   trait TimesliceContracts[SnapshotBlob] extends Timeslice[SnapshotBlob] {
