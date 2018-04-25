@@ -11,6 +11,16 @@ import scala.collection.mutable
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.DynamicVariable
 
+object IdentifiedItemAccessUsingBlobStorage {
+  object proxyFactory extends PersistentItemProxyFactory {
+    override val proxySuffix: String = "lifecyclesStateProxy"
+    override type AcquiredState =
+      PersistentItemProxyFactory.AcquiredState
+    override val acquiredStateClazz: Class[_ <: AcquiredState] =
+      classOf[AcquiredState]
+  }
+}
+
 trait IdentifiedItemAccessUsingBlobStorage
     extends IdentifiedItemAccess
     with itemStateStorageUsingProxies.ReconstitutionContext {
@@ -36,7 +46,7 @@ trait IdentifiedItemAccessUsingBlobStorage
       _uniqueItemSpecification: UniqueItemSpecification,
       lifecycleUUID: UUID,
       itemStateUpdateKey: Option[ItemStateUpdate.Key]) = {
-    import LifecyclesStateImplementation.proxyFactory.AcquiredState
+    import IdentifiedItemAccessUsingBlobStorage.proxyFactory.AcquiredState
 
     val stateToBeAcquiredByProxy: AcquiredState =
       new PersistentItemProxyFactory.AcquiredState {
@@ -70,7 +80,7 @@ trait IdentifiedItemAccessUsingBlobStorage
     implicit val typeTagForItem: TypeTag[Item] =
       _uniqueItemSpecification.typeTag.asInstanceOf[TypeTag[Item]]
 
-    val item = LifecyclesStateImplementation.proxyFactory
+    val item = IdentifiedItemAccessUsingBlobStorage.proxyFactory
       .constructFrom[Item](stateToBeAcquiredByProxy)
 
     item

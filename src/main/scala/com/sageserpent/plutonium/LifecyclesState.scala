@@ -45,14 +45,6 @@ object noLifecyclesState {
 object LifecyclesStateImplementation {
   type ItemStateUpdatesDag =
     Graph[ItemStateUpdate.Key, ItemStateUpdate, Unit]
-
-  object proxyFactory extends PersistentItemProxyFactory {
-    override val proxySuffix: String = "lifecyclesStateProxy"
-    override type AcquiredState =
-      PersistentItemProxyFactory.AcquiredState
-    override val acquiredStateClazz: Class[_ <: AcquiredState] =
-      classOf[AcquiredState]
-  }
 }
 
 class LifecyclesStateImplementation(
