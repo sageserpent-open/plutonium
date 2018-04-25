@@ -3,6 +3,7 @@ package com.sageserpent.plutonium
 import java.time.Instant
 
 import com.sageserpent.americium.{PositiveInfinity, Unbounded}
+import com.sageserpent.plutonium.BlobStorage.SnapshotRetrievalApi
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
 import com.sageserpent.plutonium.PatchRecorder.UpdateConsumer
@@ -98,12 +99,6 @@ class LifecyclesStateImplementation(
           timeSliceWhen: Unbounded[Instant],
           blobStorage: BlobStorage[ItemStateUpdate.Key, SnapshotBlob]) {
         def afterRecalculations: TimesliceState = {
-          val identifiedItemAccess = new IdentifiedItemAccessUsingBlobStorage {
-            override protected val blobStorageTimeSlice
-              : BlobStorage.Timeslice[SnapshotBlob] =
-              blobStorage.timeSlice(timeSliceWhen, inclusive = false)
-          }
-
           val revisionBuilder = blobStorage.openRevision()
 
           def afterRecalculationsWithinTimeslice(
@@ -147,6 +142,23 @@ class LifecyclesStateImplementation(
                                      .empty[ItemStateUpdate.Key,
                                             Option[SnapshotBlob]]) + (itemStateUpdateKey -> snapshotBlob)
                     )
+
+                  val identifiedItemAccess =
+                    new IdentifiedItemAccessUsingBlobStorage {
+                      override protected val blobStorageTimeSlice
+                        : SnapshotRetrievalApi[SnapshotBlob] =
+                        (uniqueItemSpecification: UniqueItemSpecification) => {
+                          for {
+                            sortedKeyValuePairs <- itemStateUpdateKeysPerItem
+                              .get(uniqueItemSpecification)
+
+                            (_, optionalSnapshot) <- sortedKeyValuePairs
+                              .until(itemStateUpdateKey)
+                              .lastOption
+                            snapshot <- optionalSnapshot
+                          } yield snapshot
+                        }
+                    }
 
                   itemStateUpdate match {
                     case ItemStateAnnihilation(annihilation) =>

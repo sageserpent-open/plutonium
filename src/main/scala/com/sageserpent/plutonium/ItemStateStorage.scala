@@ -200,7 +200,7 @@ trait ItemStateStorage { itemStateStorageObject =>
 
   trait ReconstitutionContext {
     def blobStorageTimeslice
-      : BlobStorage.Timeslice[SnapshotBlob] // NOTE: abstracting this allows the prospect of a 'moving' timeslice for use when executing an update plan.
+      : BlobStorage.SnapshotRetrievalApi[SnapshotBlob] // NOTE: abstracting this allows the prospect of a 'moving' timeslice for use when executing an update plan.
 
     def itemFor[Item](
         uniqueItemSpecification: UniqueItemSpecification): Item = {

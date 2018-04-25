@@ -2,7 +2,7 @@ package com.sageserpent.plutonium
 
 import java.util.UUID
 
-import com.sageserpent.plutonium.BlobStorage.Timeslice
+import com.sageserpent.plutonium.BlobStorage.{SnapshotRetrievalApi, Timeslice}
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
 
@@ -27,7 +27,7 @@ trait IdentifiedItemAccessUsingBlobStorage
   override def reconstitute(uniqueItemSpecification: UniqueItemSpecification) =
     itemFor[Any](uniqueItemSpecification)
 
-  protected val blobStorageTimeSlice: Timeslice[SnapshotBlob]
+  protected val blobStorageTimeSlice: SnapshotRetrievalApi[SnapshotBlob]
 
   val itemStateUpdateKeyOfPatchBeingApplied =
     new DynamicVariable[Option[ItemStateUpdate.Key]](None)
@@ -39,7 +39,7 @@ trait IdentifiedItemAccessUsingBlobStorage
     : mutable.Set[ItemStateUpdate.Key] =
     mutable.Set.empty[ItemStateUpdate.Key]
 
-  override def blobStorageTimeslice: BlobStorage.Timeslice[SnapshotBlob] =
+  override def blobStorageTimeslice: SnapshotRetrievalApi[SnapshotBlob] =
     blobStorageTimeSlice
 
   override protected def createItemFor[Item](
