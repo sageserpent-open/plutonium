@@ -218,14 +218,8 @@ class LifecyclesStateImplementation(
                                 .until(itemStateUpdateKey)
                                 .lastOption
                                 .filter {
-                                  case (ancestorItemStateUpdateKey, _) =>
-                                    val ancestorItemStateUpdate =
-                                      itemStateUpdatesDag.label(
-                                        ancestorItemStateUpdateKey)
-                                    ancestorItemStateUpdate.get match {
-                                      case _: ItemStateAnnihilation => false
-                                      case _                        => true
-                                    }
+                                  case (_, Some(_)) => true
+                                  case _            => false
                                 }
                                 .fold {
                                   sortedKeyValuePairs
