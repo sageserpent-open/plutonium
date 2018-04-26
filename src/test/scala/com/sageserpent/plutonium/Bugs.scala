@@ -616,6 +616,58 @@ trait Bugs
           changeFor(secondReferringId, Instant.ofEpochSecond(-1L), "Louie")
         )
 
+        worldResource acquireAndGet { world =>
+          world.revise(Map(
+                         0 -> Some(
+                           changeFor(secondReferringId,
+                                     Instant.ofEpochSecond(-4L),
+                                     "Huey"))),
+                       sharedAsOf)
+
+          world.revise(
+            Map(
+              1 -> Some(
+                changeFor(firstReferringId,
+                          Instant.ofEpochSecond(0L),
+                          "Louie")),
+              2 -> Some(
+                annihilationFor(firstReferringId, Instant.ofEpochSecond(0L)))),
+            sharedAsOf
+          )
+
+          world.revise(
+            Map(
+              3 -> Some(
+                changeFor(firstReferringId, Instant.ofEpochSecond(0L), "Duey")),
+              4 -> Some(
+                annihilationFor(secondReferringId, Instant.ofEpochSecond(-3L))),
+              5 -> Some(
+                changeFor(secondReferringId,
+                          Instant.ofEpochSecond(-2L),
+                          "Huey"))
+            ),
+            sharedAsOf
+          )
+
+          world.revise(Map(
+                         6 -> Some(
+                           changeFor(secondReferringId,
+                                     Instant.ofEpochSecond(-1L),
+                                     "Louie"))
+                       ),
+                       sharedAsOf)
+
+          val scope =
+            world.scopeFor(Instant.ofEpochSecond(0L), world.nextRevision)
+
+          scope
+            .render(Bitemporal.withId[ReferringHistory](firstReferringId))
+            .loneElement
+            .referencedDatums
+            .toSeq should contain theSameElementsAs Seq("Duey" -> Seq.empty)
+        }
+
+      /*
         for (seed <- 1 to 100) {
           val randomBehaviour = new Random(seed)
 
@@ -652,6 +704,7 @@ trait Bugs
             }
           }
         }
+       */
       }
     }
   }
