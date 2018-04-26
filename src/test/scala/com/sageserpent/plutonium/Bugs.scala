@@ -578,9 +578,9 @@ trait Bugs
 
     "annihilating an item and then resurrecting it at the same physical time" should "result in a history for the resurrected item" in {
       forAll(worldResourceGenerator) { worldResource =>
-        val firstReferringId = "Name: 99"
+        val firstReferringId = "Victim"
 
-        val secondReferringId = "Name: 61"
+        val secondReferringId = "Bystander"
 
         val sharedAsOf = Instant.ofEpochSecond(0)
 
@@ -604,97 +604,16 @@ trait Bugs
           Annihilation[ReferringHistory](when, itemId)
 
         val eventsForFirstReferringItem = Seq(
-          changeFor(firstReferringId,
-                    Instant.parse("1970-01-01T00:00:00Z"),
-                    "Huey"),
-          annihilationFor(firstReferringId,
-                          Instant.parse("1970-01-01T00:00:00Z")),
-          changeFor(firstReferringId,
-                    Instant.parse("1970-01-01T00:00:00Z"),
-                    "Louie"),
-          changeFor(firstReferringId,
-                    Instant.parse("1970-01-01T00:00:00Z"),
-                    "Louie"),
-          annihilationFor(firstReferringId,
-                          Instant.parse("1970-01-01T00:00:00Z")),
-          changeFor(firstReferringId,
-                    Instant.parse("1970-01-01T00:00:00Z"),
-                    "Duey"),
-          changeFor(firstReferringId,
-                    Instant.parse("1970-01-01T00:00:00Z"),
-                    "Duey"),
-          annihilationFor(firstReferringId,
-                          Instant.parse("1970-01-01T00:00:00.001Z")),
-          changeFor(firstReferringId,
-                    Instant.parse("+11426949-11-07T03:04:48.259Z"),
-                    "Louie"),
-          annihilationFor(firstReferringId,
-                          Instant.parse("+21466755-01-03T13:32:38.242Z")),
-          changeFor(firstReferringId,
-                    Instant.parse("+243533858-06-13T01:08:11.053Z"),
-                    "Huey"),
-          annihilationFor(firstReferringId,
-                          Instant.parse("+268019633-01-04T10:41:07.160Z")),
-          changeFor(firstReferringId,
-                    Instant.parse("+283521220-06-08T22:59:47.842Z"),
-                    "Louie"),
-          annihilationFor(firstReferringId,
-                          Instant.parse("+289194024-09-09T16:16:55.370Z"))
+          changeFor(firstReferringId, Instant.ofEpochSecond(0L), "Louie"),
+          annihilationFor(firstReferringId, Instant.ofEpochSecond(0L)),
+          changeFor(firstReferringId, Instant.ofEpochSecond(0L), "Duey")
         )
 
         val eventsForSecondReferringItem = Seq(
-          changeFor2(secondReferringId, "Huey"),
-          changeFor2(secondReferringId, "Duey"),
-          changeFor2(secondReferringId, "Huey"),
-          changeFor(secondReferringId,
-                    Instant.parse("-292275055-05-16T16:47:04.192Z"),
-                    "Duey"),
-          changeFor(secondReferringId,
-                    Instant.parse("-177528003-11-25T03:13:33.266Z"),
-                    "Duey"),
-          changeFor(secondReferringId,
-                    Instant.parse("-162371428-01-01T07:29:44.019Z"),
-                    "Duey"),
-          changeFor(secondReferringId,
-                    Instant.parse("-148773535-09-30T00:13:43.060Z"),
-                    "Huey"),
-          annihilationFor(secondReferringId,
-                          Instant.parse("-143904554-10-30T21:12:40.832Z")),
-          changeFor(secondReferringId,
-                    Instant.parse("-125822846-06-10T22:24:51.154Z"),
-                    "Huey"),
-          changeFor(secondReferringId,
-                    Instant.parse("-51833455-09-22T13:41:35.341Z"),
-                    "Louie"),
-          annihilationFor(secondReferringId,
-                          Instant.parse("1969-12-31T23:59:59.999Z")),
-          changeFor(secondReferringId,
-                    Instant.parse("1970-01-01T00:00:00Z"),
-                    "Louie"),
-          changeFor(secondReferringId,
-                    Instant.parse("1970-01-01T00:00:00Z"),
-                    "Duey"),
-          changeFor(secondReferringId,
-                    Instant.parse("1970-01-01T00:00:00Z"),
-                    "Louie"),
-          annihilationFor(secondReferringId,
-                          Instant.parse("+100792594-11-03T02:07:41.114Z")),
-          changeFor(secondReferringId,
-                    Instant.parse("+116079217-10-06T16:27:35.456Z"),
-                    "Louie"),
-          annihilationFor(secondReferringId,
-                          Instant.parse("+190758786-02-21T11:22:46.982Z")),
-          changeFor(secondReferringId,
-                    Instant.parse("+217021363-11-10T09:36:59.714Z"),
-                    "Louie"),
-          changeFor(secondReferringId,
-                    Instant.parse("+232769639-06-13T19:07:52.726Z"),
-                    "Duey"),
-          changeFor(secondReferringId,
-                    Instant.parse("+292278994-08-17T07:12:55.807Z"),
-                    "Duey"),
-          annihilationFor(secondReferringId,
-                          Instant.parse("+292278994-08-17T07:12:55.807Z"))
+          changeFor(secondReferringId, Instant.ofEpochSecond(-4L), "Huey"),
+          annihilationFor(secondReferringId, Instant.ofEpochSecond(-3L)),
+          changeFor(secondReferringId, Instant.ofEpochSecond(-2L), "Huey"),
+          changeFor(secondReferringId, Instant.ofEpochSecond(-1L), "Louie")
         )
 
         for (seed <- 1 to 100) {
@@ -718,8 +637,7 @@ trait Bugs
             }
 
             val scope =
-              world.scopeFor(Instant.parse("1970-01-01T00:00:00Z"),
-                             world.nextRevision)
+              world.scopeFor(Instant.ofEpochSecond(0L), world.nextRevision)
 
             try {
               scope
