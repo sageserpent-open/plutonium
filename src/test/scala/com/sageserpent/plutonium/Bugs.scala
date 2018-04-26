@@ -3,11 +3,12 @@ package com.sageserpent.plutonium
 import java.time.Instant
 
 import com.sageserpent.americium.PositiveInfinity
-import org.scalatest.prop.GeneratorDrivenPropertyChecks
-import org.scalatest.{FlatSpec, LoneElement, Matchers}
 import com.sageserpent.americium.randomEnrichment._
 import org.scalatest.exceptions.TestFailedException
+import org.scalatest.prop.GeneratorDrivenPropertyChecks
+import org.scalatest.{FlatSpec, LoneElement, Matchers}
 
+import scala.collection.immutable.SortedMap
 import scala.util.Random
 
 trait Bugs
@@ -577,48 +578,126 @@ trait Bugs
 
     "annihilating an item and then resurrecting it at the same physical time" should "result in a history for the resurrected item" in {
       forAll(worldResourceGenerator) { worldResource =>
-        val firstReferringId = "Fred"
+        val firstReferringId = "Name: 99"
 
-        val secondReferringId = "Jane"
+        val secondReferringId = "Name: 61"
 
         val sharedAsOf = Instant.ofEpochSecond(0)
 
-        val eventsForFirstReferringItem = Seq(
+        def changeFor(referrerItemId: String,
+                      when: Instant,
+                      referencedItemId: String) =
           Change
-            .forTwoItems(Instant.ofEpochSecond(-1L))(firstReferringId, "Huey", {
-              (referrer: ReferringHistory, referenced: History) =>
-                referrer.referTo(referenced)
-            }),
-          Annihilation[ReferringHistory](Instant.ofEpochSecond(0L),
-                                         firstReferringId),
-          Change
-            .forTwoItems(Instant.ofEpochSecond(0L))(firstReferringId, "Duey", {
+            .forTwoItems(when)(referrerItemId, referencedItemId, {
               (referrer: ReferringHistory, referenced: History) =>
                 referrer.referTo(referenced)
             })
+
+        def changeFor2(referrerItemId: String, referencedItemId: String) =
+          Change
+            .forTwoItems(referrerItemId, referencedItemId, {
+              (referrer: ReferringHistory, referenced: History) =>
+                referrer.referTo(referenced)
+            })
+
+        def annihilationFor(itemId: String, when: Instant) =
+          Annihilation[ReferringHistory](when, itemId)
+
+        val eventsForFirstReferringItem = Seq(
+          changeFor(firstReferringId,
+                    Instant.parse("1970-01-01T00:00:00Z"),
+                    "Huey"),
+          annihilationFor(firstReferringId,
+                          Instant.parse("1970-01-01T00:00:00Z")),
+          changeFor(firstReferringId,
+                    Instant.parse("1970-01-01T00:00:00Z"),
+                    "Louie"),
+          changeFor(firstReferringId,
+                    Instant.parse("1970-01-01T00:00:00Z"),
+                    "Louie"),
+          annihilationFor(firstReferringId,
+                          Instant.parse("1970-01-01T00:00:00Z")),
+          changeFor(firstReferringId,
+                    Instant.parse("1970-01-01T00:00:00Z"),
+                    "Duey"),
+          changeFor(firstReferringId,
+                    Instant.parse("1970-01-01T00:00:00Z"),
+                    "Duey"),
+          annihilationFor(firstReferringId,
+                          Instant.parse("1970-01-01T00:00:00.001Z")),
+          changeFor(firstReferringId,
+                    Instant.parse("+11426949-11-07T03:04:48.259Z"),
+                    "Louie"),
+          annihilationFor(firstReferringId,
+                          Instant.parse("+21466755-01-03T13:32:38.242Z")),
+          changeFor(firstReferringId,
+                    Instant.parse("+243533858-06-13T01:08:11.053Z"),
+                    "Huey"),
+          annihilationFor(firstReferringId,
+                          Instant.parse("+268019633-01-04T10:41:07.160Z")),
+          changeFor(firstReferringId,
+                    Instant.parse("+283521220-06-08T22:59:47.842Z"),
+                    "Louie"),
+          annihilationFor(firstReferringId,
+                          Instant.parse("+289194024-09-09T16:16:55.370Z"))
         )
 
         val eventsForSecondReferringItem = Seq(
-          Change
-            .forTwoItems(Instant.ofEpochSecond(-1L))(
-              secondReferringId,
-              "Louie", { (referrer: ReferringHistory, referenced: History) =>
-                referrer.referTo(referenced)
-              }),
-          Change
-            .forTwoItems(Instant.ofEpochSecond(0L))(secondReferringId, "Huey", {
-              (referrer: ReferringHistory, referenced: History) =>
-                referrer.referTo(referenced)
-            }),
-          Change
-            .forTwoItems(Instant.ofEpochSecond(1L))(
-              secondReferringId,
-              "Louie", { (referrer: ReferringHistory, referenced: History) =>
-                referrer.referTo(referenced)
-              })
+          changeFor2(secondReferringId, "Huey"),
+          changeFor2(secondReferringId, "Duey"),
+          changeFor2(secondReferringId, "Huey"),
+          changeFor(secondReferringId,
+                    Instant.parse("-292275055-05-16T16:47:04.192Z"),
+                    "Duey"),
+          changeFor(secondReferringId,
+                    Instant.parse("-177528003-11-25T03:13:33.266Z"),
+                    "Duey"),
+          changeFor(secondReferringId,
+                    Instant.parse("-162371428-01-01T07:29:44.019Z"),
+                    "Duey"),
+          changeFor(secondReferringId,
+                    Instant.parse("-148773535-09-30T00:13:43.060Z"),
+                    "Huey"),
+          annihilationFor(secondReferringId,
+                          Instant.parse("-143904554-10-30T21:12:40.832Z")),
+          changeFor(secondReferringId,
+                    Instant.parse("-125822846-06-10T22:24:51.154Z"),
+                    "Huey"),
+          changeFor(secondReferringId,
+                    Instant.parse("-51833455-09-22T13:41:35.341Z"),
+                    "Louie"),
+          annihilationFor(secondReferringId,
+                          Instant.parse("1969-12-31T23:59:59.999Z")),
+          changeFor(secondReferringId,
+                    Instant.parse("1970-01-01T00:00:00Z"),
+                    "Louie"),
+          changeFor(secondReferringId,
+                    Instant.parse("1970-01-01T00:00:00Z"),
+                    "Duey"),
+          changeFor(secondReferringId,
+                    Instant.parse("1970-01-01T00:00:00Z"),
+                    "Louie"),
+          annihilationFor(secondReferringId,
+                          Instant.parse("+100792594-11-03T02:07:41.114Z")),
+          changeFor(secondReferringId,
+                    Instant.parse("+116079217-10-06T16:27:35.456Z"),
+                    "Louie"),
+          annihilationFor(secondReferringId,
+                          Instant.parse("+190758786-02-21T11:22:46.982Z")),
+          changeFor(secondReferringId,
+                    Instant.parse("+217021363-11-10T09:36:59.714Z"),
+                    "Louie"),
+          changeFor(secondReferringId,
+                    Instant.parse("+232769639-06-13T19:07:52.726Z"),
+                    "Duey"),
+          changeFor(secondReferringId,
+                    Instant.parse("+292278994-08-17T07:12:55.807Z"),
+                    "Duey"),
+          annihilationFor(secondReferringId,
+                          Instant.parse("+292278994-08-17T07:12:55.807Z"))
         )
 
-        for (seed <- 1 to 200) {
+        for (seed <- 1 to 100) {
           val randomBehaviour = new Random(seed)
 
           val eventsForBothItems = randomBehaviour.pickAlternatelyFrom(
@@ -628,14 +707,19 @@ trait Bugs
             .splitIntoNonEmptyPieces(eventsForBothItems.zipWithIndex)
 
           worldResource acquireAndGet { world =>
+            /*            println(
+              "------------------------------ TEST CASE -------------------------------------")*/
+
             for (eventChunk <- eventsInChunks) {
-              world.revise(eventChunk.map {
+              /*println(s"Booking in events: ${eventChunk.map(_.swap)}")*/
+              world.revise(SortedMap(eventChunk.map {
                 case (event, eventId) => eventId -> Some(event)
-              }.toMap, sharedAsOf)
+              }: _*), sharedAsOf)
             }
 
             val scope =
-              world.scopeFor(PositiveInfinity[Instant](), world.nextRevision)
+              world.scopeFor(Instant.parse("1970-01-01T00:00:00Z"),
+                             world.nextRevision)
 
             try {
               scope
