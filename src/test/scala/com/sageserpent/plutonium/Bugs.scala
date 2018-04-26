@@ -5,6 +5,10 @@ import java.time.Instant
 import com.sageserpent.americium.PositiveInfinity
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{FlatSpec, LoneElement, Matchers}
+import com.sageserpent.americium.randomEnrichment._
+import org.scalatest.exceptions.TestFailedException
+
+import scala.util.Random
 
 class WorldEfficientInMemoryImplementationBugs
     extends FlatSpec
@@ -559,6 +563,82 @@ class WorldEfficientInMemoryImplementationBugs
 
         exception.getMessage should include(
           "attempt to annihilate an item.*without an explicit type")
+      }
+    }
+  }
+
+  "annihilating an item and then resurrecting it at the same physical time" should "result in a history for the resurrected item" in {
+    forAll(worldResourceGenerator) { worldResource =>
+      val firstReferringId = "Fred"
+
+      val secondReferringId = "Jane"
+
+      val sharedAsOf = Instant.ofEpochSecond(0)
+
+      val eventsForFirstReferringItem = Seq(
+        Change
+          .forTwoItems(Instant.ofEpochSecond(-1L))(firstReferringId, "Huey", {
+            (referrer: ReferringHistory, referenced: History) =>
+              referrer.referTo(referenced)
+          }),
+        Annihilation[ReferringHistory](Instant.ofEpochSecond(0L),
+                                       firstReferringId),
+        Change
+          .forTwoItems(Instant.ofEpochSecond(0L))(firstReferringId, "Duey", {
+            (referrer: ReferringHistory, referenced: History) =>
+              referrer.referTo(referenced)
+          })
+      )
+
+      val eventsForSecondReferringItem = Seq(
+        Change
+          .forTwoItems(Instant.ofEpochSecond(-1L))(secondReferringId, "Louie", {
+            (referrer: ReferringHistory, referenced: History) =>
+              referrer.referTo(referenced)
+          }),
+        Change
+          .forTwoItems(Instant.ofEpochSecond(0L))(secondReferringId, "Huey", {
+            (referrer: ReferringHistory, referenced: History) =>
+              referrer.referTo(referenced)
+          }),
+        Change
+          .forTwoItems(Instant.ofEpochSecond(1L))(secondReferringId, "Louie", {
+            (referrer: ReferringHistory, referenced: History) =>
+              referrer.referTo(referenced)
+          })
+      )
+
+      for (seed <- 1 to 200) {
+        val randomBehaviour = new Random(seed)
+
+        val eventsForBothItems = randomBehaviour.pickAlternatelyFrom(
+          Seq(eventsForFirstReferringItem, eventsForSecondReferringItem))
+
+        val eventsInChunks = randomBehaviour
+          .splitIntoNonEmptyPieces(eventsForBothItems.zipWithIndex)
+
+        worldResource acquireAndGet { world =>
+          for (eventChunk <- eventsInChunks) {
+            world.revise(eventChunk.map {
+              case (event, eventId) => eventId -> Some(event)
+            }.toMap, sharedAsOf)
+          }
+
+          val scope =
+            world.scopeFor(PositiveInfinity[Instant](), world.nextRevision)
+
+          try {
+            scope
+              .render(Bitemporal.withId[ReferringHistory](firstReferringId))
+              .loneElement
+              .referencedDatums
+              .toSeq should contain theSameElementsAs Seq("Duey" -> Seq.empty)
+          } catch {
+            case exception: TestFailedException =>
+              throw exception.modifyMessage(
+                _.map(message => s"$message - Test case is: $eventsInChunks"))
+          }
+        }
       }
     }
   }
