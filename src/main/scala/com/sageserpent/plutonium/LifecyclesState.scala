@@ -272,9 +272,17 @@ class LifecyclesStateImplementation(
                                      Some(snapshot))
                         }
 
+                      val itemStateUpdateKeysToScheduleForRecalculation = successorsAccordingToPreviousRevision ++ successorsTakenOverFromAPreviousItemStateUpdate
+
+                      itemStateUpdateKeysToScheduleForRecalculation.foreach(
+                        key =>
+                          assert(
+                            Ordering[ItemStateUpdate.Key].lt(itemStateUpdateKey,
+                                                             key)))
+
                       afterRecalculationsWithinTimeslice(
                         itemStateUpdatesToApply
-                          .drop(1) ++ ((successorsAccordingToPreviousRevision ++ successorsTakenOverFromAPreviousItemStateUpdate) map (
+                          .drop(1) ++ (itemStateUpdateKeysToScheduleForRecalculation map (
                             key => (key, key))),
                         itemStateUpdatesDagWithUpdatedDependencies,
                         itemStateUpdateKeysPerItemWithNewKeyForPatch
