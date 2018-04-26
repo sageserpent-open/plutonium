@@ -175,6 +175,64 @@ trait WorldBehaviours
   }
 
   def worldBehaviour = {
+    it should "not mysteriously fail to yield items" in {
+      val testCaseGenerator = for {
+        worldResource <- worldResourceGenerator
+        referringHistoryRecordingsGroupedById <- referringHistoryRecordingsGroupedByIdGenerator(
+          forbidMeasurements = true)
+        seed <- seedGenerator
+        random = new Random(seed)
+        bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(
+          shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+            random,
+            referringHistoryRecordingsGroupedById).zipWithIndex)
+        asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
+                             instantGenerator) map (_.sorted)
+        queryWhen <- unboundedInstantGenerator
+      } yield
+        (worldResource,
+         referringHistoryRecordingsGroupedById,
+         bigShuffledHistoryOverLotsOfThings,
+         asOfs,
+         queryWhen)
+      check(
+        Prop.forAllNoShrink(testCaseGenerator) {
+          case (worldResource,
+                referringHistoryRecordingsGroupedById,
+                bigShuffledHistoryOverLotsOfThings,
+                asOfs,
+                queryWhen) =>
+            worldResource acquireAndGet {
+              world =>
+                recordEventsInWorld(
+                  liftRecordings(bigShuffledHistoryOverLotsOfThings),
+                  asOfs,
+                  world)
+
+                val scope = world.scopeFor(queryWhen, world.nextRevision)
+
+                val checks = (for {
+                  RecordingsNoLaterThan(
+                    referringHistoryId,
+                    referringHistoriesFrom,
+                    _,
+                    _,
+                    _) <- referringHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(
+                    queryWhen))
+                } yield referringHistoryId -> referringHistoriesFrom(scope))
+
+                if (checks.nonEmpty)
+                  Prop.all(checks map {
+                    case (id, itemSingletonSequence) =>
+                      (1 == itemSingletonSequence.size) :| s"Expected there to be a single item for id: $id."
+                  }: _*)
+                else Prop.undecided
+            }
+        },
+        MinSuccessful(300)
+      )
+    }
+
     it should "deduce the most accurate type for items based on the events that refer to them" in {
       val testCaseGenerator = for {
         worldResource <- worldResourceGenerator
