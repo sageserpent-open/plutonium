@@ -333,14 +333,13 @@ class LifecyclesStateImplementation(
       val baseItemStateUpdateKeysPerItemToApplyChangesTo: Map[
         UniqueItemSpecification,
         SortedMap[ItemStateUpdate.Key, Option[SnapshotBlob]]] = itemStateUpdateKeysPerItem mapValues (_ -- itemStateUpdateKeysThatNeedToBeRevoked) filter (_._2.nonEmpty) mapValues (
-          keyValuePairs =>
-            SortedMap(keyValuePairs.toSeq: _*)(itemStateUpdateKeyOrdering))
+          keyValuePairs => SortedMap(keyValuePairs.toSeq: _*))
 
       val itemStateUpdatesToApply
         : PriorityMap[ItemStateUpdate.Key, ItemStateUpdate.Key] =
         PriorityMap(
           descendantsOfRevokedItemStateUpdates ++ newAndModifiedItemStateUpdates
-            .map(_._1) map (key => (key, key)): _*)(itemStateUpdateKeyOrdering)
+            .map(_._1) map (key => (key, key)): _*)
 
       if (itemStateUpdatesToApply.nonEmpty) {
         val initialState = TimesliceState(
