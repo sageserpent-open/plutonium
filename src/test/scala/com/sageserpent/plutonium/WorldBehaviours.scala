@@ -2755,7 +2755,7 @@ trait WorldBehaviours
                   item.integerProperty = step
               })
         }
-        obsoleteEventTimes <- Gen.nonEmptyListOf(instantGenerator) map (_.sorted)
+        obsoleteEventTimes <- Gen.nonEmptyListOf(instantGenerator)
         obsoleteSteps = 1 to obsoleteEventTimes.size
         obsoleteRecordings: List[(Unbounded[Instant], Event)] = obsoleteEventTimes zip obsoleteSteps map {
           case (when, step) =>
