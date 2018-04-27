@@ -2844,27 +2844,31 @@ trait WorldBehaviours
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
                              instantGenerator) map (_.sorted)
       } yield (worldResource, bigShuffledHistoryOverLotsOfThings, asOfs, steps)
-      check(Prop.forAllNoShrink(testCaseGenerator) {
-        case (worldResource,
-              bigShuffledHistoryOverLotsOfThings,
-              asOfs,
-              steps) =>
-          worldResource acquireAndGet {
-            world =>
-              recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
-                                  asOfs,
-                                  world)
+      check(
+        Prop.forAllNoShrink(testCaseGenerator) {
+          case (worldResource,
+                bigShuffledHistoryOverLotsOfThings,
+                asOfs,
+                steps) =>
+            worldResource acquireAndGet {
+              world =>
+                recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
+                                    asOfs,
+                                    world)
 
-              val scope =
-                world.scopeFor(PositiveInfinity[Instant](), world.nextRevision)
+                val scope =
+                  world.scopeFor(PositiveInfinity[Instant](),
+                                 world.nextRevision)
 
-              val fredTheItem = scope
-                .render(Bitemporal.withId[IntegerHistory](itemId))
-                .force
+                val fredTheItem = scope
+                  .render(Bitemporal.withId[IntegerHistory](itemId))
+                  .force
 
-              (steps == fredTheItem.head.datums) :| s"Expecting: ${steps}, but got: ${fredTheItem.head.datums}"
-          }
-      })
+                (steps == fredTheItem.head.datums) :| s"Expecting: ${steps}, but got: ${fredTheItem.head.datums}"
+            }
+        },
+        MinSuccessful(200)
+      )
     }
 
     it should "yield a history at the final revision based only on the latest corrections" in {
