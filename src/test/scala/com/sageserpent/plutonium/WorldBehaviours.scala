@@ -3046,8 +3046,19 @@ trait WorldBehaviours
         worldResource <- worldResourceGenerator
         eventTimes    <- Gen.nonEmptyListOf(instantGenerator) map (_.sorted)
         steps = 1 to eventTimes.size
-        recordingsThatAreBothObsoleteAndCorrecting: List[(Unbounded[Instant],
-        Event)] = eventTimes zip steps map {
+        recordings: List[(Unbounded[Instant], Event)] = eventTimes zip steps map {
+          case (when, step) =>
+            Finite(when) -> Change
+              .forOneItem[IntegerHistory](when)(itemId, {
+                item: IntegerHistory =>
+                  item.integerProperty = step
+              })
+        }
+        seed <- seedGenerator
+        random             = new Random(seed)
+        obsoleteEventTimes = random.shuffle(eventTimes)
+        obsoleteSteps      = 1 to obsoleteEventTimes.size
+        obsoleteRecordings: List[(Unbounded[Instant], Event)] = obsoleteEventTimes zip obsoleteSteps map {
           case (when, step) =>
             Finite(when) -> Change
               .forOneItem[IntegerHistory](when)(itemId, {
@@ -3056,14 +3067,12 @@ trait WorldBehaviours
               })
         }
 
-        seed <- seedGenerator
-        random = new Random(seed)
         shuffledRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhenForAGivenItem(
           random,
-          recordingsThatAreBothObsoleteAndCorrecting)
+          recordings)
         shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhenForAGivenItem(
           random,
-          recordingsThatAreBothObsoleteAndCorrecting)
+          recordings)
         bigShuffledHistoryOverLotsOfThings = intersperseObsoleteEvents(
           random,
           shuffledRecordings,
@@ -3094,7 +3103,7 @@ trait WorldBehaviours
                 (steps == fredTheItem.head.datums) :| s"Expecting: ${steps}, but got: ${fredTheItem.head.datums}"
             }
         },
-        MinSuccessful(200)
+        MinSuccessful(400)
       )
     }
 
