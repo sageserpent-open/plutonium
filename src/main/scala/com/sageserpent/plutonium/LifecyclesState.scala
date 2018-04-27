@@ -279,8 +279,9 @@ class LifecyclesStateImplementation(
                           assert(
                             Ordering[ItemStateUpdate.Key].lt(itemStateUpdateKey,
                                                              key),
-                            s"Comparison between item state update key being updated and the one being scheduled: ${Ordering[ItemStateUpdate.Key]
-                              .compare(itemStateUpdateKey, key)}"
+                            s"Comparison between item state update key being recalculated and the one being scheduled: ${Ordering[ItemStateUpdate.Key]
+                              .compare(itemStateUpdateKey, key)}, recalculated: $itemStateUpdateKey at: ${whenForItemStateUpdate(
+                              itemStateUpdateKey)}, scheduled: $key at: ${whenForItemStateUpdate(key)}"
                         ))
 
                       afterRecalculationsWithinTimeslice(
