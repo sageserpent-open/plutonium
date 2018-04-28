@@ -85,12 +85,16 @@ class PatchRecorderSpec
 
               val (setupInteractionsWithBestPatchSelection, bestPatches) =
                 (for (clumpOfPatches <- clumpsOfPatches) yield {
-                  val bestPatch = randomBehaviour.chooseOneOf(clumpOfPatches)
+                  val (bestPatch, bestPatchIndex) =
+                    randomBehaviour.chooseOneOf(clumpOfPatches.zipWithIndex)
 
                   def setupInteractionWithBestPatchSelection() {
-                    (bestPatchSelection.apply _)
-                      .expects(clumpOfPatches)
-                      .returns(bestPatch)
+                    (bestPatchSelection.apply[Long] _)
+                      .expects(
+                        where((candidatePatches: Seq[(AbstractPatch, Long)]) =>
+                          candidatePatches.map(_._1) == clumpOfPatches))
+                      .onCall((candidatePatches: Seq[(AbstractPatch, Long)]) =>
+                        candidatePatches(bestPatchIndex))
                       .once
                   }
 
@@ -324,7 +328,9 @@ class PatchRecorderSpec
           // Otherwise if the patch recorder's implementation of 'BestPatchSelection' were to be mocked, there would be no contracts on it.
           trait DelegatingBestPatchSelectionImplementation
               extends BestPatchSelection {
-            def apply(relatedPatches: Seq[AbstractPatch]): AbstractPatch =
+            def apply[AssociatedData](
+                relatedPatches: Seq[(AbstractPatch, AssociatedData)])
+              : (AbstractPatch, AssociatedData) =
               bestPatchSelection(relatedPatches)
           }
 
