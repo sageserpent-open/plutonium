@@ -3113,7 +3113,7 @@ trait WorldBehaviours
       val testCaseGenerator = for {
         worldResource <- worldResourceGenerator
         eventTimes <- Gen.chooseNum(0L, 50L) map (0L to _ toList) map (_.map(
-          Instant.ofEpochSecond))
+          timeInSeconds => Instant.ofEpochSecond(24 * 60 * 60 * timeInSeconds)))
         steps = 1 to eventTimes.size
         recordings: List[(Unbounded[Instant], Event)] = eventTimes zip steps map {
           case (when, step) =>
