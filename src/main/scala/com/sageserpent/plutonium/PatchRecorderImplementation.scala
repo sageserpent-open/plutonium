@@ -38,11 +38,13 @@ abstract class PatchRecorderImplementation[EventId](
                                      patch: AbstractPatch): Unit = {
     _whenEventPertainedToByLastRecordingTookPlace = Some(when)
 
-    val itemState = refineRelevantItemStatesAndYieldTarget(patch)
+    val sequenceIndex: SequenceIndex = nextSequenceIndex()
+
+    val itemState = refineRelevantItemStatesAndYieldTarget(patch, sequenceIndex)
 
     itemState.submitCandidatePatches(patch.method)
 
-    itemState.addPatch(when, patch, eventId)
+    itemState.addPatch(when, patch, eventId, sequenceIndex)
   }
 
   override def recordPatchFromMeasurement(eventId: EventId,
@@ -50,7 +52,13 @@ abstract class PatchRecorderImplementation[EventId](
                                           patch: AbstractPatch): Unit = {
     _whenEventPertainedToByLastRecordingTookPlace = Some(when)
 
-    refineRelevantItemStatesAndYieldTarget(patch).addPatch(when, patch, eventId)
+    val sequenceIndex: SequenceIndex = nextSequenceIndex()
+
+    refineRelevantItemStatesAndYieldTarget(patch, sequenceIndex).addPatch(
+      when,
+      patch,
+      eventId,
+      sequenceIndex)
   }
 
   def annihilateItemFor_[SubclassOfItem <: Item, Item](
@@ -180,8 +188,9 @@ abstract class PatchRecorderImplementation[EventId](
 
     def addPatch(when: Unbounded[Instant],
                  patch: AbstractPatch,
-                 eventId: EventId) = {
-      val candidatePatchTuple = (nextSequenceIndex(), patch, when, eventId)
+                 eventId: EventId,
+                 sequenceIndex: SequenceIndex) = {
+      val candidatePatchTuple = (sequenceIndex, patch, when, eventId)
       methodAndItsCandidatePatchTuplesFor(patch.method) match {
         case (Some((exemplarMethod, candidatePatchTuples))) =>
           candidatePatchTuples += candidatePatchTuple
@@ -256,8 +265,8 @@ abstract class PatchRecorderImplementation[EventId](
 
   private val bagOfPatches = mutable.Bag.empty[AbstractPatch]
 
-  private val patchToItemStatesMap =
-    mutable.Map.empty[AbstractPatch, UniqueItemSpecificationToItemStateMap]
+  private val sequenceIndexToItemStatesMap =
+    mutable.Map.empty[SequenceIndex, UniqueItemSpecificationToItemStateMap]
 
   private var _nextSequenceIndex: SequenceIndex = initialSequenceIndex
 
@@ -278,13 +287,15 @@ abstract class PatchRecorderImplementation[EventId](
 
   private def enqueueBestCandidatePatchFrom(
       candidatePatchTuples: CandidatePatches): Unit = {
-    val bestPatch = self(candidatePatchTuples.map(_._2))
+    val (bestPatch, sequenceIndexForBestPatch) = self(candidatePatchTuples.map {
+      case (sequenceIndex, patch, _, _) => patch -> sequenceIndex
+    })
 
     val patchRepresentingTheEvent = candidatePatchTuples.head
 
-    // The best patch has to be applied as if it occurred when the patch representing
-    // the event would have taken place - so it steals the latter's sequence index.
-    val (sequenceIndexForBestPatch, _, whenTheBestPatchOccurs, _) =
+    // The best patch has to be applied as if it occurred when the anchor patch representing
+    // the event would have taken place - so it steals the anchor patch's sequence index and physical time.
+    val (sequenceIndexForAnchorPatch, _, whenTheAnchorPatchOccurs, _) =
       patchRepresentingTheEvent
 
     bagOfPatches.setMultiplicity(bestPatch,
@@ -293,15 +304,15 @@ abstract class PatchRecorderImplementation[EventId](
 
     val reconstitutionDataToItemStateMap =
       if (bagOfPatches.contains(bestPatch)) {
-        patchToItemStatesMap(bestPatch)
+        sequenceIndexToItemStatesMap(sequenceIndexForBestPatch)
       } else {
-        patchToItemStatesMap.remove(bestPatch).get
+        sequenceIndexToItemStatesMap.remove(sequenceIndexForBestPatch).get
       }
 
     for ((UniqueItemSpecification(id, _), itemState) <- reconstitutionDataToItemStateMap) {
-      if (itemState.itemWouldConflictWithEarlierLifecyclePriorTo > sequenceIndexForBestPatch) {
+      if (itemState.itemWouldConflictWithEarlierLifecyclePriorTo > sequenceIndexForAnchorPatch) {
         throw new RuntimeException(
-          s"Attempt to execute patch involving id: '$id' of type: '${itemState.lowerBoundTypeTag.tpe}' for a later lifecycle that cannot exist at time: $whenTheBestPatchOccurs and sequence number: $sequenceIndexForBestPatch, as there is at least one item from a previous lifecycle up until sequence number: ${itemState.itemWouldConflictWithEarlierLifecyclePriorTo}.")
+          s"Attempt to execute patch involving id: '$id' of type: '${itemState.lowerBoundTypeTag.tpe}' for a later lifecycle that cannot exist at time: $whenTheAnchorPatchOccurs and sequence number: $sequenceIndexForAnchorPatch, as there is at least one item from a previous lifecycle up until sequence number: ${itemState.itemWouldConflictWithEarlierLifecyclePriorTo}.")
       }
     }
 
@@ -311,13 +322,13 @@ abstract class PatchRecorderImplementation[EventId](
     val eventIdsFromAllCandidatePatches = candidatePatchTuples.map(_._4).toSet
 
     actionQueue.enqueue(new IndexedAction {
-      override val sequenceIndex: SequenceIndex = sequenceIndexForBestPatch
-      override val when: Unbounded[Instant]     = whenTheBestPatchOccurs
+      override val sequenceIndex: SequenceIndex = sequenceIndexForAnchorPatch
+      override val when: Unbounded[Instant]     = whenTheAnchorPatchOccurs
 
       override def perform() {
         val bestPatchWithLoweredTypeTags = bestPatch.rewriteItemTypeTags(
           reconstitutionDataToItemStateMap.mapValues(_.lowerBoundTypeTag))
-        updateConsumer.capturePatch(whenTheBestPatchOccurs,
+        updateConsumer.capturePatch(whenTheAnchorPatchOccurs,
                                     eventIdsFromAllCandidatePatches,
                                     bestPatchWithLoweredTypeTags)
       }
@@ -331,7 +342,8 @@ abstract class PatchRecorderImplementation[EventId](
   }
 
   private def refineRelevantItemStatesAndYieldTarget(
-      patch: AbstractPatch): ItemState = {
+      patch: AbstractPatch,
+      sequenceIndex: SequenceIndex): ItemState = {
     val itemStates: UniqueItemSpecificationToItemStateMap = mutable.Map.empty
 
     def refinedItemStateFor(reconstitutionData: UniqueItemSpecification) = {
@@ -347,7 +359,7 @@ abstract class PatchRecorderImplementation[EventId](
     val targetItemState = refinedItemStateFor(patch.targetItemSpecification)
 
     bagOfPatches += patch
-    patchToItemStatesMap(patch) = itemStates
+    sequenceIndexToItemStatesMap(sequenceIndex) = itemStates
 
     targetItemState
   }
