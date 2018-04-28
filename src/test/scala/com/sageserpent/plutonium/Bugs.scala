@@ -562,4 +562,54 @@ class WorldEfficientInMemoryImplementationBugs
       }
     }
   }
+
+  "correcting an event by moving it in physical time" should "work properly" in {
+    forAll(worldResourceGenerator) { worldResource =>
+      val itemId = "Fred"
+
+      val sharedAsOf = Instant.ofEpochSecond(0)
+
+      val expectedHistory = Seq(99, 88, 55555, 77)
+
+      val eventBeingMovedInPhysicalTime = 1
+
+      worldResource acquireAndGet { world =>
+        world.revise(0, Change.forOneItem(Instant.ofEpochSecond(-3L))(itemId, {
+          item: IntegerHistory =>
+            item.integerProperty = 99
+        }), sharedAsOf)
+
+        val foo = (item: IntegerHistory) => item.integerProperty = 55555
+
+        world.revise(eventBeingMovedInPhysicalTime,
+                     Change.forOneItem(Instant.ofEpochSecond(1L))(itemId, foo),
+                     sharedAsOf)
+
+        world.revise(2, Change.forOneItem(Instant.ofEpochSecond(0L))(itemId, {
+          item: IntegerHistory =>
+            item.integerProperty = 77
+        }), sharedAsOf)
+
+        world.revise(
+          Map(
+            eventBeingMovedInPhysicalTime -> Some(
+              Change.forOneItem(Instant.ofEpochSecond(-1L))(itemId, foo)),
+            3 -> Some(Change.forOneItem(Instant.ofEpochSecond(-2l))(itemId, {
+              item: IntegerHistory =>
+                item.integerProperty = 88
+            }))
+          ),
+          sharedAsOf
+        )
+
+        val scope =
+          world.scopeFor(PositiveInfinity[Instant](), world.nextRevision)
+
+        scope
+          .render(Bitemporal.withId[IntegerHistory](itemId))
+          .loneElement
+          .datums should contain theSameElementsInOrderAs expectedHistory
+      }
+    }
+  }
 }
