@@ -347,7 +347,7 @@ abstract class PatchRecorderImplementation[EventId](
     val targetItemState = refinedItemStateFor(patch.targetItemSpecification)
 
     bagOfPatches += patch
-    patchToItemStatesMap.getOrElseUpdate(patch, mutable.Map.empty) ++= itemStates
+    patchToItemStatesMap(patch) = itemStates
 
     targetItemState
   }
