@@ -3107,6 +3107,67 @@ trait WorldBehaviours
       )
     }
 
+    it should "build an item's state in a manner consistent with the history experienced by the item regardless of any corrected history - with another twist." in {
+      val itemId = "Fred"
+
+      val testCaseGenerator = for {
+        worldResource <- worldResourceGenerator
+        eventTimes <- Gen.chooseNum(0L, 50L) map (0L to _ toList) map (_.map(
+          Instant.ofEpochSecond))
+        steps = 1 to eventTimes.size
+        recordings: List[(Unbounded[Instant], Event)] = eventTimes zip steps map {
+          case (when, step) =>
+            Finite(when) -> Change
+              .forOneItem[IntegerHistory](when)(itemId, {
+                item: IntegerHistory =>
+                  item.integerProperty = step
+              })
+        }
+        seed <- seedGenerator
+        random             = new Random(seed)
+        obsoleteEventTimes = random.shuffle(eventTimes)
+        obsoleteSteps      = 1 to obsoleteEventTimes.size
+        obsoleteRecordings: List[(Unbounded[Instant], Event)] = obsoleteEventTimes zip obsoleteSteps map {
+          case (when, step) =>
+            Finite(when) -> Change
+              .forOneItem[IntegerHistory](when)(itemId, {
+                item: IntegerHistory =>
+                  item.integerProperty = step
+              })
+        }
+
+        pairsOfObsoleteAndSucceedingEvents = obsoleteRecordings.zipWithIndex zip recordings.zipWithIndex
+
+        historyOverLotsOfThings = pairsOfObsoleteAndSucceedingEvents flatMap {
+          case (obsolete, succeeding) => Seq(Seq(obsolete), Seq(succeeding))
+        } toStream
+
+        asOfs <- Gen.listOfN(historyOverLotsOfThings.length, instantGenerator) map (_.sorted)
+      } yield (worldResource, historyOverLotsOfThings, asOfs, steps)
+      check(
+        Prop.forAllNoShrink(testCaseGenerator) {
+          case (worldResource, historyOverLotsOfThings, asOfs, steps) =>
+            worldResource acquireAndGet {
+              world =>
+                recordEventsInWorld(liftRecordings(historyOverLotsOfThings),
+                                    asOfs,
+                                    world)
+
+                val scope =
+                  world.scopeFor(PositiveInfinity[Instant](),
+                                 world.nextRevision)
+
+                val fredTheItem = scope
+                  .render(Bitemporal.withId[IntegerHistory](itemId))
+                  .force
+
+                (steps.toSet == fredTheItem.head.datums.toSet) :| s"Expecting: ${steps}, but got: ${fredTheItem.head.datums}"
+            }
+        },
+        MinSuccessful(700)
+      )
+    }
+
     it should "yield a history at the final revision based only on the latest corrections" in {
       val testCaseGenerator = for {
         worldResource <- worldResourceGenerator
