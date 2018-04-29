@@ -4,13 +4,21 @@ import java.time.Instant
 
 import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
+import com.sageserpent.plutonium.LifecyclesStateImplementation.{
+  EndOfTimesliceTime,
+  ItemStateUpdateTime
+}
 
 import scala.collection.immutable.Map
 
-class TimelineImplementation(
-    lifecyclesState: LifecyclesState = noLifecyclesState(),
-    blobStorage: BlobStorage[Unbounded[Instant], ItemStateUpdate.Key, SnapshotBlob] =
-      BlobStorageInMemory[Unbounded[Instant], ItemStateUpdate.Key, SnapshotBlob]())
+class TimelineImplementation(lifecyclesState: LifecyclesState =
+                               noLifecyclesState(),
+                             blobStorage: BlobStorage[ItemStateUpdateTime,
+                                                      ItemStateUpdate.Key,
+                                                      SnapshotBlob] =
+                               BlobStorageInMemory[ItemStateUpdateTime,
+                                                   ItemStateUpdate.Key,
+                                                   SnapshotBlob]())
     extends Timeline {
 
   override def revise(events: Map[_ <: EventId, Option[Event]]) = {
@@ -26,11 +34,12 @@ class TimelineImplementation(
   override def retainUpTo(when: Unbounded[Instant]) = {
     new TimelineImplementation(
       lifecyclesState = this.lifecyclesState.retainUpTo(when),
-      blobStorage = this.blobStorage.retainUpTo(when)
+      blobStorage = this.blobStorage.retainUpTo(EndOfTimesliceTime(when))
     )
   }
 
   override def itemCacheAt(when: Unbounded[Instant]) =
-    new ItemCacheUsingBlobStorage[Unbounded[Instant]](blobStorage, when)
+    new ItemCacheUsingBlobStorage[ItemStateUpdateTime](blobStorage,
+                                                       EndOfTimesliceTime(when))
 
 }

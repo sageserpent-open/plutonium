@@ -7,6 +7,11 @@ import com.sageserpent.plutonium.BlobStorage.SnapshotRetrievalApi
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
 import com.sageserpent.plutonium.ItemStateUpdate.IntraEventIndex
+import com.sageserpent.plutonium.LifecyclesStateImplementation.{
+  EndOfTimesliceTime,
+  IntraTimesliceTime,
+  ItemStateUpdateTime
+}
 import com.sageserpent.plutonium.PatchRecorder.UpdateConsumer
 import com.sageserpent.plutonium.World.{Revision, initialRevision}
 import com.sageserpent.plutonium.WorldImplementationCodeFactoring.{
@@ -33,11 +38,11 @@ trait LifecyclesState {
   // reabsorb the new blob storage instance back into its own revision. If so, then perhaps 'TimelineImplementation' *is*
   // in fact the cutover form of 'LifecyclesState'. Food for thought...
   def revise(events: Map[_ <: EventId, Option[Event]],
-             blobStorage: BlobStorage[Unbounded[Instant],
+             blobStorage: BlobStorage[ItemStateUpdateTime,
                                       ItemStateUpdate.Key,
                                       SnapshotBlob])
     : (LifecyclesState,
-       BlobStorage[Unbounded[Instant], ItemStateUpdate.Key, SnapshotBlob])
+       BlobStorage[ItemStateUpdateTime, ItemStateUpdate.Key, SnapshotBlob])
 
   def retainUpTo(when: Unbounded[Instant]): LifecyclesState
 }
@@ -50,6 +55,34 @@ object noLifecyclesState {
 object LifecyclesStateImplementation {
   type ItemStateUpdatesDag =
     Graph[ItemStateUpdate.Key, ItemStateUpdate, Unit]
+
+  sealed trait ItemStateUpdateTime
+
+  case class IntraTimesliceTime(eventOrderingKey: EventOrderingKey,
+                                intraEventIndex: IntraEventIndex)
+      extends ItemStateUpdateTime
+
+  case class EndOfTimesliceTime(when: Unbounded[Instant])
+      extends ItemStateUpdateTime
+
+  implicit val itemStateUpdateTimeOrdering: Ordering[ItemStateUpdateTime] =
+    (first: ItemStateUpdateTime, second: ItemStateUpdateTime) =>
+      first -> second match {
+        case (IntraTimesliceTime(firstEventOrderingKey, firstIntraEventIndex),
+              IntraTimesliceTime(secondEventOrderingKey,
+                                 secondIntraEventIndex)) =>
+          Ordering[(EventOrderingKey, IntraEventIndex)].compare(
+            firstEventOrderingKey  -> firstIntraEventIndex,
+            secondEventOrderingKey -> secondIntraEventIndex)
+        case (IntraTimesliceTime((firstWhen, _, _), _),
+              EndOfTimesliceTime(secondWhen)) =>
+          if (firstWhen > secondWhen) 1 else -1 // NOTE: they can't be equal.
+        case (EndOfTimesliceTime(firstWhen),
+              IntraTimesliceTime((secondWhen, _, _), _)) =>
+          if (firstWhen < secondWhen) -1 else 1 // NOTE: they can't be equal.
+        case (EndOfTimesliceTime(firstWhen), EndOfTimesliceTime(secondWhen)) =>
+          Ordering[Unbounded[Instant]].compare(firstWhen, secondWhen)
+    }
 }
 
 class LifecyclesStateImplementation(
@@ -60,17 +93,18 @@ class LifecyclesStateImplementation(
     itemStateUpdateKeysPerItem: Map[
       UniqueItemSpecification,
       SortedMap[ItemStateUpdate.Key, Option[SnapshotBlob]]] = Map.empty,
-    itemStateUpdateKeyOrderingProperty: ItemStateUpdate.Key => (EventOrderingKey,
-                                                                IntraEventIndex) =
-      _ => (NegativeInfinity[Instant](), 0, 0) -> 0,
+    itemStateUpdateTime: ItemStateUpdate.Key => ItemStateUpdateTime = _ =>
+      EndOfTimesliceTime(PositiveInfinity[Instant]),
     nextRevision: Revision = initialRevision)
     extends LifecyclesState {
+  import LifecyclesStateImplementation.ItemStateUpdateTime
+
   override def revise(events: Map[_ <: EventId, Option[Event]],
-                      blobStorage: BlobStorage[Unbounded[Instant],
+                      blobStorage: BlobStorage[ItemStateUpdateTime,
                                                ItemStateUpdate.Key,
                                                SnapshotBlob])
     : (LifecyclesState,
-       BlobStorage[Unbounded[Instant], ItemStateUpdate.Key, SnapshotBlob]) = {
+       BlobStorage[ItemStateUpdateTime, ItemStateUpdate.Key, SnapshotBlob]) = {
     val (annulledEvents, newEvents) =
       (events.toList map {
         case (eventId, Some(event)) => \/-(eventId -> event)
@@ -86,14 +120,14 @@ class LifecyclesStateImplementation(
     val whenForItemStateUpdate: ItemStateUpdate.Key => Unbounded[Instant] =
       whenFor(eventsForNewTimeline)(_)
 
-    def itemStateUpdateKeyOrderingPropertyAccordingToThisRevision(
-        key: ItemStateUpdate.Key): (EventOrderingKey, IntraEventIndex) = {
+    def itemStateUpdateTimeAccordingToThisRevision(
+        key: ItemStateUpdate.Key): ItemStateUpdateTime = {
       val eventData = eventsForNewTimeline(key.eventId)
-      (eventData.orderingKey, key.intraEventIndex)
+      IntraTimesliceTime(eventData.orderingKey, key.intraEventIndex)
     }
 
     implicit val itemStateUpdateKeyOrdering: Ordering[ItemStateUpdate.Key] =
-      Ordering.by(itemStateUpdateKeyOrderingPropertyAccordingToThisRevision)
+      Ordering.by(itemStateUpdateTimeAccordingToThisRevision)
 
     case class TimesliceState(
         itemStateUpdatesToApply: PriorityMap[ItemStateUpdate.Key,
@@ -103,7 +137,7 @@ class LifecyclesStateImplementation(
           UniqueItemSpecification,
           SortedMap[ItemStateUpdate.Key, Option[SnapshotBlob]]],
         timeSliceWhen: Unbounded[Instant],
-        blobStorage: BlobStorage[Unbounded[Instant],
+        blobStorage: BlobStorage[ItemStateUpdateTime,
                                  ItemStateUpdate.Key,
                                  SnapshotBlob]) {
       def afterRecalculations: TimesliceState = {
@@ -168,6 +202,8 @@ class LifecyclesStateImplementation(
                       }
                   }
 
+                val itemStateUpdateTime =
+                  itemStateUpdateTimeAccordingToThisRevision(itemStateUpdateKey)
                 itemStateUpdate match {
                   case ItemStateAnnihilation(annihilation) =>
                     // TODO: having to reconstitute the item here is hokey when the act of applying the annihilation just afterwards will also do that too. Sort it out!
@@ -181,7 +217,7 @@ class LifecyclesStateImplementation(
 
                     revisionBuilder.record(
                       itemStateUpdateKey,
-                      when,
+                      itemStateUpdateTime,
                       Map(annihilation.uniqueItemSpecification -> None))
 
                     val itemStateUpdatesDagWithUpdatedDependency =
@@ -212,7 +248,7 @@ class LifecyclesStateImplementation(
 
                     revisionBuilder.record(
                       itemStateUpdateKey,
-                      when,
+                      itemStateUpdateTime,
                       mutatedItemSnapshots.mapValues(Some.apply))
 
                     def successorsOf(itemStateUpdateKey: ItemStateUpdate.Key) =
@@ -323,13 +359,13 @@ class LifecyclesStateImplementation(
     val unchangedItemStateUpdatesKeysOrderedAccordingToPreviousRevision =
       unchangedItemStateUpdates.map {
         case pair @ (key, _) =>
-          pair -> itemStateUpdateKeyOrderingProperty(key)
+          pair -> itemStateUpdateTime(key)
       }
 
     val unchangedItemStateUpdatesOrderedAccordingToNewRevision =
       unchangedItemStateUpdates.map {
         case pair @ (key, _) =>
-          pair -> itemStateUpdateKeyOrderingPropertyAccordingToThisRevision(key)
+          pair -> itemStateUpdateTimeAccordingToThisRevision(key)
       }
 
     val unchangedItemStateUpdatesThatHaveMovedInOrdering
@@ -400,8 +436,7 @@ class LifecyclesStateImplementation(
         itemStateUpdates = itemStateUpdatesForNewTimeline,
         itemStateUpdatesDag = itemStateUpdatesDagForNewTimeline,
         itemStateUpdateKeysPerItem = itemStateUpdateKeysPerItemForNewTimeline,
-        itemStateUpdateKeyOrderingProperty =
-          itemStateUpdateKeyOrderingPropertyAccordingToThisRevision,
+        itemStateUpdateTime = itemStateUpdateTimeAccordingToThisRevision,
         nextRevision = 1 + nextRevision
       ) -> blobStorageForNewTimeline
     } else
@@ -411,8 +446,7 @@ class LifecyclesStateImplementation(
         itemStateUpdatesDag = itemStateUpdatesDagWithNewNodesAddedIn,
         itemStateUpdateKeysPerItem =
           baseItemStateUpdateKeysPerItemToApplyChangesTo,
-        itemStateUpdateKeyOrderingProperty =
-          itemStateUpdateKeyOrderingPropertyAccordingToThisRevision,
+        itemStateUpdateTime = itemStateUpdateTimeAccordingToThisRevision,
         nextRevision = 1 + nextRevision
       ) -> blobStorageWithRevocations
   }
@@ -477,8 +511,7 @@ class LifecyclesStateImplementation(
       itemStateUpdateKeysPerItem = itemStateUpdateKeysPerItem mapValues (_.filter {
         case (key, _) => when >= whenFor(this.events.apply)(key)
       }) filter (_._2.nonEmpty),
-      itemStateUpdateKeyOrderingProperty =
-        this.itemStateUpdateKeyOrderingProperty, // Reusing the same ordering property with its closure over the state of 'this' is a bit hokey, but it works.
+      itemStateUpdateTime = this.itemStateUpdateTime, // Reusing the same ordering property with its closure over the state of 'this' is a bit hokey, but it works.
       nextRevision = this.nextRevision
     )
 }
