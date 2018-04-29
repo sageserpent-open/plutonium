@@ -1,8 +1,5 @@
 package com.sageserpent.plutonium
 
-import java.time.Instant
-
-import com.sageserpent.americium.{PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 
 import scala.reflect.runtime.universe.TypeTag
@@ -43,20 +40,20 @@ trait BlobStorage[Time, EventId, SnapshotBlob] { blobStorage =>
     // if an item's greatest lower bound type changes.
     def recordSnapshotBlobsForEvent(
         eventIds: Set[EventId],
-        when: Unbounded[Instant],
+        when: Time,
         snapshotBlobs: Map[UniqueItemSpecification, Option[SnapshotBlob]]): Unit
 
     def annulEvent(eventId: EventId) =
-      recordSnapshotBlobsForEvent(Set(eventId), PositiveInfinity(), Map.empty)
+      recordSnapshotBlobsForEvent(Set(eventId),
+                                  null.asInstanceOf[Time],
+                                  Map.empty)
 
     def build(): BlobStorage[Time, EventId, SnapshotBlob]
   }
 
   def openRevision(): RevisionBuilder
 
-  def timeSlice(when: Unbounded[Instant],
-                inclusive: Boolean = true): Timeslice[SnapshotBlob]
+  def timeSlice(when: Time, inclusive: Boolean = true): Timeslice[SnapshotBlob]
 
-  def retainUpTo(
-      when: Unbounded[Instant]): BlobStorage[Time, EventId, SnapshotBlob]
+  def retainUpTo(when: Time): BlobStorage[Time, EventId, SnapshotBlob]
 }

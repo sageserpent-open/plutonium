@@ -1,31 +1,26 @@
 package com.sageserpent.plutonium
 
-import java.time.Instant
-
-import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 
 import scala.collection.Searching._
 import scala.collection.generic.IsSeqLike
-import scala.collection.{SeqLike, SeqView, immutable, mutable}
-import scala.reflect.runtime.universe
-import scala.reflect.runtime.universe._
+import scala.collection.{SeqLike, SeqView, mutable}
 import scala.math.Ordered.orderingToOrdered
+import scala.reflect.runtime.universe._
 
 object BlobStorageInMemory {
   type Revision = Int
 
-  implicit val isSeqLike = new IsSeqLike[SeqView[Unbounded[Instant], Seq[_]]] {
-    type A = Unbounded[Instant]
-    override val conversion: SeqView[Unbounded[Instant], Seq[_]] => SeqLike[
-      this.A,
-      SeqView[Unbounded[Instant], Seq[_]]] =
+  implicit def isSeqLike[Time] = new IsSeqLike[SeqView[Time, Seq[_]]] {
+    type A = Time
+    override val conversion
+      : SeqView[Time, Seq[_]] => SeqLike[this.A, SeqView[Time, Seq[_]]] =
       identity
   }
 
-  def indexToSearchDownFromOrInsertAt[EventId](
-      when: Split[Unbounded[Instant]],
-      snapshotBlobTimes: Seq[Split[Unbounded[Instant]]]) = {
+  def indexToSearchDownFromOrInsertAt[Time: Ordering, EventId](
+      when: Split[Time],
+      snapshotBlobTimes: Seq[Split[Time]]) = {
 
     snapshotBlobTimes.search(when) match {
       case Found(foundIndex) =>
@@ -61,10 +56,9 @@ case class BlobStorageInMemory[Time, EventId, SnapshotBlob] private (
 
   case class Lifecycle(
       itemTypeTag: TypeTag[_ <: Any],
-      snapshotBlobs: Vector[(Split[Unbounded[Instant]],
-                             (Option[SnapshotBlob], Set[EventId], Revision))] =
-        Vector.empty[(Split[Unbounded[Instant]],
-                      (Option[SnapshotBlob], Set[EventId], Revision))]) {
+      snapshotBlobs: Vector[
+        (Split[Time], (Option[SnapshotBlob], Set[EventId], Revision))] = Vector
+        .empty[(Split[Time], (Option[SnapshotBlob], Set[EventId], Revision))]) {
     val snapshotBlobTimes = snapshotBlobs.view.map(_._1)
 
     require(
@@ -72,7 +66,7 @@ case class BlobStorageInMemory[Time, EventId, SnapshotBlob] private (
         case (first, second) => first <= second
       }))
 
-    private def indexOf(when: Split[Unbounded[Instant]],
+    private def indexOf(when: Split[Time],
                         validRevisionFor: EventId => Revision) = {
       snapshotBlobs
         .view(0, indexToSearchDownFromOrInsertAt(when, snapshotBlobTimes))
@@ -83,13 +77,13 @@ case class BlobStorageInMemory[Time, EventId, SnapshotBlob] private (
         })
     }
 
-    def isValid(when: Split[Unbounded[Instant]],
+    def isValid(when: Split[Time],
                 validRevisionFor: EventId => Revision): Boolean = {
       val index = indexOf(when, validRevisionFor)
       -1 != index && snapshotBlobs(index)._2._1.isDefined
     }
 
-    def snapshotBlobFor(when: Split[Unbounded[Instant]],
+    def snapshotBlobFor(when: Split[Time],
                         validRevisionFor: EventId => Revision): SnapshotBlob = {
       val index = indexOf(when, validRevisionFor)
 
@@ -101,7 +95,7 @@ case class BlobStorageInMemory[Time, EventId, SnapshotBlob] private (
     }
 
     def addSnapshotBlob(eventIds: Set[EventId],
-                        when: Split[Unbounded[Instant]],
+                        when: Split[Time],
                         snapshotBlob: Option[SnapshotBlob],
                         revision: Revision): Lifecycle = {
       require(!snapshotBlobs.contains(when))
@@ -118,15 +112,13 @@ case class BlobStorageInMemory[Time, EventId, SnapshotBlob] private (
   override def openRevision(): RevisionBuilder = {
     class RevisionBuilderImplementation extends RevisionBuilder {
       type Event =
-        (Set[EventId],
-         Unbounded[Instant],
-         Map[UniqueItemSpecification, Option[SnapshotBlob]])
+        (Set[EventId], Time, Map[UniqueItemSpecification, Option[SnapshotBlob]])
 
       val events = mutable.MutableList.empty[Event]
 
       override def recordSnapshotBlobsForEvent(
           eventIds: Set[EventId],
-          when: Unbounded[Instant],
+          when: Time,
           snapshotBlobs: Map[UniqueItemSpecification, Option[SnapshotBlob]])
         : Unit = {
         events += ((eventIds, when, snapshotBlobs))
@@ -191,7 +183,7 @@ case class BlobStorageInMemory[Time, EventId, SnapshotBlob] private (
     new RevisionBuilderImplementation
   }
 
-  override def timeSlice(when: Unbounded[Instant],
+  override def timeSlice(when: Time,
                          inclusive: Boolean): Timeslice[SnapshotBlob] = {
     trait TimesliceImplementation extends Timeslice[SnapshotBlob] {
       val splitWhen =
@@ -238,8 +230,8 @@ case class BlobStorageInMemory[Time, EventId, SnapshotBlob] private (
     new TimesliceImplementation with TimesliceContracts[SnapshotBlob]
   }
 
-  override def retainUpTo(when: Unbounded[Instant])
-    : BlobStorageInMemory[Time, EventId, SnapshotBlob] =
+  override def retainUpTo(
+      when: Time): BlobStorageInMemory[Time, EventId, SnapshotBlob] =
     thisBlobStorage.copy(
       revision = this.revision,
       eventRevisions = this.eventRevisions,
