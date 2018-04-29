@@ -18,23 +18,25 @@ object WorldImplementationCodeFactoring {
     val introducedInRevision: Revision
   }
 
+  type EventOrderingKey =
+    (Unbounded[Instant], Revision, EventOrderingTiebreakerIndex)
+
   case class EventData(
       serializableEvent: Event,
       override val introducedInRevision: Revision,
       eventOrderingTiebreakerIndex: EventOrderingTiebreakerIndex)
-      extends AbstractEventData
+      extends AbstractEventData {
+    def orderingKey: EventOrderingKey =
+      (serializableEvent.when,
+       introducedInRevision,
+       eventOrderingTiebreakerIndex)
+  }
 
   case class AnnulledEventData(override val introducedInRevision: Revision)
       extends AbstractEventData
 
-  implicit val eventOrdering = Ordering.by((_: Event).when)
-
-  implicit val eventDataOrdering: Ordering[EventData] = Ordering.by {
-    case EventData(serializableEvent,
-                   introducedInRevision,
-                   eventOrderingTiebreakerIndex) =>
-      (serializableEvent, introducedInRevision, eventOrderingTiebreakerIndex)
-  }
+  implicit val eventDataOrdering: Ordering[EventData] =
+    Ordering.by(_.orderingKey)
 
   def eventTimelineFrom[EventId](
       eventDatums: Seq[(EventId, AbstractEventData)]): Seq[(Event, EventId)] =
@@ -87,7 +89,6 @@ object WorldImplementationCodeFactoring {
       new MethodDescription.ForLoadedMethod(secondMethod))
   }
 
-  
 }
 
 abstract class WorldImplementationCodeFactoring extends World {
@@ -124,5 +125,4 @@ abstract class WorldImplementationCodeFactoring extends World {
     }
   }
 
-  
 }
