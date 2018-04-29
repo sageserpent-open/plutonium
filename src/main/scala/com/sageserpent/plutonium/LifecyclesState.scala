@@ -2,7 +2,7 @@ package com.sageserpent.plutonium
 
 import java.time.Instant
 
-import com.sageserpent.americium.{PositiveInfinity, Unbounded}
+import com.sageserpent.americium.{NegativeInfinity, PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.BlobStorage.SnapshotRetrievalApi
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
@@ -11,7 +11,7 @@ import com.sageserpent.plutonium.PatchRecorder.UpdateConsumer
 import com.sageserpent.plutonium.World.{Revision, initialRevision}
 import com.sageserpent.plutonium.WorldImplementationCodeFactoring.{
   EventData,
-  eventDataOrdering
+  EventOrderingKey
 }
 import de.ummels.prioritymap.PriorityMap
 import quiver._
@@ -60,9 +60,9 @@ class LifecyclesStateImplementation(
     itemStateUpdateKeysPerItem: Map[
       UniqueItemSpecification,
       SortedMap[ItemStateUpdate.Key, Option[SnapshotBlob]]] = Map.empty,
-    itemStateUpdateKeyOrderingProperty: ItemStateUpdate.Key => (EventData,
+    itemStateUpdateKeyOrderingProperty: ItemStateUpdate.Key => (EventOrderingKey,
                                                                 IntraEventIndex) =
-      _ => EventData(null, 0, 0) -> 0,
+      _ => (NegativeInfinity[Instant](), 0, 0) -> 0,
     nextRevision: Revision = initialRevision)
     extends LifecyclesState {
   override def revise(events: Map[_ <: EventId, Option[Event]],
@@ -87,9 +87,9 @@ class LifecyclesStateImplementation(
       whenFor(eventsForNewTimeline)(_)
 
     def itemStateUpdateKeyOrderingPropertyAccordingToThisRevision(
-        key: ItemStateUpdate.Key): (EventData, IntraEventIndex) = {
+        key: ItemStateUpdate.Key): (EventOrderingKey, IntraEventIndex) = {
       val eventData = eventsForNewTimeline(key.eventId)
-      (eventData, key.intraEventIndex)
+      (eventData.orderingKey, key.intraEventIndex)
     }
 
     implicit val itemStateUpdateKeyOrdering: Ordering[ItemStateUpdate.Key] =
