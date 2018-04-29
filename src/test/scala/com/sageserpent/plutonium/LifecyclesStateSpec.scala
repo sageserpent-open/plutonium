@@ -1,5 +1,8 @@
 package com.sageserpent.plutonium
 
+import java.time.Instant
+
+import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
 import org.scalacheck.{ShrinkLowPriority => NoShrinking}
 import org.scalatest.exceptions.TestFailedException
@@ -30,9 +33,11 @@ class LifecyclesStateSpec
         }: _*)
 
       val itemCache: ItemCache =
-        new ItemCacheUsingBlobStorage[EventId](
+        new ItemCacheUsingBlobStorage[Unbounded[Instant], EventId](
           noLifecyclesState[EventId]()
-            .revise(events, BlobStorageInMemory[EventId, SnapshotBlob]())
+            .revise(
+              events,
+              BlobStorageInMemory[Unbounded[Instant], EventId, SnapshotBlob]())
             ._2,
           queryWhen)
 
@@ -78,10 +83,11 @@ class LifecyclesStateSpec
         }: _*)
 
       val blobStorageResultingFromBlockBooking
-        : BlobStorage[EventId, SnapshotBlob] =
+        : BlobStorage[Unbounded[Instant], EventId, SnapshotBlob] =
         noLifecyclesState[EventId]()
-          .revise(eventsInOneBlock,
-                  BlobStorageInMemory[EventId, SnapshotBlob]())
+          .revise(
+            eventsInOneBlock,
+            BlobStorageInMemory[Unbounded[Instant], EventId, SnapshotBlob]())
           ._2
 
       val random = new Random(seed)
@@ -92,9 +98,12 @@ class LifecyclesStateSpec
             booking => TreeMap(booking.map(_.swap): _*)) toList
 
       val blobStorageResultingFromIncrementalBookings
-        : BlobStorage[EventId, SnapshotBlob] =
-        ((noLifecyclesState[EventId]() -> (BlobStorageInMemory[EventId,
-                                                               SnapshotBlob](): BlobStorage[
+        : BlobStorage[Unbounded[Instant], EventId, SnapshotBlob] =
+        ((noLifecyclesState[EventId]() -> (BlobStorageInMemory[
+          Unbounded[Instant],
+          EventId,
+          SnapshotBlob](): BlobStorage[
+          Unbounded[Instant],
           EventId,
           SnapshotBlob])) /: severalRevisionBookingsWithObsoleteEventsThrownIn) {
           case ((lifecyclesState, blobStorage), booking) =>
@@ -102,12 +111,12 @@ class LifecyclesStateSpec
         }._2
 
       val itemCacheFromBlockBooking =
-        new ItemCacheUsingBlobStorage[EventId](
+        new ItemCacheUsingBlobStorage[Unbounded[Instant], EventId](
           blobStorageResultingFromBlockBooking,
           queryWhen)
 
       val itemCacheFromIncrementalBookings =
-        new ItemCacheUsingBlobStorage[EventId](
+        new ItemCacheUsingBlobStorage[Unbounded[Instant], EventId](
           blobStorageResultingFromIncrementalBookings,
           queryWhen)
 

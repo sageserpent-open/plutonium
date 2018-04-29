@@ -17,8 +17,11 @@ case class UpdatePlan[EventId](
     eventsMadeObsolete: Set[EventId],
     updates: SortedMap[Unbounded[Instant],
                        Seq[(Set[EventId], ItemStateUpdate)]]) {
-  def apply(blobStorage: BlobStorage[EventId, (Array[Byte], UUID)])
-    : BlobStorage[EventId, SnapshotBlob] = {
+  def apply(
+      blobStorage: BlobStorage[Unbounded[Instant],
+                               EventId,
+                               (Array[Byte], UUID)])
+    : BlobStorage[Unbounded[Instant], EventId, SnapshotBlob] = {
     val UpdatePlan(eventsMadeObsolete, updates) = this
 
     var microRevisedBlobStorage = {

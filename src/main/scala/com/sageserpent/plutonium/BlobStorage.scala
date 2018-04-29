@@ -32,7 +32,7 @@ object BlobStorage {
   }
 }
 
-trait BlobStorage[EventId, SnapshotBlob] { blobStorage =>
+trait BlobStorage[Time, EventId, SnapshotBlob] { blobStorage =>
 
   import BlobStorage._
 
@@ -47,7 +47,7 @@ trait BlobStorage[EventId, SnapshotBlob] { blobStorage =>
     def annulEvent(eventId: EventId) =
       recordSnapshotBlobsForEvent(Set(eventId), PositiveInfinity(), Map.empty)
 
-    def build(): BlobStorage[EventId, SnapshotBlob]
+    def build(): BlobStorage[Time, EventId, SnapshotBlob]
   }
 
   def openRevision(): RevisionBuilder
@@ -55,5 +55,6 @@ trait BlobStorage[EventId, SnapshotBlob] { blobStorage =>
   def timeSlice(when: Unbounded[Instant],
                 inclusive: Boolean = true): Timeslice[SnapshotBlob]
 
-  def retainUpTo(when: Unbounded[Instant]): BlobStorage[EventId, SnapshotBlob]
+  def retainUpTo(
+      when: Unbounded[Instant]): BlobStorage[Time, EventId, SnapshotBlob]
 }

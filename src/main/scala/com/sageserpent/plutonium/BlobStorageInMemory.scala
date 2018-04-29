@@ -40,20 +40,21 @@ object BlobStorageInMemory {
     }
   }
 
-  def apply[EventId, SnapshotBlob]() =
-    new BlobStorageInMemory[EventId, SnapshotBlob](
+  def apply[Time, EventId, SnapshotBlob]() =
+    new BlobStorageInMemory[Time, EventId, SnapshotBlob](
       revision = 0,
       eventRevisions = Map.empty,
       lifecycles = Map.empty
     )
 }
 
-case class BlobStorageInMemory[EventId, SnapshotBlob] private (
+case class BlobStorageInMemory[Time, EventId, SnapshotBlob] private (
     revision: BlobStorageInMemory.Revision,
     eventRevisions: Map[EventId, BlobStorageInMemory.Revision],
-    lifecycles: Map[Any,
-                    Seq[BlobStorageInMemory[EventId, SnapshotBlob]#Lifecycle]])
-    extends BlobStorage[EventId, SnapshotBlob] { thisBlobStorage =>
+    lifecycles: Map[
+      Any,
+      Seq[BlobStorageInMemory[Time, EventId, SnapshotBlob]#Lifecycle]])
+    extends BlobStorage[Time, EventId, SnapshotBlob] { thisBlobStorage =>
   import BlobStorage._
   import BlobStorageInMemory._
 
@@ -130,7 +131,7 @@ case class BlobStorageInMemory[EventId, SnapshotBlob] private (
         events += ((eventIds, when, snapshotBlobs))
       }
 
-      override def build(): BlobStorage[EventId, SnapshotBlob] = {
+      override def build(): BlobStorage[Time, EventId, SnapshotBlob] = {
         val newRevision = 1 + thisBlobStorage.revision
 
         val newEventRevisions
@@ -236,8 +237,8 @@ case class BlobStorageInMemory[EventId, SnapshotBlob] private (
     new TimesliceImplementation with TimesliceContracts[SnapshotBlob]
   }
 
-  override def retainUpTo(
-      when: Unbounded[Instant]): BlobStorageInMemory[EventId, SnapshotBlob] =
+  override def retainUpTo(when: Unbounded[Instant])
+    : BlobStorageInMemory[Time, EventId, SnapshotBlob] =
     thisBlobStorage.copy(
       revision = this.revision,
       eventRevisions = this.eventRevisions,

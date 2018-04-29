@@ -24,9 +24,11 @@ trait LifecyclesState[EventId] {
   // encapsulate the former in some way - it could hive off a local 'BlobStorageInMemory' as it revises itself, then
   // reabsorb the new blob storage instance back into its own revision. If so, then perhaps 'TimelineImplementation' *is*
   // in fact the cutover form of 'LifecyclesState'. Food for thought...
-  def revise(events: Map[EventId, Option[Event]],
-             blobStorage: BlobStorage[EventId, SnapshotBlob])
-    : (LifecyclesState[EventId], BlobStorage[EventId, SnapshotBlob])
+  def revise(
+      events: Map[EventId, Option[Event]],
+      blobStorage: BlobStorage[Unbounded[Instant], EventId, SnapshotBlob])
+    : (LifecyclesState[EventId],
+       BlobStorage[Unbounded[Instant], EventId, SnapshotBlob])
 
   def retainUpTo(when: Unbounded[Instant]): LifecyclesState[EventId]
 }
@@ -40,9 +42,11 @@ class LifecyclesStateImplementation[EventId](
     events: Map[EventId, EventData] = Map.empty[EventId, EventData],
     nextRevision: Revision = initialRevision)
     extends LifecyclesState[EventId] {
-  override def revise(events: Map[EventId, Option[Event]],
-                      blobStorage: BlobStorage[EventId, SnapshotBlob])
-    : (LifecyclesState[EventId], BlobStorage[EventId, SnapshotBlob]) = {
+  override def revise(
+      events: Map[EventId, Option[Event]],
+      blobStorage: BlobStorage[Unbounded[Instant], EventId, SnapshotBlob])
+    : (LifecyclesState[EventId],
+       BlobStorage[Unbounded[Instant], EventId, SnapshotBlob]) = {
     val (annulledEvents, newEvents) =
       (events.toList map {
         case (eventId, Some(event)) => \/-(eventId -> event)
