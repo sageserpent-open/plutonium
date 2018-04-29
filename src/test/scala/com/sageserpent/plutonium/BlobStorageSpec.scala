@@ -245,8 +245,8 @@ class BlobStorageSpec
          RecordingId)]
 
   def blobStorageFrom(revisions: Seq[ScalaFmtWorkaround]) =
-    ((BlobStorageInMemory[RecordingId, SnapshotBlob](): BlobStorage[
-      RecordingId,
+    ((BlobStorageInMemory[Unbounded[Instant], RecordingId, SnapshotBlob](): BlobStorage[
+      Unbounded[Instant], RecordingId,
       SnapshotBlob]) /: revisions) {
       case (blobStorage, bookingsForRevision) =>
         val builder = blobStorage.openRevision()
@@ -340,7 +340,7 @@ class BlobStorageSpec
                                   finalBookings,
                                   obsoleteBookings)
 
-      val blobStorage: BlobStorage[RecordingId, SnapshotBlob] =
+      val blobStorage: BlobStorage[Unbounded[Instant], RecordingId, SnapshotBlob] =
         blobStorageFrom(revisions)
 
       for (TimeSeries(uniqueItemSpecification, snapshots, queryTimes) <- lotsOfFinalTimeSeries) {
@@ -477,7 +477,7 @@ class BlobStorageSpec
                                   finalBookings,
                                   obsoleteBookings)
 
-      val blobStorage: BlobStorage[RecordingId, SnapshotBlob] =
+      val blobStorage: BlobStorage[Unbounded[Instant], RecordingId, SnapshotBlob] =
         blobStorageFrom(revisions)
 
       for (TimeSeries(uniqueItemSpecification, snapshots, queryTimes) <- lotsOfFinalTimeSeries) {
@@ -524,7 +524,7 @@ class BlobStorageSpec
                                   finalBookings,
                                   obsoleteBookings)
 
-      val blobStorage: BlobStorage[RecordingId, SnapshotBlob] =
+      val blobStorage: BlobStorage[Unbounded[Instant], RecordingId, SnapshotBlob] =
         blobStorageFrom(revisions)
 
       for (TimeSeries(uniqueItemSpecification, snapshots, queryTimes) <- lotsOfFinalTimeSeries) {

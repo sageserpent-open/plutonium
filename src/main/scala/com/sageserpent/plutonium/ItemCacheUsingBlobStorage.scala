@@ -1,9 +1,7 @@
 package com.sageserpent.plutonium
 
-import java.time.Instant
 import java.util.UUID
 
-import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
 
@@ -19,9 +17,9 @@ object ItemCacheUsingBlobStorage {
   }
 }
 
-class ItemCacheUsingBlobStorage(
-    blobStorage: BlobStorage[ItemStateUpdate.Key, SnapshotBlob],
-    when: Unbounded[Instant])
+class ItemCacheUsingBlobStorage[Time](
+    blobStorage: BlobStorage[Time, ItemStateUpdate.Key, SnapshotBlob],
+    when: Time)
     extends ItemCacheImplementation
     with itemStateStorageUsingProxies.ReconstitutionContext {
   override def itemsFor[Item: TypeTag](id: Any): Stream[Item] =

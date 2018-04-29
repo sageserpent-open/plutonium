@@ -9,8 +9,8 @@ import scala.collection.immutable.Map
 
 class TimelineImplementation(
     lifecyclesState: LifecyclesState = noLifecyclesState(),
-    blobStorage: BlobStorage[ItemStateUpdate.Key, SnapshotBlob] =
-      BlobStorageInMemory[ItemStateUpdate.Key, SnapshotBlob]())
+    blobStorage: BlobStorage[Unbounded[Instant], ItemStateUpdate.Key, SnapshotBlob] =
+      BlobStorageInMemory[Unbounded[Instant], ItemStateUpdate.Key, SnapshotBlob]())
     extends Timeline {
 
   override def revise(events: Map[_ <: EventId, Option[Event]]) = {
@@ -31,5 +31,6 @@ class TimelineImplementation(
   }
 
   override def itemCacheAt(when: Unbounded[Instant]) =
-    new ItemCacheUsingBlobStorage(blobStorage, when)
+    new ItemCacheUsingBlobStorage[Unbounded[Instant]](blobStorage, when)
+
 }

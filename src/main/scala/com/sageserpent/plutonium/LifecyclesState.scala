@@ -33,8 +33,11 @@ trait LifecyclesState {
   // reabsorb the new blob storage instance back into its own revision. If so, then perhaps 'TimelineImplementation' *is*
   // in fact the cutover form of 'LifecyclesState'. Food for thought...
   def revise(events: Map[_ <: EventId, Option[Event]],
-             blobStorage: BlobStorage[ItemStateUpdate.Key, SnapshotBlob])
-    : (LifecyclesState, BlobStorage[ItemStateUpdate.Key, SnapshotBlob])
+             blobStorage: BlobStorage[Unbounded[Instant],
+                                      ItemStateUpdate.Key,
+                                      SnapshotBlob])
+    : (LifecyclesState,
+       BlobStorage[Unbounded[Instant], ItemStateUpdate.Key, SnapshotBlob])
 
   def retainUpTo(when: Unbounded[Instant]): LifecyclesState
 }
@@ -62,10 +65,12 @@ class LifecyclesStateImplementation(
       _ => EventData(null, 0, 0) -> 0,
     nextRevision: Revision = initialRevision)
     extends LifecyclesState {
-  override def revise(
-      events: Map[_ <: EventId, Option[Event]],
-      blobStorage: BlobStorage[ItemStateUpdate.Key, SnapshotBlob])
-    : (LifecyclesState, BlobStorage[ItemStateUpdate.Key, SnapshotBlob]) = {
+  override def revise(events: Map[_ <: EventId, Option[Event]],
+                      blobStorage: BlobStorage[Unbounded[Instant],
+                                               ItemStateUpdate.Key,
+                                               SnapshotBlob])
+    : (LifecyclesState,
+       BlobStorage[Unbounded[Instant], ItemStateUpdate.Key, SnapshotBlob]) = {
     val (annulledEvents, newEvents) =
       (events.toList map {
         case (eventId, Some(event)) => \/-(eventId -> event)
@@ -104,7 +109,9 @@ class LifecyclesStateImplementation(
             UniqueItemSpecification,
             SortedMap[ItemStateUpdate.Key, Option[SnapshotBlob]]],
           timeSliceWhen: Unbounded[Instant],
-          blobStorage: BlobStorage[ItemStateUpdate.Key, SnapshotBlob]) {
+          blobStorage: BlobStorage[Unbounded[Instant],
+                                   ItemStateUpdate.Key,
+                                   SnapshotBlob]) {
         def afterRecalculations: TimesliceState = {
           val revisionBuilder = blobStorage.openRevision()
 
