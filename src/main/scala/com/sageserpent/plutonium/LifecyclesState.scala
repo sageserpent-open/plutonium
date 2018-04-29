@@ -6,6 +6,7 @@ import com.sageserpent.americium.{PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.BlobStorage.SnapshotRetrievalApi
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
+import com.sageserpent.plutonium.ItemStateUpdate.IntraEventIndex
 import com.sageserpent.plutonium.PatchRecorder.UpdateConsumer
 import com.sageserpent.plutonium.World.{Revision, initialRevision}
 import com.sageserpent.plutonium.WorldImplementationCodeFactoring.{
@@ -56,6 +57,9 @@ class LifecyclesStateImplementation(
     itemStateUpdateKeysPerItem: Map[
       UniqueItemSpecification,
       SortedMap[ItemStateUpdate.Key, Option[SnapshotBlob]]] = Map.empty,
+    itemStateUpdateKeyOrderingProperty: ItemStateUpdate.Key => (EventData,
+                                                                IntraEventIndex) =
+      _ => EventData(null, 0, 0) -> 0,
     nextRevision: Revision = initialRevision)
     extends LifecyclesState {
   override def revise(
@@ -81,11 +85,14 @@ class LifecyclesStateImplementation(
       val whenForItemStateUpdate: ItemStateUpdate.Key => Unbounded[Instant] =
         whenFor(eventsForNewTimeline)(_)
 
+      def itemStateUpdateKeyOrderingPropertyAccordingToThisRevision(
+          key: ItemStateUpdate.Key): (EventData, IntraEventIndex) = {
+        val eventData = eventsForNewTimeline(key.eventId)
+        (eventData, key.intraEventIndex)
+      }
+
       implicit val itemStateUpdateKeyOrdering: Ordering[ItemStateUpdate.Key] =
-        Ordering.by { key: ItemStateUpdate.Key =>
-          val eventData = eventsForNewTimeline(key.eventId)
-          (eventData, key.intraEventIndex)
-        }
+        Ordering.by(itemStateUpdateKeyOrderingPropertyAccordingToThisRevision)
 
       case class TimesliceState(
           itemStateUpdatesToApply: PriorityMap[ItemStateUpdate.Key,
@@ -312,12 +319,33 @@ class LifecyclesStateImplementation(
         : Set[(ItemStateUpdate.Key, ItemStateUpdate)] =
         createItemStateUpdates(eventsForNewTimeline)
 
+      val unchangedItemStateUpdates = itemStateUpdatesForNewTimeline intersect itemStateUpdates
+
+      val unchangedItemStateUpdatesKeysOrderedAccordingToPreviousRevision =
+        unchangedItemStateUpdates.map {
+          case pair @ (key, _) =>
+            pair -> itemStateUpdateKeyOrderingProperty(key)
+        }
+
+      val unchangedItemStateUpdatesOrderedAccordingToNewRevision =
+        unchangedItemStateUpdates.map {
+          case pair @ (key, _) =>
+            pair -> itemStateUpdateKeyOrderingPropertyAccordingToThisRevision(
+              key)
+        }
+
+      val unchangedItemStateUpdatesThatHaveMovedInOrdering
+        : Set[(ItemStateUpdate.Key, ItemStateUpdate)] =
+        (unchangedItemStateUpdatesOrderedAccordingToNewRevision -- unchangedItemStateUpdatesKeysOrderedAccordingToPreviousRevision)
+          .map(_._1)
+
       val itemStateUpdateKeysThatNeedToBeRevoked: Set[ItemStateUpdate.Key] =
-        (itemStateUpdates -- itemStateUpdatesForNewTimeline).map(_._1)
+        (itemStateUpdates -- unchangedItemStateUpdates ++ unchangedItemStateUpdatesThatHaveMovedInOrdering)
+          .map(_._1)
 
       val newAndModifiedItemStateUpdates
         : Seq[(ItemStateUpdate.Key, ItemStateUpdate)] =
-        (itemStateUpdatesForNewTimeline -- itemStateUpdates).toSeq
+        (itemStateUpdatesForNewTimeline -- unchangedItemStateUpdates ++ unchangedItemStateUpdatesThatHaveMovedInOrdering).toSeq
 
       val blobStorageWithRevocations = {
         val initialMicroRevisionBuilder = blobStorage.openRevision()
@@ -374,6 +402,8 @@ class LifecyclesStateImplementation(
           itemStateUpdates = itemStateUpdatesForNewTimeline,
           itemStateUpdatesDag = itemStateUpdatesDagForNewTimeline,
           itemStateUpdateKeysPerItem = itemStateUpdateKeysPerItemForNewTimeline,
+          itemStateUpdateKeyOrderingProperty =
+            itemStateUpdateKeyOrderingPropertyAccordingToThisRevision,
           nextRevision = 1 + nextRevision
         ) -> blobStorageForNewTimeline
       } else
@@ -383,6 +413,8 @@ class LifecyclesStateImplementation(
           itemStateUpdatesDag = itemStateUpdatesDagWithNewNodesAddedIn,
           itemStateUpdateKeysPerItem =
             baseItemStateUpdateKeysPerItemToApplyChangesTo,
+          itemStateUpdateKeyOrderingProperty =
+            itemStateUpdateKeyOrderingPropertyAccordingToThisRevision,
           nextRevision = 1 + nextRevision
         ) -> blobStorageWithRevocations
     }
@@ -448,6 +480,8 @@ class LifecyclesStateImplementation(
       itemStateUpdateKeysPerItem = itemStateUpdateKeysPerItem mapValues (_.filter {
         case (key, _) => when >= whenFor(this.events.apply)(key)
       }) filter (_._2.nonEmpty),
+      itemStateUpdateKeyOrderingProperty =
+        this.itemStateUpdateKeyOrderingProperty, // Reusing the same ordering property with its closure over the state of 'this' is a bit hokey, but it works.
       nextRevision = this.nextRevision
     )
 }
