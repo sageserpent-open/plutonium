@@ -260,11 +260,6 @@ abstract class PatchRecorderImplementation(
   private type UniqueItemSpecificationToItemStateMap =
     mutable.Map[UniqueItemSpecification, ItemState]
 
-  implicit val patchBagConfiguration =
-    mutable.HashBag.configuration.keepAll[AbstractPatch]
-
-  private val bagOfPatches = mutable.Bag.empty[AbstractPatch]
-
   private val sequenceIndexToItemStatesMap =
     mutable.Map.empty[SequenceIndex, UniqueItemSpecificationToItemStateMap]
 
@@ -301,16 +296,8 @@ abstract class PatchRecorderImplementation(
          eventIdForAnchorPatch) =
       patchRepresentingTheEvent
 
-    bagOfPatches.setMultiplicity(bestPatch,
-                                 bagOfPatches.multiplicity(bestPatch) - 1)
-    // HACK: this should be a straight '-=' call, but there is a bug in the referenced library version for the bag implementation.
-
     val reconstitutionDataToItemStateMap =
-      if (bagOfPatches.contains(bestPatch)) {
-        sequenceIndexToItemStatesMap(sequenceIndexForBestPatch)
-      } else {
-        sequenceIndexToItemStatesMap.remove(sequenceIndexForBestPatch).get
-      }
+      sequenceIndexToItemStatesMap.remove(sequenceIndexForBestPatch).get
 
     for ((UniqueItemSpecification(id, _), itemState) <- reconstitutionDataToItemStateMap) {
       if (itemState.itemWouldConflictWithEarlierLifecyclePriorTo > sequenceIndexForAnchorPatch) {
@@ -359,7 +346,6 @@ abstract class PatchRecorderImplementation(
     }
     val targetItemState = refinedItemStateFor(patch.targetItemSpecification)
 
-    bagOfPatches += patch
     sequenceIndexToItemStatesMap(sequenceIndex) = itemStates
 
     targetItemState
