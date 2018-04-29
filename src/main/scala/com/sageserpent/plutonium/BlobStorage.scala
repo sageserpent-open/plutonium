@@ -36,6 +36,8 @@ trait BlobStorage[Time, EventId, SnapshotBlob] { blobStorage =>
 
   import BlobStorage._
 
+  implicit val timeOrdering: Ordering[Time]
+
   trait RevisionBuilder {
     // NOTE: the unique item specification must be exact and consistent for all of an item's snapshots. This implies that snapshots from a previous revision may have to be rewritten
     // if an item's greatest lower bound type changes.

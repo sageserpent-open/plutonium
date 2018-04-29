@@ -40,7 +40,7 @@ object BlobStorageInMemory {
     }
   }
 
-  def apply[Time, EventId, SnapshotBlob]() =
+  def apply[Time: Ordering, EventId, SnapshotBlob]() =
     new BlobStorageInMemory[Time, EventId, SnapshotBlob](
       revision = 0,
       eventRevisions = Map.empty,
@@ -53,7 +53,8 @@ case class BlobStorageInMemory[Time, EventId, SnapshotBlob] private (
     eventRevisions: Map[EventId, BlobStorageInMemory.Revision],
     lifecycles: Map[
       Any,
-      Seq[BlobStorageInMemory[Time, EventId, SnapshotBlob]#Lifecycle]])
+      Seq[BlobStorageInMemory[Time, EventId, SnapshotBlob]#Lifecycle]])(
+    override implicit val timeOrdering: Ordering[Time])
     extends BlobStorage[Time, EventId, SnapshotBlob] { thisBlobStorage =>
   import BlobStorage._
   import BlobStorageInMemory._
