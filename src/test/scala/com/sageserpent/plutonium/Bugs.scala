@@ -616,6 +616,7 @@ trait Bugs
           changeFor(secondReferringId, Instant.ofEpochSecond(-1L), "Louie")
         )
 
+        /*
         worldResource acquireAndGet { world =>
           world.revise(Map(
                          0 -> Some(
@@ -666,8 +667,8 @@ trait Bugs
             .referencedDatums
             .toSeq should contain theSameElementsAs Seq("Duey" -> Seq.empty)
         }
+         */
 
-      /*
         for (seed <- 1 to 100) {
           val randomBehaviour = new Random(seed)
 
@@ -678,11 +679,7 @@ trait Bugs
             .splitIntoNonEmptyPieces(eventsForBothItems.zipWithIndex)
 
           worldResource acquireAndGet { world =>
-            /*            println(
-              "------------------------------ TEST CASE -------------------------------------")*/
-
             for (eventChunk <- eventsInChunks) {
-              /*println(s"Booking in events: ${eventChunk.map(_.swap)}")*/
               world.revise(SortedMap(eventChunk.map {
                 case (event, eventId) => eventId -> Some(event)
               }: _*), sharedAsOf)
@@ -704,7 +701,7 @@ trait Bugs
             }
           }
         }
-       */
+
       }
     }
   }
