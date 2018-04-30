@@ -704,54 +704,96 @@ trait Bugs
 
       }
     }
-  }
 
-  "correcting an event by moving it in physical time" should "work properly" in {
-    forAll(worldResourceGenerator) { worldResource =>
-      val itemId = "Fred"
+    "correcting an event by moving it in physical time" should "work properly" in {
+      forAll(worldResourceGenerator) { worldResource =>
+        val itemId = "Fred"
 
-      val sharedAsOf = Instant.ofEpochSecond(0)
+        val sharedAsOf = Instant.ofEpochSecond(0)
 
-      val expectedHistory = Seq(99, 88, 55555, 77)
+        val expectedHistory = Seq(99, 88, 55555, 77)
 
-      val eventBeingMovedInPhysicalTime = 1
+        val eventBeingMovedInPhysicalTime = 1
 
-      worldResource acquireAndGet { world =>
-        world.revise(0, Change.forOneItem(Instant.ofEpochSecond(-3L))(itemId, {
-          item: IntegerHistory =>
-            item.integerProperty = 99
-        }), sharedAsOf)
+        worldResource acquireAndGet { world =>
+          world.revise(0,
+                       Change.forOneItem(Instant.ofEpochSecond(-3L))(itemId, {
+                         item: IntegerHistory =>
+                           item.integerProperty = 99
+                       }),
+                       sharedAsOf)
 
-        val foo = (item: IntegerHistory) => item.integerProperty = 55555
+          val foo = (item: IntegerHistory) => item.integerProperty = 55555
 
-        world.revise(eventBeingMovedInPhysicalTime,
-                     Change.forOneItem(Instant.ofEpochSecond(1L))(itemId, foo),
-                     sharedAsOf)
+          world.revise(
+            eventBeingMovedInPhysicalTime,
+            Change.forOneItem(Instant.ofEpochSecond(1L))(itemId, foo),
+            sharedAsOf)
 
-        world.revise(2, Change.forOneItem(Instant.ofEpochSecond(0L))(itemId, {
-          item: IntegerHistory =>
-            item.integerProperty = 77
-        }), sharedAsOf)
+          world.revise(2, Change.forOneItem(Instant.ofEpochSecond(0L))(itemId, {
+            item: IntegerHistory =>
+              item.integerProperty = 77
+          }), sharedAsOf)
 
-        world.revise(
-          Map(
-            eventBeingMovedInPhysicalTime -> Some(
-              Change.forOneItem(Instant.ofEpochSecond(-1L))(itemId, foo)),
-            3 -> Some(Change.forOneItem(Instant.ofEpochSecond(-2l))(itemId, {
-              item: IntegerHistory =>
-                item.integerProperty = 88
-            }))
-          ),
-          sharedAsOf
-        )
+          world.revise(
+            Map(
+              eventBeingMovedInPhysicalTime -> Some(
+                Change.forOneItem(Instant.ofEpochSecond(-1L))(itemId, foo)),
+              3 -> Some(Change.forOneItem(Instant.ofEpochSecond(-2l))(itemId, {
+                item: IntegerHistory =>
+                  item.integerProperty = 88
+              }))
+            ),
+            sharedAsOf
+          )
 
-        val scope =
-          world.scopeFor(PositiveInfinity[Instant](), world.nextRevision)
+          val scope =
+            world.scopeFor(PositiveInfinity[Instant](), world.nextRevision)
 
-        scope
-          .render(Bitemporal.withId[IntegerHistory](itemId))
-          .loneElement
-          .datums should contain theSameElementsInOrderAs expectedHistory
+          scope
+            .render(Bitemporal.withId[IntegerHistory](itemId))
+            .loneElement
+            .datums should contain theSameElementsInOrderAs expectedHistory
+        }
+      }
+    }
+
+    "anulling an annihilation" should "fuse the earlier lifecycle with a subsequent one" in {
+      forAll(worldResourceGenerator) { worldResource =>
+        val itemId = "Fred"
+
+        val sharedAsOf = Instant.ofEpochSecond(0)
+
+        val expectedHistory = Seq(1, 2)
+
+        val annihilationEvent = 1
+
+        worldResource acquireAndGet { world =>
+          world.revise(0, Change.forOneItem(Instant.ofEpochSecond(0L))(itemId, {
+            item: IntegerHistory =>
+              item.integerProperty = 1
+          }), sharedAsOf)
+
+          world.revise(annihilationEvent,
+                       Annihilation[IntegerHistory](Instant.ofEpochSecond(1L),
+                                                    itemId),
+                       sharedAsOf)
+
+          world.revise(2, Change.forOneItem(Instant.ofEpochSecond(0L))(itemId, {
+            item: IntegerHistory =>
+              item.integerProperty = 2
+          }), sharedAsOf)
+
+          world.annul(annihilationEvent, sharedAsOf)
+
+          val scope =
+            world.scopeFor(PositiveInfinity[Instant](), world.nextRevision)
+
+          scope
+            .render(Bitemporal.withId[IntegerHistory](itemId))
+            .loneElement
+            .datums should contain theSameElementsInOrderAs expectedHistory
+        }
       }
     }
   }
