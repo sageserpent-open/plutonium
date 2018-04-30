@@ -779,7 +779,7 @@ trait Bugs
                                                     itemId),
                        sharedAsOf)
 
-          world.revise(2, Change.forOneItem(Instant.ofEpochSecond(0L))(itemId, {
+          world.revise(2, Change.forOneItem(Instant.ofEpochSecond(2L))(itemId, {
             item: IntegerHistory =>
               item.integerProperty = 2
           }), sharedAsOf)
