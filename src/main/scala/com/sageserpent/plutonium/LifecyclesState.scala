@@ -178,12 +178,12 @@ class LifecyclesStateImplementation(
 
             itemStateUpdate match {
               case ItemStateAnnihilation(annihilation) =>
-                // TODO: having to reconstitute the item here is hokey when the act of applying the annihilation just afterwards will also do that too. Sort it out!
-                val dependencyOfAnnihilation: Option[ItemStateUpdate.Key] =
-                  identifiedItemAccess
-                    .reconstitute(annihilation.uniqueItemSpecification)
-                    .asInstanceOf[ItemStateUpdateKeyTrackingApi]
-                    .itemStateUpdateKey
+                val dependencyOfAnnihilation: ItemStateUpdate.Key =
+                  itemStateUpdateKeysPerItem(
+                    annihilation.uniqueItemSpecification)
+                    .until(itemStateUpdateKey)
+                    .last
+                    ._1
 
                 annihilation(identifiedItemAccess)
 
@@ -193,14 +193,12 @@ class LifecyclesStateImplementation(
                   Map(annihilation.uniqueItemSpecification -> None))
 
                 val itemStateUpdatesDagWithUpdatedDependency =
-                  dependencyOfAnnihilation.fold(itemStateUpdatesDag)(
-                    dependency =>
-                      itemStateUpdatesDag
-                        .decomp(itemStateUpdateKey) match {
-                        case Decomp(Some(context), remainder) =>
-                          context
-                            .copy(inAdj = Vector(() -> dependency)) & remainder
-                    })
+                  itemStateUpdatesDag
+                    .decomp(itemStateUpdateKey) match {
+                    case Decomp(Some(context), remainder) =>
+                      context
+                        .copy(inAdj = Vector(() -> dependencyOfAnnihilation)) & remainder
+                  }
 
                 val itemStateUpdateKeysPerItemWithNewKeyForAnnihilation =
                   addKeyTo(itemStateUpdateKeysPerItem,
@@ -271,8 +269,8 @@ class LifecyclesStateImplementation(
                 val mandatoryDependencyThatAlsoPicksUpAnyPreviousAnnihilation
                   : Option[ItemStateUpdate.Key] =
                   itemStateUpdateKeysPerItem.get(patch.targetItemSpecification) flatMap {
-                    (sortedKeyValuePairs: SortedMap[ItemStateUpdate.Key,
-                                                    Boolean]) =>
+                    sortedKeyValuePairs: SortedMap[ItemStateUpdate.Key,
+                                                   Boolean] =>
                       sortedKeyValuePairs
                         .until(itemStateUpdateKey)
                         .lastOption
