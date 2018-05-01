@@ -91,9 +91,9 @@ class LifecyclesStateImplementation(
     itemStateUpdates: Set[(ItemStateUpdate.Key, ItemStateUpdate)] = Set.empty, // TODO - remove this when the item lifecycle abstraction is fully cooked; this is just to allow the use of the patch recorder for now.
     itemStateUpdatesDag: LifecyclesStateImplementation.ItemStateUpdatesDag =
       empty,
-    itemStateUpdateKeysPerItem: Map[
-      UniqueItemSpecification,
-      SortedMap[ItemStateUpdate.Key, Option[SnapshotBlob]]] = Map.empty,
+    itemStateUpdateKeysPerItem: Map[UniqueItemSpecification,
+                                    SortedMap[ItemStateUpdate.Key, Boolean]] =
+      Map.empty,
     itemStateUpdateTime: ItemStateUpdate.Key => ItemStateUpdateTime = _ =>
       EndOfTimesliceTime(PositiveInfinity[Instant]),
     nextRevision: Revision = initialRevision)
@@ -136,7 +136,7 @@ class LifecyclesStateImplementation(
         itemStateUpdatesDag: Graph[ItemStateUpdate.Key, ItemStateUpdate, Unit],
         itemStateUpdateKeysPerItem: Map[
           UniqueItemSpecification,
-          SortedMap[ItemStateUpdate.Key, Option[SnapshotBlob]]],
+          SortedMap[ItemStateUpdate.Key, Boolean]],
         blobStorage: BlobStorage[ItemStateUpdateTime,
                                  ItemStateUpdate.Key,
                                  SnapshotBlob]) {
@@ -149,52 +149,41 @@ class LifecyclesStateImplementation(
             val itemStateUpdate =
               itemStateUpdatesDag.label(itemStateUpdateKey).get
 
-            def addKeyTo(
-                itemStateUpdateKeysPerItem: Map[
-                  UniqueItemSpecification,
-                  SortedMap[ItemStateUpdate.Key, Option[SnapshotBlob]]],
-                uniqueItemSpecification: UniqueItemSpecification,
-                itemStateUpdateKey: ItemStateUpdate.Key,
-                snapshotBlob: Option[SnapshotBlob])
+            def addKeyTo(itemStateUpdateKeysPerItem: Map[
+                           UniqueItemSpecification,
+                           SortedMap[ItemStateUpdate.Key, Boolean]],
+                         uniqueItemSpecification: UniqueItemSpecification,
+                         itemStateUpdateKey: ItemStateUpdate.Key,
+                         isAnnihilation: Boolean)
               : Map[UniqueItemSpecification,
-                    SortedMap[ItemStateUpdate.Key, Option[SnapshotBlob]]] =
+                    SortedMap[ItemStateUpdate.Key, Boolean]] =
               itemStateUpdateKeysPerItem.updated(
                 uniqueItemSpecification,
                 itemStateUpdateKeysPerItem
-                  .getOrElse(uniqueItemSpecification,
-                             SortedMap
-                               .empty[
-                                 ItemStateUpdate.Key,
-                                 Option[SnapshotBlob]]) + (itemStateUpdateKey -> snapshotBlob)
+                  .getOrElse(
+                    uniqueItemSpecification,
+                    SortedMap
+                      .empty[ItemStateUpdate.Key, Boolean]) + (itemStateUpdateKey -> isAnnihilation)
               )
+
+            val itemStateUpdateTime =
+              itemStateUpdateTimeAccordingToThisRevision(itemStateUpdateKey)
 
             val identifiedItemAccess =
               new IdentifiedItemAccessUsingBlobStorage {
                 override protected val blobStorageTimeSlice
                   : SnapshotRetrievalApi[SnapshotBlob] =
-                  (uniqueItemSpecification: UniqueItemSpecification) => {
-                    for {
-                      sortedKeyValuePairs <- itemStateUpdateKeysPerItem
-                        .get(uniqueItemSpecification)
-
-                      (_, optionalSnapshot) <- sortedKeyValuePairs
-                        .until(itemStateUpdateKey)
-                        .lastOption
-                      snapshot <- optionalSnapshot
-                    } yield snapshot
-                  }
+                  blobStorage.timeSlice(itemStateUpdateTime, inclusive = false)
               }
 
-            val itemStateUpdateTime =
-              itemStateUpdateTimeAccordingToThisRevision(itemStateUpdateKey)
             itemStateUpdate match {
               case ItemStateAnnihilation(annihilation) =>
-                // TODO: having to reconstitute the item here is hokey when the act of applying the annihilation just afterwards will also do that too. Sort it out!
-                val dependencyOfAnnihilation: Option[ItemStateUpdate.Key] =
-                  identifiedItemAccess
-                    .reconstitute(annihilation.uniqueItemSpecification)
-                    .asInstanceOf[ItemStateUpdateKeyTrackingApi]
-                    .itemStateUpdateKey
+                val dependencyOfAnnihilation: ItemStateUpdate.Key =
+                  itemStateUpdateKeysPerItem(
+                    annihilation.uniqueItemSpecification)
+                    .until(itemStateUpdateKey)
+                    .last
+                    ._1
 
                 annihilation(identifiedItemAccess)
 
@@ -204,20 +193,18 @@ class LifecyclesStateImplementation(
                   Map(annihilation.uniqueItemSpecification -> None))
 
                 val itemStateUpdatesDagWithUpdatedDependency =
-                  dependencyOfAnnihilation.fold(itemStateUpdatesDag)(
-                    dependency =>
-                      itemStateUpdatesDag
-                        .decomp(itemStateUpdateKey) match {
-                        case Decomp(Some(context), remainder) =>
-                          context
-                            .copy(inAdj = Vector(() -> dependency)) & remainder
-                    })
+                  itemStateUpdatesDag
+                    .decomp(itemStateUpdateKey) match {
+                    case Decomp(Some(context), remainder) =>
+                      context
+                        .copy(inAdj = Vector(() -> dependencyOfAnnihilation)) & remainder
+                  }
 
                 val itemStateUpdateKeysPerItemWithNewKeyForAnnihilation =
                   addKeyTo(itemStateUpdateKeysPerItem,
                            annihilation.uniqueItemSpecification,
                            itemStateUpdateKey,
-                           None)
+                           isAnnihilation = true)
 
                 RecalculationStep(
                   itemStateUpdatesToApply.drop(1),
@@ -250,15 +237,18 @@ class LifecyclesStateImplementation(
                   : Set[ItemStateUpdate.Key] =
                   (mutatedItems flatMap itemStateUpdateKeysPerItem.get flatMap (
                       (sortedKeyValuePairs: SortedMap[ItemStateUpdate.Key,
-                                                      Option[SnapshotBlob]]) =>
+                                                      Boolean]) =>
                         sortedKeyValuePairs
                           .until(itemStateUpdateKey)
                           .lastOption
-                          .filter {
-                            case (_, Some(_)) => true
-                            case _            => false
+                          .filterNot {
+                            case (_, isAnnihilation) => isAnnihilation
                           }
                           .fold {
+                            // In this case 'itemStateUpdateKey' is either starting off a brand new lifecycle, or is
+                            // moving the start of the lifecycle earlier in physical time than in the previous revision.
+                            // Use what used to be the first item state update key from the previous lifecycle if there
+                            // is one, as that will now follow on from 'itemStateUpdateKey'.
                             sortedKeyValuePairs
                               .from(itemStateUpdateKey)
                               .dropWhile {
@@ -283,8 +273,8 @@ class LifecyclesStateImplementation(
                 val mandatoryDependencyThatAlsoPicksUpAnyPreviousAnnihilation
                   : Option[ItemStateUpdate.Key] =
                   itemStateUpdateKeysPerItem.get(patch.targetItemSpecification) flatMap {
-                    (sortedKeyValuePairs: SortedMap[ItemStateUpdate.Key,
-                                                    Option[SnapshotBlob]]) =>
+                    sortedKeyValuePairs: SortedMap[ItemStateUpdate.Key,
+                                                   Boolean] =>
                       sortedKeyValuePairs
                         .until(itemStateUpdateKey)
                         .lastOption
@@ -306,7 +296,7 @@ class LifecyclesStateImplementation(
                       addKeyTo(itemStateUpdateKeysPerItem,
                                uniqueItemSpecification,
                                itemStateUpdateKey,
-                               Some(snapshot))
+                               isAnnihilation = false)
                   }
 
                 val itemStateUpdateKeysToScheduleForRecalculation = successorsAccordingToPreviousRevision ++ successorsTakenOverFromAPreviousItemStateUpdate
@@ -395,7 +385,7 @@ class LifecyclesStateImplementation(
 
     val baseItemStateUpdateKeysPerItemToApplyChangesTo: Map[
       UniqueItemSpecification,
-      SortedMap[ItemStateUpdate.Key, Option[SnapshotBlob]]] = itemStateUpdateKeysPerItem mapValues (_ -- itemStateUpdateKeysThatNeedToBeRevoked) filter (_._2.nonEmpty) mapValues (
+      SortedMap[ItemStateUpdate.Key, Boolean]] = itemStateUpdateKeysPerItem mapValues (_ -- itemStateUpdateKeysThatNeedToBeRevoked) filter (_._2.nonEmpty) mapValues (
         keyValuePairs => SortedMap(keyValuePairs.toSeq: _*))
 
     val itemStateUpdatesToApply
