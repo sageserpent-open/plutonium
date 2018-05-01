@@ -168,25 +168,16 @@ class LifecyclesStateImplementation(
                                  Option[SnapshotBlob]]) + (itemStateUpdateKey -> snapshotBlob)
               )
 
+            val itemStateUpdateTime =
+              itemStateUpdateTimeAccordingToThisRevision(itemStateUpdateKey)
+
             val identifiedItemAccess =
               new IdentifiedItemAccessUsingBlobStorage {
                 override protected val blobStorageTimeSlice
                   : SnapshotRetrievalApi[SnapshotBlob] =
-                  (uniqueItemSpecification: UniqueItemSpecification) => {
-                    for {
-                      sortedKeyValuePairs <- itemStateUpdateKeysPerItem
-                        .get(uniqueItemSpecification)
-
-                      (_, optionalSnapshot) <- sortedKeyValuePairs
-                        .until(itemStateUpdateKey)
-                        .lastOption
-                      snapshot <- optionalSnapshot
-                    } yield snapshot
-                  }
+                  blobStorage.timeSlice(itemStateUpdateTime, inclusive = false)
               }
 
-            val itemStateUpdateTime =
-              itemStateUpdateTimeAccordingToThisRevision(itemStateUpdateKey)
             itemStateUpdate match {
               case ItemStateAnnihilation(annihilation) =>
                 // TODO: having to reconstitute the item here is hokey when the act of applying the annihilation just afterwards will also do that too. Sort it out!
