@@ -3,9 +3,9 @@ import java.time.Instant
 import java.util.Optional
 
 import com.sageserpent.americium.Unbounded
-import com.sageserpent.plutonium.{Event, javaApi}
+import com.sageserpent.plutonium.{Event, EventId, javaApi}
 
-trait World[EventId] extends WorldConstants {
+trait World extends WorldConstants {
   def nextRevision
     : Int // NOTE: this is the number of *revisions* that have all been made via 'revise'.
 
@@ -33,7 +33,7 @@ trait World[EventId] extends WorldConstants {
   // is to make it easy for clients to do annulments en-bloc without querying to see what events are in force in the world's current state. Furthermore,
   // the API issues no constraints on when to define an event id key for the first time and when to use it for correction, so why not treat the annulment
   // case the same way?
-  def revise(events: java.util.Map[EventId, Optional[Event]],
+  def revise(events: java.util.Map[_ <: EventId, Optional[Event]],
              asOf: Instant): Int
 
   def revise(eventId: EventId, event: Event, asOf: Instant): Int
@@ -58,5 +58,5 @@ trait World[EventId] extends WorldConstants {
   // differences that a) the revision history is truncated after the scope's revision and b) that only events coming no
   // later than the scope's 'when' are included in each revision. Of course, the experimental world can itself be revised
   // in just the same way as any other world, including the definition of events beyond the defining scope's 'when'.
-  def forkExperimentalWorld(scope: javaApi.Scope): World[EventId]
+  def forkExperimentalWorld(scope: javaApi.Scope): World
 }

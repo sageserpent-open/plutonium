@@ -8,14 +8,16 @@ lazy val settings = Seq(
   scalaVersion := "2.12.4",
   scalacOptions ++= Seq("-Xexperimental", "-target:jvm-1.8"),
   libraryDependencies += "org.scalaz"              %% "scalaz-core"                 % "7.3.0-M10",
-  libraryDependencies += "net.bytebuddy"           % "byte-buddy"                   % "1.8.0",
-  libraryDependencies += "com.sageserpent"         %% "americium"                   % "0.1.4",
+  libraryDependencies += "net.bytebuddy"           % "byte-buddy"                   % "1.8.3",
+  libraryDependencies += "com.sageserpent"         %% "americium"                   % "0.1.5",
   libraryDependencies += "com.jsuereth"            %% "scala-arm"                   % "2.0",
   libraryDependencies += "org.scala-lang"          % "scala-reflect"                % "2.12.4",
   libraryDependencies += "biz.paluch.redis"        % "lettuce"                      % "4.3.0.Final",
   libraryDependencies += "io.reactivex"            %% "rxscala"                     % "0.26.4",
   libraryDependencies += "io.github.nicolasstucki" %% "multisets"                   % "0.4",
   libraryDependencies += "com.twitter"             %% "chill"                       % "0.9.2",
+  libraryDependencies += "io.verizon.quiver"       %% "core"                        % "7.0.19",
+  libraryDependencies += "de.ummels"               %% "scala-prioritymap"           % "1.0.0",
   libraryDependencies += "org.slf4j"               % "slf4j-api"                    % "1.7.21" % "provided",
   libraryDependencies += "org.slf4j"               % "slf4j-nop"                    % "1.7.21" % "test",
   libraryDependencies += "org.scalatest"           %% "scalatest"                   % "3.0.1" % "test",
@@ -31,7 +33,7 @@ lazy val settings = Seq(
   publishMavenStyle := true,
   publishTo := Some(
     Resolver.file("file",
-      new File(Path.userHome.absolutePath + "/.m2/repository")))
+                  new File(Path.userHome.absolutePath + "/.m2/repository")))
 )
 
 lazy val Benchmark = config("benchmark") extend Test

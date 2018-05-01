@@ -1,39 +1,27 @@
 package com.sageserpent.plutonium
 
 import java.time.Instant
-import java.util.UUID
 
 import com.sageserpent.americium.Unbounded
-import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
+import com.sageserpent.plutonium.LifecyclesStateImplementation.{
+  EndOfTimesliceTime,
+  ItemStateUpdateTime
+}
 
 import scala.collection.immutable.Map
 
-object itemStateStorageUsingProxies extends ItemStateStorage {
-  override protected type ItemSuperType = ItemExtensionApi
-  override protected val clazzOfItemSuperType = classOf[ItemSuperType]
+class TimelineImplementation(lifecyclesState: LifecyclesState =
+                               noLifecyclesState(),
+                             blobStorage: BlobStorage[ItemStateUpdateTime,
+                                                      ItemStateUpdate.Key,
+                                                      SnapshotBlob] =
+                               BlobStorageInMemory[ItemStateUpdateTime,
+                                                   ItemStateUpdate.Key,
+                                                   SnapshotBlob]())
+    extends Timeline {
 
-  override protected def uniqueItemSpecification(
-      item: ItemSuperType): UniqueItemSpecification =
-    item.uniqueItemSpecification
-
-  override protected def lifecycleUUID(item: ItemSuperType): UUID =
-    item.lifecycleUUID
-
-  override protected def noteAnnihilationOnItem(item: ItemSuperType): Unit = {
-    item
-      .asInstanceOf[AnnihilationHook]
-      .recordAnnihilation()
-  }
-}
-
-class TimelineImplementation[EventId](
-    lifecyclesState: LifecyclesState[EventId] = noLifecyclesState[EventId](),
-    blobStorage: BlobStorage[EventId, SnapshotBlob] =
-      BlobStorageInMemory[EventId, SnapshotBlob]())
-    extends Timeline[EventId] {
-
-  override def revise(events: Map[EventId, Option[Event]]) = {
+  override def revise(events: Map[_ <: EventId, Option[Event]]) = {
     val (newLifecyclesState, blobStorageForNewTimeline) = lifecyclesState
       .revise(events, blobStorage)
 
@@ -44,12 +32,14 @@ class TimelineImplementation[EventId](
   }
 
   override def retainUpTo(when: Unbounded[Instant]) = {
-    new TimelineImplementation[EventId](
+    new TimelineImplementation(
       lifecyclesState = this.lifecyclesState.retainUpTo(when),
-      blobStorage = this.blobStorage.retainUpTo(when)
+      blobStorage = this.blobStorage.retainUpTo(EndOfTimesliceTime(when))
     )
   }
 
   override def itemCacheAt(when: Unbounded[Instant]) =
-    new ItemCacheUsingBlobStorage[EventId](blobStorage, when)
+    new ItemCacheUsingBlobStorage[ItemStateUpdateTime](blobStorage,
+                                                       EndOfTimesliceTime(when))
+
 }

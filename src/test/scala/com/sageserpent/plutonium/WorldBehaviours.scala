@@ -175,6 +175,64 @@ trait WorldBehaviours
   }
 
   def worldBehaviour = {
+    it should "not mysteriously fail to yield items" in {
+      val testCaseGenerator = for {
+        worldResource <- worldResourceGenerator
+        referringHistoryRecordingsGroupedById <- referringHistoryRecordingsGroupedByIdGenerator(
+          forbidMeasurements = true)
+        seed <- seedGenerator
+        random = new Random(seed)
+        bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(
+          shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+            random,
+            referringHistoryRecordingsGroupedById).zipWithIndex)
+        asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
+                             instantGenerator) map (_.sorted)
+        queryWhen <- unboundedInstantGenerator
+      } yield
+        (worldResource,
+         referringHistoryRecordingsGroupedById,
+         bigShuffledHistoryOverLotsOfThings,
+         asOfs,
+         queryWhen)
+      check(
+        Prop.forAllNoShrink(testCaseGenerator) {
+          case (worldResource,
+                referringHistoryRecordingsGroupedById,
+                bigShuffledHistoryOverLotsOfThings,
+                asOfs,
+                queryWhen) =>
+            worldResource acquireAndGet {
+              world =>
+                recordEventsInWorld(
+                  liftRecordings(bigShuffledHistoryOverLotsOfThings),
+                  asOfs,
+                  world)
+
+                val scope = world.scopeFor(queryWhen, world.nextRevision)
+
+                val checks = (for {
+                  RecordingsNoLaterThan(
+                    referringHistoryId,
+                    referringHistoriesFrom,
+                    _,
+                    _,
+                    _) <- referringHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(
+                    queryWhen))
+                } yield referringHistoryId -> referringHistoriesFrom(scope))
+
+                if (checks.nonEmpty)
+                  Prop.all(checks map {
+                    case (id, itemSingletonSequence) =>
+                      (1 == itemSingletonSequence.size) :| s"Expected there to be a single item for id: $id."
+                  }: _*)
+                else Prop.undecided
+            }
+        },
+        MinSuccessful(300)
+      )
+    }
+
     it should "deduce the most accurate type for items based on the events that refer to them" in {
       val testCaseGenerator = for {
         worldResource <- worldResourceGenerator
@@ -2918,6 +2976,83 @@ trait WorldBehaviours
   }
 
   def worldWithEventsThatHaveSinceBeenCorrectedBehaviour = {
+    it should "extend the history of an item whose annihilation is annulled to pick up any subsequent events relating to that item." in {
+      val itemId = "Fred"
+
+      val testCaseGenerator = for {
+        worldResource <- worldResourceGenerator
+        eventTimes    <- Gen.nonEmptyListOf(instantGenerator) map (_.sorted)
+        annihilationWhen <- instantGenerator filter (when =>
+          when.isAfter(eventTimes.head) && !when.isAfter(eventTimes.last))
+        steps = 1 to eventTimes.size
+        recordings: List[(Unbounded[Instant], Event)] = eventTimes zip steps map {
+          case (when, step) =>
+            Finite(when) -> Change
+              .forOneItem[IntegerHistory](when)(itemId, {
+                item: IntegerHistory =>
+                  item.integerProperty = step
+              })
+        }
+        seed <- seedGenerator
+        random = new Random(seed)
+        shuffledRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhenForAGivenItem(
+          random,
+          recordings)
+        bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(
+          shuffledRecordings.zipWithIndex)
+        asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
+                             instantGenerator) map (_.sorted)
+      } yield
+        (worldResource,
+         bigShuffledHistoryOverLotsOfThings,
+         asOfs,
+         steps,
+         annihilationWhen)
+      check(Prop.forAllNoShrink(testCaseGenerator) {
+        case (worldResource,
+              bigShuffledHistoryOverLotsOfThings,
+              asOfs,
+              steps,
+              annihilationWhen) =>
+          worldResource acquireAndGet {
+            world =>
+              val initialEventId = -2
+
+              world.revise(
+                initialEventId,
+                Change.forOneItem[IntegerHistory](annihilationWhen)(itemId, {
+                  item: IntegerHistory =>
+                    item.integerProperty = -1
+                }),
+                asOfs.head)
+
+              val annihilationEventId = -1
+
+              world.revise(annihilationEventId,
+                           Annihilation[Any](annihilationWhen, itemId),
+                           asOfs.head)
+
+              recordEventsInWorld(
+                liftRecordings(bigShuffledHistoryOverLotsOfThings),
+                asOfs,
+                world)
+
+              world.annul(initialEventId, asOfs.last)
+
+              world.annul(annihilationEventId, asOfs.last)
+
+              val scope =
+                world.scopeFor(PositiveInfinity[Instant](), world.nextRevision)
+
+              val fredTheItem = scope
+                .render(Bitemporal.withId[IntegerHistory](itemId))
+                .force
+
+              (steps == fredTheItem.head.datums) :| s"Expecting: ${steps}, but got: ${fredTheItem.head.datums}"
+          }
+      })
+    }
+
     it should "build an item's state in a manner consistent with the history experienced by the item regardless of any corrected history." in {
       val itemId = "Fred"
 
@@ -2933,7 +3068,7 @@ trait WorldBehaviours
                   item.integerProperty = step
               })
         }
-        obsoleteEventTimes <- Gen.nonEmptyListOf(instantGenerator) map (_.sorted)
+        obsoleteEventTimes <- Gen.nonEmptyListOf(instantGenerator)
         obsoleteSteps = 1 to obsoleteEventTimes.size
         obsoleteRecordings: List[(Unbounded[Instant], Event)] = obsoleteEventTimes zip obsoleteSteps map {
           case (when, step) =>
@@ -2988,8 +3123,19 @@ trait WorldBehaviours
         worldResource <- worldResourceGenerator
         eventTimes    <- Gen.nonEmptyListOf(instantGenerator) map (_.sorted)
         steps = 1 to eventTimes.size
-        recordingsThatAreBothObsoleteAndCorrecting: List[(Unbounded[Instant],
-        Event)] = eventTimes zip steps map {
+        recordings: List[(Unbounded[Instant], Event)] = eventTimes zip steps map {
+          case (when, step) =>
+            Finite(when) -> Change
+              .forOneItem[IntegerHistory](when)(itemId, {
+                item: IntegerHistory =>
+                  item.integerProperty = step
+              })
+        }
+        seed <- seedGenerator
+        random             = new Random(seed)
+        obsoleteEventTimes = random.shuffle(eventTimes)
+        obsoleteSteps      = 1 to obsoleteEventTimes.size
+        obsoleteRecordings: List[(Unbounded[Instant], Event)] = obsoleteEventTimes zip obsoleteSteps map {
           case (when, step) =>
             Finite(when) -> Change
               .forOneItem[IntegerHistory](when)(itemId, {
@@ -2998,14 +3144,12 @@ trait WorldBehaviours
               })
         }
 
-        seed <- seedGenerator
-        random = new Random(seed)
         shuffledRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhenForAGivenItem(
           random,
-          recordingsThatAreBothObsoleteAndCorrecting)
+          recordings)
         shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhenForAGivenItem(
           random,
-          recordingsThatAreBothObsoleteAndCorrecting)
+          recordings)
         bigShuffledHistoryOverLotsOfThings = intersperseObsoleteEvents(
           random,
           shuffledRecordings,
@@ -3036,7 +3180,68 @@ trait WorldBehaviours
                 (steps == fredTheItem.head.datums) :| s"Expecting: ${steps}, but got: ${fredTheItem.head.datums}"
             }
         },
-        MinSuccessful(200)
+        MinSuccessful(400)
+      )
+    }
+
+    it should "build an item's state in a manner consistent with the history experienced by the item regardless of any corrected history - with another twist." in {
+      val itemId = "Fred"
+
+      val testCaseGenerator = for {
+        worldResource <- worldResourceGenerator
+        eventTimes <- Gen.chooseNum(0L, 50L) map (0L to _ toList) map (_.map(
+          timeInSeconds => Instant.ofEpochSecond(24 * 60 * 60 * timeInSeconds)))
+        steps = 1 to eventTimes.size
+        recordings: List[(Unbounded[Instant], Event)] = eventTimes zip steps map {
+          case (when, step) =>
+            Finite(when) -> Change
+              .forOneItem[IntegerHistory](when)(itemId, {
+                item: IntegerHistory =>
+                  item.integerProperty = step
+              })
+        }
+        seed <- seedGenerator
+        random             = new Random(seed)
+        obsoleteEventTimes = random.shuffle(eventTimes)
+        obsoleteSteps      = 1 to obsoleteEventTimes.size
+        obsoleteRecordings: List[(Unbounded[Instant], Event)] = obsoleteEventTimes zip obsoleteSteps map {
+          case (when, step) =>
+            Finite(when) -> Change
+              .forOneItem[IntegerHistory](when)(itemId, {
+                item: IntegerHistory =>
+                  item.integerProperty = step
+              })
+        }
+
+        pairsOfObsoleteAndSucceedingEvents = obsoleteRecordings.zipWithIndex zip recordings.zipWithIndex
+
+        historyOverLotsOfThings = pairsOfObsoleteAndSucceedingEvents flatMap {
+          case (obsolete, succeeding) => Seq(Seq(obsolete), Seq(succeeding))
+        } toStream
+
+        asOfs <- Gen.listOfN(historyOverLotsOfThings.length, instantGenerator) map (_.sorted)
+      } yield (worldResource, historyOverLotsOfThings, asOfs, steps)
+      check(
+        Prop.forAllNoShrink(testCaseGenerator) {
+          case (worldResource, historyOverLotsOfThings, asOfs, steps) =>
+            worldResource acquireAndGet {
+              world =>
+                recordEventsInWorld(liftRecordings(historyOverLotsOfThings),
+                                    asOfs,
+                                    world)
+
+                val scope =
+                  world.scopeFor(PositiveInfinity[Instant](),
+                                 world.nextRevision)
+
+                val fredTheItem = scope
+                  .render(Bitemporal.withId[IntegerHistory](itemId))
+                  .force
+
+                (steps.toSet == fredTheItem.head.datums.toSet) :| s"Expecting: ${steps}, but got: ${fredTheItem.head.datums}"
+            }
+        },
+        MinSuccessful(700)
       )
     }
 
@@ -3510,7 +3715,7 @@ class WorldSpecUsingWorldReferenceImplementation
     extends WorldBehaviours
     with WorldReferenceImplementationResource {
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
-    PropertyCheckConfig(maxSize = 40)
+    PropertyCheckConfig(maxSize = 40, minSuccessful = 100)
 
   "A world with no history (using the world reference implementation)" should behave like worldWithNoHistoryBehaviour
 
@@ -3525,7 +3730,7 @@ class WorldSpecUsingWorldEfficientInMemoryImplementation
     extends WorldBehaviours
     with WorldEfficientInMemoryImplementationResource {
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
-    PropertyCheckConfig(maxSize = 15, minSuccessful = 30)
+    PropertyCheckConfig(maxSize = 40, minSuccessful = 100)
 
   "A world with no history (using the world efficient in-memory implementation)" should behave like worldWithNoHistoryBehaviour
 
@@ -3727,7 +3932,7 @@ class AllTheWorlds
             bigShuffledHistoryOverLotsOfThings,
             asOfs,
             queryWhen) =>
-        def resultsFrom(world: World[Int]): immutable.Seq[(Any, Seq[Any])] = {
+        def resultsFrom(world: World): immutable.Seq[(Any, Seq[Any])] = {
           recordEventsInWorld(bigShuffledHistoryOverLotsOfThings, asOfs, world)
 
           val scope = world.scopeFor(queryWhen, world.nextRevision)

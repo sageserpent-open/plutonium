@@ -12,7 +12,7 @@ import java.time.Instant;
 public class JavaApiTest {
     @Test
     public void smokeTestTheApi() {
-        World<Integer> world = new WorldEfficientInMemoryImplementation<>();
+        World world = new WorldEfficientInMemoryImplementation();
 
         final NegativeInfinity<Instant> atTheBeginningOfTime = NegativeInfinity.apply();
 

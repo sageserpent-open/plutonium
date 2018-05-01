@@ -1,20 +1,19 @@
 package com.sageserpent.plutonium
 
-import java.time.Instant
-
-import com.sageserpent.americium.{PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 
 import scala.reflect.runtime.universe.TypeTag
 
 object BlobStorage {
-  trait Timeslice[SnapshotBlob] {
+  trait SnapshotRetrievalApi[SnapshotBlob] {
+    def snapshotBlobFor(
+        uniqueItemSpecification: UniqueItemSpecification): Option[SnapshotBlob]
+  }
+
+  trait Timeslice[SnapshotBlob] extends SnapshotRetrievalApi[SnapshotBlob] {
     def uniqueItemQueriesFor[Item: TypeTag]: Stream[UniqueItemSpecification]
     def uniqueItemQueriesFor[Item: TypeTag](
         id: Any): Stream[UniqueItemSpecification]
-
-    def snapshotBlobFor(
-        uniqueItemSpecification: UniqueItemSpecification): Option[SnapshotBlob]
   }
 
   trait TimesliceContracts[SnapshotBlob] extends Timeslice[SnapshotBlob] {
@@ -32,27 +31,31 @@ object BlobStorage {
   }
 }
 
-trait BlobStorage[EventId, SnapshotBlob] { blobStorage =>
+trait BlobStorage[Time, RecordingId, SnapshotBlob] { blobStorage =>
 
   import BlobStorage._
+
+  implicit val timeOrdering: Ordering[Time]
 
   trait RevisionBuilder {
     // NOTE: the unique item specification must be exact and consistent for all of an item's snapshots. This implies that snapshots from a previous revision may have to be rewritten
     // if an item's greatest lower bound type changes.
-    def recordSnapshotBlobsForEvent(
-        eventIds: Set[EventId],
-        when: Unbounded[Instant],
+    def record(
+        key: RecordingId,
+        when: Time,
         snapshotBlobs: Map[UniqueItemSpecification, Option[SnapshotBlob]]): Unit
 
-    def annulEvent(eventId: EventId) =
-      recordSnapshotBlobsForEvent(Set(eventId), PositiveInfinity(), Map.empty)
+    def annul(key: RecordingId): Unit =
+      record(key, null.asInstanceOf[Time], Map.empty)
 
-    def build(): BlobStorage[EventId, SnapshotBlob]
+    def build(): BlobStorage[Time, RecordingId, SnapshotBlob]
+
   }
 
   def openRevision(): RevisionBuilder
 
-  def timeSlice(when: Unbounded[Instant]): Timeslice[SnapshotBlob]
+  def timeSlice(when: Time, inclusive: Boolean = true): Timeslice[SnapshotBlob]
 
-  def retainUpTo(when: Unbounded[Instant]): BlobStorage[EventId, SnapshotBlob]
+  def retainUpTo(when: Time): BlobStorage[Time, RecordingId, SnapshotBlob]
+
 }
