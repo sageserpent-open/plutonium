@@ -6,27 +6,37 @@ import java.util.Optional
 import com.sageserpent.americium.{Finite, NegativeInfinity, Unbounded}
 import com.sageserpent.plutonium.World.Revision
 
+import scala.collection.JavaConversions._
+
 object World {
   type Revision = Int
   val initialRevision
     : Revision = 0 // NOTE: this is the revision defined when the world is first revised.
 }
 
-trait World[EventId] extends javaApi.World[EventId] {
+trait World extends javaApi.World {
   def nextRevision
     : Revision // NOTE: this is the number of *revisions* that have all been made via 'revise'.
 
   def revisionAsOfs
     : Array[Instant] // Adjacent duplicates are permitted - this is taken to mean that successive revisions were booked in faster than than the time resolution.
 
-  def revise(events: Map[EventId, Option[Event]], asOf: Instant): Revision
+  def revise(events: Map[_ <: EventId, Option[Event]], asOf: Instant): Revision
 
-  def revise(events: java.util.Map[EventId, Optional[Event]],
-             asOf: Instant): Revision
+  def revise(events: java.util.Map[_ <: EventId, Optional[Event]],
+             asOf: Instant): Revision = {
+    val sam: java.util.function.Function[Event, Option[Event]] = event =>
+      Some(event): Option[Event]
+    val eventsAsScalaImmutableMap = Map(
+      events mapValues (_.map[Option[Event]](sam).orElse(None)) toSeq: _*)
+    revise(eventsAsScalaImmutableMap, asOf)
+  }
 
-  def revise(eventId: EventId, event: Event, asOf: Instant): Revision
+  def revise(eventId: EventId, event: Event, asOf: Instant): Revision =
+    revise(Map(eventId -> Some(event)), asOf)
 
-  def annul(eventId: EventId, asOf: Instant): Revision
+  def annul(eventId: EventId, asOf: Instant): Revision =
+    revise(Map(eventId -> None), asOf)
 
   def scopeFor(when: Unbounded[Instant], nextRevision: World.Revision): Scope
 
@@ -38,10 +48,10 @@ trait World[EventId] extends javaApi.World[EventId] {
   def scopeFor(when: Instant, asOf: Instant): Scope =
     scopeFor(Finite(when), asOf)
 
-  def forkExperimentalWorld(scope: javaApi.Scope): World[EventId]
+  def forkExperimentalWorld(scope: javaApi.Scope): World
 }
 
-trait WorldContracts[EventId] extends World[EventId] {
+trait WorldContracts extends World {
   def checkInvariant: Unit = {
     require(revisionAsOfs.size == nextRevision)
     require(
@@ -51,7 +61,7 @@ trait WorldContracts[EventId] extends World[EventId] {
   }
 
   // NOTE: this increments 'nextRevision' if it succeeds, associating the new revision with 'asOf'.
-  abstract override def revise(events: Map[EventId, Option[Event]],
+  abstract override def revise(events: Map[_ <: EventId, Option[Event]],
                                asOf: Instant): Revision = {
     require(revisionAsOfs.isEmpty || !asOf.isBefore(revisionAsOfs.last))
     val revisionAsOfsBeforehand = revisionAsOfs

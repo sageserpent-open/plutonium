@@ -23,7 +23,7 @@ trait WorldStateSharingBehaviours
     with Checkers
     with WorldSpecSupport {
   val worldSharingCommonStateFactoryResourceGenerator: Gen[
-    ManagedResource[() => World[Int]]]
+    ManagedResource[() => World]]
 
   val testParameters: Test.Parameters
 
@@ -31,13 +31,13 @@ trait WorldStateSharingBehaviours
 
   def multipleInstancesRepresentingTheSameWorldBehaviour = {
     they should "yield the same results to scope queries regardless of which instance is used to define a revision" in {
-      class DemultiplexingWorld(worldFactory: () => World[Int], seed: Long)
-          extends World[Int] {
+      class DemultiplexingWorld(worldFactory: () => World, seed: Long)
+          extends World {
         val random = new scala.util.Random(seed)
 
-        val worlds: Set[World[Int]] = Set.empty
+        val worlds: Set[World] = Set.empty
 
-        def world: World[Int] = {
+        def world: World = {
           worlds.synchronized {
             if (worlds.nonEmpty && random.nextBoolean()) {
               worlds -= random.chooseOneOf(worlds)
@@ -55,11 +55,11 @@ trait WorldStateSharingBehaviours
 
         override def nextRevision: Revision = world.nextRevision
 
-        override def revise(events: Map[Int, Option[Event]],
+        override def revise(events: Map[_ <: EventId, Option[Event]],
                             asOf: Instant): Revision =
           world.revise(events, asOf)
 
-        override def revise(events: util.Map[Int, Optional[Event]],
+        override def revise(events: util.Map[_ <: EventId, Optional[Event]],
                             asOf: Instant): Revision =
           world.revise(events, asOf)
 
@@ -70,17 +70,17 @@ trait WorldStateSharingBehaviours
         override def scopeFor(when: Unbounded[Instant], asOf: Instant): Scope =
           world.scopeFor(when, asOf)
 
-        override def forkExperimentalWorld(scope: javaApi.Scope): World[Int] =
+        override def forkExperimentalWorld(scope: javaApi.Scope): World =
           world.forkExperimentalWorld(scope)
 
         override def revisionAsOfs: Array[Instant] = world.revisionAsOfs
 
-        override def revise(eventId: Revision,
+        override def revise(eventId: EventId,
                             event: Event,
                             asOf: Instant): Revision =
           world.revise(eventId, event, asOf)
 
-        override def annul(eventId: Revision, asOf: Instant): Revision =
+        override def annul(eventId: EventId, asOf: Instant): Revision =
           world.annul(eventId, asOf)
       }
 
@@ -160,19 +160,18 @@ trait WorldStateSharingBehaviours
       )
     }
 
-    class DemultiplexingWorld(worldFactory: () => World[Int])
-        extends World[Int] {
-      val worldThreadLocal: ThreadLocal[World[Int]] =
-        ThreadLocal.withInitial[World[Int]](() => worldFactory())
+    class DemultiplexingWorld(worldFactory: () => World) extends World {
+      val worldThreadLocal: ThreadLocal[World] =
+        ThreadLocal.withInitial[World](() => worldFactory())
 
-      def world: World[Int] = worldThreadLocal.get
+      def world: World = worldThreadLocal.get
 
       override def nextRevision: Revision = world.nextRevision
 
-      override def revise(events: Map[Int, Option[Event]],
+      override def revise(events: Map[_ <: EventId, Option[Event]],
                           asOf: Instant): Revision = world.revise(events, asOf)
 
-      override def revise(events: util.Map[Int, Optional[Event]],
+      override def revise(events: util.Map[_ <: EventId, Optional[Event]],
                           asOf: Instant): Revision = world.revise(events, asOf)
 
       override def scopeFor(when: Unbounded[Instant],
@@ -182,17 +181,17 @@ trait WorldStateSharingBehaviours
       override def scopeFor(when: Unbounded[Instant], asOf: Instant): Scope =
         world.scopeFor(when, asOf)
 
-      override def forkExperimentalWorld(scope: javaApi.Scope): World[Int] =
+      override def forkExperimentalWorld(scope: javaApi.Scope): World =
         world.forkExperimentalWorld(scope)
 
       override def revisionAsOfs: Array[Instant] = world.revisionAsOfs
 
-      override def revise(eventId: Revision,
+      override def revise(eventId: EventId,
                           event: Event,
                           asOf: Instant): Revision =
         world.revise(eventId, event, asOf)
 
-      override def annul(eventId: Revision, asOf: Instant): Revision =
+      override def annul(eventId: EventId, asOf: Instant): Revision =
         world.annul(eventId, asOf)
     }
 
@@ -471,14 +470,13 @@ class WorldStateSharingSpecUsingWorldReferenceImplementation
   val numberOfConcurrentQueriesPerRevision: Revision = 100
 
   val worldSharingCommonStateFactoryResourceGenerator
-    : Gen[ManagedResource[() => World[Int]]] =
+    : Gen[ManagedResource[() => World]] =
     Gen.const(
-      for (sharedMutableState <- makeManagedResource(new MutableState[Int])(
-             _ => {})(List.empty))
+      for (sharedMutableState <- makeManagedResource(new MutableState)(_ => {})(
+             List.empty))
         yield
           () =>
-            new WorldReferenceImplementation[Int](
-              mutableState = sharedMutableState))
+            new WorldReferenceImplementation(mutableState = sharedMutableState))
 
   "multiple world instances representing the same world (using the world reference implementation)" should behave like multipleInstancesRepresentingTheSameWorldBehaviour
 }
@@ -494,7 +492,7 @@ class WorldStateSharingSpecUsingWorldRedisBasedImplementation
   val numberOfConcurrentQueriesPerRevision: Revision = 20
 
   val worldSharingCommonStateFactoryResourceGenerator
-    : Gen[ManagedResource[() => World[Int]]] =
+    : Gen[ManagedResource[() => World]] =
     Gen.const(for {
       sharedGuid <- makeManagedResource(UUID.randomUUID().toString)(_ => {})(
         List.empty)
@@ -505,7 +503,7 @@ class WorldStateSharingSpecUsingWorldRedisBasedImplementation
         RedisURI.Builder.redis("localhost", redisServerPort).build())
       redisClientSet += redisClient
       () =>
-        new WorldRedisBasedImplementation[Int](redisClient, sharedGuid)
+        new WorldRedisBasedImplementation(redisClient, sharedGuid)
     })
 
   "multiple world instances representing the same world (using the world Redis-based implementation)" should behave like multipleInstancesRepresentingTheSameWorldBehaviour
