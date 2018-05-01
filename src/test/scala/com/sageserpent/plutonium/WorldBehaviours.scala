@@ -2976,6 +2976,83 @@ trait WorldBehaviours
   }
 
   def worldWithEventsThatHaveSinceBeenCorrectedBehaviour = {
+    it should "extend the history of an item whose annihilation is annulled to pick up any subsequent events relating to that item." in {
+      val itemId = "Fred"
+
+      val testCaseGenerator = for {
+        worldResource <- worldResourceGenerator
+        eventTimes    <- Gen.nonEmptyListOf(instantGenerator) map (_.sorted)
+        annihilationWhen <- instantGenerator filter (when =>
+          when.isAfter(eventTimes.head) && !when.isAfter(eventTimes.last))
+        steps = 1 to eventTimes.size
+        recordings: List[(Unbounded[Instant], Event)] = eventTimes zip steps map {
+          case (when, step) =>
+            Finite(when) -> Change
+              .forOneItem[IntegerHistory](when)(itemId, {
+                item: IntegerHistory =>
+                  item.integerProperty = step
+              })
+        }
+        seed <- seedGenerator
+        random = new Random(seed)
+        shuffledRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhenForAGivenItem(
+          random,
+          recordings)
+        bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(
+          shuffledRecordings.zipWithIndex)
+        asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
+                             instantGenerator) map (_.sorted)
+      } yield
+        (worldResource,
+         bigShuffledHistoryOverLotsOfThings,
+         asOfs,
+         steps,
+         annihilationWhen)
+      check(Prop.forAllNoShrink(testCaseGenerator) {
+        case (worldResource,
+              bigShuffledHistoryOverLotsOfThings,
+              asOfs,
+              steps,
+              annihilationWhen) =>
+          worldResource acquireAndGet {
+            world =>
+              val initialEventId = -2
+
+              world.revise(
+                initialEventId,
+                Change.forOneItem[IntegerHistory](annihilationWhen)(itemId, {
+                  item: IntegerHistory =>
+                    item.integerProperty = -1
+                }),
+                asOfs.head)
+
+              val annihilationEventId = -1
+
+              world.revise(annihilationEventId,
+                           Annihilation[Any](annihilationWhen, itemId),
+                           asOfs.head)
+
+              recordEventsInWorld(
+                liftRecordings(bigShuffledHistoryOverLotsOfThings),
+                asOfs,
+                world)
+
+              world.annul(initialEventId, asOfs.last)
+
+              world.annul(annihilationEventId, asOfs.last)
+
+              val scope =
+                world.scopeFor(PositiveInfinity[Instant](), world.nextRevision)
+
+              val fredTheItem = scope
+                .render(Bitemporal.withId[IntegerHistory](itemId))
+                .force
+
+              (steps == fredTheItem.head.datums) :| s"Expecting: ${steps}, but got: ${fredTheItem.head.datums}"
+          }
+      })
+    }
+
     it should "build an item's state in a manner consistent with the history experienced by the item regardless of any corrected history." in {
       val itemId = "Fred"
 
