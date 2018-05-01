@@ -245,6 +245,10 @@ class LifecyclesStateImplementation(
                             case (_, isAnnihilation) => isAnnihilation
                           }
                           .fold {
+                            // In this case 'itemStateUpdateKey' is either starting off a brand new lifecycle, or is
+                            // moving the start of the lifecycle earlier in physical time than in the previous revision.
+                            // Use what used to be the first item state update key from the previous lifecycle if there
+                            // is one, as that will now follow on from 'itemStateUpdateKey'.
                             sortedKeyValuePairs
                               .from(itemStateUpdateKey)
                               .dropWhile {
