@@ -79,7 +79,9 @@ trait ProxyFactory {
     // the items may forbid certain operations on them - e.g. for rendering from a client's scope, the items should be
     // read-only.
 
-    val proxyClazz = proxyClassFor()
+    val id = stateToBeAcquiredByProxy.uniqueItemSpecification.id
+
+    val proxyClazz = proxyClassFor(typeOf[Item], id)
 
     val clazz = proxyClazz.getSuperclass
 
@@ -87,7 +89,7 @@ trait ProxyFactory {
           // TODO - cleanup.
           "id" != method.getName && Modifier.isAbstract(method.getModifiers))) {
       throw new UnsupportedOperationException(
-        s"Attempt to create an instance of an abstract class '$clazz' for id: '${stateToBeAcquiredByProxy.uniqueItemSpecification.id}'.")
+        s"Attempt to create an instance of an abstract class '$clazz' for id: '${id}'.")
     }
     val proxy = proxyClazz.newInstance().asInstanceOf[Item]
 
@@ -98,15 +100,20 @@ trait ProxyFactory {
     proxy
   }
 
-  def proxyClassFor[Item: TypeTag]()
+  def proxyClassFor(typeOfItem: universe.Type, id: Any)
     : Class[_] = // NOTE: using 'synchronized' is rather hokey, but there are subtle issues with
     // using the likes of 'TrieMap.getOrElseUpdate' due to the initialiser block being executed
     // more than once, even though the map is indeed thread safe. Let's keep it simple for now...
-    synchronized {
-      val typeOfItem = typeOf[Item]
-      cachedProxyClasses.getOrElseUpdate(typeOfItem, {
-        createProxyClass(classFromType(typeOfItem))
-      })
+    {
+      if (typeOf[Nothing] == typeOfItem)
+        throw new RuntimeException(
+          s"attempt to annihilate an item '$id' without an explicit type.")
+
+      synchronized {
+        cachedProxyClasses.getOrElseUpdate(typeOfItem, {
+          createProxyClass(classFromType(typeOfItem))
+        })
+      }
     }
 
   protected def additionalInterfaces: Array[Class[_]]
