@@ -2,7 +2,7 @@ package com.sageserpent.plutonium
 
 import java.time.Instant
 
-import com.sageserpent.americium.{NegativeInfinity, PositiveInfinity, Unbounded}
+import com.sageserpent.americium.{PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.BlobStorage.SnapshotRetrievalApi
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
@@ -280,12 +280,23 @@ class LifecyclesStateImplementation(
                           }
                   )).toSet
 
+                val mandatoryDependencyThatAlsoPicksUpAnyPreviousAnnihilation
+                  : Option[ItemStateUpdate.Key] =
+                  itemStateUpdateKeysPerItem.get(patch.targetItemSpecification) flatMap {
+                    (sortedKeyValuePairs: SortedMap[ItemStateUpdate.Key,
+                                                    Option[SnapshotBlob]]) =>
+                      sortedKeyValuePairs
+                        .until(itemStateUpdateKey)
+                        .lastOption
+                        .map(_._1)
+                  }
+
                 val itemStateUpdatesDagWithUpdatedDependencies =
                   itemStateUpdatesDag.decomp(itemStateUpdateKey) match {
                     case Decomp(Some(context), remainder) =>
-                      context.copy(
-                        inAdj =
-                          discoveredReadDependencies map (() -> _) toVector) & remainder
+                      context.copy(inAdj = mandatoryDependencyThatAlsoPicksUpAnyPreviousAnnihilation
+                        .fold(discoveredReadDependencies)(
+                          discoveredReadDependencies + _) map (() -> _) toVector) & remainder
                   }
 
                 val itemStateUpdateKeysPerItemWithNewKeyForPatch =
