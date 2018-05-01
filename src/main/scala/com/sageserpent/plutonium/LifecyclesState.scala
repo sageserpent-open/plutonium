@@ -495,6 +495,8 @@ class LifecyclesStateImplementation(
         case (key, _) =>
           when >= whenFor(this.events.apply)(key)
       },
+      itemStateUpdatesDag = this.itemStateUpdatesDag nfilter (key =>
+        when >= whenFor(this.events.apply)(key)),
       itemStateUpdateKeysPerItem = itemStateUpdateKeysPerItem mapValues (_.filter {
         case (key, _) => when >= whenFor(this.events.apply)(key)
       }) filter (_._2.nonEmpty),
