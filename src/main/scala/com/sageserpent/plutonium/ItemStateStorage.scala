@@ -236,9 +236,7 @@ trait ItemStateStorage { itemStateStorageObject =>
 
               snapshot match {
                 case Some(
-                    SnapshotBlob(payload, lifecycleUUID, itemStateUpdateKey))
-                    if !annihilatedItemsKeyedByLifecycleUUID.contains(
-                      lifecycleUUID) =>
+                    SnapshotBlob(payload, lifecycleUUID, itemStateUpdateKey)) =>
                   uniqueItemSpecificationAccess
                     .withValue(
                       Some(
