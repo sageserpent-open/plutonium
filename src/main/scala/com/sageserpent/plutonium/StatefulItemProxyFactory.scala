@@ -59,7 +59,7 @@ trait StatefulItemProxyFactory extends ProxyFactory {
     ArgumentTypeResolver.INSTANCE,
     MethodNameEqualityResolver.INSTANCE,
     ParameterLengthResolver.INSTANCE,
-    DeclaringTypeResolver.INSTANCE,
+    DeclaringTypeResolver.INSTANCE
   )
 
   override protected def configureInterceptions(
