@@ -9,24 +9,28 @@ import scalaz.std.option.optionSyntax._
 import scala.reflect.runtime.universe._
 
 trait BestPatchSelection {
-  def apply(relatedPatches: Seq[AbstractPatch]): AbstractPatch
+  def apply[AssociatedData](
+      relatedPatches: Seq[(AbstractPatch, AssociatedData)])
+    : (AbstractPatch, AssociatedData)
 }
 
 trait BestPatchSelectionContracts extends BestPatchSelection {
-  abstract override def apply(
-      relatedPatches: Seq[AbstractPatch]): AbstractPatch = {
+  abstract override def apply[AssociatedData](
+      relatedPatches: Seq[(AbstractPatch, AssociatedData)])
+    : (AbstractPatch, AssociatedData) = {
     require(relatedPatches.nonEmpty)
-    require(1 == (relatedPatches map (_.targetId) distinct).size)
+    require(
+      1 == (relatedPatches map { case (patch, _) => patch.targetId } distinct).size)
     require((for {
       lhs <- relatedPatches
       rhs <- relatedPatches if lhs != rhs
-    } yield AbstractPatch.patchesAreRelated(lhs, rhs)).forall(identity))
+    } yield AbstractPatch.patchesAreRelated(lhs._1, rhs._1)).forall(identity))
     super.apply(relatedPatches)
   }
 }
 
 object PatchRecorder {
-  trait UpdateConsumer[EventId] {
+  trait UpdateConsumer {
     def captureAnnihilation(eventId: EventId, annihilation: Annihilation): Unit
 
     def capturePatch(when: Unbounded[Instant],
@@ -35,10 +39,10 @@ object PatchRecorder {
   }
 }
 
-trait PatchRecorder[EventId] {
+trait PatchRecorder {
   import PatchRecorder._
 
-  val updateConsumer: UpdateConsumer[EventId]
+  val updateConsumer: UpdateConsumer
 
   def whenEventPertainedToByLastRecordingTookPlace: Option[Unbounded[Instant]]
 
@@ -57,7 +61,7 @@ trait PatchRecorder[EventId] {
   def noteThatThereAreNoFollowingRecordings(): Unit
 }
 
-trait PatchRecorderContracts[EventId] extends PatchRecorder[EventId] {
+trait PatchRecorderContracts extends PatchRecorder {
   require(whenEventPertainedToByLastRecordingTookPlace.isEmpty)
   require(!allRecordingsAreCaptured)
 

@@ -10,8 +10,6 @@ object Benchmark extends Bench.OfflineRegressionReport {
   override def historian: RegressionReporter.Historian =
     RegressionReporter.Historian.Complete()
 
-  type EventId = Int
-
   abstract class Thing {
     var property: Int = 0
 
@@ -28,7 +26,7 @@ object Benchmark extends Bench.OfflineRegressionReport {
 
       val idSet = 0 until 1 + (size / 5)
 
-      val world = new WorldReferenceImplementation[EventId]()
+      val world = new WorldEfficientInMemoryImplementation()
 
       for (step <- 0 until size) {
         val oneId     = randomBehaviour.chooseOneOf(idSet)

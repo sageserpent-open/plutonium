@@ -19,8 +19,31 @@ import resource.makeManagedResource
 
 import scala.reflect.runtime.universe.{Super => _, This => _}
 
+object StatefulItemProxyFactory {
+  trait AcquiredState extends ProxyFactory.AcquiredState {
+    var _isGhost = false
+
+    def recordAnnihilation(): Unit = {
+      require(!_isGhost)
+      _isGhost = true
+    }
+
+    def isGhost: Boolean = _isGhost
+
+    def itemIsLocked: Boolean
+
+    var invariantCheckInProgress = false
+
+    def recordMutation(item: ItemExtensionApi): Unit
+
+    def recordReadOnlyAccess(item: ItemExtensionApi): Unit
+
+    var unlockFullReadAccess: Boolean = false
+  }
+}
+
 trait StatefulItemProxyFactory extends ProxyFactory {
-  import StatefulItemProxyFactory._
+  import WorldImplementationCodeFactoring.firstMethodIsOverrideCompatibleWithSecond
 
   override val isForRecordingOnly = false
 
@@ -62,31 +85,6 @@ trait StatefulItemProxyFactory extends ProxyFactory {
       .intercept(MethodDelegation.to(checkInvariant))
       .method(matchUniqueItemSpecification)
       .intercept(MethodDelegation.toField("acquiredState"))
-
-}
-
-object StatefulItemProxyFactory {
-  import ProxyFactory._
-  import WorldImplementationCodeFactoring.firstMethodIsOverrideCompatibleWithSecond
-
-  trait AcquiredState extends ProxyFactory.AcquiredState {
-    var _isGhost = false
-
-    def recordAnnihilation(): Unit = {
-      require(!_isGhost)
-      _isGhost = true
-    }
-
-    def isGhost: Boolean = _isGhost
-
-    def itemIsLocked: Boolean
-
-    def recordMutation(item: ItemExtensionApi): Unit
-
-    def recordReadOnlyAccess(item: ItemExtensionApi): Unit
-
-    var unlockFullReadAccess: Boolean = false
-  }
 
   val recordAnnihilationMethod = new MethodDescription.ForLoadedMethod(
     classOf[AnnihilationHook].getMethod("recordAnnihilation"))
@@ -135,10 +133,9 @@ object StatefulItemProxyFactory {
     @RuntimeType
     def apply(@Origin method: Method,
               @This target: ItemExtensionApi,
-              @AllArguments arguments: Array[Any],
               @SuperCall superCall: Callable[_],
               @FieldValue("acquiredState") acquiredState: AcquiredState) = {
-      if (acquiredState.itemIsLocked) {
+      if (acquiredState.itemIsLocked || acquiredState.invariantCheckInProgress) {
         throw new UnsupportedOperationException(
           s"Attempt to write via: '$method' to an item: '$target' rendered from a bitemporal query.")
       }
@@ -151,6 +148,9 @@ object StatefulItemProxyFactory {
 
       superCall.call()
 
+      acquiredState.recordReadOnlyAccess(target) // NOTE: because a mutation is entitled to modify existing state via field access and access to
+      // objects that are not item proxies but form part of the target item's state, we have to play
+      // safe and regard a mutations as a superset of read-only accesses.
       acquiredState.recordMutation(target)
     }
   }
@@ -168,6 +168,7 @@ object StatefulItemProxyFactory {
       }
 
       acquiredState.recordReadOnlyAccess(target)
+
       superCall.call()
     }
   }
@@ -186,10 +187,12 @@ object StatefulItemProxyFactory {
         }(List.empty)
       } yield {
         acquiredState.recordReadOnlyAccess(target)
+
         superCall.call()
       }) acquireAndGet identity
       else {
         acquiredState.recordReadOnlyAccess(target)
+
         superCall.call()
       }
     }
@@ -207,7 +210,17 @@ object StatefulItemProxyFactory {
     def apply(@FieldValue("acquiredState") acquiredState: AcquiredState,
               @SuperCall superCall: Callable[Unit]): Unit = {
       apply(acquiredState)
-      superCall.call()
+      if (!acquiredState.invariantCheckInProgress) {
+        for {
+          _ <- makeManagedResource {
+            acquiredState.invariantCheckInProgress = true
+          } { _ =>
+            acquiredState.invariantCheckInProgress = false
+          }(List.empty)
+        } {
+          superCall.call()
+        }
+      } else superCall.call()
     }
   }
 }

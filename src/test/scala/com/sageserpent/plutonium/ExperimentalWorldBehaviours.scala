@@ -18,10 +18,10 @@ trait ExperimentalWorldBehaviours
     with Checkers
     with WorldSpecSupport { this: WorldResource =>
   def experimentalWorldBehaviour = {
-    def scopeAndExperimentalWorldFor(baseWorld: World[Int],
+    def scopeAndExperimentalWorldFor(baseWorld: World,
                                      forkWhen: Unbounded[Instant],
                                      forkAsOf: Instant,
-                                     seed: Long): (Scope, World[Int]) = {
+                                     seed: Long): (Scope, World) = {
       val random = new Random(seed)
 
       if (random.nextBoolean()) {

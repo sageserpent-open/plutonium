@@ -32,7 +32,7 @@ object Patch {
 
   case class MethodPieces(declaringClassOfMethod: Class[_],
                           methodName: String,
-                          methodParameterTypes: Array[Class[_]]) {
+                          methodParameterTypes: Seq[Class[_]]) {
     def method =
       declaringClassOfMethod.getMethod(methodName, methodParameterTypes: _*)
   }

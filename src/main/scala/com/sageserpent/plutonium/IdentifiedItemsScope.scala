@@ -45,8 +45,8 @@ class IdentifiedItemsScope extends IdentifiedItemAccess {
     }
   }
 
-  def populate[EventId](_when: Unbounded[Instant],
-                        eventTimeline: Seq[(Event, EventId)]) = {
+  def populate(_when: Unbounded[Instant],
+               eventTimeline: Seq[(Event, EventId)]) = {
     idToItemsMultiMap.clear()
 
     for (_ <- makeManagedResource {
@@ -54,8 +54,8 @@ class IdentifiedItemsScope extends IdentifiedItemAccess {
          } { _ =>
            allItemsAreLocked = true
          }(List.empty)) {
-      val patchRecorder = new PatchRecorderImplementation[EventId](_when)
-      with PatchRecorderContracts[EventId] with BestPatchSelectionImplementation
+      val patchRecorder = new PatchRecorderImplementation(_when)
+      with PatchRecorderContracts with BestPatchSelectionImplementation
       with BestPatchSelectionContracts {
         val itemsAreLockedResource: ManagedResource[Unit] =
           makeManagedResource {
@@ -63,8 +63,8 @@ class IdentifiedItemsScope extends IdentifiedItemAccess {
           } { _ =>
             allItemsAreLocked = false
           }(List.empty)
-        override val updateConsumer: UpdateConsumer[EventId] =
-          new UpdateConsumer[EventId] {
+        override val updateConsumer: UpdateConsumer =
+          new UpdateConsumer {
             override def captureAnnihilation(
                 eventId: EventId,
                 annihilation: Annihilation): Unit = {
