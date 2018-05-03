@@ -1,17 +1,18 @@
-import com.sageserpent.americium.Unbounded._
-import com.sageserpent.americium.{Finite, NegativeInfinity, PositiveInfinity, Unbounded}
 
+import scalaz.State
+import scalaz.StateT.stateMonad
+import scalaz.syntax.monad._
 
-Finite(67) < Finite(78)
+implicit val s = stateMonad[String]
 
-Finite(67) >= Finite(78)
+import s.{put, get}
 
-Finite(67) != Finite(78)
+val stuff: State[String, String] = for {
+  x <- 1.pure
+  y <- 2.pure
+  _ <- put("Wiggies")
+  result <- get
+} yield "Hello"
 
-Finite(67) == Finite(67)
+stuff.run("")
 
-NegativeInfinity[Int] < PositiveInfinity()
-
-val stuff = Seq(Finite(67), NegativeInfinity[Int], PositiveInfinity[Int], Finite(-34))
-
-stuff.sorted(Ordering.ordered[Unbounded[Int]]).toList
