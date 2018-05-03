@@ -2,7 +2,7 @@ package com.sageserpent.plutonium
 
 import java.util.UUID
 
-import com.sageserpent.plutonium.BlobStorage.{SnapshotRetrievalApi, Timeslice}
+import com.sageserpent.plutonium.BlobStorage.SnapshotRetrievalApi
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
 
@@ -104,9 +104,10 @@ trait IdentifiedItemAccessUsingBlobStorage
   }
 
   override protected def fallbackAnnihilatedItemFor[Item](
-      uniqueItemSpecification: UniqueItemSpecification): Item = {
+      uniqueItemSpecification: UniqueItemSpecification,
+      lifecycleUUID: UUID): Item = {
     val item =
-      createItemFor[Item](uniqueItemSpecification, UUID.randomUUID(), None)
+      createItemFor[Item](uniqueItemSpecification, lifecycleUUID, None)
     item.asInstanceOf[AnnihilationHook].recordAnnihilation()
     item
   }
