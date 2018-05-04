@@ -14,7 +14,6 @@ lazy val settings = Seq(
   libraryDependencies += "org.scala-lang"          % "scala-reflect"                % "2.12.4",
   libraryDependencies += "biz.paluch.redis"        % "lettuce"                      % "4.3.0.Final",
   libraryDependencies += "io.reactivex"            %% "rxscala"                     % "0.26.4",
-  libraryDependencies += "io.github.nicolasstucki" %% "multisets"                   % "0.4",
   libraryDependencies += "com.twitter"             %% "chill"                       % "0.9.2",
   libraryDependencies += "org.slf4j"               % "slf4j-api"                    % "1.7.21" % "provided",
   libraryDependencies += "org.slf4j"               % "slf4j-nop"                    % "1.7.21" % "test",
