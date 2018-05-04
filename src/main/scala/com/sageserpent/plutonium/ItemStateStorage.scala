@@ -236,9 +236,10 @@ trait ItemStateStorage { itemStateStorageObject =>
 
               snapshot match {
                 case Some(
-                    SnapshotBlob(payload, lifecycleUUID, itemStateUpdateKey))
-                    if !annihilatedItemsKeyedByLifecycleUUID.contains(
-                      lifecycleUUID) =>
+                    SnapshotBlob(payload, lifecycleUUID, itemStateUpdateKey)) =>
+                  assert(
+                    !annihilatedItemsKeyedByLifecycleUUID.contains(
+                      lifecycleUUID))
                   uniqueItemSpecificationAccess
                     .withValue(
                       Some(
@@ -320,7 +321,8 @@ trait ItemStateStorage { itemStateStorageObject =>
               candidateRelatedItem.getOrElse {
                 annihilatedItemsKeyedByLifecycleUUID.getOrElseUpdate(
                   lifecycleUUID, {
-                    fallbackAnnihilatedItemFor[Item](uniqueItemSpecification)
+                    fallbackAnnihilatedItemFor[Item](uniqueItemSpecification,
+                                                     lifecycleUUID)
                   }
                 )
               }
@@ -354,7 +356,8 @@ trait ItemStateStorage { itemStateStorageObject =>
         uniqueItemSpecification: UniqueItemSpecification): Item
 
     protected def fallbackAnnihilatedItemFor[Item](
-        uniqueItemSpecification: UniqueItemSpecification): Item
+        uniqueItemSpecification: UniqueItemSpecification,
+        lifecycleUUID: UUID): Item
 
     protected def createItemFor[Item](
         uniqueItemSpecification: UniqueItemSpecification,

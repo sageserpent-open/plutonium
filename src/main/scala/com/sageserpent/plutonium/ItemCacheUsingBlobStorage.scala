@@ -42,9 +42,10 @@ class ItemCacheUsingBlobStorage[Time](
       s"Snapshot does not exist for: $uniqueItemSpecification at: $when.")
 
   override protected def fallbackAnnihilatedItemFor[Item](
-      uniqueItemSpecification: UniqueItemSpecification): Item = {
+      uniqueItemSpecification: UniqueItemSpecification,
+      lifecycleUUID: UUID): Item = {
     val item =
-      createItemFor[Item](uniqueItemSpecification, UUID.randomUUID(), None)
+      createItemFor[Item](uniqueItemSpecification, lifecycleUUID, None)
     item.asInstanceOf[AnnihilationHook].recordAnnihilation()
     item
   }
