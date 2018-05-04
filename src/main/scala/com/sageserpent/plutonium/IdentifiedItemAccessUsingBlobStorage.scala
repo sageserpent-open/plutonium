@@ -120,11 +120,8 @@ trait IdentifiedItemAccessUsingBlobStorage
         patch.checkInvariants(this)
       }
 
-    val readDependencies: Set[ItemStateUpdate.Key] =
-      itemStateUpdateReadDependenciesDiscoveredSinceLastHarvest.toSet
-
-    // NOTE: set this *after* getting the read dependencies, because mutations caused by the item state update being applied
-    // can themselves discover read dependencies that would otherwise be clobbered by the following block...
+    // NOTE: set this *after* performing the update, because mutations caused by the update can themselves
+    // discover read dependencies that would otherwise be clobbered by the following block...
     for (item <- itemsMutatedSinceLastHarvest.values) {
       item
         .asInstanceOf[ItemStateUpdateKeyTrackingApi]
@@ -139,6 +136,9 @@ trait IdentifiedItemAccessUsingBlobStorage
 
         uniqueItemSpecification -> snapshotBlob
     } toMap
+
+    val readDependencies: Set[ItemStateUpdate.Key] =
+      itemStateUpdateReadDependenciesDiscoveredSinceLastHarvest.toSet
 
     itemsMutatedSinceLastHarvest.clear()
     itemStateUpdateReadDependenciesDiscoveredSinceLastHarvest.clear()
