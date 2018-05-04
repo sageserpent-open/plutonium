@@ -178,12 +178,12 @@ class LifecyclesStateImplementation(
 
             itemStateUpdate match {
               case ItemStateAnnihilation(annihilation) =>
-                val dependencyOfAnnihilation: ItemStateUpdate.Key =
-                  itemStateUpdateKeysPerItem(
-                    annihilation.uniqueItemSpecification)
-                    .until(itemStateUpdateKey)
-                    .last
-                    ._1
+                // TODO: having to reconstitute the item here is hokey when the act of applying the annihilation just afterwards will also do that too. Sort it out!
+                val dependencyOfAnnihilation: Option[ItemStateUpdate.Key] =
+                  identifiedItemAccess
+                    .reconstitute(annihilation.uniqueItemSpecification)
+                    .asInstanceOf[ItemStateUpdateKeyTrackingApi]
+                    .itemStateUpdateKey
 
                 annihilation(identifiedItemAccess)
 
@@ -193,23 +193,19 @@ class LifecyclesStateImplementation(
                   Map(annihilation.uniqueItemSpecification -> None))
 
                 val itemStateUpdatesDagWithUpdatedDependency =
-                  itemStateUpdatesDag
-                    .decomp(itemStateUpdateKey) match {
-                    case Decomp(Some(context), remainder) =>
-                      context
-                        .copy(inAdj = Vector(() -> dependencyOfAnnihilation)) & remainder
-                  }
-
-                val itemStateUpdateKeysPerItemWithNewKeyForAnnihilation =
-                  addKeyTo(itemStateUpdateKeysPerItem,
-                           annihilation.uniqueItemSpecification,
-                           itemStateUpdateKey,
-                           isAnnihilation = true)
+                  dependencyOfAnnihilation.fold(itemStateUpdatesDag)(
+                    dependency =>
+                      itemStateUpdatesDag
+                        .decomp(itemStateUpdateKey) match {
+                        case Decomp(Some(context), remainder) =>
+                          context
+                            .copy(inAdj = Vector(() -> dependency)) & remainder
+                    })
 
                 RecalculationStep(
                   itemStateUpdatesToApply.drop(1),
                   itemStateUpdatesDagWithUpdatedDependency,
-                  itemStateUpdateKeysPerItemWithNewKeyForAnnihilation,
+                  itemStateUpdateKeysPerItem,
                   revisionBuilder.build()
                 ).afterRecalculations
 
@@ -217,10 +213,11 @@ class LifecyclesStateImplementation(
                 val (mutatedItemSnapshots, discoveredReadDependencies) =
                   identifiedItemAccess(patch, itemStateUpdateKey)
 
-                revisionBuilder.record(
-                  itemStateUpdateKey,
-                  itemStateUpdateTime,
-                  mutatedItemSnapshots.mapValues(Some.apply))
+                revisionBuilder.record(itemStateUpdateKey,
+                                       itemStateUpdateTime,
+                                       mutatedItemSnapshots.mapValues {
+                                         case (snapshot, _) => Some(snapshot)
+                                       })
 
                 def successorsOf(itemStateUpdateKey: ItemStateUpdate.Key) =
                   itemStateUpdatesDag
@@ -230,73 +227,53 @@ class LifecyclesStateImplementation(
                   : Set[ItemStateUpdate.Key] =
                   successorsOf(itemStateUpdateKey)
 
-                val mutatedItems = mutatedItemSnapshots.map(_._1)
-
-                // TODO - this code is, ahem, a tad prolix, not to mention completely incomprehensible...
                 val successorsTakenOverFromAPreviousItemStateUpdate
                   : Set[ItemStateUpdate.Key] =
-                  (mutatedItems flatMap itemStateUpdateKeysPerItem.get flatMap (
-                      (sortedKeyValuePairs: SortedMap[ItemStateUpdate.Key,
-                                                      Boolean]) =>
-                        sortedKeyValuePairs
-                          .until(itemStateUpdateKey)
-                          .lastOption
-                          .filterNot {
-                            case (_, isAnnihilation) => isAnnihilation
-                          }
-                          .fold {
-                            // In this case 'itemStateUpdateKey' is either starting off a brand new lifecycle, or is
-                            // moving the start of the lifecycle earlier in physical time than in the previous revision.
-                            // Use what used to be the first item state update key from the previous lifecycle if there
-                            // is one, as that will now follow on from 'itemStateUpdateKey'.
-                            sortedKeyValuePairs
-                              .from(itemStateUpdateKey)
-                              .dropWhile {
-                                case (key, _) =>
-                                  !Ordering[ItemStateUpdate.Key]
-                                    .gt(key, itemStateUpdateKey)
-                              }
-                              .headOption
-                              .map(_._1)
-                              .toSet
-                          } {
-                            case (ancestorItemStateUpdateKey, _) =>
-                              successorsOf(ancestorItemStateUpdateKey)
-                                .filter(
-                                  successorOfAncestor =>
-                                    Ordering[ItemStateUpdate.Key].gt(
-                                      successorOfAncestor,
-                                      itemStateUpdateKey))
-                          }
-                  )).toSet
-
-                val mandatoryDependencyThatAlsoPicksUpAnyPreviousAnnihilation
-                  : Option[ItemStateUpdate.Key] =
-                  itemStateUpdateKeysPerItem.get(patch.targetItemSpecification) flatMap {
-                    sortedKeyValuePairs: SortedMap[ItemStateUpdate.Key,
-                                                   Boolean] =>
-                      sortedKeyValuePairs
-                        .until(itemStateUpdateKey)
-                        .lastOption
-                        .map(_._1)
-                  }
+                  (mutatedItemSnapshots map {
+                    case (_, (_, Some(ancestorItemStateUpdateKey))) =>
+                      successorsOf(ancestorItemStateUpdateKey)
+                        .filter(successorOfAncestor =>
+                          Ordering[ItemStateUpdate.Key].gt(successorOfAncestor,
+                                                           itemStateUpdateKey))
+                    case (uniqueItemSpecification, (_, None)) =>
+                      // In this case 'itemStateUpdateKey' is either starting off a brand new lifecycle, or is
+                      // moving the start of the lifecycle earlier in physical time than in the previous revision.
+                      // Use what used to be the first item state update key from the previous lifecycle if there
+                      // is one, as that will now follow on from 'itemStateUpdateKey'.
+                      itemStateUpdateKeysPerItem
+                        .get(uniqueItemSpecification)
+                        .flatMap(
+                          _.from(itemStateUpdateKey)
+                            .dropWhile {
+                              case (key, _) =>
+                                !Ordering[ItemStateUpdate.Key]
+                                  .gt(key, itemStateUpdateKey)
+                            }
+                            .headOption
+                            .map(_._1))
+                        .toSet
+                  }) reduce (_ ++ _)
 
                 val itemStateUpdatesDagWithUpdatedDependencies =
                   itemStateUpdatesDag.decomp(itemStateUpdateKey) match {
                     case Decomp(Some(context), remainder) =>
-                      context.copy(inAdj = mandatoryDependencyThatAlsoPicksUpAnyPreviousAnnihilation
-                        .fold(discoveredReadDependencies)(
-                          discoveredReadDependencies + _) map (() -> _) toVector) & remainder
+                      context.copy(
+                        inAdj =
+                          discoveredReadDependencies map (() -> _) toVector) & remainder
                   }
 
                 val itemStateUpdateKeysPerItemWithNewKeyForPatch =
                   (itemStateUpdateKeysPerItem /: mutatedItemSnapshots) {
                     case (itemStateUpdateKeysPerItem,
-                          (uniqueItemSpecification, snapshot)) =>
+                          (uniqueItemSpecification, (_, None))) =>
+                      // In this case 'itemStateUpdateKey' is either starting off a brand new lifecycle, or is
+                      // moving the start of the lifecycle earlier in physical time than in the previous revision.
                       addKeyTo(itemStateUpdateKeysPerItem,
                                uniqueItemSpecification,
                                itemStateUpdateKey,
                                isAnnihilation = false)
+                    case (itemStateUpdateKeysPerItem, (_, (_, Some(_)))) =>
+                      itemStateUpdateKeysPerItem
                   }
 
                 val itemStateUpdateKeysToScheduleForRecalculation = successorsAccordingToPreviousRevision ++ successorsTakenOverFromAPreviousItemStateUpdate
@@ -381,7 +358,25 @@ class LifecyclesStateImplementation(
         })
 
     val descendantsOfRevokedItemStateUpdates
-      : Seq[ItemStateUpdate.Key] = itemStateUpdateKeysThatNeedToBeRevoked.toSeq flatMap itemStateUpdatesDag.successors filterNot itemStateUpdateKeysThatNeedToBeRevoked.contains
+      : Seq[ItemStateUpdate.Key] = itemStateUpdateKeysThatNeedToBeRevoked.toSeq flatMap (
+        itemStateUpdateKey =>
+          (itemStateUpdatesDag.label(itemStateUpdateKey)).get match {
+            case ItemStatePatch(_) =>
+              itemStateUpdatesDag.successors(itemStateUpdateKey)
+            case ItemStateAnnihilation(annihilation) =>
+              itemStateUpdateKeysPerItem
+                .get(annihilation.uniqueItemSpecification)
+                .flatMap(
+                  _.keySet
+                    .from(itemStateUpdateKey)
+                    .dropWhile(
+                      key =>
+                        !Ordering[ItemStateUpdate.Key]
+                          .gt(key, itemStateUpdateKey)
+                    )
+                    .headOption)
+          }
+    ) filterNot itemStateUpdateKeysThatNeedToBeRevoked.contains
 
     val baseItemStateUpdateKeysPerItemToApplyChangesTo: Map[
       UniqueItemSpecification,
