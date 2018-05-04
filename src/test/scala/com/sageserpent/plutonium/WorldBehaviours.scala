@@ -3186,7 +3186,7 @@ trait WorldBehaviours
                 (steps == fredTheItem.head.datums) :| s"Expecting: ${steps}, but got: ${fredTheItem.head.datums}"
             }
         },
-        MinSuccessful(400)
+        MinSuccessful(50)
       )
     }
 
@@ -3247,7 +3247,7 @@ trait WorldBehaviours
                 (steps.toSet == fredTheItem.head.datums.toSet) :| s"Expecting: ${steps}, but got: ${fredTheItem.head.datums}"
             }
         },
-        MinSuccessful(700)
+        MinSuccessful(50)
       )
     }
 
@@ -3721,7 +3721,7 @@ class WorldSpecUsingWorldReferenceImplementation
     extends WorldBehaviours
     with WorldReferenceImplementationResource {
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
-    PropertyCheckConfig(maxSize = 40, minSuccessful = 10)
+    PropertyCheckConfig(maxSize = 40, minSuccessful = 20)
 
   "A world with no history (using the world reference implementation)" should behave like worldWithNoHistoryBehaviour
 
