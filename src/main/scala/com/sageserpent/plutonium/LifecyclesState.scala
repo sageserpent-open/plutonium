@@ -382,11 +382,29 @@ class LifecyclesStateImplementation(
       SortedMap[ItemStateUpdate.Key, Boolean]] = itemStateUpdateKeysPerItem mapValues (_ -- itemStateUpdateKeysThatNeedToBeRevoked) filter (_._2.nonEmpty) mapValues (
         keyValuePairs => SortedMap(keyValuePairs.toSeq: _*))
 
+    val updatesForLifecyclesFollowingAnnihilations: Seq[ItemStateUpdate.Key] =
+      newAndModifiedItemStateUpdates flatMap {
+        case (itemStateUpdateKey, ItemStateAnnihilation(annihilation)) =>
+          baseItemStateUpdateKeysPerItemToApplyChangesTo
+            .get(annihilation.uniqueItemSpecification)
+            .flatMap(
+              _.keySet
+                .from(itemStateUpdateKey)
+                .dropWhile(
+                  key =>
+                    !Ordering[ItemStateUpdate.Key]
+                      .gt(key, itemStateUpdateKey)
+                )
+                .headOption)
+        case (_, ItemStatePatch(_)) => None
+      }
+
     val itemStateUpdatesToApply
       : PriorityMap[ItemStateUpdate.Key, ItemStateUpdate.Key] =
       PriorityMap(
         descendantsOfRevokedItemStateUpdates ++ newAndModifiedItemStateUpdates
-          .map(_._1) map (key => (key, key)): _*)
+          .map(_._1) ++ updatesForLifecyclesFollowingAnnihilations map (key =>
+          (key, key)): _*)
 
     if (itemStateUpdatesToApply.nonEmpty) {
       val initialState = RecalculationStep(
