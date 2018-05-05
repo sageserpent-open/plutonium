@@ -179,11 +179,12 @@ class LifecyclesStateImplementation(
             itemStateUpdate match {
               case ItemStateAnnihilation(annihilation) =>
                 // TODO: having to reconstitute the item here is hokey when the act of applying the annihilation just afterwards will also do that too. Sort it out!
-                val dependencyOfAnnihilation: Option[ItemStateUpdate.Key] =
+                val dependencyOfAnnihilation: ItemStateUpdate.Key =
                   identifiedItemAccess
                     .reconstitute(annihilation.uniqueItemSpecification)
                     .asInstanceOf[ItemStateUpdateKeyTrackingApi]
                     .itemStateUpdateKey
+                    .get
 
                 annihilation(identifiedItemAccess)
 
@@ -193,14 +194,12 @@ class LifecyclesStateImplementation(
                   Map(annihilation.uniqueItemSpecification -> None))
 
                 val itemStateUpdatesDagWithUpdatedDependency =
-                  dependencyOfAnnihilation.fold(itemStateUpdatesDag)(
-                    dependency =>
-                      itemStateUpdatesDag
-                        .decomp(itemStateUpdateKey) match {
-                        case Decomp(Some(context), remainder) =>
-                          context
-                            .copy(inAdj = Vector(() -> dependency)) & remainder
-                    })
+                  itemStateUpdatesDag
+                    .decomp(itemStateUpdateKey) match {
+                    case Decomp(Some(context), remainder) =>
+                      context
+                        .copy(inAdj = Vector(() -> dependencyOfAnnihilation)) & remainder
+                  }
 
                 RecalculationStep(
                   itemStateUpdatesToApply.drop(1),
