@@ -25,7 +25,7 @@ import scalaz.syntax.monadPlus._
 import scalaz.{-\/, \/-}
 
 import scala.annotation.tailrec
-import scala.collection.immutable.{Map, SortedMap}
+import scala.collection.immutable.{Map, SortedSet}
 import scala.collection.mutable
 
 trait LifecyclesState {
@@ -92,8 +92,7 @@ class LifecyclesStateImplementation(
     itemStateUpdatesDag: LifecyclesStateImplementation.ItemStateUpdatesDag =
       empty,
     itemStateUpdateKeysPerItem: Map[UniqueItemSpecification,
-                                    SortedMap[ItemStateUpdate.Key, Boolean]] =
-      Map.empty,
+                                    SortedSet[ItemStateUpdate.Key]] = Map.empty,
     itemStateUpdateTime: ItemStateUpdate.Key => ItemStateUpdateTime = _ =>
       EndOfTimesliceTime(PositiveInfinity[Instant]),
     nextRevision: Revision = initialRevision)
@@ -331,8 +330,8 @@ class LifecyclesStateImplementation(
 
     val baseItemStateUpdateKeysPerItemToApplyChangesTo: Map[
       UniqueItemSpecification,
-      SortedMap[ItemStateUpdate.Key, Boolean]] = itemStateUpdateKeysPerItem mapValues (_ -- itemStateUpdateKeysThatNeedToBeRevoked) filter (_._2.nonEmpty) mapValues (
-        keyValuePairs => SortedMap(keyValuePairs.toSeq: _*))
+      SortedSet[ItemStateUpdate.Key]] = itemStateUpdateKeysPerItem mapValues (_ -- itemStateUpdateKeysThatNeedToBeRevoked) filter (_._2.nonEmpty) mapValues (
+        keys => SortedSet(keys.toSeq: _*))
 
     val unrevokedUpdatesThatStartLifecyclesAccordingToThePreviousRevision
       : Seq[ItemStateUpdate.Key] =
@@ -374,10 +373,10 @@ class LifecyclesStateImplementation(
             .argumentItemSpecifications
           (itemsReferredToByPatch :\ itemStateUpdateKeysPerItem) {
             case (uniqueItemSpecification, itemStateUpdateKeysPerItem) =>
-              itemStateUpdateKeysPerItem + (uniqueItemSpecification -> (itemStateUpdateKeysPerItem
-                .getOrElse(uniqueItemSpecification,
-                           SortedMap.empty[ItemStateUpdate.Key, Boolean]) +
-                (itemStateUpdateKey -> false)))
+              itemStateUpdateKeysPerItem + (uniqueItemSpecification -> itemStateUpdateKeysPerItem
+                .get(uniqueItemSpecification)
+                .fold(SortedSet[ItemStateUpdate.Key](itemStateUpdateKey))(
+                  _ + itemStateUpdateKey))
           }
         case ((itemStateUpdateKey, ItemStateAnnihilation(_)),
               itemStateUpdateKeysPerItem) =>
@@ -481,9 +480,9 @@ class LifecyclesStateImplementation(
       },
       itemStateUpdatesDag = this.itemStateUpdatesDag nfilter (key =>
         when >= whenFor(this.events.apply)(key)),
-      itemStateUpdateKeysPerItem = itemStateUpdateKeysPerItem mapValues (_.filter {
-        case (key, _) => when >= whenFor(this.events.apply)(key)
-      }) filter (_._2.nonEmpty),
+      itemStateUpdateKeysPerItem = itemStateUpdateKeysPerItem mapValues (_.filter(
+        key => when >= whenFor(this.events.apply)(key)
+      )) filter (_._2.nonEmpty),
       itemStateUpdateTime = this.itemStateUpdateTime, // Reusing the same ordering property with its closure over the state of 'this' is a bit hokey, but it works.
       nextRevision = this.nextRevision
     )
