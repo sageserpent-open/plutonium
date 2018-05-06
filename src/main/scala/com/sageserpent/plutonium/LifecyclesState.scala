@@ -127,16 +127,14 @@ class LifecyclesStateImplementation(
       IntraTimesliceTime(eventData.orderingKey, key.intraEventIndex)
     }
 
-    implicit val itemStateUpdateKeyOrdering: Ordering[ItemStateUpdate.Key] =
+    implicit val itemStateUpdateKeyOrderingAccordingToThisRevision
+      : Ordering[ItemStateUpdate.Key] =
       Ordering.by(itemStateUpdateTimeAccordingToThisRevision)
 
     case class RecalculationStep(
         itemStateUpdatesToApply: PriorityMap[ItemStateUpdate.Key,
                                              ItemStateUpdate.Key],
         itemStateUpdatesDag: Graph[ItemStateUpdate.Key, ItemStateUpdate, Unit],
-        itemStateUpdateKeysPerItem: Map[
-          UniqueItemSpecification,
-          SortedMap[ItemStateUpdate.Key, Boolean]],
         blobStorage: BlobStorage[ItemStateUpdateTime,
                                  ItemStateUpdate.Key,
                                  SnapshotBlob]) {
@@ -148,23 +146,6 @@ class LifecyclesStateImplementation(
           case Some((_, itemStateUpdateKey)) =>
             val itemStateUpdate =
               itemStateUpdatesDag.label(itemStateUpdateKey).get
-
-            def addKeyTo(itemStateUpdateKeysPerItem: Map[
-                           UniqueItemSpecification,
-                           SortedMap[ItemStateUpdate.Key, Boolean]],
-                         uniqueItemSpecification: UniqueItemSpecification,
-                         itemStateUpdateKey: ItemStateUpdate.Key,
-                         isAnnihilation: Boolean)
-              : Map[UniqueItemSpecification,
-                    SortedMap[ItemStateUpdate.Key, Boolean]] =
-              itemStateUpdateKeysPerItem.updated(
-                uniqueItemSpecification,
-                itemStateUpdateKeysPerItem
-                  .getOrElse(
-                    uniqueItemSpecification,
-                    SortedMap
-                      .empty[ItemStateUpdate.Key, Boolean]) + (itemStateUpdateKey -> isAnnihilation)
-              )
 
             val itemStateUpdateTime =
               itemStateUpdateTimeAccordingToThisRevision(itemStateUpdateKey)
@@ -204,7 +185,6 @@ class LifecyclesStateImplementation(
                 RecalculationStep(
                   itemStateUpdatesToApply.drop(1),
                   itemStateUpdatesDagWithUpdatedDependency,
-                  itemStateUpdateKeysPerItem,
                   revisionBuilder.build()
                 ).afterRecalculations
 
@@ -218,7 +198,8 @@ class LifecyclesStateImplementation(
                                          case (snapshot, _) => Some(snapshot)
                                        })
 
-                def successorsOf(itemStateUpdateKey: ItemStateUpdate.Key) =
+                def successorsOf(itemStateUpdateKey: ItemStateUpdate.Key)
+                  : Set[ItemStateUpdate.Key] =
                   itemStateUpdatesDag
                     .successors(itemStateUpdateKey) toSet
 
@@ -228,29 +209,12 @@ class LifecyclesStateImplementation(
 
                 val successorsTakenOverFromAPreviousItemStateUpdate
                   : Set[ItemStateUpdate.Key] =
-                  (mutatedItemSnapshots map {
+                  (mutatedItemSnapshots collect {
                     case (_, (_, Some(ancestorItemStateUpdateKey))) =>
                       successorsOf(ancestorItemStateUpdateKey)
                         .filter(successorOfAncestor =>
                           Ordering[ItemStateUpdate.Key].gt(successorOfAncestor,
                                                            itemStateUpdateKey))
-                    case (uniqueItemSpecification, (_, None)) =>
-                      // In this case 'itemStateUpdateKey' is either starting off a brand new lifecycle, or is
-                      // moving the start of the lifecycle earlier in physical time than in the previous revision.
-                      // Use what used to be the first item state update key from the previous lifecycle if there
-                      // is one, as that will now follow on from 'itemStateUpdateKey'.
-                      itemStateUpdateKeysPerItem
-                        .get(uniqueItemSpecification)
-                        .flatMap(
-                          _.from(itemStateUpdateKey)
-                            .dropWhile {
-                              case (key, _) =>
-                                !Ordering[ItemStateUpdate.Key]
-                                  .gt(key, itemStateUpdateKey)
-                            }
-                            .headOption
-                            .map(_._1))
-                        .toSet
                   }) reduce (_ ++ _)
 
                 val itemStateUpdatesDagWithUpdatedDependencies =
@@ -259,20 +223,6 @@ class LifecyclesStateImplementation(
                       context.copy(
                         inAdj =
                           discoveredReadDependencies map (() -> _) toVector) & remainder
-                  }
-
-                val itemStateUpdateKeysPerItemWithNewKeyForPatch =
-                  (itemStateUpdateKeysPerItem /: mutatedItemSnapshots) {
-                    case (itemStateUpdateKeysPerItem,
-                          (uniqueItemSpecification, (_, None))) =>
-                      // In this case 'itemStateUpdateKey' is either starting off a brand new lifecycle, or is
-                      // moving the start of the lifecycle earlier in physical time than in the previous revision.
-                      addKeyTo(itemStateUpdateKeysPerItem,
-                               uniqueItemSpecification,
-                               itemStateUpdateKey,
-                               isAnnihilation = false)
-                    case (itemStateUpdateKeysPerItem, (_, (_, Some(_)))) =>
-                      itemStateUpdateKeysPerItem
                   }
 
                 val itemStateUpdateKeysToScheduleForRecalculation = successorsAccordingToPreviousRevision ++ successorsTakenOverFromAPreviousItemStateUpdate
@@ -291,7 +241,6 @@ class LifecyclesStateImplementation(
                     .drop(1) ++ (itemStateUpdateKeysToScheduleForRecalculation map (
                       key => (key, key))),
                   itemStateUpdatesDagWithUpdatedDependencies,
-                  itemStateUpdateKeysPerItemWithNewKeyForPatch,
                   revisionBuilder.build()
                 ).afterRecalculations
             }
@@ -299,7 +248,6 @@ class LifecyclesStateImplementation(
           case None =>
             RecalculationStep(itemStateUpdatesToApply,
                               itemStateUpdatesDag,
-                              itemStateUpdateKeysPerItem,
                               revisionBuilder.build())
         }
       }
@@ -356,10 +304,14 @@ class LifecyclesStateImplementation(
           case (key, value) => LNode(key, value)
         })
 
+    val itemStateUpdateKeyOrderingAccordingToPreviousRevision
+      : Ordering[ItemStateUpdate.Key] =
+      Ordering.by(itemStateUpdateTime)
+
     val descendantsOfRevokedItemStateUpdates
       : Seq[ItemStateUpdate.Key] = itemStateUpdateKeysThatNeedToBeRevoked.toSeq flatMap (
         itemStateUpdateKey =>
-          (itemStateUpdatesDag.label(itemStateUpdateKey)).get match {
+          itemStateUpdatesDag.label(itemStateUpdateKey).get match {
             case ItemStatePatch(_) =>
               itemStateUpdatesDag.successors(itemStateUpdateKey)
             case ItemStateAnnihilation(annihilation) =>
@@ -370,7 +322,7 @@ class LifecyclesStateImplementation(
                     .from(itemStateUpdateKey)
                     .dropWhile(
                       key =>
-                        !Ordering[ItemStateUpdate.Key]
+                        !itemStateUpdateKeyOrderingAccordingToPreviousRevision
                           .gt(key, itemStateUpdateKey)
                     )
                     .headOption)
@@ -382,7 +334,8 @@ class LifecyclesStateImplementation(
       SortedMap[ItemStateUpdate.Key, Boolean]] = itemStateUpdateKeysPerItem mapValues (_ -- itemStateUpdateKeysThatNeedToBeRevoked) filter (_._2.nonEmpty) mapValues (
         keyValuePairs => SortedMap(keyValuePairs.toSeq: _*))
 
-    val updatesForLifecyclesFollowingAnnihilations: Seq[ItemStateUpdate.Key] =
+    val unrevokedUpdatesThatStartLifecyclesAccordingToThePreviousRevision
+      : Seq[ItemStateUpdate.Key] =
       newAndModifiedItemStateUpdates flatMap {
         case (itemStateUpdateKey, ItemStateAnnihilation(annihilation)) =>
           baseItemStateUpdateKeysPerItemToApplyChangesTo
@@ -396,27 +349,57 @@ class LifecyclesStateImplementation(
                       .gt(key, itemStateUpdateKey)
                 )
                 .headOption)
-        case (_, ItemStatePatch(_)) => None
+        case (itemStateUpdateKey, ItemStatePatch(patch)) =>
+          val itemsReferredToByPatch = patch.targetItemSpecification +: patch.argumentItemSpecifications
+          itemsReferredToByPatch.flatMap(
+            uniqueItemSpecification =>
+              baseItemStateUpdateKeysPerItemToApplyChangesTo
+                .get(uniqueItemSpecification)
+                .flatMap(
+                  _.keySet
+                    .from(itemStateUpdateKey)
+                    .dropWhile(
+                      key =>
+                        !Ordering[ItemStateUpdate.Key]
+                          .gt(key, itemStateUpdateKey)
+                    )
+                    .headOption))
+      } filterNot itemStateUpdateKeysThatNeedToBeRevoked.contains
+
+    val itemStateUpdateKeysPerItemForNewTimeline =
+      (newAndModifiedItemStateUpdates :\ baseItemStateUpdateKeysPerItemToApplyChangesTo) {
+        case ((itemStateUpdateKey, ItemStatePatch(patch)),
+              itemStateUpdateKeysPerItem) =>
+          val itemsReferredToByPatch = patch.targetItemSpecification +: patch
+            .argumentItemSpecifications
+          (itemsReferredToByPatch :\ itemStateUpdateKeysPerItem) {
+            case (uniqueItemSpecification, itemStateUpdateKeysPerItem) =>
+              itemStateUpdateKeysPerItem + (uniqueItemSpecification -> (itemStateUpdateKeysPerItem
+                .getOrElse(uniqueItemSpecification,
+                           SortedMap.empty[ItemStateUpdate.Key, Boolean]) +
+                (itemStateUpdateKey -> false)))
+          }
+        case ((itemStateUpdateKey, ItemStateAnnihilation(_)),
+              itemStateUpdateKeysPerItem) =>
+          itemStateUpdateKeysPerItem
       }
 
     val itemStateUpdatesToApply
       : PriorityMap[ItemStateUpdate.Key, ItemStateUpdate.Key] =
       PriorityMap(
         descendantsOfRevokedItemStateUpdates ++ newAndModifiedItemStateUpdates
-          .map(_._1) ++ updatesForLifecyclesFollowingAnnihilations map (key =>
-          (key, key)): _*)
+          .map(_._1) ++ unrevokedUpdatesThatStartLifecyclesAccordingToThePreviousRevision map (
+            key => (key, key)): _*)
 
     if (itemStateUpdatesToApply.nonEmpty) {
       val initialState = RecalculationStep(
         itemStateUpdatesToApply,
         itemStateUpdatesDagWithNewNodesAddedIn,
-        baseItemStateUpdateKeysPerItemToApplyChangesTo,
         blobStorageWithRevocations
       )
 
       val RecalculationStep(_,
                             itemStateUpdatesDagForNewTimeline,
-                            itemStateUpdateKeysPerItemForNewTimeline,
                             blobStorageForNewTimeline) =
         initialState.afterRecalculations
 
@@ -433,8 +416,7 @@ class LifecyclesStateImplementation(
         events = eventsForNewTimeline,
         itemStateUpdates = itemStateUpdatesForNewTimeline,
         itemStateUpdatesDag = itemStateUpdatesDagWithNewNodesAddedIn,
-        itemStateUpdateKeysPerItem =
-          baseItemStateUpdateKeysPerItemToApplyChangesTo,
+        itemStateUpdateKeysPerItem = itemStateUpdateKeysPerItemForNewTimeline,
         itemStateUpdateTime = itemStateUpdateTimeAccordingToThisRevision,
         nextRevision = 1 + nextRevision
       ) -> blobStorageWithRevocations
