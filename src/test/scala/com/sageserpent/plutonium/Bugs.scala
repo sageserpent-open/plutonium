@@ -802,27 +802,22 @@ trait Bugs
 
         val sharedAsOf = Instant.ofEpochSecond(0)
 
-        val expectedHistory = Seq(1981940010, 0, -1, 1)
+        val expectedHistory = Seq(55, 66, 77)
 
         worldResource acquireAndGet { world =>
           world.revise(0, Change.forOneItem(Instant.ofEpochSecond(1L))(itemId, {
             item: IntegerHistory =>
-              item.integerProperty = 0
+              item.integerProperty = 66
           }), sharedAsOf)
 
-          world.revise(1, Change.forOneItem(Instant.ofEpochSecond(1L))(itemId, {
+          world.revise(1, Change.forOneItem(Instant.ofEpochSecond(2L))(itemId, {
             item: IntegerHistory =>
-              item.integerProperty = -1
+              item.integerProperty = 77
           }), sharedAsOf)
 
           world.revise(2, Change.forOneItem(Instant.ofEpochSecond(0L))(itemId, {
             item: IntegerHistory =>
-              item.integerProperty = 1981940010
-          }), sharedAsOf)
-
-          world.revise(3, Change.forOneItem(Instant.ofEpochSecond(3L))(itemId, {
-            item: IntegerHistory =>
-              item.integerProperty = 1
+              item.integerProperty = 55
           }), sharedAsOf)
 
           val scope =
