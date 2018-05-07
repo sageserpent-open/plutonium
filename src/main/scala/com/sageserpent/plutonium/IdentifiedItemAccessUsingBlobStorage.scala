@@ -122,11 +122,13 @@ trait IdentifiedItemAccessUsingBlobStorage
         patch.checkInvariants(this)
       }
 
-    val ancestorItemStateUpdateKeysOnMutatedItems =
+    val ancestorItemStateUpdateKeysOnMutatedItems
+      : Map[UniqueItemSpecification, Option[ItemStateUpdate.Key]] =
       itemsMutatedSinceLastHarvest
         .mapValues(
           _.asInstanceOf[ItemStateUpdateKeyTrackingApi].itemStateUpdateKey
         )
+        .toMap
 
     // NOTE: set this *after* performing the update, because mutations caused by the update can themselves
     // discover read dependencies that would otherwise be clobbered by the following block...
@@ -137,15 +139,18 @@ trait IdentifiedItemAccessUsingBlobStorage
     }
 
     // ... but make sure this happens *before* the snapshots are obtained. Imperative code, got to love it, eh!
-    val mutationSnapshots = itemsMutatedSinceLastHarvest map {
-      case (uniqueItemSpecification, item) =>
-        val snapshotBlob =
-          itemStateStorageUsingProxies.snapshotFor(item)
+    val mutationSnapshots: Map[UniqueItemSpecification, SnapshotBlob] =
+      itemsMutatedSinceLastHarvest map {
+        case (uniqueItemSpecification, item) =>
+          val snapshotBlob =
+            itemStateStorageUsingProxies.snapshotFor(item)
 
-        uniqueItemSpecification -> snapshotBlob
-    } toMap
+          uniqueItemSpecification -> snapshotBlob
+      } toMap
 
-    val mutatedItemResults = mutationSnapshots map {
+    val mutatedItemResults: Map[
+      UniqueItemSpecification,
+      (SnapshotBlob, Option[ItemStateUpdate.Key])] = mutationSnapshots map {
       case (uniqueItemSpecification, snapshot) =>
         uniqueItemSpecification -> (snapshot, ancestorItemStateUpdateKeysOnMutatedItems(
           uniqueItemSpecification))

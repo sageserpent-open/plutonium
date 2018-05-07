@@ -265,13 +265,13 @@ class LifecyclesStateImplementation(
 
                 val successorsTakenOverFromAPreviousItemStateUpdate
                   : Set[ItemStateUpdate.Key] =
-                  (mutatedItemSnapshots collect {
+                  ((mutatedItemSnapshots collect {
                     case (_, (_, Some(ancestorItemStateUpdateKey))) =>
                       successorsOf(ancestorItemStateUpdateKey)
                         .filter(successorOfAncestor =>
                           Ordering[ItemStateUpdate.Key].gt(successorOfAncestor,
                                                            itemStateUpdateKey))
-                  }) reduce (_ ++ _)
+                  }) flatten) toSet
 
                 val itemsNotStartingLifecyclesDueToThisPatch = mutatedItemSnapshots collect {
                   case (uniqueItemIdentifier, (_, Some(_))) =>
@@ -286,7 +286,7 @@ class LifecyclesStateImplementation(
                       lifecycleStartKeysPerItem
                         .get(uniqueItemSpecification)
                         .map(_ - itemStateUpdateKey)
-                        .filter(_.isEmpty)
+                        .filter(_.nonEmpty)
                         .fold(
                           lifecycleStartKeysPerItem - uniqueItemSpecification)(
                           keys =>
@@ -433,56 +433,6 @@ class LifecyclesStateImplementation(
       UniqueItemSpecification,
       SortedSet[ItemStateUpdate.Key]] = lifecycleStartKeysPerItem mapValues (_ -- itemStateUpdateKeysThatNeedToBeRevoked) filter (_._2.nonEmpty) mapValues (
         keys => SortedSet(keys.toSeq: _*))
-
-    /*    val unrevokedUpdatesThatStartLifecyclesAccordingToThePreviousRevision
-      : Seq[ItemStateUpdate.Key] =
-      newAndModifiedItemStateUpdates flatMap {
-        case (itemStateUpdateKey, ItemStateAnnihilation(annihilation)) =>
-          unrevokedLifecycleStartKeysPerItem
-            .get(annihilation.uniqueItemSpecification)
-            .flatMap(
-              _.keySet
-                .from(itemStateUpdateKey)
-                .dropWhile(
-                  key =>
-                    !Ordering[ItemStateUpdate.Key]
-                      .gt(key, itemStateUpdateKey)
-                )
-                .headOption)
-        case (itemStateUpdateKey, ItemStatePatch(patch)) =>
-          val itemsReferredToByPatch = patch.targetItemSpecification +: patch.argumentItemSpecifications
-          itemsReferredToByPatch.flatMap(
-            uniqueItemSpecification =>
-              unrevokedLifecycleStartKeysPerItem
-                .get(uniqueItemSpecification)
-                .flatMap(
-                  _.keySet
-                    .from(itemStateUpdateKey)
-                    .dropWhile(
-                      key =>
-                        !Ordering[ItemStateUpdate.Key]
-                          .gt(key, itemStateUpdateKey)
-                    )
-                    .headOption))
-      } filterNot itemStateUpdateKeysThatNeedToBeRevoked.contains*/
-
-    /*    val lifecycleStartKeysPerItemForNewTimeline =
-      (newAndModifiedItemStateUpdates :\ unrevokedLifecycleStartKeysPerItem) {
-        case ((itemStateUpdateKey, ItemStatePatch(patch)),
-              itemStateUpdateKeysPerItem) =>
-          val itemsReferredToByPatch = patch.targetItemSpecification +: patch
-            .argumentItemSpecifications
-          (itemsReferredToByPatch :\ itemStateUpdateKeysPerItem) {
-            case (uniqueItemSpecification, itemStateUpdateKeysPerItem) =>
-              itemStateUpdateKeysPerItem + (uniqueItemSpecification -> itemStateUpdateKeysPerItem
-                .get(uniqueItemSpecification)
-                .fold(SortedSet[ItemStateUpdate.Key](itemStateUpdateKey))(
-                  _ + itemStateUpdateKey))
-          }
-        case ((itemStateUpdateKey, ItemStateAnnihilation(_)),
-              itemStateUpdateKeysPerItem) =>
-          itemStateUpdateKeysPerItem
-      }*/
 
     val itemStateUpdatesToApply
       : PriorityMap[PriorityQueueKey, ItemStateUpdate.Key] =
