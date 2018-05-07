@@ -795,6 +795,46 @@ trait Bugs
         }
       }
     }
+
+    "booking in events in a mixed up order of physical time" should "work" in {
+      forAll(worldResourceGenerator) { worldResource =>
+        val itemId = "Fred"
+
+        val sharedAsOf = Instant.ofEpochSecond(0)
+
+        val expectedHistory = Seq(1981940010, 0, -1, 1)
+
+        worldResource acquireAndGet { world =>
+          world.revise(0, Change.forOneItem(Instant.ofEpochSecond(1L))(itemId, {
+            item: IntegerHistory =>
+              item.integerProperty = 0
+          }), sharedAsOf)
+
+          world.revise(1, Change.forOneItem(Instant.ofEpochSecond(1L))(itemId, {
+            item: IntegerHistory =>
+              item.integerProperty = -1
+          }), sharedAsOf)
+
+          world.revise(2, Change.forOneItem(Instant.ofEpochSecond(0L))(itemId, {
+            item: IntegerHistory =>
+              item.integerProperty = 1981940010
+          }), sharedAsOf)
+
+          world.revise(3, Change.forOneItem(Instant.ofEpochSecond(3L))(itemId, {
+            item: IntegerHistory =>
+              item.integerProperty = 1
+          }), sharedAsOf)
+
+          val scope =
+            world.scopeFor(PositiveInfinity[Instant](), world.nextRevision)
+
+          scope
+            .render(Bitemporal.withId[IntegerHistory](itemId))
+            .loneElement
+            .datums should contain theSameElementsInOrderAs expectedHistory
+        }
+      }
+    }
   }
 }
 
