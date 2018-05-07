@@ -172,15 +172,8 @@ class LifecyclesStateImplementation(
 
             itemStateUpdate match {
               case ItemStateAnnihilation(annihilation) =>
-                // TODO: having to reconstitute the item here is hokey when the act of applying the annihilation just afterwards will also do that too. Sort it out!
                 val ancestorKey: ItemStateUpdate.Key =
-                  identifiedItemAccess
-                    .reconstitute(annihilation.uniqueItemSpecification)
-                    .asInstanceOf[ItemStateUpdateKeyTrackingApi]
-                    .itemStateUpdateKey
-                    .get
-
-                annihilation(identifiedItemAccess)
+                  identifiedItemAccess(annihilation)
 
                 revisionBuilder.record(
                   itemStateUpdateKey,

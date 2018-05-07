@@ -32,6 +32,8 @@ trait IdentifiedItemAccessUsingBlobStorage
   val itemStateUpdateKeyOfPatchBeingApplied =
     new DynamicVariable[Option[ItemStateUpdate.Key]](None)
 
+  private var ancestorKeyOfAnnihilatedItem: Option[ItemStateUpdate.Key] = None
+
   private val itemsMutatedSinceLastHarvest =
     mutable.Map.empty[UniqueItemSpecification, ItemExtensionApi]
 
@@ -54,6 +56,11 @@ trait IdentifiedItemAccessUsingBlobStorage
           _uniqueItemSpecification
 
         def itemIsLocked: Boolean = false
+
+        override def recordAnnihilation(): Unit = {
+          ancestorKeyOfAnnihilatedItem = itemStateUpdateKey
+          super.recordAnnihilation()
+        }
 
         override def recordMutation(item: ItemExtensionApi): Unit = {
           itemsMutatedSinceLastHarvest.update(item.uniqueItemSpecification,
@@ -163,5 +170,15 @@ trait IdentifiedItemAccessUsingBlobStorage
     itemStateUpdateReadDependenciesDiscoveredSinceLastHarvest.clear()
 
     mutatedItemResults -> readDependencies
+  }
+
+  def apply(annihilation: Annihilation): ItemStateUpdate.Key = {
+    annihilation(this)
+
+    val ancestorKey: ItemStateUpdate.Key = ancestorKeyOfAnnihilatedItem.get
+
+    ancestorKeyOfAnnihilatedItem = None
+
+    ancestorKey
   }
 }
