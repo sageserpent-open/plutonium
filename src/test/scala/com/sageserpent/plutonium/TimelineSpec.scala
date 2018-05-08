@@ -1,10 +1,5 @@
 package com.sageserpent.plutonium
 
-import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
-import com.sageserpent.plutonium.LifecyclesStateImplementation.{
-  EndOfTimesliceTime,
-  ItemStateUpdateTime
-}
 import org.scalacheck.{ShrinkLowPriority => NoShrinking}
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
@@ -13,19 +8,19 @@ import org.scalatest.{FlatSpec, Inspectors, Matchers}
 import scala.collection.immutable.TreeMap
 import scala.util.Random
 
-class LifecyclesStateSpec
+class TimelineSpec
     extends FlatSpec
     with Matchers
     with GeneratorDrivenPropertyChecks
     with NoShrinking
     with WorldSpecSupport {
 
-  type EventId = Int
+  type SpecificEventId = Int
 
   "Booking in events in one block revision" should "capture the correct state in the blob storage" in {
     forAll(recordingsGroupedByIdGenerator(forbidAnnihilations = false),
            unboundedInstantGenerator) { (recordingsGroupedById, queryWhen) =>
-      val events: Map[EventId, Some[Event]] = TreeMap(
+      val events: Map[SpecificEventId, Some[Event]] = TreeMap(
         // Use 'TreeMap' as it won't rearrange the key ordering. We do this purely
         // to ensure that events that occur at the same time won't be shuffled as
         // they go into the map wrt the expected histories.
@@ -34,14 +29,9 @@ class LifecyclesStateSpec
         }: _*)
 
       val itemCache: ItemCache =
-        new ItemCacheUsingBlobStorage[ItemStateUpdateTime](
-          noLifecyclesState()
-            .revise(events,
-                    BlobStorageInMemory[ItemStateUpdateTime,
-                                        ItemStateUpdate.Key,
-                                        SnapshotBlob]())
-            ._2,
-          EndOfTimesliceTime(queryWhen))
+        emptyTimeline()
+          .revise(events)
+          .itemCacheAt(queryWhen)
 
       val checks = for {
         RecordingsNoLaterThan(
@@ -76,7 +66,7 @@ class LifecyclesStateSpec
     ) { (recordingsGroupedById, obsoleteEvents, seed, queryWhen) =>
       val events = recordingsGroupedById.flatMap(_.events) map (_._2)
 
-      val eventsInOneBlock: Map[EventId, Some[Event]] = TreeMap(
+      val eventsInOneBlock: Map[SpecificEventId, Some[Event]] = TreeMap(
         // Use 'TreeMap' as it won't rearrange the key ordering. We do this purely
         // to ensure that events that occur at the same time won't be shuffled as
         // they go into the map wrt the expected histories.
@@ -84,44 +74,26 @@ class LifecyclesStateSpec
           case (event, index) => index -> Some(event)
         }: _*)
 
-      val blobStorageResultingFromBlockBooking
-        : BlobStorage[ItemStateUpdateTime, ItemStateUpdate.Key, SnapshotBlob] =
-        noLifecyclesState()
-          .revise(eventsInOneBlock,
-                  BlobStorageInMemory[ItemStateUpdateTime,
-                                      ItemStateUpdate.Key,
-                                      SnapshotBlob]())
-          ._2
+      val itemCacheFromBlockBooking =
+        emptyTimeline()
+          .revise(eventsInOneBlock)
+          .itemCacheAt(queryWhen)
 
       val random = new Random(seed)
 
       val severalRevisionBookingsWithObsoleteEventsThrownIn
-        : List[Map[EventId, Option[Event]]] =
+        : List[Map[SpecificEventId, Option[Event]]] =
         intersperseObsoleteEvents(random, events, obsoleteEvents) map (
             booking => TreeMap(booking.map(_.swap): _*)) toList
 
-      val blobStorageResultingFromIncrementalBookings
-        : BlobStorage[ItemStateUpdateTime, ItemStateUpdate.Key, SnapshotBlob] =
-        ((noLifecyclesState() -> (BlobStorageInMemory[
-          ItemStateUpdateTime,
-          ItemStateUpdate.Key,
-          SnapshotBlob](): BlobStorage[
-          ItemStateUpdateTime,
-          ItemStateUpdate.Key,
-          SnapshotBlob])) /: severalRevisionBookingsWithObsoleteEventsThrownIn) {
-          case ((lifecyclesState, blobStorage), booking) =>
-            lifecyclesState.revise(booking, blobStorage)
-        }._2
-
-      val itemCacheFromBlockBooking =
-        new ItemCacheUsingBlobStorage[ItemStateUpdateTime](
-          blobStorageResultingFromBlockBooking,
-          EndOfTimesliceTime(queryWhen))
+      val timelineResultingFromIncrementalBookings =
+        ((emptyTimeline(): Timeline) /: severalRevisionBookingsWithObsoleteEventsThrownIn) {
+          case (timeline, booking) =>
+            timeline.revise(booking)
+        }
 
       val itemCacheFromIncrementalBookings =
-        new ItemCacheUsingBlobStorage[ItemStateUpdateTime](
-          blobStorageResultingFromIncrementalBookings,
-          EndOfTimesliceTime(queryWhen))
+        timelineResultingFromIncrementalBookings.itemCacheAt(queryWhen)
 
       val checks = for {
         RecordingsNoLaterThan(historyId, historiesFrom, _, _, _) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(

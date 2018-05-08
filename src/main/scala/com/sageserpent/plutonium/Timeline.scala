@@ -15,6 +15,6 @@ trait Timeline {
 }
 
 object emptyTimeline {
-  def apply[EventId]() =
+  def apply() =
     new TimelineImplementation
 }
