@@ -9,11 +9,11 @@ import com.sageserpent.plutonium.Lifecycle.FusionResult
 import scala.reflect.runtime.universe.TypeTag
 
 object Lifecycle {
-  val orderingByStartTime: Ordering[Lifecycle[_]] =
-    Ordering.by[Lifecycle[_], Unbounded[Instant]](_.startTime)
+  val orderingByStartTime: Ordering[Lifecycle] =
+    Ordering.by[Lifecycle, Unbounded[Instant]](_.startTime)
 
-  val orderingByEndTime: Ordering[Lifecycle[_]] =
-    Ordering.by[Lifecycle[_], Unbounded[Instant]](
+  val orderingByEndTime: Ordering[Lifecycle] =
+    Ordering.by[Lifecycle, Unbounded[Instant]](
       _.endTime.getOrElse(PositiveInfinity()))
 
   trait PatchKind
@@ -22,24 +22,21 @@ object Lifecycle {
 
   case object Measurement extends PatchKind
 
-  def apply[EventId](eventId: EventId,
-                     when: Unbounded[Instant],
-                     patch: AbstractPatch,
-                     kind: PatchKind): Seq[Lifecycle[EventId]] = ???
+  def apply(eventId: EventId,
+            when: Unbounded[Instant],
+            patch: AbstractPatch,
+            kind: PatchKind): Seq[Lifecycle] = ???
 
-  trait FusionResult[EventId]
+  trait FusionResult
 
-  case class Split[EventId](first: Lifecycle[EventId],
-                            second: Lifecycle[EventId])
-      extends FusionResult[EventId] {
+  case class Split(first: Lifecycle, second: Lifecycle) extends FusionResult {
     require(first.endTime.fold(false)(_ < second.startTime))
   }
 
-  case class Merge[EventId](merged: Lifecycle[EventId])
-      extends FusionResult[EventId]
+  case class Merge(merged: Lifecycle) extends FusionResult
 }
 
-trait Lifecycle[EventId] {
+trait Lifecycle {
   import Lifecycle.FusionResult
 
   val uniqueItemSpecification: UniqueItemSpecification
@@ -50,14 +47,14 @@ trait Lifecycle[EventId] {
 
   require(lowerBoundTypeTag.tpe <:< upperBoundTypeTag.tpe)
 
-  def isInconsistentWith(another: Lifecycle[EventId]): Boolean =
+  def isInconsistentWith(another: Lifecycle): Boolean =
     (another.upperBoundTypeTag.tpe <:< this.upperBoundTypeTag.tpe || this.upperBoundTypeTag.tpe <:< another.upperBoundTypeTag.tpe) && !this
       .isFusibleWith(another)
 
-  def isFusibleWith(another: Lifecycle[EventId]): Boolean =
+  def isFusibleWith(another: Lifecycle): Boolean =
     this.lowerBoundTypeTag.tpe <:< another.lowerBoundTypeTag.tpe || another.lowerBoundTypeTag.tpe <:< this.lowerBoundTypeTag.tpe
 
-  def overlapsWith(another: Lifecycle[EventId]): Boolean =
+  def overlapsWith(another: Lifecycle): Boolean =
     !(this.endTime.fold(false)(_ < another.startTime) || another.endTime.fold(
       false)(_ < this.startTime))
 
@@ -65,17 +62,16 @@ trait Lifecycle[EventId] {
 
   val endTime: Option[Unbounded[Instant]]
 
-  def fuseWith(another: Lifecycle[EventId]): FusionResult[EventId]
+  def fuseWith(another: Lifecycle): FusionResult
 
-  def annul(eventId: EventId): Lifecycle[EventId]
+  def annul(eventId: EventId): Lifecycle
 }
 
-trait LifecycleContracts[EventId] extends Lifecycle[EventId] {
+trait LifecycleContracts extends Lifecycle {
   require(endTime.fold(true)(startTime < _))
   require(lowerBoundTypeTag.tpe <:< upperBoundTypeTag.tpe)
 
-  abstract override def fuseWith(
-      another: Lifecycle[EventId]): FusionResult[EventId] = {
+  abstract override def fuseWith(another: Lifecycle): FusionResult = {
     require(
       this.uniqueItemSpecification.id == another.uniqueItemSpecification.id)
     require(isFusibleWith(another))
@@ -85,26 +81,26 @@ trait LifecycleContracts[EventId] extends Lifecycle[EventId] {
   }
 }
 
-trait Lifecycles[EventId] {
+trait Lifecycles {
   // TODO - how do we get root patches out to prime the update plan? Use a state transformer monad?
   // Where does the patch dag come into this, if at all? How do *new* root patches make their way into the dag?
   val uniqueItemSpecification: UniqueItemSpecification
 
-  def annul(eventId: EventId): Lifecycles[EventId]
+  def annul(eventId: EventId): Lifecycles
 
   def recordPatchFromChange(eventId: EventId,
                             when: Unbounded[Instant],
-                            patch: AbstractPatch): Lifecycles[EventId]
+                            patch: AbstractPatch): Lifecycles
 
   def recordPatchFromMeasurement(eventId: EventId,
                                  when: Unbounded[Instant],
-                                 patch: AbstractPatch): Lifecycles[EventId]
+                                 patch: AbstractPatch): Lifecycles
 
   def recordAnnihilation(eventId: EventId,
-                         annihilation: Annihilation): Lifecycles[EventId]
+                         annihilation: Annihilation): Lifecycles
 }
 
-class LifecyclesImplementation[EventId] extends Lifecycles[EventId] {
+class LifecyclesImplementation extends Lifecycles {
   // TODO: need to store each lifecycle somewhere - how about in a map keyed by id, where each maplet refers to an ordered sequence of lifecycles for that id?
   // This implies an invariant - the lifecycles in a maplet must not conflict - so no overlaps are permitted, they should all be fused already.
 
@@ -116,19 +112,17 @@ class LifecyclesImplementation[EventId] extends Lifecycles[EventId] {
 
   override val uniqueItemSpecification: UniqueItemSpecification = ???
 
-  override def annul(eventId: EventId): Lifecycles[EventId] = ???
+  override def annul(eventId: EventId): Lifecycles = ???
 
-  override def recordPatchFromChange(
-      eventId: EventId,
-      when: Unbounded[Instant],
-      patch: AbstractPatch): Lifecycles[EventId] = ???
+  override def recordPatchFromChange(eventId: EventId,
+                                     when: Unbounded[Instant],
+                                     patch: AbstractPatch): Lifecycles = ???
 
-  override def recordPatchFromMeasurement(
-      eventId: EventId,
-      when: Unbounded[Instant],
-      patch: AbstractPatch): Lifecycles[EventId] = ???
+  override def recordPatchFromMeasurement(eventId: EventId,
+                                          when: Unbounded[Instant],
+                                          patch: AbstractPatch): Lifecycles =
+    ???
 
-  override def recordAnnihilation(
-      eventId: EventId,
-      annihilation: Annihilation): Lifecycles[EventId] = ???
+  override def recordAnnihilation(eventId: EventId,
+                                  annihilation: Annihilation): Lifecycles = ???
 }
