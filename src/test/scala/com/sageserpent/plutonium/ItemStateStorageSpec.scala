@@ -236,7 +236,8 @@ class ItemStateStorageSpec
             idToFallbackItemMap(uniqueItemSpecification.id).asInstanceOf[Item]
 
           override protected def fallbackAnnihilatedItemFor[Item](
-              uniqueItemSpecification: UniqueItemSpecification): Item =
+              uniqueItemSpecification: UniqueItemSpecification,
+              lifecycleUUID: UUID): Item =
             idToFallbackItemMap(uniqueItemSpecification.id).asInstanceOf[Item]
 
           // The following implementation is the epitome of hokeyness. Well, it's just test code... Hmmm.

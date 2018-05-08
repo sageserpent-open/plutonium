@@ -148,9 +148,6 @@ trait StatefulItemProxyFactory extends ProxyFactory {
 
       superCall.call()
 
-      acquiredState.recordReadOnlyAccess(target) // NOTE: because a mutation is entitled to modify existing state via field access and access to
-      // objects that are not item proxies but form part of the target item's state, we have to play
-      // safe and regard a mutations as a superset of read-only accesses.
       acquiredState.recordMutation(target)
     }
   }
