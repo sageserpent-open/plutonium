@@ -1,3 +1,4 @@
+/*
 package com.sageserpent.plutonium
 
 import java.time.Instant
@@ -25,7 +26,7 @@ object Lifecycle {
   def apply(eventId: EventId,
             when: Unbounded[Instant],
             patch: AbstractPatch,
-            kind: PatchKind): Seq[Lifecycle] = ???
+            kind: PatchKind): Lifecycle = ???
 
   trait FusionResult
 
@@ -126,3 +127,6 @@ class LifecyclesImplementation extends Lifecycles {
   override def recordAnnihilation(eventId: EventId,
                                   annihilation: Annihilation): Lifecycles = ???
 }
+
+
+ */
