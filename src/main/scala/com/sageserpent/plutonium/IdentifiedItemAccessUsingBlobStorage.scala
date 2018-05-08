@@ -32,6 +32,8 @@ trait IdentifiedItemAccessUsingBlobStorage
   val itemStateUpdateKeyOfPatchBeingApplied =
     new DynamicVariable[Option[ItemStateUpdate.Key]](None)
 
+  private var ancestorKeyOfAnnihilatedItem: Option[ItemStateUpdate.Key] = None
+
   private val itemsMutatedSinceLastHarvest =
     mutable.Map.empty[UniqueItemSpecification, ItemExtensionApi]
 
@@ -54,6 +56,11 @@ trait IdentifiedItemAccessUsingBlobStorage
           _uniqueItemSpecification
 
         def itemIsLocked: Boolean = false
+
+        override def recordAnnihilation(): Unit = {
+          ancestorKeyOfAnnihilatedItem = itemStateUpdateKey
+          super.recordAnnihilation()
+        }
 
         override def recordMutation(item: ItemExtensionApi): Unit = {
           itemsMutatedSinceLastHarvest.update(item.uniqueItemSpecification,
@@ -113,18 +120,25 @@ trait IdentifiedItemAccessUsingBlobStorage
   }
 
   def apply(patch: AbstractPatch, itemStateUpdateKey: ItemStateUpdate.Key)
-    : (Map[UniqueItemSpecification, SnapshotBlob], Set[ItemStateUpdate.Key]) = {
+    : (Map[UniqueItemSpecification,
+           (SnapshotBlob, Option[ItemStateUpdate.Key])],
+       Set[ItemStateUpdate.Key]) = {
     itemStateUpdateKeyOfPatchBeingApplied
       .withValue(Some(itemStateUpdateKey)) {
         patch(this)
         patch.checkInvariants(this)
       }
 
-    val readDependencies: Set[ItemStateUpdate.Key] =
-      itemStateUpdateReadDependenciesDiscoveredSinceLastHarvest.toSet
+    val ancestorItemStateUpdateKeysOnMutatedItems
+      : Map[UniqueItemSpecification, Option[ItemStateUpdate.Key]] =
+      itemsMutatedSinceLastHarvest
+        .mapValues(
+          _.asInstanceOf[ItemStateUpdateKeyTrackingApi].itemStateUpdateKey
+        )
+        .toMap
 
-    // NOTE: set this *after* getting the read dependencies, because mutations caused by the item state update being applied
-    // can themselves discover read dependencies that would otherwise be clobbered by the following block...
+    // NOTE: set this *after* performing the update, because mutations caused by the update can themselves
+    // discover read dependencies that would otherwise be clobbered by the following block...
     for (item <- itemsMutatedSinceLastHarvest.values) {
       item
         .asInstanceOf[ItemStateUpdateKeyTrackingApi]
@@ -132,17 +146,39 @@ trait IdentifiedItemAccessUsingBlobStorage
     }
 
     // ... but make sure this happens *before* the snapshots are obtained. Imperative code, got to love it, eh!
-    val mutationSnapshots = itemsMutatedSinceLastHarvest map {
-      case (uniqueItemSpecification, item) =>
-        val snapshotBlob =
-          itemStateStorageUsingProxies.snapshotFor(item)
+    val mutationSnapshots: Map[UniqueItemSpecification, SnapshotBlob] =
+      itemsMutatedSinceLastHarvest map {
+        case (uniqueItemSpecification, item) =>
+          val snapshotBlob =
+            itemStateStorageUsingProxies.snapshotFor(item)
 
-        uniqueItemSpecification -> snapshotBlob
-    } toMap
+          uniqueItemSpecification -> snapshotBlob
+      } toMap
+
+    val mutatedItemResults: Map[
+      UniqueItemSpecification,
+      (SnapshotBlob, Option[ItemStateUpdate.Key])] = mutationSnapshots map {
+      case (uniqueItemSpecification, snapshot) =>
+        uniqueItemSpecification -> (snapshot, ancestorItemStateUpdateKeysOnMutatedItems(
+          uniqueItemSpecification))
+    }
+
+    val readDependencies: Set[ItemStateUpdate.Key] =
+      itemStateUpdateReadDependenciesDiscoveredSinceLastHarvest.toSet
 
     itemsMutatedSinceLastHarvest.clear()
     itemStateUpdateReadDependenciesDiscoveredSinceLastHarvest.clear()
 
-    mutationSnapshots -> readDependencies
+    mutatedItemResults -> readDependencies
+  }
+
+  def apply(annihilation: Annihilation): ItemStateUpdate.Key = {
+    annihilation(this)
+
+    val ancestorKey: ItemStateUpdate.Key = ancestorKeyOfAnnihilatedItem.get
+
+    ancestorKeyOfAnnihilatedItem = None
+
+    ancestorKey
   }
 }
