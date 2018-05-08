@@ -486,7 +486,7 @@ class TimelineImplementation(
     }).values.toSeq sortBy (_.head._2) map (_.map(_._1))
 
     (itemStateUpdatesGroupedByEventIdPreservingOriginalOrder flatMap (_.zipWithIndex) map {
-      case (((itemStateUpdate, eventId), intraEventIndex)) =>
+      case ((itemStateUpdate, eventId), intraEventIndex) =>
         val itemStateUpdateKey =
           ItemStateUpdate.Key(eventId, intraEventIndex)
         itemStateUpdateKey -> itemStateUpdate
