@@ -6,13 +6,9 @@ import com.sageserpent.americium.{PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.BlobStorage.SnapshotRetrievalApi
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
-import com.sageserpent.plutonium.ItemStateUpdate.IntraEventIndex
 import com.sageserpent.plutonium.PatchRecorder.UpdateConsumer
 import com.sageserpent.plutonium.World.{Revision, initialRevision}
-import com.sageserpent.plutonium.WorldImplementationCodeFactoring.{
-  EventData,
-  EventOrderingKey
-}
+import com.sageserpent.plutonium.WorldImplementationCodeFactoring.EventData
 import de.ummels.prioritymap.PriorityMap
 import quiver._
 
@@ -27,80 +23,12 @@ object TimelineImplementation {
   case class PriorityQueueKey(itemStateUpdateKey: ItemStateUpdate.Key,
                               isAlreadyReferencedAsADependencyInTheDag: Boolean)
 
-  sealed trait ItemStateUpdateTime
-
-  case class IntraTimesliceTime(eventOrderingKey: EventOrderingKey,
-                                intraEventIndex: IntraEventIndex)
-      extends ItemStateUpdateTime
-
-  case class EndOfTimesliceTime(when: Unbounded[Instant])
-      extends ItemStateUpdateTime
-
-  implicit val itemStateUpdateTimeOrdering: Ordering[ItemStateUpdateTime] =
-    (first: ItemStateUpdateTime, second: ItemStateUpdateTime) =>
-      first -> second match {
-        case (IntraTimesliceTime(firstEventOrderingKey, firstIntraEventIndex),
-              IntraTimesliceTime(secondEventOrderingKey,
-                                 secondIntraEventIndex)) =>
-          Ordering[(EventOrderingKey, IntraEventIndex)].compare(
-            firstEventOrderingKey  -> firstIntraEventIndex,
-            secondEventOrderingKey -> secondIntraEventIndex)
-        case (IntraTimesliceTime((firstWhen, _, _), _),
-              EndOfTimesliceTime(secondWhen)) =>
-          if (firstWhen > secondWhen) 1 else -1 // NOTE: they can't be equal.
-        case (EndOfTimesliceTime(firstWhen),
-              IntraTimesliceTime((secondWhen, _, _), _)) =>
-          if (firstWhen < secondWhen) -1 else 1 // NOTE: they can't be equal.
-        case (EndOfTimesliceTime(firstWhen), EndOfTimesliceTime(secondWhen)) =>
-          Ordering[Unbounded[Instant]].compare(firstWhen, secondWhen)
-    }
-
-  case class EventsRevisionOutcome[AllEventsType <: AllEvents](
-      events: AllEventsType,
-      itemStateUpdateKeysThatNeedToBeRevoked: Set[ItemStateUpdate.Key],
-      newOrModifiedItemStateUpdates: Map[ItemStateUpdate.Key, ItemStateUpdate]) {
-    def flatMap(step: AllEventsType => EventsRevisionOutcome[AllEventsType])
-      : EventsRevisionOutcome[AllEventsType] = {
-      val EventsRevisionOutcome(eventsFromStep,
-                                itemStateUpdateKeysThatNeedToBeRevokedFromStep,
-                                newOrModifiedItemStateUpdatesFromStep) = step(
-        events)
-      EventsRevisionOutcome(
-        eventsFromStep,
-        itemStateUpdateKeysThatNeedToBeRevokedFromStep -- newOrModifiedItemStateUpdates.keys ++ itemStateUpdateKeysThatNeedToBeRevoked,
-        newOrModifiedItemStateUpdates -- itemStateUpdateKeysThatNeedToBeRevokedFromStep ++ newOrModifiedItemStateUpdatesFromStep
-      )
-    }
-  }
-
-  trait AllEvents {
-    // TODO: we can get the lifecycle start keys from there too...
-
-    type AllEventsType <: AllEvents
-
-    def revise(events: Map[_ <: EventId, Option[Event]])
-      : EventsRevisionOutcome[AllEventsType]
-
-    def retainUpTo(when: Unbounded[Instant]): AllEvents
-
-    def itemStateUpdateTime(
-        itemStateUpdateKey: ItemStateUpdate.Key): ItemStateUpdateTime
-
-    def when(itemStateUpdateKey: ItemStateUpdate.Key): Unbounded[Instant] =
-      itemStateUpdateTime(itemStateUpdateKey) match {
-        case IntraTimesliceTime((when, _, _), _) => when
-        case EndOfTimesliceTime(when)            => when
-      }
-  }
-
-  val noEvents = new AllEventsImplementation(boringOldEventsMap = Map.empty,
-                                             itemStateUpdates = Set.empty)
-
   class AllEventsImplementation(
       boringOldEventsMap: Map[EventId, EventData],
       itemStateUpdates: Set[(ItemStateUpdate.Key, ItemStateUpdate)],
       nextRevision: Revision = initialRevision)
       extends AllEvents {
+    import AllEvents.EventsRevisionOutcome
     import scalaz.std.list._
     import scalaz.syntax.monadPlus._
     import scalaz.{-\/, \/-}
@@ -233,61 +161,21 @@ object TimelineImplementation {
     }
   }
 
-  class AllEventsSplendidImplementation extends AllEvents {
-    override type AllEventsType = AllEventsSplendidImplementation
-
-    override def revise(events: Map[_ <: EventId, Option[Event]])
-      : EventsRevisionOutcome[AllEventsType] = {
-
-      val initialOutcome = EventsRevisionOutcome(
-        events = this,
-        itemStateUpdateKeysThatNeedToBeRevoked = Set.empty,
-        newOrModifiedItemStateUpdates = Map.empty)
-
-      (events :\ initialOutcome) {
-        case ((eventId, Some(change: Change)), eventRevisionOutcome) =>
-          eventRevisionOutcome.flatMap(_.record(eventId, change))
-        case ((eventId, Some(measurement: Measurement)),
-              eventRevisionOutcome) =>
-          eventRevisionOutcome.flatMap(_.record(eventId, measurement))
-        case ((eventId, None), eventRevisionOutcome) =>
-          eventRevisionOutcome.flatMap(_.annul(eventId))
-      }
-    }
-
-    override def retainUpTo(when: Unbounded[Instant]): AllEvents = ???
-
-    override def itemStateUpdateTime(
-        itemStateUpdateKey: ItemStateUpdate.Key): ItemStateUpdateTime = ???
-
-    def annul(eventId: EventId): EventsRevisionOutcome[AllEventsType] = ???
-
-    def record(eventId: EventId,
-               change: Change): EventsRevisionOutcome[AllEventsType] = ???
-
-    def record(eventId: EventId,
-               measurement: Measurement): EventsRevisionOutcome[AllEventsType] =
-      ???
-
-    def record(
-        eventId: EventId,
-        annihilation: Annihilation): EventsRevisionOutcome[AllEventsType] = ???
-  }
 }
 
 class TimelineImplementation(
-    allEvents: TimelineImplementation.AllEvents =
-      TimelineImplementation.noEvents,
+    allEvents: AllEvents = AllEvents.noEvents,
     itemStateUpdatesDag: TimelineImplementation.ItemStateUpdatesDag = empty,
     lifecycleStartKeysPerItem: Map[UniqueItemSpecification,
                                    SortedSet[ItemStateUpdate.Key]] = Map.empty,
-    blobStorage: BlobStorage[TimelineImplementation.ItemStateUpdateTime,
+    blobStorage: BlobStorage[ItemStateUpdateTime,
                              ItemStateUpdate.Key,
                              SnapshotBlob] =
-      BlobStorageInMemory[TimelineImplementation.ItemStateUpdateTime,
+      BlobStorageInMemory[ItemStateUpdateTime,
                           ItemStateUpdate.Key,
                           SnapshotBlob]())
     extends Timeline {
+  import AllEvents.EventsRevisionOutcome
   import TimelineImplementation._
 
   override def revise(events: Map[_ <: EventId, Option[Event]]): Timeline = {
