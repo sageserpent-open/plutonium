@@ -15,9 +15,6 @@ import com.sageserpent.plutonium.WorldImplementationCodeFactoring.{
 }
 import de.ummels.prioritymap.PriorityMap
 import quiver._
-import scalaz.std.list._
-import scalaz.syntax.monadPlus._
-import scalaz.{-\/, \/-}
 
 import scala.annotation.tailrec
 import scala.collection.immutable.{Map, SortedSet}
@@ -58,15 +55,31 @@ object TimelineImplementation {
           Ordering[Unbounded[Instant]].compare(firstWhen, secondWhen)
     }
 
-  case class EventsRevisionOutcome(
-      events: AllEvents,
+  case class EventsRevisionOutcome[AllEventsType <: AllEvents](
+      events: AllEventsType,
       itemStateUpdateKeysThatNeedToBeRevoked: Set[ItemStateUpdate.Key],
-      newOrModifiedItemStateUpdates: Map[ItemStateUpdate.Key, ItemStateUpdate])
+      newOrModifiedItemStateUpdates: Map[ItemStateUpdate.Key, ItemStateUpdate]) {
+    def flatMap(step: AllEventsType => EventsRevisionOutcome[AllEventsType])
+      : EventsRevisionOutcome[AllEventsType] = {
+      val EventsRevisionOutcome(eventsFromStep,
+                                itemStateUpdateKeysThatNeedToBeRevokedFromStep,
+                                newOrModifiedItemStateUpdatesFromStep) = step(
+        events)
+      EventsRevisionOutcome(
+        eventsFromStep,
+        itemStateUpdateKeysThatNeedToBeRevokedFromStep -- newOrModifiedItemStateUpdates.keys ++ itemStateUpdateKeysThatNeedToBeRevoked,
+        newOrModifiedItemStateUpdates -- itemStateUpdateKeysThatNeedToBeRevokedFromStep ++ newOrModifiedItemStateUpdatesFromStep
+      )
+    }
+  }
 
   trait AllEvents {
     // TODO: we can get the lifecycle start keys from there too...
 
-    def revise(events: Map[_ <: EventId, Option[Event]]): EventsRevisionOutcome
+    type AllEventsType <: AllEvents
+
+    def revise(events: Map[_ <: EventId, Option[Event]])
+      : EventsRevisionOutcome[AllEventsType]
 
     def retainUpTo(when: Unbounded[Instant]): AllEvents
 
@@ -88,8 +101,14 @@ object TimelineImplementation {
       itemStateUpdates: Set[(ItemStateUpdate.Key, ItemStateUpdate)],
       nextRevision: Revision = initialRevision)
       extends AllEvents {
-    override def revise(
-        events: Map[_ <: EventId, Option[Event]]): EventsRevisionOutcome = {
+    import scalaz.std.list._
+    import scalaz.syntax.monadPlus._
+    import scalaz.{-\/, \/-}
+
+    override type AllEventsType = AllEventsImplementation
+
+    override def revise(events: Map[_ <: EventId, Option[Event]])
+      : EventsRevisionOutcome[AllEventsType] = {
       val (annulledEvents, newEvents) =
         (events.toList map {
           case (eventId, Some(event)) => \/-(eventId -> event)
@@ -104,17 +123,6 @@ object TimelineImplementation {
 
       buildFrom(updatedBoringOldEventsMap)
     }
-
-    /*    def annul(eventId: EventId): EventsRevisionOutcome = ???
-
-    def record(eventId: EventId,
-                        change: Change): EventsRevisionOutcome = ???
-
-    def record(eventId: EventId,
-                        measurement: Measurement): EventsRevisionOutcome = ???
-
-    def record(eventId: EventId,
-                        annihilation: Annihilation): EventsRevisionOutcome = ???*/
 
     override def retainUpTo(when: Unbounded[Instant]): AllEvents =
       new AllEventsImplementation(
@@ -224,6 +232,47 @@ object TimelineImplementation {
       )
     }
   }
+
+  class AllEventsSplendidImplementation extends AllEvents {
+    override type AllEventsType = AllEventsSplendidImplementation
+
+    override def revise(events: Map[_ <: EventId, Option[Event]])
+      : EventsRevisionOutcome[AllEventsType] = {
+
+      val initialOutcome = EventsRevisionOutcome(
+        events = this,
+        itemStateUpdateKeysThatNeedToBeRevoked = Set.empty,
+        newOrModifiedItemStateUpdates = Map.empty)
+
+      (events :\ initialOutcome) {
+        case ((eventId, Some(change: Change)), eventRevisionOutcome) =>
+          eventRevisionOutcome.flatMap(_.record(eventId, change))
+        case ((eventId, Some(measurement: Measurement)),
+              eventRevisionOutcome) =>
+          eventRevisionOutcome.flatMap(_.record(eventId, measurement))
+        case ((eventId, None), eventRevisionOutcome) =>
+          eventRevisionOutcome.flatMap(_.annul(eventId))
+      }
+    }
+
+    override def retainUpTo(when: Unbounded[Instant]): AllEvents = ???
+
+    override def itemStateUpdateTime(
+        itemStateUpdateKey: ItemStateUpdate.Key): ItemStateUpdateTime = ???
+
+    def annul(eventId: EventId): EventsRevisionOutcome[AllEventsType] = ???
+
+    def record(eventId: EventId,
+               change: Change): EventsRevisionOutcome[AllEventsType] = ???
+
+    def record(eventId: EventId,
+               measurement: Measurement): EventsRevisionOutcome[AllEventsType] =
+      ???
+
+    def record(
+        eventId: EventId,
+        annihilation: Annihilation): EventsRevisionOutcome[AllEventsType] = ???
+  }
 }
 
 class TimelineImplementation(
@@ -244,8 +293,9 @@ class TimelineImplementation(
   override def revise(events: Map[_ <: EventId, Option[Event]]): Timeline = {
     val EventsRevisionOutcome(allEventsForNewTimeline,
                               itemStateUpdateKeysThatNeedToBeRevoked,
-                              newAndModifiedItemStateUpdates) = allEvents
-      .revise(events)
+                              newAndModifiedItemStateUpdates) =
+      allEvents
+        .revise(events)
 
     implicit val itemStateUpdateKeyOrderingAccordingToThisRevision
       : Ordering[ItemStateUpdate.Key] =
