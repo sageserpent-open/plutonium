@@ -2,12 +2,68 @@ package com.sageserpent.plutonium
 
 import java.time.Instant
 
-import com.sageserpent.americium.Unbounded
+import com.sageserpent.americium.{NegativeInfinity, PositiveInfinity, Unbounded}
+import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
+import de.sciss.fingertree.RangedSeq
 
 import scala.collection.immutable.Map
+import scala.reflect.runtime.universe.TypeTag
+import ItemStateUpdateTime.itemStateUpdateTimeOrdering
 
-class AllEventsSplendidImplementation extends AllEvents {
+object AllEventsSplendidImplementation {
+  // NASTY HACK: we can get away with this for now, as 'Event' currently forbids
+  // the booking of events at 'PositiveInfinity'. Yes, this is very hokey.
+  val sentinelForEndTimeOfLifecycleWithoutAnnihilation = UpperBoundOfTimeslice(
+    PositiveInfinity())
+
+  type LifecycleEndPoints = (ItemStateUpdateTime, ItemStateUpdateTime)
+
+  trait Lifecycle {
+    val startTime: ItemStateUpdateTime
+
+    val endTime: ItemStateUpdateTime
+
+    require(Ordering[ItemStateUpdateTime].lt(startTime, endTime))
+
+    val endPoints: LifecycleEndPoints = startTime -> endTime
+
+    val uniqueItemSpecification: UniqueItemSpecification
+
+    val lowerBoundTypeTag = uniqueItemSpecification.typeTag
+
+    val upperBoundTypeTag: TypeTag[_]
+
+    require(lowerBoundTypeTag.tpe <:< upperBoundTypeTag.tpe)
+
+    def isInconsistentWith(another: Lifecycle): Boolean =
+      (another.upperBoundTypeTag.tpe <:< this.upperBoundTypeTag.tpe || this.upperBoundTypeTag.tpe <:< another.upperBoundTypeTag.tpe) && !this
+        .isFusibleWith(another)
+
+    def isFusibleWith(another: Lifecycle): Boolean =
+      this.lowerBoundTypeTag.tpe <:< another.lowerBoundTypeTag.tpe || another.lowerBoundTypeTag.tpe <:< this.lowerBoundTypeTag.tpe
+
+    // NOTE: this is quite defensive, we can answer with 'None' if 'when' is not greater than the start time.
+    def retainUpTo(when: Unbounded[Instant]): Option[Lifecycle]
+  }
+
+  trait LifecycleContracts extends Lifecycle // TODO - see if we need this...
+
+  implicit val endPoints = (_: Lifecycle).endPoints
+
+  type Lifecycles = RangedSeq[Lifecycle, ItemStateUpdateTime]
+
+  type EventItemFootprint = (ItemStateUpdateTime, Set[Any])
+}
+
+class AllEventsSplendidImplementation(
+    lifecycleSetsInvolvingEvent: Map[
+      EventId,
+      AllEventsSplendidImplementation.EventItemFootprint] = Map.empty,
+    lifecyclesById: Map[Any, AllEventsSplendidImplementation.Lifecycles] =
+      Map.empty)
+    extends AllEvents {
   import AllEvents.EventsRevisionOutcome
+  import AllEventsSplendidImplementation.Lifecycle
 
   override type AllEventsType = AllEventsSplendidImplementation
 
@@ -21,15 +77,40 @@ class AllEventsSplendidImplementation extends AllEvents {
 
     (events :\ initialOutcome) {
       case ((eventId, Some(change: Change)), eventRevisionOutcome) =>
-        eventRevisionOutcome.flatMap(_.record(eventId, change))
+        eventRevisionOutcome.flatMap(
+          _.annul(eventId).flatMap(_.record(eventId, change)))
       case ((eventId, Some(measurement: Measurement)), eventRevisionOutcome) =>
-        eventRevisionOutcome.flatMap(_.record(eventId, measurement))
+        eventRevisionOutcome.flatMap(
+          _.annul(eventId).flatMap(_.record(eventId, measurement)))
       case ((eventId, None), eventRevisionOutcome) =>
         eventRevisionOutcome.flatMap(_.annul(eventId))
     }
   }
 
-  override def retainUpTo(when: Unbounded[Instant]): AllEvents = ???
+  override def retainUpTo(when: Unbounded[Instant]): AllEvents = {
+    val timespanUpToAndIncludingTheCutoff = (LowerBoundOfTimeslice(
+      NegativeInfinity()) -> UpperBoundOfTimeslice(when))
+
+    new AllEventsSplendidImplementation(
+      lifecycleSetsInvolvingEvent = lifecycleSetsInvolvingEvent.filter {
+        case (_, (whenEventTakesPlace, _)) =>
+          Ordering[ItemStateUpdateTime].lteq(whenEventTakesPlace,
+                                             UpperBoundOfTimeslice(when))
+      },
+      lifecyclesById.mapValues { lifecycles =>
+        val (retainedUnchangedLifecycles, retainedTrimmedLifecycles) =
+          lifecycles
+            .filterIncludes(timespanUpToAndIncludingTheCutoff)
+            .partition(lifecycle =>
+              Ordering[ItemStateUpdateTime].lteq(lifecycle.endTime,
+                                                 UpperBoundOfTimeslice(when)))
+
+        (RangedSeq
+          .empty[Lifecycle, ItemStateUpdateTime] /: (retainedUnchangedLifecycles ++ retainedTrimmedLifecycles
+          .flatMap(_.retainUpTo(when))))(_ + _)
+      }
+    )
+  }
 
   override def itemStateUpdateTime(
       itemStateUpdateKey: ItemStateUpdate.Key): ItemStateUpdateTime = ???
@@ -46,7 +127,6 @@ class AllEventsSplendidImplementation extends AllEvents {
   def record(eventId: EventId,
              annihilation: Annihilation): EventsRevisionOutcome[AllEventsType] =
     ???
-
 }
 /*
 package com.sageserpent.plutonium
@@ -87,36 +167,7 @@ object Lifecycle {
   case class Merge(merged: Lifecycle) extends FusionResult
 }
 
-trait Lifecycle {
-  import Lifecycle.FusionResult
 
-  val uniqueItemSpecification: UniqueItemSpecification
-
-  val lowerBoundTypeTag = uniqueItemSpecification.typeTag
-
-  val upperBoundTypeTag: TypeTag[_]
-
-  require(lowerBoundTypeTag.tpe <:< upperBoundTypeTag.tpe)
-
-  def isInconsistentWith(another: Lifecycle): Boolean =
-    (another.upperBoundTypeTag.tpe <:< this.upperBoundTypeTag.tpe || this.upperBoundTypeTag.tpe <:< another.upperBoundTypeTag.tpe) && !this
-      .isFusibleWith(another)
-
-  def isFusibleWith(another: Lifecycle): Boolean =
-    this.lowerBoundTypeTag.tpe <:< another.lowerBoundTypeTag.tpe || another.lowerBoundTypeTag.tpe <:< this.lowerBoundTypeTag.tpe
-
-  def overlapsWith(another: Lifecycle): Boolean =
-    !(this.endTime.fold(false)(_ < another.startTime) || another.endTime.fold(
-      false)(_ < this.startTime))
-
-  val startTime: Unbounded[Instant]
-
-  val endTime: Option[Unbounded[Instant]]
-
-  def fuseWith(another: Lifecycle): FusionResult
-
-  def annul(eventId: EventId): Lifecycle
-}
 
 trait LifecycleContracts extends Lifecycle {
   require(endTime.fold(true)(startTime < _))

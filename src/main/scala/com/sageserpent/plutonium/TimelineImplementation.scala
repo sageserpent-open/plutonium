@@ -2,19 +2,15 @@ package com.sageserpent.plutonium
 
 import java.time.Instant
 
-import com.sageserpent.americium.{PositiveInfinity, Unbounded}
+import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.BlobStorage.SnapshotRetrievalApi
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
-import com.sageserpent.plutonium.PatchRecorder.UpdateConsumer
-import com.sageserpent.plutonium.World.{Revision, initialRevision}
-import com.sageserpent.plutonium.WorldImplementationCodeFactoring.EventData
 import de.ummels.prioritymap.PriorityMap
 import quiver._
 
 import scala.annotation.tailrec
 import scala.collection.immutable.{Map, SortedSet}
-import scala.collection.mutable
 
 object TimelineImplementation {
   type ItemStateUpdatesDag =
@@ -22,145 +18,6 @@ object TimelineImplementation {
 
   case class PriorityQueueKey(itemStateUpdateKey: ItemStateUpdate.Key,
                               isAlreadyReferencedAsADependencyInTheDag: Boolean)
-
-  class AllEventsImplementation(
-      boringOldEventsMap: Map[EventId, EventData],
-      itemStateUpdates: Set[(ItemStateUpdate.Key, ItemStateUpdate)],
-      nextRevision: Revision = initialRevision)
-      extends AllEvents {
-    import AllEvents.EventsRevisionOutcome
-    import scalaz.std.list._
-    import scalaz.syntax.monadPlus._
-    import scalaz.{-\/, \/-}
-
-    override type AllEventsType = AllEventsImplementation
-
-    override def revise(events: Map[_ <: EventId, Option[Event]])
-      : EventsRevisionOutcome[AllEventsType] = {
-      val (annulledEvents, newEvents) =
-        (events.toList map {
-          case (eventId, Some(event)) => \/-(eventId -> event)
-          case (eventId, None)        => -\/(eventId)
-        }).separate
-
-      val updatedBoringOldEventsMap
-        : Map[EventId, EventData] = this.boringOldEventsMap -- annulledEvents ++ newEvents.zipWithIndex.map {
-        case ((eventId, event), tiebreakerIndex) =>
-          eventId -> EventData(event, nextRevision, tiebreakerIndex)
-      }.toMap
-
-      buildFrom(updatedBoringOldEventsMap)
-    }
-
-    override def retainUpTo(when: Unbounded[Instant]): AllEvents =
-      new AllEventsImplementation(
-        boringOldEventsMap = this.boringOldEventsMap filter (when >= _._2.serializableEvent.when),
-        itemStateUpdates = this.itemStateUpdates filter {
-          case (key, _) =>
-            when >= this.when(key)
-        },
-        nextRevision = this.nextRevision
-      )
-
-    override def itemStateUpdateTime(
-        itemStateUpdateKey: ItemStateUpdate.Key): ItemStateUpdateTime =
-      IntraTimesliceTime(eventOrderingKey = boringOldEventsMap(
-                           itemStateUpdateKey.eventId).orderingKey,
-                         intraEventIndex = itemStateUpdateKey.intraEventIndex)
-
-    private def createItemStateUpdates(
-        eventsForNewTimeline: Map[EventId, EventData])
-      : Set[(ItemStateUpdate.Key, ItemStateUpdate)] = {
-      val eventTimeline = WorldImplementationCodeFactoring.eventTimelineFrom(
-        eventsForNewTimeline.toSeq)
-
-      val itemStateUpdatesBuffer
-        : mutable.MutableList[(ItemStateUpdate, EventId)] =
-        mutable.MutableList.empty[(ItemStateUpdate, EventId)]
-
-      val patchRecorder: PatchRecorder =
-        new PatchRecorderImplementation(PositiveInfinity())
-        with PatchRecorderContracts with BestPatchSelectionImplementation
-        with BestPatchSelectionContracts {
-          override val updateConsumer: UpdateConsumer =
-            new UpdateConsumer {
-              override def captureAnnihilation(
-                  eventId: EventId,
-                  annihilation: Annihilation): Unit = {
-                val itemStateUpdate = ItemStateAnnihilation(annihilation)
-                itemStateUpdatesBuffer += ((itemStateUpdate, eventId))
-              }
-
-              override def capturePatch(when: Unbounded[Instant],
-                                        eventId: EventId,
-                                        patch: AbstractPatch): Unit = {
-                val itemStateUpdate = ItemStatePatch(patch)
-                itemStateUpdatesBuffer += ((itemStateUpdate, eventId))
-              }
-            }
-        }
-
-      WorldImplementationCodeFactoring.recordPatches(eventTimeline,
-                                                     patchRecorder)
-
-      val itemStateUpdatesGroupedByEventIdPreservingOriginalOrder = (itemStateUpdatesBuffer.zipWithIndex groupBy {
-        case ((_, eventId), _) => eventId
-      }).values.toSeq sortBy (_.head._2) map (_.map(_._1))
-
-      (itemStateUpdatesGroupedByEventIdPreservingOriginalOrder flatMap (_.zipWithIndex) map {
-        case ((itemStateUpdate, eventId), intraEventIndex) =>
-          val itemStateUpdateKey =
-            ItemStateUpdate.Key(eventId, intraEventIndex)
-          itemStateUpdateKey -> itemStateUpdate
-      }).toSet
-    }
-
-    private def buildFrom(
-        updatedBoringOldEventsMap: Map[EventId, EventData]) = {
-      val updatedItemStateUpdates: Set[(ItemStateUpdate.Key, ItemStateUpdate)] =
-        createItemStateUpdates(updatedBoringOldEventsMap)
-
-      val updatedEvents = new AllEventsImplementation(
-        boringOldEventsMap = updatedBoringOldEventsMap,
-        itemStateUpdates = updatedItemStateUpdates,
-        nextRevision = 1 + nextRevision)
-
-      val unchangedItemStateUpdates = updatedItemStateUpdates intersect itemStateUpdates
-
-      val unchangedItemStateUpdatesKeysOrderedAccordingToPreviousRevision =
-        unchangedItemStateUpdates.map {
-          case pair @ (key, _) =>
-            pair -> itemStateUpdateTime(key)
-        }
-
-      val unchangedItemStateUpdatesOrderedAccordingToNewRevision =
-        unchangedItemStateUpdates.map {
-          case pair @ (key, _) =>
-            pair -> updatedEvents.itemStateUpdateTime(key)
-        }
-
-      val unchangedItemStateUpdatesThatHaveMovedInOrdering
-        : Set[(ItemStateUpdate.Key, ItemStateUpdate)] =
-        (unchangedItemStateUpdatesOrderedAccordingToNewRevision -- unchangedItemStateUpdatesKeysOrderedAccordingToPreviousRevision)
-          .map(_._1)
-
-      val itemStateUpdateKeysThatNeedToBeRevoked: Set[ItemStateUpdate.Key] =
-        (itemStateUpdates -- unchangedItemStateUpdates ++ unchangedItemStateUpdatesThatHaveMovedInOrdering)
-          .map(_._1)
-
-      val newOrModifiedItemStateUpdates
-        : Set[(ItemStateUpdate.Key, ItemStateUpdate)] =
-        updatedItemStateUpdates -- unchangedItemStateUpdates ++ unchangedItemStateUpdatesThatHaveMovedInOrdering
-
-      EventsRevisionOutcome(
-        updatedEvents,
-        itemStateUpdateKeysThatNeedToBeRevoked =
-          itemStateUpdateKeysThatNeedToBeRevoked,
-        newOrModifiedItemStateUpdates = newOrModifiedItemStateUpdates.toMap
-      )
-    }
-  }
-
 }
 
 class TimelineImplementation(
@@ -500,10 +357,11 @@ class TimelineImplementation(
       lifecycleStartKeysPerItem = lifecycleStartKeysPerItem mapValues (_.filter(
         key => when >= this.allEvents.when(key)
       )) filter (_._2.nonEmpty),
-      blobStorage = this.blobStorage.retainUpTo(EndOfTimesliceTime(when))
+      blobStorage = this.blobStorage.retainUpTo(UpperBoundOfTimeslice(when))
     )
 
   override def itemCacheAt(when: Unbounded[Instant]): ItemCache =
-    new ItemCacheUsingBlobStorage[ItemStateUpdateTime](blobStorage,
-                                                       EndOfTimesliceTime(when))
+    new ItemCacheUsingBlobStorage[ItemStateUpdateTime](
+      blobStorage,
+      UpperBoundOfTimeslice(when))
 }

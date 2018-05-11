@@ -17,21 +17,40 @@ object ItemStateUpdateTime {
             firstEventOrderingKey  -> firstIntraEventIndex,
             secondEventOrderingKey -> secondIntraEventIndex)
         case (IntraTimesliceTime((firstWhen, _, _), _),
-              EndOfTimesliceTime(secondWhen)) =>
+              LowerBoundOfTimeslice(secondWhen)) =>
+          if (firstWhen < secondWhen) -1 else 1 // NOTE: they can't be equal.
+        case (LowerBoundOfTimeslice(firstWhen),
+              IntraTimesliceTime((secondWhen, _, _), _)) =>
           if (firstWhen > secondWhen) 1 else -1 // NOTE: they can't be equal.
-        case (EndOfTimesliceTime(firstWhen),
+        case (LowerBoundOfTimeslice(firstWhen),
+              LowerBoundOfTimeslice(secondWhen)) =>
+          Ordering[Unbounded[Instant]].compare(firstWhen, secondWhen)
+        case (IntraTimesliceTime((firstWhen, _, _), _),
+              UpperBoundOfTimeslice(secondWhen)) =>
+          if (firstWhen > secondWhen) 1 else -1 // NOTE: they can't be equal.
+        case (UpperBoundOfTimeslice(firstWhen),
               IntraTimesliceTime((secondWhen, _, _), _)) =>
           if (firstWhen < secondWhen) -1 else 1 // NOTE: they can't be equal.
-        case (EndOfTimesliceTime(firstWhen), EndOfTimesliceTime(secondWhen)) =>
+        case (UpperBoundOfTimeslice(firstWhen),
+              UpperBoundOfTimeslice(secondWhen)) =>
           Ordering[Unbounded[Instant]].compare(firstWhen, secondWhen)
+        case (LowerBoundOfTimeslice(firstWhen),
+              UpperBoundOfTimeslice(secondWhen)) =>
+          if (firstWhen > secondWhen) 1 else -1 // NOTE: they can't be equal.
+        case (UpperBoundOfTimeslice(firstWhen),
+              LowerBoundOfTimeslice(secondWhen)) =>
+          if (firstWhen < secondWhen) -1 else 1 // NOTE: they can't be equal.
     }
 }
 
 sealed trait ItemStateUpdateTime
 
+case class LowerBoundOfTimeslice(when: Unbounded[Instant])
+    extends ItemStateUpdateTime
+
 case class IntraTimesliceTime(eventOrderingKey: EventOrderingKey,
                               intraEventIndex: IntraEventIndex)
     extends ItemStateUpdateTime
 
-case class EndOfTimesliceTime(when: Unbounded[Instant])
+case class UpperBoundOfTimeslice(when: Unbounded[Instant])
     extends ItemStateUpdateTime

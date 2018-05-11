@@ -10,9 +10,9 @@ val rangedSeq = RangedSeq((1, 2), (-1, 5), (7, 10))(identity, implicitly[Orderin
 
 rangedSeq.intersect(2).toList
 
-rangedSeq.filterIncludes((2, 2)).toList
+rangedSeq.filterIncludes((1, 3)).toList
 
-rangedSeq.filterOverlaps((2, 2)).toList
+rangedSeq.filterOverlaps((2, 8)).toList
 
 rangedSeq.includes(2)
 

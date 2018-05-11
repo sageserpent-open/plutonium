@@ -3,7 +3,6 @@ package com.sageserpent.plutonium
 import java.time.Instant
 
 import com.sageserpent.americium.Unbounded
-import com.sageserpent.plutonium.TimelineImplementation.AllEventsImplementation
 
 import scala.collection.immutable.Map
 
@@ -26,8 +25,7 @@ object AllEvents {
     }
   }
 
-  val noEvents = new AllEventsImplementation(boringOldEventsMap = Map.empty,
-                                             itemStateUpdates = Set.empty)
+  val noEvents = new AllEventsSplendidImplementation()
 }
 
 trait AllEvents {
@@ -46,7 +44,8 @@ trait AllEvents {
 
   def when(itemStateUpdateKey: ItemStateUpdate.Key): Unbounded[Instant] =
     itemStateUpdateTime(itemStateUpdateKey) match {
+      case LowerBoundOfTimeslice(when)         => when
       case IntraTimesliceTime((when, _, _), _) => when
-      case EndOfTimesliceTime(when)            => when
+      case UpperBoundOfTimeslice(when)         => when
     }
 }
