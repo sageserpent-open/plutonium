@@ -25,7 +25,7 @@ object AllEvents {
     }
   }
 
-  val noEvents = new AllEventsSplendidImplementation()
+  val noEvents = new AllEventsImplementation()
 }
 
 trait AllEvents {

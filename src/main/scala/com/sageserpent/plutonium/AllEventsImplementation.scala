@@ -10,7 +10,7 @@ import scala.collection.immutable.Map
 import scala.reflect.runtime.universe.TypeTag
 import ItemStateUpdateTime.itemStateUpdateTimeOrdering
 
-object AllEventsSplendidImplementation {
+object AllEventsImplementation {
   // NASTY HACK: we can get away with this for now, as 'Event' currently forbids
   // the booking of events at 'PositiveInfinity'. Yes, this is very hokey.
   val sentinelForEndTimeOfLifecycleWithoutAnnihilation = UpperBoundOfTimeslice(
@@ -55,17 +55,16 @@ object AllEventsSplendidImplementation {
   type EventItemFootprint = (ItemStateUpdateTime, Set[Any])
 }
 
-class AllEventsSplendidImplementation(
+class AllEventsImplementation(
     lifecycleSetsInvolvingEvent: Map[
       EventId,
-      AllEventsSplendidImplementation.EventItemFootprint] = Map.empty,
-    lifecyclesById: Map[Any, AllEventsSplendidImplementation.Lifecycles] =
-      Map.empty)
+      AllEventsImplementation.EventItemFootprint] = Map.empty,
+    lifecyclesById: Map[Any, AllEventsImplementation.Lifecycles] = Map.empty)
     extends AllEvents {
   import AllEvents.EventsRevisionOutcome
-  import AllEventsSplendidImplementation.Lifecycle
+  import AllEventsImplementation.Lifecycle
 
-  override type AllEventsType = AllEventsSplendidImplementation
+  override type AllEventsType = AllEventsImplementation
 
   override def revise(events: Map[_ <: EventId, Option[Event]])
     : EventsRevisionOutcome[AllEventsType] = {
@@ -88,10 +87,10 @@ class AllEventsSplendidImplementation(
   }
 
   override def retainUpTo(when: Unbounded[Instant]): AllEvents = {
-    val timespanUpToAndIncludingTheCutoff = (LowerBoundOfTimeslice(
-      NegativeInfinity()) -> UpperBoundOfTimeslice(when))
+    val timespanUpToAndIncludingTheCutoff = LowerBoundOfTimeslice(
+      NegativeInfinity()) -> UpperBoundOfTimeslice(when)
 
-    new AllEventsSplendidImplementation(
+    new AllEventsImplementation(
       lifecycleSetsInvolvingEvent = lifecycleSetsInvolvingEvent.filter {
         case (_, (whenEventTakesPlace, _)) =>
           Ordering[ItemStateUpdateTime].lteq(whenEventTakesPlace,
