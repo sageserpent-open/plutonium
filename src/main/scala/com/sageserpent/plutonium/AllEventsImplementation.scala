@@ -56,7 +56,7 @@ object AllEventsImplementation {
 }
 
 class AllEventsImplementation(
-    lifecycleSetsInvolvingEvent: Map[
+    lifecycleFootprintPerEvent: Map[
       EventId,
       AllEventsImplementation.EventItemFootprint] = Map.empty,
     lifecyclesById: Map[Any, AllEventsImplementation.Lifecycles] = Map.empty)
@@ -91,7 +91,7 @@ class AllEventsImplementation(
       NegativeInfinity()) -> UpperBoundOfTimeslice(when)
 
     new AllEventsImplementation(
-      lifecycleSetsInvolvingEvent = lifecycleSetsInvolvingEvent.filter {
+      lifecycleFootprintPerEvent = lifecycleFootprintPerEvent.filter {
         case (_, (whenEventTakesPlace, _)) =>
           Ordering[ItemStateUpdateTime].lteq(whenEventTakesPlace,
                                              UpperBoundOfTimeslice(when))
