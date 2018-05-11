@@ -1,10 +1,5 @@
 package com.sageserpent.plutonium
 
-object ItemStateUpdate {
-  type IntraEventIndex = Int
-  case class Key(eventId: EventId, intraEventIndex: IntraEventIndex)
-}
-
 sealed trait ItemStateUpdate
 
 case class ItemStatePatch(patch: AbstractPatch) extends ItemStateUpdate
