@@ -3,33 +3,31 @@ package com.sageserpent.plutonium
 import java.time.Instant
 
 import com.sageserpent.americium.Unbounded
-import com.sageserpent.plutonium.ItemStateUpdate.IntraEventIndex
+import com.sageserpent.plutonium.ItemStateUpdateTime.IntraEventIndex
 import com.sageserpent.plutonium.WorldImplementationCodeFactoring.EventOrderingKey
 
 object ItemStateUpdateTime {
-  implicit val itemStateUpdateTimeOrdering: Ordering[ItemStateUpdateTime] =
+  type IntraEventIndex = Int
+
+  implicit val ordering: Ordering[ItemStateUpdateTime] =
     (first: ItemStateUpdateTime, second: ItemStateUpdateTime) =>
       first -> second match {
-        case (IntraTimesliceTime(firstEventOrderingKey, firstIntraEventIndex),
-              IntraTimesliceTime(secondEventOrderingKey,
-                                 secondIntraEventIndex)) =>
-          Ordering[(EventOrderingKey, IntraEventIndex)].compare(
-            firstEventOrderingKey  -> firstIntraEventIndex,
-            secondEventOrderingKey -> secondIntraEventIndex)
-        case (IntraTimesliceTime((firstWhen, _, _), _),
+        case (first: ItemStateUpdateKey, second: ItemStateUpdateKey) =>
+          Ordering[ItemStateUpdateKey].compare(first, second)
+        case (ItemStateUpdateKey((firstWhen, _, _), _),
               LowerBoundOfTimeslice(secondWhen)) =>
           if (firstWhen < secondWhen) -1 else 1 // NOTE: they can't be equal.
         case (LowerBoundOfTimeslice(firstWhen),
-              IntraTimesliceTime((secondWhen, _, _), _)) =>
+              ItemStateUpdateKey((secondWhen, _, _), _)) =>
           if (firstWhen > secondWhen) 1 else -1 // NOTE: they can't be equal.
         case (LowerBoundOfTimeslice(firstWhen),
               LowerBoundOfTimeslice(secondWhen)) =>
           Ordering[Unbounded[Instant]].compare(firstWhen, secondWhen)
-        case (IntraTimesliceTime((firstWhen, _, _), _),
+        case (ItemStateUpdateKey((firstWhen, _, _), _),
               UpperBoundOfTimeslice(secondWhen)) =>
           if (firstWhen > secondWhen) 1 else -1 // NOTE: they can't be equal.
         case (UpperBoundOfTimeslice(firstWhen),
-              IntraTimesliceTime((secondWhen, _, _), _)) =>
+              ItemStateUpdateKey((secondWhen, _, _), _)) =>
           if (firstWhen < secondWhen) -1 else 1 // NOTE: they can't be equal.
         case (UpperBoundOfTimeslice(firstWhen),
               UpperBoundOfTimeslice(secondWhen)) =>
@@ -45,11 +43,20 @@ object ItemStateUpdateTime {
 
 sealed trait ItemStateUpdateTime
 
-case class LowerBoundOfTimeslice(when: Unbounded[Instant])
-    extends ItemStateUpdateTime
+object ItemStateUpdateKey {
+  implicit val ordering: Ordering[ItemStateUpdateKey] = Ordering.by {
+    case (ItemStateUpdateKey(eventOrderingKey, intraEventIndex)) =>
+      eventOrderingKey -> intraEventIndex
+  }
+}
 
-case class IntraTimesliceTime(eventOrderingKey: EventOrderingKey,
+case class ItemStateUpdateKey(eventOrderingKey: EventOrderingKey,
                               intraEventIndex: IntraEventIndex)
+    extends ItemStateUpdateTime {
+  def when = eventOrderingKey._1
+}
+
+case class LowerBoundOfTimeslice(when: Unbounded[Instant])
     extends ItemStateUpdateTime
 
 case class UpperBoundOfTimeslice(when: Unbounded[Instant])

@@ -30,16 +30,16 @@ trait IdentifiedItemAccessUsingBlobStorage
   protected val blobStorageTimeSlice: SnapshotRetrievalApi[SnapshotBlob]
 
   val itemStateUpdateKeyOfPatchBeingApplied =
-    new DynamicVariable[Option[ItemStateUpdate.Key]](None)
+    new DynamicVariable[Option[ItemStateUpdateKey]](None)
 
-  private var ancestorKeyOfAnnihilatedItem: Option[ItemStateUpdate.Key] = None
+  private var ancestorKeyOfAnnihilatedItem: Option[ItemStateUpdateKey] = None
 
   private val itemsMutatedSinceLastHarvest =
     mutable.Map.empty[UniqueItemSpecification, ItemExtensionApi]
 
   private val itemStateUpdateReadDependenciesDiscoveredSinceLastHarvest
-    : mutable.Set[ItemStateUpdate.Key] =
-    mutable.Set.empty[ItemStateUpdate.Key]
+    : mutable.Set[ItemStateUpdateKey] =
+    mutable.Set.empty[ItemStateUpdateKey]
 
   override def blobStorageTimeslice: SnapshotRetrievalApi[SnapshotBlob] =
     blobStorageTimeSlice
@@ -47,7 +47,7 @@ trait IdentifiedItemAccessUsingBlobStorage
   override protected def createItemFor[Item](
       _uniqueItemSpecification: UniqueItemSpecification,
       lifecycleUUID: UUID,
-      itemStateUpdateKey: Option[ItemStateUpdate.Key]) = {
+      itemStateUpdateKey: Option[ItemStateUpdateKey]) = {
     import IdentifiedItemAccessUsingBlobStorage.proxyFactory.AcquiredState
 
     val stateToBeAcquiredByProxy: AcquiredState =
@@ -119,10 +119,9 @@ trait IdentifiedItemAccessUsingBlobStorage
     item
   }
 
-  def apply(patch: AbstractPatch, itemStateUpdateKey: ItemStateUpdate.Key)
-    : (Map[UniqueItemSpecification,
-           (SnapshotBlob, Option[ItemStateUpdate.Key])],
-       Set[ItemStateUpdate.Key]) = {
+  def apply(patch: AbstractPatch, itemStateUpdateKey: ItemStateUpdateKey)
+    : (Map[UniqueItemSpecification, (SnapshotBlob, Option[ItemStateUpdateKey])],
+       Set[ItemStateUpdateKey]) = {
     itemStateUpdateKeyOfPatchBeingApplied
       .withValue(Some(itemStateUpdateKey)) {
         patch(this)
@@ -130,7 +129,7 @@ trait IdentifiedItemAccessUsingBlobStorage
       }
 
     val ancestorItemStateUpdateKeysOnMutatedItems
-      : Map[UniqueItemSpecification, Option[ItemStateUpdate.Key]] =
+      : Map[UniqueItemSpecification, Option[ItemStateUpdateKey]] =
       itemsMutatedSinceLastHarvest
         .mapValues(
           _.asInstanceOf[ItemStateUpdateKeyTrackingApi].itemStateUpdateKey
@@ -157,13 +156,13 @@ trait IdentifiedItemAccessUsingBlobStorage
 
     val mutatedItemResults: Map[
       UniqueItemSpecification,
-      (SnapshotBlob, Option[ItemStateUpdate.Key])] = mutationSnapshots map {
+      (SnapshotBlob, Option[ItemStateUpdateKey])] = mutationSnapshots map {
       case (uniqueItemSpecification, snapshot) =>
         uniqueItemSpecification -> (snapshot, ancestorItemStateUpdateKeysOnMutatedItems(
           uniqueItemSpecification))
     }
 
-    val readDependencies: Set[ItemStateUpdate.Key] =
+    val readDependencies: Set[ItemStateUpdateKey] =
       itemStateUpdateReadDependenciesDiscoveredSinceLastHarvest.toSet
 
     itemsMutatedSinceLastHarvest.clear()
@@ -172,10 +171,10 @@ trait IdentifiedItemAccessUsingBlobStorage
     mutatedItemResults -> readDependencies
   }
 
-  def apply(annihilation: Annihilation): ItemStateUpdate.Key = {
+  def apply(annihilation: Annihilation): ItemStateUpdateKey = {
     annihilation(this)
 
-    val ancestorKey: ItemStateUpdate.Key = ancestorKeyOfAnnihilatedItem.get
+    val ancestorKey: ItemStateUpdateKey = ancestorKeyOfAnnihilatedItem.get
 
     ancestorKeyOfAnnihilatedItem = None
 

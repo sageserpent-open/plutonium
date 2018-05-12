@@ -20,14 +20,14 @@ object PersistentItemProxyFactory {
     private var _lifecycleUUID: UUID = _
 
     def setItemStateUpdateKey(
-        itemStateUpdateKey: Option[ItemStateUpdate.Key]): Unit = {
+        itemStateUpdateKey: Option[ItemStateUpdateKey]): Unit = {
       _itemStateUpdateKey = itemStateUpdateKey
     }
 
-    def itemStateUpdateKey: Option[ItemStateUpdate.Key] =
+    def itemStateUpdateKey: Option[ItemStateUpdateKey] =
       _itemStateUpdateKey
 
-    private var _itemStateUpdateKey: Option[ItemStateUpdate.Key] = None
+    private var _itemStateUpdateKey: Option[ItemStateUpdateKey] = None
   }
 }
 
@@ -67,7 +67,7 @@ trait PersistentItemProxyFactory extends StatefulItemProxyFactory {
 
   val setItemStateUpdateKeyMethod = new MethodDescription.ForLoadedMethod(
     classOf[ItemStateUpdateKeyTrackingApi]
-      .getMethod("setItemStateUpdateKey", classOf[Option[ItemStateUpdate.Key]]))
+      .getMethod("setItemStateUpdateKey", classOf[Option[ItemStateUpdateKey]]))
 
   val matchSetItemStateUpdateKey: ElementMatcher[MethodDescription] =
     firstMethodIsOverrideCompatibleWithSecond(_, setItemStateUpdateKeyMethod)

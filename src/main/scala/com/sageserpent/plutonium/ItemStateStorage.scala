@@ -24,7 +24,7 @@ import scala.util.DynamicVariable
 object ItemStateStorage {
   case class SnapshotBlob(payload: Array[Byte],
                           lifecycleUUID: UUID,
-                          itemStateUpdateKey: Option[ItemStateUpdate.Key])
+                          itemStateUpdateKey: Option[ItemStateUpdateKey])
 }
 
 trait ItemStateStorage { itemStateStorageObject =>
@@ -66,7 +66,7 @@ trait ItemStateStorage { itemStateStorageObject =>
   protected def lifecycleUUID(item: ItemSuperType): UUID
 
   protected def itemStateUpdateKey(
-      item: ItemSuperType): Option[ItemStateUpdate.Key]
+      item: ItemSuperType): Option[ItemStateUpdateKey]
 
   protected def noteAnnihilationOnItem(item: ItemSuperType): Unit
 
@@ -223,7 +223,7 @@ trait ItemStateStorage { itemStateStorageObject =>
     class ItemDeserializationThreadContext {
       val uniqueItemSpecificationAccess =
         new DynamicVariable[
-          Option[(UniqueItemSpecification, UUID, Option[ItemStateUpdate.Key])]](
+          Option[(UniqueItemSpecification, UUID, Option[ItemStateUpdateKey])]](
           None)
 
       def itemFor[Item](
@@ -344,7 +344,7 @@ trait ItemStateStorage { itemStateStorageObject =>
     protected def createAndStoreItem[Item](
         uniqueItemSpecification: UniqueItemSpecification,
         lifecycleUUID: UUID,
-        itemStateUpdateKey: Option[ItemStateUpdate.Key]): Item = {
+        itemStateUpdateKey: Option[ItemStateUpdateKey]): Item = {
       val item: Item = createItemFor(uniqueItemSpecification,
                                      lifecycleUUID,
                                      itemStateUpdateKey)
@@ -362,7 +362,7 @@ trait ItemStateStorage { itemStateStorageObject =>
     protected def createItemFor[Item](
         uniqueItemSpecification: UniqueItemSpecification,
         lifecycleUUID: UUID,
-        itemStateUpdateKey: Option[ItemStateUpdate.Key]): Item
+        itemStateUpdateKey: Option[ItemStateUpdateKey]): Item
 
     private class StorageKeyedByUniqueItemSpecification
         extends mutable.HashMap[UniqueItemSpecification, Any]

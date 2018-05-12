@@ -16,7 +16,7 @@ object itemStateStorageUsingProxies extends ItemStateStorage {
     item.asInstanceOf[LifecycleUUIDApi].lifecycleUUID
 
   override protected def itemStateUpdateKey(
-      item: ItemExtensionApi): Option[ItemStateUpdate.Key] =
+      item: ItemExtensionApi): Option[ItemStateUpdateKey] =
     item.asInstanceOf[ItemStateUpdateKeyTrackingApi].itemStateUpdateKey
 
   override protected def noteAnnihilationOnItem(item: ItemSuperType): Unit = {

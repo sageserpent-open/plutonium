@@ -9,8 +9,8 @@ import scala.collection.immutable.Map
 object AllEvents {
   case class EventsRevisionOutcome[AllEventsType <: AllEvents](
       events: AllEventsType,
-      itemStateUpdateKeysThatNeedToBeRevoked: Set[ItemStateUpdate.Key],
-      newOrModifiedItemStateUpdates: Map[ItemStateUpdate.Key, ItemStateUpdate]) {
+      itemStateUpdateKeysThatNeedToBeRevoked: Set[ItemStateUpdateKey],
+      newOrModifiedItemStateUpdates: Map[ItemStateUpdateKey, ItemStateUpdate]) {
     def flatMap(step: AllEventsType => EventsRevisionOutcome[AllEventsType])
       : EventsRevisionOutcome[AllEventsType] = {
       val EventsRevisionOutcome(eventsFromStep,
@@ -39,13 +39,5 @@ trait AllEvents {
 
   def retainUpTo(when: Unbounded[Instant]): AllEvents
 
-  def itemStateUpdateTime(
-      itemStateUpdateKey: ItemStateUpdate.Key): ItemStateUpdateTime
-
-  def when(itemStateUpdateKey: ItemStateUpdate.Key): Unbounded[Instant] =
-    itemStateUpdateTime(itemStateUpdateKey) match {
-      case LowerBoundOfTimeslice(when)         => when
-      case IntraTimesliceTime((when, _, _), _) => when
-      case UpperBoundOfTimeslice(when)         => when
-    }
+  
 }

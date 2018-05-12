@@ -8,7 +8,7 @@ import de.sciss.fingertree.RangedSeq
 
 import scala.collection.immutable.Map
 import scala.reflect.runtime.universe.TypeTag
-import ItemStateUpdateTime.itemStateUpdateTimeOrdering
+import ItemStateUpdateTime.ordering
 
 object AllEventsImplementation {
   // NASTY HACK: we can get away with this for now, as 'Event' currently forbids
@@ -110,9 +110,6 @@ class AllEventsImplementation(
       }
     )
   }
-
-  override def itemStateUpdateTime(
-      itemStateUpdateKey: ItemStateUpdate.Key): ItemStateUpdateTime = ???
 
   def annul(eventId: EventId): EventsRevisionOutcome[AllEventsType] = ???
 
