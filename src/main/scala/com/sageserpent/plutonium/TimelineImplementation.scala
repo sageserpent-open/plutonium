@@ -3,11 +3,16 @@ package com.sageserpent.plutonium
 import java.time.Instant
 
 import com.sageserpent.americium.Unbounded
+import com.sageserpent.plutonium.AllEvents.{EventsRevisionOutcome, noEvents}
 import com.sageserpent.plutonium.BlobStorage.SnapshotRetrievalApi
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
 import com.sageserpent.plutonium.ItemStateUpdateKey.ordering
 import com.sageserpent.plutonium.ItemStateUpdateTime.ordering
+import com.sageserpent.plutonium.TimelineImplementation.{
+  ItemStateUpdatesDag,
+  PriorityQueueKey
+}
 import de.ummels.prioritymap.PriorityMap
 import quiver._
 
@@ -20,13 +25,11 @@ object TimelineImplementation {
 
   case class PriorityQueueKey(itemStateUpdateKey: ItemStateUpdateKey,
                               isAlreadyReferencedAsADependencyInTheDag: Boolean)
-
-  
 }
 
 class TimelineImplementation(
-    allEvents: AllEvents = AllEvents.noEvents,
-    itemStateUpdatesDag: TimelineImplementation.ItemStateUpdatesDag = empty,
+    allEvents: AllEvents = noEvents,
+    itemStateUpdatesDag: ItemStateUpdatesDag = empty,
     lifecycleStartKeysPerItem: Map[UniqueItemSpecification,
                                    SortedSet[ItemStateUpdateKey]] = Map.empty,
     blobStorage: BlobStorage[ItemStateUpdateTime,
@@ -36,9 +39,6 @@ class TimelineImplementation(
                           ItemStateUpdateKey,
                           SnapshotBlob]())
     extends Timeline {
-  import AllEvents.EventsRevisionOutcome
-  import TimelineImplementation._
-
   override def revise(events: Map[_ <: EventId, Option[Event]]): Timeline = {
     val EventsRevisionOutcome(allEventsForNewTimeline,
                               itemStateUpdateKeysThatNeedToBeRevoked,

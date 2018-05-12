@@ -3,6 +3,7 @@ package com.sageserpent.plutonium
 import java.time.Instant
 
 import com.sageserpent.americium.Unbounded
+import com.sageserpent.plutonium.AllEvents.EventsRevisionOutcome
 
 import scala.collection.immutable.Map
 
@@ -29,7 +30,6 @@ object AllEvents {
 }
 
 trait AllEvents {
-  import AllEvents._
   // TODO: we can get the lifecycle start keys from there too...
 
   type AllEventsType <: AllEvents
@@ -38,6 +38,4 @@ trait AllEvents {
     : EventsRevisionOutcome[AllEventsType]
 
   def retainUpTo(when: Unbounded[Instant]): AllEvents
-
-  
 }
