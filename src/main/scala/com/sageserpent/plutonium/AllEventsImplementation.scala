@@ -21,6 +21,9 @@ object AllEventsImplementation {
   val sentinelForEndTimeOfLifecycleWithoutAnnihilation = UpperBoundOfTimeslice(
     PositiveInfinity())
 
+  // TODO: I'm getting the impression that 'RangedSeq' works with closed-open intervals.
+  // If so, we should probably cutover to using a 'SplitLevel[ItemStateUpdateTime]' so that
+  // the open end can be modelled cleanly.
   type LifecycleEndPoints = (ItemStateUpdateTime, ItemStateUpdateTime)
 
   object Lifecycle {
