@@ -3,22 +3,22 @@ package com.sageserpent.plutonium
 import java.time.Instant
 
 import com.sageserpent.americium.Unbounded
-import com.sageserpent.plutonium.AllEvents.EventsRevisionOutcome
+import com.sageserpent.plutonium.AllEvents.ItemStateUpdatesDelta
 
 import scala.collection.immutable.Map
 
 object AllEvents {
-  case class EventsRevisionOutcome[AllEventsType <: AllEvents](
-      events: AllEventsType,
+  case class ItemStateUpdatesDelta[Payload](
+      payload: Payload,
       itemStateUpdateKeysThatNeedToBeRevoked: Set[ItemStateUpdateKey],
       newOrModifiedItemStateUpdates: Map[ItemStateUpdateKey, ItemStateUpdate]) {
-    def flatMap(step: AllEventsType => EventsRevisionOutcome[AllEventsType])
-      : EventsRevisionOutcome[AllEventsType] = {
-      val EventsRevisionOutcome(eventsFromStep,
+    def flatMap(step: Payload => ItemStateUpdatesDelta[Payload])
+      : ItemStateUpdatesDelta[Payload] = {
+      val ItemStateUpdatesDelta(eventsFromStep,
                                 itemStateUpdateKeysThatNeedToBeRevokedFromStep,
                                 newOrModifiedItemStateUpdatesFromStep) = step(
-        events)
-      EventsRevisionOutcome(
+        payload)
+      ItemStateUpdatesDelta(
         eventsFromStep,
         itemStateUpdateKeysThatNeedToBeRevokedFromStep -- newOrModifiedItemStateUpdates.keys ++ itemStateUpdateKeysThatNeedToBeRevoked,
         newOrModifiedItemStateUpdates -- itemStateUpdateKeysThatNeedToBeRevokedFromStep ++ newOrModifiedItemStateUpdatesFromStep
@@ -35,7 +35,7 @@ trait AllEvents {
   type AllEventsType <: AllEvents
 
   def revise(events: Map[_ <: EventId, Option[Event]])
-    : EventsRevisionOutcome[AllEventsType]
+    : ItemStateUpdatesDelta[AllEventsType]
 
   def retainUpTo(when: Unbounded[Instant]): AllEvents
 }

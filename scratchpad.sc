@@ -10,9 +10,9 @@ val rangedSeq = RangedSeq((1, 2), (-1, 5), (7, 10))(identity, implicitly[Orderin
 
 rangedSeq.intersect(2).toList
 
-rangedSeq.filterIncludes((1, 3)).toList
+rangedSeq.filterIncludes((2, 2)).toList
 
-rangedSeq.filterOverlaps((2, 8)).toList
+rangedSeq.filterOverlaps((2, 2)).toList
 
 rangedSeq.includes(2)
 
@@ -30,6 +30,26 @@ biggerRangedSeq.filterOverlaps((2, 2)).toList
 
 biggerRangedSeq.includes(2)
 
-biggerRangedSeq - (3 -> 4)
+biggerRangedSeq - (1 -> 3)
+
+biggerRangedSeq - (1 -> 2)
 
 biggerRangedSeq - (1, 47)
+
+
+import scalaz.State
+import scalaz.StateT.stateMonad
+import scalaz.syntax.monad._
+
+implicit val s = stateMonad[String]
+
+import s.{put, get}
+
+val stuff: State[String, String] = for {
+  x <- 1.pure
+  y <- 2.pure
+  _ <- put("Wiggies")
+  result <- get
+} yield "Hello"
+
+stuff.run("")

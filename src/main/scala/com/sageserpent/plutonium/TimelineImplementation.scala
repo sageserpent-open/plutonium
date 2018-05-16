@@ -3,7 +3,7 @@ package com.sageserpent.plutonium
 import java.time.Instant
 
 import com.sageserpent.americium.Unbounded
-import com.sageserpent.plutonium.AllEvents.{EventsRevisionOutcome, noEvents}
+import com.sageserpent.plutonium.AllEvents.{ItemStateUpdatesDelta, noEvents}
 import com.sageserpent.plutonium.BlobStorage.SnapshotRetrievalApi
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
@@ -40,7 +40,7 @@ class TimelineImplementation(
                           SnapshotBlob]())
     extends Timeline {
   override def revise(events: Map[_ <: EventId, Option[Event]]): Timeline = {
-    val EventsRevisionOutcome(allEventsForNewTimeline,
+    val ItemStateUpdatesDelta(allEventsForNewTimeline,
                               itemStateUpdateKeysThatNeedToBeRevoked,
                               newAndModifiedItemStateUpdates) =
       allEvents

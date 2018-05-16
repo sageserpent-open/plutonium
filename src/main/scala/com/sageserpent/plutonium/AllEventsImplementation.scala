@@ -9,10 +9,12 @@ import de.sciss.fingertree.RangedSeq
 import scala.collection.immutable.Map
 import scala.reflect.runtime.universe.TypeTag
 import ItemStateUpdateTime.ordering
-import com.sageserpent.plutonium.AllEvents.EventsRevisionOutcome
+import com.sageserpent.plutonium.AllEvents.ItemStateUpdatesDelta
 import com.sageserpent.plutonium.AllEventsImplementation.{
   EventFootprint,
-  Lifecycle
+  Lifecycle,
+  Lifecycles,
+  LifecyclesById
 }
 
 object AllEventsImplementation {
@@ -54,7 +56,8 @@ object AllEventsImplementation {
     // NOTE: this is quite defensive, we can answer with 'None' if 'when' is not greater than the start time.
     def retainUpTo(when: Unbounded[Instant]): Option[Lifecycle]
 
-    def annul(eventId: EventId): Option[Lifecycle]
+    // NOTE: this can (and has to) cope with irrelevant event ids - it simply yields this -> None.
+    def annul(eventId: EventId): (Option[Lifecycle], Set[ItemStateUpdateKey])
 
     def isFusibleWith(another: Lifecycle): Boolean
 
@@ -68,6 +71,8 @@ object AllEventsImplementation {
 
   type Lifecycles = RangedSeq[Lifecycle, ItemStateUpdateTime]
 
+  type LifecyclesById = Map[Any, Lifecycles]
+
   // NOTE: an event footprint an cover several item state updates, each of which in turn can affect several items.
   case class EventFootprint(when: Unbounded[Instant], itemIds: Set[Any])
 }
@@ -76,29 +81,44 @@ class AllEventsImplementation(
     lifecycleFootprintPerEvent: Map[EventId,
                                     AllEventsImplementation.EventFootprint] =
       Map.empty,
-    lifecyclesById: Map[Any, AllEventsImplementation.Lifecycles] = Map.empty)
+    lifecyclesById: LifecyclesById = Map.empty)
     extends AllEvents {
   override type AllEventsType = AllEventsImplementation
 
   override def revise(events: Map[_ <: EventId, Option[Event]])
-    : EventsRevisionOutcome[AllEventsType] = {
+    : ItemStateUpdatesDelta[AllEventsType] = {
 
-    val initialOutcome = EventsRevisionOutcome(
-      events = this,
+    /*
+     * PLAN
+     *
+
+     *
+     * */
+
+    val eventIdsToRevoke = events.keys
+
+    val initialOutcome = ItemStateUpdatesDelta(
+      payload = AnnulmentResult(unchangedLifecycles = this.lifecyclesById,
+                                changedLifecycles = Map.empty),
       itemStateUpdateKeysThatNeedToBeRevoked = Set.empty,
-      newOrModifiedItemStateUpdates = Map.empty)
+      newOrModifiedItemStateUpdates = Map.empty
+    )
 
-    (events :\ initialOutcome) {
-      case ((eventId, Some(change: Change)), eventRevisionOutcome) =>
-        eventRevisionOutcome.flatMap(_.record(eventId, change))
-      case ((eventId, Some(measurement: Measurement)), eventRevisionOutcome) =>
-        eventRevisionOutcome.flatMap(_.record(eventId, measurement))
-      case ((eventId, Some(annihilation: Annihilation)),
-            eventRevisionOutcome) =>
-        eventRevisionOutcome.flatMap(_.record(eventId, annihilation))
-      case ((eventId, None), eventRevisionOutcome) =>
-        eventRevisionOutcome.flatMap(_.annul(eventId))
-    }
+    val enMasseAnnulmentsResult: ItemStateUpdatesDelta[AnnulmentResult] =
+      (initialOutcome /: eventIdsToRevoke) {
+        case (outcome, eventId) =>
+          for {
+            AnnulmentResult(unchangedLifecycles, changedLifecycles) <- outcome
+            AnnulmentResult(stillLeftUnchanged, partOne) <- annul(
+              unchangedLifecycles,
+              eventId)
+            AnnulmentResult(partTwo, partThree) <- annul(changedLifecycles,
+                                                         eventId)
+          } yield {
+            AnnulmentResult(unchangedLifecycles = stillLeftUnchanged,
+                            changedLifecycles = partOne ++ partTwo ++ partThree)
+          }
+      }
   }
 
   override def retainUpTo(when: Unbounded[Instant]): AllEvents = {
@@ -127,94 +147,46 @@ class AllEventsImplementation(
     )
   }
 
-  def annul(eventId: EventId): EventsRevisionOutcome[AllEventsType] = {
+  case class AnnulmentResult(unchangedLifecycles: Map[Any, Lifecycles],
+                             changedLifecycles: Map[Any, Lifecycles])
+
+  def annul(lifecyclesById: Map[Any, Lifecycles],
+            eventId: EventId): ItemStateUpdatesDelta[AnnulmentResult] = {
     val EventFootprint(when, itemIds) = lifecycleFootprintPerEvent(eventId)
 
-    val (relevantLifecycles, irrelevantLifecycles) = lifecyclesById.partition {
-      case (lifecycleId, _) => itemIds.contains(lifecycleId)
-    }
+    val timeslice = UpperBoundOfTimeslice(when)
 
-    EventsRevisionOutcome(
-      events = new AllEventsImplementation(
-        lifecycleFootprintPerEvent = lifecycleFootprintPerEvent - eventId,
-        lifecyclesById = irrelevantLifecycles),
-      itemStateUpdateKeysThatNeedToBeRevoked = ???,
+    val (lifecyclesWithRelevantIds: Map[Any, Lifecycles],
+         lifecyclesWithIrrelevantIds: Map[Any, Lifecycles]) =
+      lifecyclesById.partition {
+        case (lifecycleId, lifecycles) => itemIds.contains(lifecycleId)
+      }
+
+    val (unchangedLifecycles, changedLifecycles, revokedItemStateUpdateKeys) =
+      (lifecyclesWithRelevantIds map {
+        case (itemId, lifecycles: Lifecycles) =>
+          val lifecyclesIncludingEventTime =
+            lifecycles.filterIncludes(timeslice -> timeslice).toSeq
+
+          val otherLifecycles: Lifecycles =
+            (lifecycles /: lifecyclesIncludingEventTime)(_ - _)
+
+          val (lifecyclesWithAnnulments, revokedItemStateUpdateKeys) =
+            lifecyclesIncludingEventTime.map(_.annul(eventId)).unzip
+
+          (itemId -> otherLifecycles,
+           itemId -> RangedSeq[Lifecycle, ItemStateUpdateTime](
+             lifecyclesWithAnnulments.flatten: _*),
+           (Set.empty[ItemStateUpdateKey] /: revokedItemStateUpdateKeys)(
+             _ ++ _))
+      }).unzip3
+
+    ItemStateUpdatesDelta(
+      payload = AnnulmentResult(unchangedLifecycles = unchangedLifecycles.toMap,
+                                changedLifecycles = changedLifecycles.toMap),
+      itemStateUpdateKeysThatNeedToBeRevoked =
+        (Set.empty[ItemStateUpdateKey] /: revokedItemStateUpdateKeys)(_ ++ _),
       newOrModifiedItemStateUpdates = Map.empty
     )
   }
-
-  // TODO - will need to do some fancy footwork for the three overloads below - if an event id migrates off a lifecycle, then that lifecycle
-  // needs to be told to annul it. Otherwise we should not annul upfront, at least not before doing lifecycle fusion.
-  // TODO - it may be the case that a modified or new lifecycle can be fused with more than one other lifecycle - this is a sign of inconsistency.
-  // At least I think it is - but what if several events allow progressive fusion? Ah - we are just dealing with one event here. Hold on ... is
-  // this approach correct? Could we allow an entire revision booking to indulge in some mutually self-consistent revision that taken piecemeal might
-  // be inconsistent?
-  def record(eventId: EventId,
-             change: Change): EventsRevisionOutcome[AllEventsType] = ???
-
-  def record(eventId: EventId,
-             measurement: Measurement): EventsRevisionOutcome[AllEventsType] =
-    ???
-
-  def record(eventId: EventId,
-             annihilation: Annihilation): EventsRevisionOutcome[AllEventsType] =
-    ???
 }
-/*
-package com.sageserpent.plutonium
-
-import java.time.Instant
-
-import com.sageserpent.americium.{PositiveInfinity, Unbounded}
-import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
-import com.sageserpent.plutonium.Lifecycle.FusionResult
-
-import scala.reflect.runtime.universe.TypeTag
-
-object Lifecycle {
-  val orderingByStartTime: Ordering[Lifecycle] =
-    Ordering.by[Lifecycle, Unbounded[Instant]](_.startTime)
-
-  val orderingByEndTime: Ordering[Lifecycle] =
-    Ordering.by[Lifecycle, Unbounded[Instant]](
-      _.endTime.getOrElse(PositiveInfinity()))
-
-  trait PatchKind
-
-  case object Change extends PatchKind
-
-  case object Measurement extends PatchKind
-
-  def apply(eventId: EventId,
-            when: Unbounded[Instant],
-            patch: AbstractPatch,
-            kind: PatchKind): Lifecycle = ???
-
-  trait FusionResult
-
-  case class Split(first: Lifecycle, second: Lifecycle) extends FusionResult {
-    require(first.endTime.fold(false)(_ < second.startTime))
-  }
-
-  case class Merge(merged: Lifecycle) extends FusionResult
-}
-
-
-
-trait LifecycleContracts extends Lifecycle {
-  require(endTime.fold(true)(startTime < _))
-  require(lowerBoundTypeTag.tpe <:< upperBoundTypeTag.tpe)
-
-  abstract override def fuseWith(another: Lifecycle): FusionResult = {
-    require(
-      this.uniqueItemSpecification.id == another.uniqueItemSpecification.id)
-    require(isFusibleWith(another))
-    require(!isInconsistentWith(another))
-    require(overlapsWith(another))
-    super.fuseWith(another)
-  }
-}
-
-
-
- */
