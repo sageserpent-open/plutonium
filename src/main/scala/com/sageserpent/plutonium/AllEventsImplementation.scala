@@ -44,7 +44,14 @@ object AllEventsImplementation {
 
     val endPoints: LifecycleEndPoints = startTime -> endTime
 
+    def overlapsWith(another: Lifecycle): Boolean =
+      Ordering[ItemStateUpdateTime]
+        .lteq(this.startTime, another.endTime) && Ordering[ItemStateUpdateTime]
+        .lteq(another.startTime, this.endTime)
+
     val uniqueItemSpecification: UniqueItemSpecification
+
+    def id = uniqueItemSpecification.id
 
     val lowerBoundTypeTag = uniqueItemSpecification.typeTag
 
@@ -53,24 +60,30 @@ object AllEventsImplementation {
     require(lowerBoundTypeTag.tpe <:< upperBoundTypeTag.tpe)
 
     def typeBoundsAreInconsistentWith(another: Lifecycle): Boolean =
-      (another.upperBoundTypeTag.tpe <:< this.upperBoundTypeTag.tpe || this.upperBoundTypeTag.tpe <:< another.upperBoundTypeTag.tpe) && !this
+      // NOTE: the conjunction of the negatives of the two sub-predicates isn't checked. Think of
+      // multiple inheritance of interfaces in Java and trait mixins in Scala; you'll see why.
+      this.upperTypeIsConsistentWith(another) && !this
         .lowerTypeIsConsistentWith(another)
 
     def lowerTypeIsConsistentWith(another: Lifecycle): Boolean =
       this.lowerBoundTypeTag.tpe <:< another.lowerBoundTypeTag.tpe || another.lowerBoundTypeTag.tpe <:< this.lowerBoundTypeTag.tpe
+
+    def upperTypeIsConsistentWith(another: Lifecycle): Boolean =
+      another.upperBoundTypeTag.tpe <:< this.upperBoundTypeTag.tpe || this.upperBoundTypeTag.tpe <:< another.upperBoundTypeTag.tpe
 
     // NOTE: this is quite defensive, we can answer with 'None' if 'when' is not greater than the start time.
     def retainUpTo(when: Unbounded[Instant]): Option[Lifecycle]
 
     def isRelevantTo(eventId: EventId): Boolean
 
-    // NOTE: there should be a precondition on this that the event id is relevant to this lifecycle.
-    def annul(eventId: EventId): (Option[Lifecycle], Set[ItemStateUpdateKey])
+    def annul(eventId: EventId): Option[Lifecycle]
 
-    // NOTE: there should be a precondition that the two lifecycles share the same id.
-    def isFusibleWith(another: Lifecycle): Boolean
+    // The lower type bounds are compatible and there is overlap.
+    def isFusibleWith(another: Lifecycle): Boolean =
+      // NOTE: there is no check on upper types. Think of multiple inheritance
+      // of interfaces in Java and trait mixins in Scala; you'll see why.
+      this.lowerTypeIsConsistentWith(another) && this.overlapsWith(another)
 
-    // TODO - contracts! Overlapping, fusibility, ids etc.
     def fuseWith(another: Lifecycle): Lifecycle
 
     // NOTE: these will have best patches applied along with type adjustments, including on the arguments. Hence the crufty argument...
@@ -80,11 +93,27 @@ object AllEventsImplementation {
           TypeTag[_]]): Map[ItemStateUpdateKey, ItemStateUpdate]
 
     // NOTE: the client code merges this across all the lifecycles to provide the argument for the previous method.
+    // I'm calling it the Client Cruft Cooperation Pattern - aka Rebounding Flyweight Pattern.
     def uniqueItemSpecificationToTypeTagMap
       : collection.Map[UniqueItemSpecification, TypeTag[_]]
   }
 
-  trait LifecycleContracts extends Lifecycle // TODO - see if we need this...
+  trait LifecycleContracts extends Lifecycle {
+    abstract override def annul(eventId: EventId): Option[Lifecycle] = {
+      require(isRelevantTo(eventId))
+      super.annul(eventId)
+    }
+
+    abstract override def isFusibleWith(another: Lifecycle): Boolean = {
+      require(this.id == another.id)
+      super.isFusibleWith(another)
+    }
+
+    abstract override def fuseWith(another: Lifecycle): Lifecycle = {
+      require(isFusibleWith(another))
+      super.fuseWith(another)
+    }
+  }
 
   implicit val endPoints = (_: Lifecycle).endPoints
 
