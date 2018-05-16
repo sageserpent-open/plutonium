@@ -8,23 +8,10 @@ import com.sageserpent.plutonium.AllEvents.ItemStateUpdatesDelta
 import scala.collection.immutable.Map
 
 object AllEvents {
-  case class ItemStateUpdatesDelta[Payload](
-      payload: Payload,
+  case class ItemStateUpdatesDelta[AllEventsType <: AllEvents](
+      allEvents: AllEventsType,
       itemStateUpdateKeysThatNeedToBeRevoked: Set[ItemStateUpdateKey],
-      newOrModifiedItemStateUpdates: Map[ItemStateUpdateKey, ItemStateUpdate]) {
-    def flatMap(step: Payload => ItemStateUpdatesDelta[Payload])
-      : ItemStateUpdatesDelta[Payload] = {
-      val ItemStateUpdatesDelta(eventsFromStep,
-                                itemStateUpdateKeysThatNeedToBeRevokedFromStep,
-                                newOrModifiedItemStateUpdatesFromStep) = step(
-        payload)
-      ItemStateUpdatesDelta(
-        eventsFromStep,
-        itemStateUpdateKeysThatNeedToBeRevokedFromStep -- newOrModifiedItemStateUpdates.keys ++ itemStateUpdateKeysThatNeedToBeRevoked,
-        newOrModifiedItemStateUpdates -- itemStateUpdateKeysThatNeedToBeRevokedFromStep ++ newOrModifiedItemStateUpdatesFromStep
-      )
-    }
-  }
+      newOrModifiedItemStateUpdates: Map[ItemStateUpdateKey, ItemStateUpdate])
 
   val noEvents = new AllEventsImplementation()
 }
