@@ -2,20 +2,27 @@ package com.sageserpent.plutonium
 
 import java.time.Instant
 
-import com.sageserpent.americium.{NegativeInfinity, PositiveInfinity, Unbounded}
-import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
-import de.sciss.fingertree.RangedSeq
-
-import scala.collection.immutable.Map
-import scala.reflect.runtime.universe.TypeTag
-import ItemStateUpdateTime.ordering
+import com.sageserpent.americium.{
+  Finite,
+  NegativeInfinity,
+  PositiveInfinity,
+  Unbounded
+}
 import com.sageserpent.plutonium.AllEvents.ItemStateUpdatesDelta
 import com.sageserpent.plutonium.AllEventsImplementation.{
   EventFootprint,
   Lifecycle,
-  Lifecycles,
   LifecyclesById
 }
+import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
+import com.sageserpent.plutonium.ItemStateUpdateKey.ordering
+import com.sageserpent.plutonium.ItemStateUpdateTime.ordering
+import com.sageserpent.plutonium.World.{Revision, initialRevision}
+import de.sciss.fingertree.RangedSeq
+import de.ummels.prioritymap.PriorityMap
+
+import scala.collection.immutable.Map
+import scala.reflect.runtime.universe.TypeTag
 
 object AllEventsImplementation {
   val sentinelForEndTimeOfLifecycleWithoutAnnihilation = UpperBoundOfTimeslice(
@@ -27,15 +34,23 @@ object AllEventsImplementation {
   type LifecycleEndPoints = (ItemStateUpdateTime, ItemStateUpdateTime)
 
   object Lifecycle {
-    // This creates a single lifecycle based on an actual update.
-    def apply(eventId: EventId,
-              itemStateUpdateKey: ItemStateUpdateKey,
-              itemStateUpdate: ItemStateUpdate): Lifecycle = ???
+    def fromChange(eventId: EventId,
+                   itemStateUpdateKey: ItemStateUpdateKey,
+                   patch: AbstractPatch): Lifecycle = ???
 
-    // This creates a single lifecycle based on an argument reference.
-    def apply(eventId: EventId,
-              itemStateUpdateKey: ItemStateUpdateKey,
-              uniqueItemSpecification: UniqueItemSpecification): Lifecycle = ???
+    def fromMeasurement(eventId: EventId,
+                        itemStateUpdateKey: ItemStateUpdateKey,
+                        patch: AbstractPatch): Lifecycle =
+      ???
+
+    def fromAnnihilation(eventId: EventId,
+                         itemStateUpdateKey: ItemStateUpdateKey,
+                         annihilation: Annihilation): Lifecycle = ???
+
+    def fromArgumentTypeReference(
+        eventId: EventId,
+        itemStateUpdateKey: ItemStateUpdateKey,
+        uniqueItemSpecification: UniqueItemSpecification): Lifecycle = ???
   }
 
   trait Lifecycle {
@@ -89,14 +104,15 @@ object AllEventsImplementation {
 
     def fuseWith(another: Lifecycle): Lifecycle
 
-    // NOTE: these will have best patches applied along with type adjustments, including on the arguments. Hence the crufty argument...
-    def itemStateUpdatesByKey(
-        uniqueItemSpecificationToTypeTagMap: collection.Map[
-          UniqueItemSpecification,
-          TypeTag[_]]): Map[ItemStateUpdateKey, ItemStateUpdate]
+    def itemStateUpdateKeys(): Set[ItemStateUpdateKey]
 
-    // NOTE: the client code merges this across all the lifecycles to provide the argument for the previous method.
-    // I'm calling it the Client Cruft Cooperation Pattern - aka Rebounding Flyweight Pattern.
+    // NOTE: these will have best patches applied along with type adjustments, including on the arguments. That's why
+    // 'lifecyclesById' is provided - although the any reference to the same unique item as that references by the receiver
+    // lifecycle will ignore the argument and use the receiver lifecycle. The item state update key of the update is used
+    // to select the correct lifecycle to resolve an argument type, if there is more than one lifecycle for that unique item.
+    def itemStateUpdatesByKey(lifecyclesById: LifecyclesById)
+      : Map[ItemStateUpdateKey, ItemStateUpdate]
+
     def uniqueItemSpecificationToTypeTagMap
       : collection.Map[UniqueItemSpecification, TypeTag[_]]
   }
@@ -129,6 +145,7 @@ object AllEventsImplementation {
 }
 
 class AllEventsImplementation(
+    nextRevision: Revision = initialRevision,
     lifecycleFootprintPerEvent: Map[EventId,
                                     AllEventsImplementation.EventFootprint] =
       Map.empty,
@@ -138,6 +155,69 @@ class AllEventsImplementation(
 
   override def revise(events: Map[_ <: EventId, Option[Event]])
     : ItemStateUpdatesDelta[AllEventsType] = {
+
+    case class CalculationState(defunctLifecycles: Set[Lifecycle],
+                                newLifecycles: Set[Lifecycle],
+                                lifecyclesById: LifecyclesById) {
+      def flatMap(
+          step: LifecyclesById => CalculationState): CalculationState = {
+        val CalculationState(defunctLifecyclesFromStep,
+                             newLifecyclesFromStep,
+                             lifecyclesByIdFromStep) = step(lifecyclesById)
+
+        CalculationState(
+          defunctLifecycles = defunctLifecycles -- newLifecyclesFromStep ++ defunctLifecyclesFromStep,
+          newLifecycles = newLifecycles -- defunctLifecyclesFromStep ++ newLifecyclesFromStep,
+          lifecyclesById = lifecyclesByIdFromStep
+        )
+      }
+
+      def fuseLifecycles(
+          priorityQueueOfLifecyclesConsideredForFusionOrAddition: PriorityMap[
+            Lifecycle,
+            ItemStateUpdateTime] = PriorityMap[Lifecycle, ItemStateUpdateTime](
+            newLifecycles.toSeq.map(lifecycle =>
+              lifecycle -> lifecycle.startTime): _*)): CalculationState = ???
+    }
+
+    def annul(lifecyclesById: LifecyclesById,
+              eventId: EventId): CalculationState = ???
+    /*
+// TODO: make this fit in with the Grand Master Plan....
+def annul(lifecyclesById: Map[Any, Lifecycles], eventId: EventId) = {
+val EventFootprint(when, itemIds) = lifecycleFootprintPerEvent(eventId)
+
+val timeslice = UpperBoundOfTimeslice(when)
+
+val (lifecyclesWithRelevantIds: Map[Any, Lifecycles],
+   lifecyclesWithIrrelevantIds: Map[Any, Lifecycles]) =
+lifecyclesById.partition {
+  case (lifecycleId, lifecycles) => itemIds.contains(lifecycleId)
+}
+
+val (unchangedLifecycles, changedLifecycles, revokedItemStateUpdateKeys) =
+(lifecyclesWithRelevantIds map {
+  case (itemId, lifecycles: Lifecycles) =>
+    val lifecyclesIncludingEventTime =
+      lifecycles.filterIncludes(timeslice -> timeslice).toSeq
+
+    val otherLifecycles: Lifecycles =
+      (lifecycles /: lifecyclesIncludingEventTime)(_ - _)
+
+    val (lifecyclesWithAnnulments, revokedItemStateUpdateKeys) =
+      lifecyclesIncludingEventTime.map(_.annul(eventId)).unzip
+
+    (itemId -> otherLifecycles,
+     itemId -> RangedSeq[Lifecycle, ItemStateUpdateTime](
+       lifecyclesWithAnnulments.flatten: _*),
+     (Set.empty[ItemStateUpdateKey] /: revokedItemStateUpdateKeys)(
+       _ ++ _))
+}).unzip3
+
+???
+
+}
+     */
 
     /*
      * PLAN:
@@ -163,10 +243,66 @@ class AllEventsImplementation(
      *
      * */
 
+    val initialCalculationState = CalculationState(
+      defunctLifecycles = Set.empty,
+      newLifecycles = Set.empty,
+      lifecyclesById = lifecyclesById)
+
     val eventIdsToRevoke = events.keys
 
-    ???
+    val calculationStateAfterAnnulments =
+      (initialCalculationState /: eventIdsToRevoke) {
+        case (calculationState, eventId) =>
+          calculationState.flatMap(annul(_, eventId))
+      }
 
+    val newAndModifiedEvents: Map[EventId, Event] = events.collect {
+      case (eventId, Some(event)) => eventId -> event
+    }
+
+    val simpleLifecyclesForNewAndModifiedEvents =
+      buildSimpleLifecyclesFrom(newAndModifiedEvents)
+
+    def addLifecycle(lifecyclesById: LifecyclesById,
+                     lifecycle: Lifecycle): LifecyclesById =
+      lifecyclesById.updated(
+        lifecycle.id,
+        lifecyclesById.getOrElse(
+          lifecycle.id,
+          RangedSeq.empty[Lifecycle, ItemStateUpdateTime]) + lifecycle)
+
+    val calculationStateWithSimpleLifecyclesAddedIn =
+      calculationStateAfterAnnulments.flatMap(
+        lifecyclesById =>
+          CalculationState(
+            defunctLifecycles = Set.empty,
+            newLifecycles = simpleLifecyclesForNewAndModifiedEvents.toSet,
+            lifecyclesById =
+              (lifecyclesById /: simpleLifecyclesForNewAndModifiedEvents)(
+                addLifecycle)
+        ))
+
+    val CalculationState(finalDefunctLifecyles,
+                         finalNewLifecycles,
+                         finalLifecyclesById) =
+      calculationStateWithSimpleLifecyclesAddedIn.fuseLifecycles()
+
+    val itemStateUpdateKeysThatNeedToBeRevoked =
+      finalDefunctLifecyles.flatMap(_.itemStateUpdateKeys())
+
+    val newOrModifiedItemStateUpdates =
+      (Map.empty[ItemStateUpdateKey, ItemStateUpdate] /: finalNewLifecycles.map(
+        _.itemStateUpdatesByKey(finalLifecyclesById)))(_ ++ _)
+
+    ItemStateUpdatesDelta(
+      allEvents = new AllEventsImplementation(
+        nextRevision = 1 + this.nextRevision,
+        lifecycleFootprintPerEvent = ???, // TODO!!!!!!!!!
+        lifecyclesById = finalLifecyclesById),
+      itemStateUpdateKeysThatNeedToBeRevoked =
+        itemStateUpdateKeysThatNeedToBeRevoked,
+      newOrModifiedItemStateUpdates = newOrModifiedItemStateUpdates
+    )
   }
 
   override def retainUpTo(when: Unbounded[Instant]): AllEvents = {
@@ -181,7 +317,7 @@ class AllEventsImplementation(
           Ordering[ItemStateUpdateTime]
             .lteq(UpperBoundOfTimeslice(whenEventTakesPlace), cutoff)
       },
-      lifecyclesById.mapValues { lifecycles =>
+      lifecyclesById = lifecyclesById.mapValues { lifecycles =>
         val (retainedUnchangedLifecycles, retainedTrimmedLifecycles) =
           lifecycles
             .filterIncludes(timespanUpToAndIncludingTheCutoff)
@@ -195,38 +331,58 @@ class AllEventsImplementation(
     )
   }
 
-// TODO: make this fit in with the Grand Master Plan....
-  def annul(lifecyclesById: Map[Any, Lifecycles], eventId: EventId) = {
-    val EventFootprint(when, itemIds) = lifecycleFootprintPerEvent(eventId)
-
-    val timeslice = UpperBoundOfTimeslice(when)
-
-    val (lifecyclesWithRelevantIds: Map[Any, Lifecycles],
-         lifecyclesWithIrrelevantIds: Map[Any, Lifecycles]) =
-      lifecyclesById.partition {
-        case (lifecycleId, lifecycles) => itemIds.contains(lifecycleId)
-      }
-
-    val (unchangedLifecycles, changedLifecycles, revokedItemStateUpdateKeys) =
-      (lifecyclesWithRelevantIds map {
-        case (itemId, lifecycles: Lifecycles) =>
-          val lifecyclesIncludingEventTime =
-            lifecycles.filterIncludes(timeslice -> timeslice).toSeq
-
-          val otherLifecycles: Lifecycles =
-            (lifecycles /: lifecyclesIncludingEventTime)(_ - _)
-
-          val (lifecyclesWithAnnulments, revokedItemStateUpdateKeys) =
-            lifecyclesIncludingEventTime.map(_.annul(eventId)).unzip
-
-          (itemId -> otherLifecycles,
-           itemId -> RangedSeq[Lifecycle, ItemStateUpdateTime](
-             lifecyclesWithAnnulments.flatten: _*),
-           (Set.empty[ItemStateUpdateKey] /: revokedItemStateUpdateKeys)(
-             _ ++ _))
-      }).unzip3
-
-    ???
-
+  private def buildSimpleLifecyclesFrom(
+      events: Map[EventId, Event]): Iterable[Lifecycle] = {
+    events.zipWithIndex.flatMap {
+      case ((eventId, event), eventOrderingTiebreakerIndex) =>
+        event match {
+          case Change(when, patches) =>
+            patches.zipWithIndex.flatMap {
+              case (patch, intraEventIndex) =>
+                val eventOrderingKey =
+                  (when, nextRevision, eventOrderingTiebreakerIndex)
+                val itemStateUpdateKey =
+                  ItemStateUpdateKey(eventOrderingKey = eventOrderingKey,
+                                     intraEventIndex = intraEventIndex)
+                Lifecycle.fromChange(
+                  eventId = eventId,
+                  itemStateUpdateKey,
+                  patch = patch) +: patch.argumentItemSpecifications.map(
+                  uniqueItemSpecification =>
+                    Lifecycle.fromArgumentTypeReference(
+                      eventId = eventId,
+                      itemStateUpdateKey = itemStateUpdateKey,
+                      uniqueItemSpecification = uniqueItemSpecification))
+            }
+          case Measurement(when, patches) =>
+            patches.zipWithIndex.flatMap {
+              case (patch, intraEventIndex) =>
+                val eventOrderingKey =
+                  (when, nextRevision, eventOrderingTiebreakerIndex)
+                val itemStateUpdateKey =
+                  ItemStateUpdateKey(eventOrderingKey = eventOrderingKey,
+                                     intraEventIndex = intraEventIndex)
+                Lifecycle.fromMeasurement(
+                  eventId = eventId,
+                  itemStateUpdateKey,
+                  patch = patch) +: patch.argumentItemSpecifications.map(
+                  uniqueItemSpecification =>
+                    Lifecycle.fromArgumentTypeReference(
+                      eventId = eventId,
+                      itemStateUpdateKey = itemStateUpdateKey,
+                      uniqueItemSpecification = uniqueItemSpecification))
+            }
+          case annihilation @ Annihilation(when, _) =>
+            val eventOrderingKey =
+              (Finite(when), nextRevision, eventOrderingTiebreakerIndex)
+            Seq(
+              Lifecycle.fromAnnihilation(
+                eventId = eventId,
+                itemStateUpdateKey = ItemStateUpdateKey(eventOrderingKey =
+                                                          eventOrderingKey,
+                                                        intraEventIndex = 0),
+                annihilation = annihilation))
+        }
+    }
   }
 }
