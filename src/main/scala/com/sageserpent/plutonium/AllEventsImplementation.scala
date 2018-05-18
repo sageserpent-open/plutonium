@@ -104,14 +104,12 @@ object AllEventsImplementation {
 
     def fuseWith(another: Lifecycle): Lifecycle
 
-    def itemStateUpdateKeys(): Set[ItemStateUpdateKey]
-
     // NOTE: these will have best patches applied along with type adjustments, including on the arguments. That's why
     // 'lifecyclesById' is provided - although the any reference to the same unique item as that references by the receiver
     // lifecycle will ignore the argument and use the receiver lifecycle. The item state update key of the update is used
     // to select the correct lifecycle to resolve an argument type, if there is more than one lifecycle for that unique item.
-    def itemStateUpdatesByKey(lifecyclesById: LifecyclesById)
-      : Map[ItemStateUpdateKey, ItemStateUpdate]
+    def itemStateUpdates(lifecyclesById: LifecyclesById)
+      : Set[(ItemStateUpdateKey, ItemStateUpdate)]
 
     def uniqueItemSpecificationToTypeTagMap
       : collection.Map[UniqueItemSpecification, TypeTag[_]]
@@ -159,6 +157,8 @@ class AllEventsImplementation(
     case class CalculationState(defunctLifecycles: Set[Lifecycle],
                                 newLifecycles: Set[Lifecycle],
                                 lifecyclesById: LifecyclesById) {
+      require(defunctLifecycles.intersect(newLifecycles).isEmpty)
+
       def flatMap(
           step: LifecyclesById => CalculationState): CalculationState = {
         val CalculationState(defunctLifecyclesFromStep,
@@ -287,12 +287,24 @@ val (unchangedLifecycles, changedLifecycles, revokedItemStateUpdateKeys) =
                          finalLifecyclesById) =
       calculationStateWithSimpleLifecyclesAddedIn.fuseLifecycles()
 
-    val itemStateUpdateKeysThatNeedToBeRevoked =
-      finalDefunctLifecyles.flatMap(_.itemStateUpdateKeys())
+    // NOTE: is it really valid to use *'lifecycleById'* with 'finalDefunctLifecycles'? Yes, because any lifecycle *not* in 'lifecycleById'
+    // either makes it all the way through in the above code to 'finalLifecyclesById', or is made defunct itself and thrown away by the
+    // balancing done when flat-mapping a 'CalculationState'.
+    val itemStateUpdatesFromDefunctLifecycles
+      : Set[(ItemStateUpdateKey, ItemStateUpdate)] =
+      finalDefunctLifecyles.flatMap(_.itemStateUpdates(lifecyclesById))
 
-    val newOrModifiedItemStateUpdates =
-      (Map.empty[ItemStateUpdateKey, ItemStateUpdate] /: finalNewLifecycles.map(
-        _.itemStateUpdatesByKey(finalLifecyclesById)))(_ ++ _)
+    val itemStateUpdatesFromNewOrModifiedLifecycles
+      : Set[(ItemStateUpdateKey, ItemStateUpdate)] =
+      finalNewLifecycles.flatMap(_.itemStateUpdates(finalLifecyclesById))
+
+    val itemStateUpdateKeysThatNeedToBeRevoked: Set[ItemStateUpdateKey] =
+      (itemStateUpdatesFromDefunctLifecycles -- itemStateUpdatesFromNewOrModifiedLifecycles)
+        .map(_._1)
+
+    val newOrModifiedItemStateUpdates
+      : Map[ItemStateUpdateKey, ItemStateUpdate] =
+      (itemStateUpdatesFromNewOrModifiedLifecycles -- itemStateUpdatesFromDefunctLifecycles).toMap
 
     ItemStateUpdatesDelta(
       allEvents = new AllEventsImplementation(
