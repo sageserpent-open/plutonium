@@ -305,7 +305,27 @@ class AllEventsImplementation(
 
     val allEventIdsBookedIn: Set[EventId] = events map (_._1) toSet
 
-    def eventFootprintFrom(event: Event): EventFootprint = ???
+    def eventFootprintFrom(event: Event): EventFootprint = event match {
+      case Change(when, patches) =>
+        EventFootprint(
+          when = when,
+          itemIds = patches
+            .flatMap(patch =>
+              patch.targetItemSpecification.id +: patch.argumentItemSpecifications
+                .map(_.id))
+            .toSet)
+      case Measurement(when, patches) =>
+        EventFootprint(
+          when = when,
+          itemIds = patches
+            .flatMap(patch =>
+              patch.targetItemSpecification.id +: patch.argumentItemSpecifications
+                .map(_.id))
+            .toSet)
+      case Annihilation(when, uniqueItemSpecification) =>
+        EventFootprint(when = Finite(when),
+                       itemIds = Set(uniqueItemSpecification.id))
+    }
 
     val lifecycleFootprintPerEventWithoutEventIdsForThisRevisionBooking: Map[
       EventId,
