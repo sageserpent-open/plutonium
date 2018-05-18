@@ -12,10 +12,10 @@ import com.sageserpent.plutonium.AllEvents.ItemStateUpdatesDelta
 import com.sageserpent.plutonium.AllEventsImplementation.{
   EventFootprint,
   Lifecycle,
-  LifecyclesById
+  LifecyclesById,
+  noLifecycles
 }
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
-import com.sageserpent.plutonium.ItemStateUpdateKey.ordering
 import com.sageserpent.plutonium.ItemStateUpdateTime.ordering
 import com.sageserpent.plutonium.World.{Revision, initialRevision}
 import de.sciss.fingertree.RangedSeq
@@ -26,6 +26,7 @@ import scala.collection.immutable.Map
 import scala.reflect.runtime.universe.TypeTag
 
 object AllEventsImplementation {
+  // TODO - can we get rid of this? As long as the support for a closed-open interval exists, maybe we don't need an explicit end time?
   val sentinelForEndTimeOfLifecycleWithoutAnnihilation = UpperBoundOfTimeslice(
     PositiveInfinity())
 
@@ -133,9 +134,13 @@ object AllEventsImplementation {
     }
   }
 
-  implicit val endPoints = (_: Lifecycle).endPoints
+  implicit val endPoints = (lifecycle: Lifecycle) =>
+    Split.alignedWith(lifecycle.startTime) -> Split.upperBoundOf(
+      lifecycle.endTime)
 
-  type Lifecycles = RangedSeq[Lifecycle, ItemStateUpdateTime]
+  type Lifecycles = RangedSeq[Lifecycle, Split[ItemStateUpdateTime]]
+
+  val noLifecycles = RangedSeq.empty[Lifecycle, Split[ItemStateUpdateTime]]
 
   type LifecyclesById = Map[Any, Lifecycles]
 
@@ -188,8 +193,17 @@ class AllEventsImplementation(
           val overlappingLifecycles = lifecyclesById
             .get(itemId)
             .fold(Iterator.empty: Iterator[Lifecycle])(
-              _.filterOverlaps(candidateForFusion).filterNot(
-                _ == candidateForFusion)) // TODO - this isn't quite right, due to 'RangedSeq' using open-closed intervals. Need to come back to this...
+              lifecycle =>
+                // NASTY HACK - the 'RangedSeq' API has a strange way of dealing with intervals - have to work around it here...
+                lifecycle.filterOverlaps(candidateForFusion) ++ lifecycle
+                  .filterIncludes(
+                    Split.alignedWith(candidateForFusion.startTime) -> Split
+                      .alignedWith(candidateForFusion.startTime))
+                  ++ lifecycle
+                    .filterIncludes(
+                      Split.alignedWith(candidateForFusion.endTime) -> Split
+                        .alignedWith(candidateForFusion.endTime))
+                  filterNot (_ == candidateForFusion))
 
           val conflictingLifecycles = overlappingLifecycles.filter(
             _.typeBoundsAreInconsistentWith(candidateForFusion))
@@ -244,7 +258,7 @@ class AllEventsImplementation(
         (lifecyclesWithRelevantIds map {
           case (itemId, lifecycles) =>
             val lifecyclesIncludingEventTime =
-              lifecycles.filterIncludes(timeslice -> timeslice).toSeq
+              lifecycles.intersect(Split.alignedWith(timeslice)).toSeq
 
             val lifecyclesWithAnnulments =
               lifecyclesIncludingEventTime.flatMap(_.annul(eventId))
@@ -288,9 +302,7 @@ class AllEventsImplementation(
                      lifecycle: Lifecycle): LifecyclesById =
       lifecyclesById.updated(
         lifecycle.id,
-        lifecyclesById.getOrElse(
-          lifecycle.id,
-          RangedSeq.empty[Lifecycle, ItemStateUpdateTime]) + lifecycle)
+        lifecyclesById.getOrElse(lifecycle.id, noLifecycles) + lifecycle)
 
     val calculationStateWithSimpleLifecyclesAddedIn =
       calculationStateAfterAnnulments.flatMap(
@@ -378,8 +390,9 @@ class AllEventsImplementation(
   override def retainUpTo(when: Unbounded[Instant]): AllEvents = {
     val cutoff = UpperBoundOfTimeslice(when)
 
-    val timespanUpToAndIncludingTheCutoff = LowerBoundOfTimeslice(
-      NegativeInfinity()) -> cutoff
+    val timespanUpToAndIncludingTheCutoff = (Split.alignedWith(
+      LowerBoundOfTimeslice(NegativeInfinity())): Split[ItemStateUpdateTime]) -> (Split
+      .upperBoundOf(cutoff): Split[ItemStateUpdateTime])
 
     new AllEventsImplementation(
       lifecycleFootprintPerEvent = lifecycleFootprintPerEvent.filter {
@@ -394,8 +407,7 @@ class AllEventsImplementation(
             .partition(lifecycle =>
               Ordering[ItemStateUpdateTime].lteq(lifecycle.endTime, cutoff))
 
-        (RangedSeq
-          .empty[Lifecycle, ItemStateUpdateTime] /: (retainedUnchangedLifecycles ++ retainedTrimmedLifecycles
+        (noLifecycles /: (retainedUnchangedLifecycles ++ retainedTrimmedLifecycles
           .flatMap(_.retainUpTo(when))))(_ + _)
       }
     )
