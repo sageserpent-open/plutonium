@@ -21,6 +21,7 @@ import com.sageserpent.plutonium.World.{Revision, initialRevision}
 import de.sciss.fingertree.RangedSeq
 import de.ummels.prioritymap.PriorityMap
 
+import scala.annotation.tailrec
 import scala.collection.immutable.Map
 import scala.reflect.runtime.universe.TypeTag
 
@@ -153,7 +154,6 @@ class AllEventsImplementation(
 
   override def revise(events: Map[_ <: EventId, Option[Event]])
     : ItemStateUpdatesDelta[AllEventsType] = {
-
     case class CalculationState(defunctLifecycles: Set[Lifecycle],
                                 newLifecycles: Set[Lifecycle],
                                 lifecyclesById: LifecyclesById) {
@@ -172,21 +172,61 @@ class AllEventsImplementation(
         )
       }
 
-      def fuseLifecycles(
+      @tailrec
+      final def fuseLifecycles(
           priorityQueueOfLifecyclesConsideredForFusionOrAddition: PriorityMap[
             Lifecycle,
             ItemStateUpdateTime] = PriorityMap[Lifecycle, ItemStateUpdateTime](
             newLifecycles.toSeq.map(lifecycle =>
-              lifecycle -> lifecycle.startTime): _*)): CalculationState = ???
-    }
+              lifecycle -> lifecycle.startTime): _*)): CalculationState = {
+        if (priorityQueueOfLifecyclesConsideredForFusionOrAddition.nonEmpty) {
+          val (candidateForFusion, startTimeOfCandidate) =
+            priorityQueueOfLifecyclesConsideredForFusionOrAddition.head
 
-    def addLifecycle(lifecyclesById: LifecyclesById,
-                     lifecycle: Lifecycle): LifecyclesById =
-      lifecyclesById.updated(
-        lifecycle.id,
-        lifecyclesById.getOrElse(
-          lifecycle.id,
-          RangedSeq.empty[Lifecycle, ItemStateUpdateTime]) + lifecycle)
+          val itemId = candidateForFusion.id
+
+          val overlappingLifecycles = lifecyclesById
+            .get(itemId)
+            .fold(Iterator.empty: Iterator[Lifecycle])(
+              _.filterOverlaps(candidateForFusion).filterNot(
+                _ == candidateForFusion)) // TODO - this isn't quite right, due to 'RangedSeq' using open-closed intervals. Need to come back to this...
+
+          val conflictingLifecycles = overlappingLifecycles.filter(
+            _.typeBoundsAreInconsistentWith(candidateForFusion))
+
+          if (conflictingLifecycles.nonEmpty) {
+            throw new RuntimeException(
+              s"There is at least one item of id: '${itemId}' that would be inconsistent with type '${candidateForFusion.lowerBoundTypeTag.tpe}', these have types: '${conflictingLifecycles map (_.lowerBoundTypeTag.tpe)}'.")
+          }
+
+          val fusibleLifecycles =
+            overlappingLifecycles.filter(_.isFusibleWith(candidateForFusion))
+
+          fusibleLifecycles.size match {
+            case 0 =>
+              this.fuseLifecycles(
+                priorityQueueOfLifecyclesConsideredForFusionOrAddition.drop(1))
+            case 1 =>
+              val matchForFusion = fusibleLifecycles.next()
+              val fusedLifecycle = candidateForFusion.fuseWith(matchForFusion)
+              val nextState = CalculationState(
+                defunctLifecycles = Set(candidateForFusion, matchForFusion),
+                newLifecycles = Set(fusedLifecycle),
+                lifecyclesById = lifecyclesById.updated(
+                  itemId,
+                  lifecyclesById(itemId) - matchForFusion - candidateForFusion + fusedLifecycle)
+              )
+
+              nextState.fuseLifecycles(
+                priorityQueueOfLifecyclesConsideredForFusionOrAddition
+                  .drop(1) + (fusedLifecycle -> fusedLifecycle.startTime))
+            case _ =>
+              throw new scala.RuntimeException(
+                s"There is more than one item of id: '${itemId}' compatible with type '${candidateForFusion.lowerBoundTypeTag.tpe}', these have types: '${fusibleLifecycles map (_.lowerBoundTypeTag.tpe)}'.")
+          }
+        } else this
+      }
+    }
 
     def annul(lifecyclesById: LifecyclesById,
               eventId: EventId): CalculationState = {
@@ -224,30 +264,6 @@ class AllEventsImplementation(
       )
     }
 
-    /*
-     * PLAN:
-     *
-     * We'll build a pair of sets of lifecycles, one for those that have become defunct and the other for those (re)created anew.
-     *
-     * 1. For *all* the event ids, successively annul the event id, making a new 'LifecyclesById' state. Update the pair of sets for each step.
-     *
-     * 2. Build simple lifecycles from each new / modified event, both as fully-fledged updates and also as argument references. Add these into the second
-     * set in the pair and to the 'LifecyclesById' state.
-     *
-     * 3. Put all the lifecycles in the second set in the pair on to a priority queue in order of the start time.
-     *
-     * 4. Iterate through the priority queue, searching for *other* overlapping lifecycles in the 'LifecyclesById' state and either:-
-     * i) throw an exception because more than one other lifecycle can fuse with the one in question.
-     * ii) fusing with the only other one available - put the result on the priority queue as well as in the 'LifecyclesById' state.
-     * iii) leaving it in the 'LifecyclesById' as is, which results in the priority queue getting smaller.
-     *
-     * At each stage in #4, track which lifecycles go defunct and which are created anew.
-     *
-     * 5. Take the two sets and compare the item state updates (key / update pairs) from them - these provide the delta.
-     * We need to harvest a map of unique item specifications to lowered type tags....
-     *
-     * */
-
     val initialCalculationState = CalculationState(
       defunctLifecycles = Set.empty,
       newLifecycles = Set.empty,
@@ -267,6 +283,14 @@ class AllEventsImplementation(
 
     val simpleLifecyclesForNewAndModifiedEvents =
       buildSimpleLifecyclesFrom(newAndModifiedEvents)
+
+    def addLifecycle(lifecyclesById: LifecyclesById,
+                     lifecycle: Lifecycle): LifecyclesById =
+      lifecyclesById.updated(
+        lifecycle.id,
+        lifecyclesById.getOrElse(
+          lifecycle.id,
+          RangedSeq.empty[Lifecycle, ItemStateUpdateTime]) + lifecycle)
 
     val calculationStateWithSimpleLifecyclesAddedIn =
       calculationStateAfterAnnulments.flatMap(
