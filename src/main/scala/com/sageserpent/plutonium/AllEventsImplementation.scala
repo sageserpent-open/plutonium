@@ -180,44 +180,49 @@ class AllEventsImplementation(
               lifecycle -> lifecycle.startTime): _*)): CalculationState = ???
     }
 
+    def addLifecycle(lifecyclesById: LifecyclesById,
+                     lifecycle: Lifecycle): LifecyclesById =
+      lifecyclesById.updated(
+        lifecycle.id,
+        lifecyclesById.getOrElse(
+          lifecycle.id,
+          RangedSeq.empty[Lifecycle, ItemStateUpdateTime]) + lifecycle)
+
     def annul(lifecyclesById: LifecyclesById,
-              eventId: EventId): CalculationState = ???
-    /*
-// TODO: make this fit in with the Grand Master Plan....
-def annul(lifecyclesById: Map[Any, Lifecycles], eventId: EventId) = {
-val EventFootprint(when, itemIds) = lifecycleFootprintPerEvent(eventId)
+              eventId: EventId): CalculationState = {
+      val EventFootprint(when, itemIds) = lifecycleFootprintPerEvent(eventId)
 
-val timeslice = UpperBoundOfTimeslice(when)
+      val timeslice = UpperBoundOfTimeslice(when)
 
-val (lifecyclesWithRelevantIds: Map[Any, Lifecycles],
-   lifecyclesWithIrrelevantIds: Map[Any, Lifecycles]) =
-lifecyclesById.partition {
-  case (lifecycleId, lifecycles) => itemIds.contains(lifecycleId)
-}
+      val (lifecyclesWithRelevantIds: LifecyclesById,
+           lifecyclesWithIrrelevantIds: LifecyclesById) =
+        lifecyclesById.partition {
+          case (lifecycleId, lifecycles) => itemIds.contains(lifecycleId)
+        }
 
-val (unchangedLifecycles, changedLifecycles, revokedItemStateUpdateKeys) =
-(lifecyclesWithRelevantIds map {
-  case (itemId, lifecycles: Lifecycles) =>
-    val lifecyclesIncludingEventTime =
-      lifecycles.filterIncludes(timeslice -> timeslice).toSeq
+      val (lifecyclesByIdWithAnnulments, changedLifecycles, defunctLifecycles) =
+        (lifecyclesWithRelevantIds map {
+          case (itemId, lifecycles) =>
+            val lifecyclesIncludingEventTime =
+              lifecycles.filterIncludes(timeslice -> timeslice).toSeq
 
-    val otherLifecycles: Lifecycles =
-      (lifecycles /: lifecyclesIncludingEventTime)(_ - _)
+            val lifecyclesWithAnnulments =
+              lifecyclesIncludingEventTime.flatMap(_.annul(eventId))
 
-    val (lifecyclesWithAnnulments, revokedItemStateUpdateKeys) =
-      lifecyclesIncludingEventTime.map(_.annul(eventId)).unzip
+            val otherLifecycles =
+              (lifecycles /: lifecyclesIncludingEventTime)(_ - _)
 
-    (itemId -> otherLifecycles,
-     itemId -> RangedSeq[Lifecycle, ItemStateUpdateTime](
-       lifecyclesWithAnnulments.flatten: _*),
-     (Set.empty[ItemStateUpdateKey] /: revokedItemStateUpdateKeys)(
-       _ ++ _))
-}).unzip3
+            (itemId -> (otherLifecycles /: lifecyclesWithAnnulments)(_ + _),
+             lifecyclesWithAnnulments,
+             lifecyclesIncludingEventTime)
+        }).unzip3
 
-???
-
-}
-     */
+      CalculationState(
+        defunctLifecycles = defunctLifecycles.flatten.toSet,
+        newLifecycles = (Set.empty[Lifecycle] /: changedLifecycles)(_ ++ _),
+        lifecyclesById = lifecyclesByIdWithAnnulments.toMap
+      )
+    }
 
     /*
      * PLAN:
@@ -262,14 +267,6 @@ val (unchangedLifecycles, changedLifecycles, revokedItemStateUpdateKeys) =
 
     val simpleLifecyclesForNewAndModifiedEvents =
       buildSimpleLifecyclesFrom(newAndModifiedEvents)
-
-    def addLifecycle(lifecyclesById: LifecyclesById,
-                     lifecycle: Lifecycle): LifecyclesById =
-      lifecyclesById.updated(
-        lifecycle.id,
-        lifecyclesById.getOrElse(
-          lifecycle.id,
-          RangedSeq.empty[Lifecycle, ItemStateUpdateTime]) + lifecycle)
 
     val calculationStateWithSimpleLifecyclesAddedIn =
       calculationStateAfterAnnulments.flatMap(
