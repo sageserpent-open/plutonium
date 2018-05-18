@@ -306,11 +306,28 @@ val (unchangedLifecycles, changedLifecycles, revokedItemStateUpdateKeys) =
       : Map[ItemStateUpdateKey, ItemStateUpdate] =
       (itemStateUpdatesFromNewOrModifiedLifecycles -- itemStateUpdatesFromDefunctLifecycles).toMap
 
+    val allEventIdsBookedIn: Set[EventId] = events map (_._1) toSet
+
+    def eventFootprintFrom(event: Event): EventFootprint = ???
+
+    val lifecycleFootprintPerEventWithoutEventIdsForThisRevisionBooking: Map[
+      EventId,
+      AllEventsImplementation.EventFootprint] = lifecycleFootprintPerEvent filter {
+      case (eventId, _) => allEventIdsBookedIn.contains(eventId)
+    }
+
+    val finalLifecycleFootprintPerEvent =
+      (lifecycleFootprintPerEventWithoutEventIdsForThisRevisionBooking /: newAndModifiedEvents) {
+        case (lifecycleFootprintPerEvent, (eventId, event)) =>
+          lifecycleFootprintPerEvent + (eventId -> eventFootprintFrom(event))
+      }
+
     ItemStateUpdatesDelta(
-      allEvents = new AllEventsImplementation(
-        nextRevision = 1 + this.nextRevision,
-        lifecycleFootprintPerEvent = ???, // TODO!!!!!!!!!
-        lifecyclesById = finalLifecyclesById),
+      allEvents =
+        new AllEventsImplementation(nextRevision = 1 + this.nextRevision,
+                                    lifecycleFootprintPerEvent =
+                                      finalLifecycleFootprintPerEvent,
+                                    lifecyclesById = finalLifecyclesById),
       itemStateUpdateKeysThatNeedToBeRevoked =
         itemStateUpdateKeysThatNeedToBeRevoked,
       newOrModifiedItemStateUpdates = newOrModifiedItemStateUpdates
