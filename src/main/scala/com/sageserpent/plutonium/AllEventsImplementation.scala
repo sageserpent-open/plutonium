@@ -30,9 +30,6 @@ object AllEventsImplementation {
   val sentinelForEndTimeOfLifecycleWithoutAnnihilation = UpperBoundOfTimeslice(
     PositiveInfinity())
 
-  // TODO: I'm getting the impression that 'RangedSeq' works with closed-open intervals.
-  // If so, we should probably cutover to using a 'SplitLevel[ItemStateUpdateTime]' so that
-  // the open end can be modelled cleanly.
   type LifecycleEndPoints = (ItemStateUpdateTime, ItemStateUpdateTime)
 
   object Lifecycle {
@@ -192,18 +189,14 @@ class AllEventsImplementation(
 
           val overlappingLifecycles = lifecyclesById
             .get(itemId)
-            .fold(Iterator.empty: Iterator[Lifecycle])(
-              lifecycle =>
-                // NASTY HACK - the 'RangedSeq' API has a strange way of dealing with intervals - have to work around it here...
-                lifecycle.filterOverlaps(candidateForFusion) ++ lifecycle
-                  .filterIncludes(
-                    Split.alignedWith(candidateForFusion.startTime) -> Split
-                      .alignedWith(candidateForFusion.startTime))
-                  ++ lifecycle
-                    .filterIncludes(
-                      Split.alignedWith(candidateForFusion.endTime) -> Split
-                        .alignedWith(candidateForFusion.endTime))
-                  filterNot (_ == candidateForFusion))
+            .fold(Iterator.empty: Iterator[Lifecycle]) { lifecycle => // NASTY HACK - the 'RangedSeq' API has a strange way of dealing with intervals - have to work around it here...
+              val startTime = Split.alignedWith(candidateForFusion.startTime)
+              val endTime   = Split.alignedWith(candidateForFusion.endTime)
+              (lifecycle.filterOverlaps(candidateForFusion) ++ lifecycle
+                .filterIncludes(startTime -> startTime) ++ lifecycle
+                .filterIncludes(endTime   -> endTime))
+                .filterNot(_ == candidateForFusion)
+            }
 
           val conflictingLifecycles = overlappingLifecycles.filter(
             _.typeBoundsAreInconsistentWith(candidateForFusion))
@@ -214,14 +207,15 @@ class AllEventsImplementation(
           }
 
           val fusibleLifecycles =
-            overlappingLifecycles.filter(_.isFusibleWith(candidateForFusion))
+            overlappingLifecycles
+              .filter(_.isFusibleWith(candidateForFusion))
+              .toList
 
-          fusibleLifecycles.size match {
-            case 0 =>
+          fusibleLifecycles match {
+            case Nil =>
               this.fuseLifecycles(
                 priorityQueueOfLifecyclesConsideredForFusionOrAddition.drop(1))
-            case 1 =>
-              val matchForFusion = fusibleLifecycles.next()
+            case matchForFusion :: Nil =>
               val fusedLifecycle = candidateForFusion.fuseWith(matchForFusion)
               val nextState = CalculationState(
                 defunctLifecycles = Set(candidateForFusion, matchForFusion),
