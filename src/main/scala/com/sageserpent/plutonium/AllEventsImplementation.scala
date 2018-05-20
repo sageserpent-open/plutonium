@@ -9,6 +9,11 @@ import com.sageserpent.americium.{
   Unbounded
 }
 import com.sageserpent.plutonium.AllEvents.ItemStateUpdatesDelta
+import com.sageserpent.plutonium.AllEventsImplementation.Lifecycle.{
+  EndOfLifecycle,
+  IndivisibleEvent,
+  bagConfiguration
+}
 import com.sageserpent.plutonium.AllEventsImplementation.{
   EventFootprint,
   Lifecycle,
@@ -22,7 +27,7 @@ import de.sciss.fingertree.RangedSeq
 import de.ummels.prioritymap.PriorityMap
 
 import scala.annotation.tailrec
-import scala.collection.immutable.Map
+import scala.collection.immutable.{Bag, HashedBagConfiguration, Map, SortedMap}
 import scala.reflect.runtime.universe.TypeTag
 
 object AllEventsImplementation {
@@ -33,29 +38,99 @@ object AllEventsImplementation {
   type LifecycleEndPoints = (ItemStateUpdateTime, ItemStateUpdateTime)
 
   object Lifecycle {
+    implicit val bagConfiguration = HashedBagConfiguration.compact[TypeTag[_]]
+
     def fromChange(eventId: EventId,
                    itemStateUpdateKey: ItemStateUpdateKey,
-                   patch: AbstractPatch): Lifecycle = ???
+                   patch: AbstractPatch): Lifecycle =
+      new Lifecycle(eventId = eventId,
+                    itemStateUpdateKey = itemStateUpdateKey,
+                    indivisibleEvent = IndivisibleChange(patch))
 
     def fromMeasurement(eventId: EventId,
                         itemStateUpdateKey: ItemStateUpdateKey,
                         patch: AbstractPatch): Lifecycle =
-      ???
+      new Lifecycle(eventId = eventId,
+                    itemStateUpdateKey = itemStateUpdateKey,
+                    indivisibleEvent = IndivisibleMeasurement(patch))
 
-    def fromAnnihilation(eventId: EventId,
-                         itemStateUpdateKey: ItemStateUpdateKey,
-                         annihilation: Annihilation): Lifecycle = ???
+    def fromAnnihilation(
+        eventId: EventId,
+        itemStateUpdateKey: ItemStateUpdateKey,
+        uniqueItemSpecification: UniqueItemSpecification): Lifecycle =
+      new Lifecycle(eventId = eventId,
+                    itemStateUpdateKey = itemStateUpdateKey,
+                    indivisibleEvent = EndOfLifecycle(uniqueItemSpecification))
 
     def fromArgumentTypeReference(
         eventId: EventId,
         itemStateUpdateKey: ItemStateUpdateKey,
-        uniqueItemSpecification: UniqueItemSpecification): Lifecycle = ???
+        uniqueItemSpecification: UniqueItemSpecification): Lifecycle = {
+      new Lifecycle(eventId = eventId,
+                    itemStateUpdateKey = itemStateUpdateKey,
+                    indivisibleEvent =
+                      ArgumentReference(uniqueItemSpecification))
+    }
+
+    sealed trait IndivisibleEvent {
+      def uniqueItemSpecification: UniqueItemSpecification
+    }
+
+    case class ArgumentReference(
+        override val uniqueItemSpecification: UniqueItemSpecification)
+        extends IndivisibleEvent {}
+
+    case class IndivisibleChange(patch: AbstractPatch)
+        extends IndivisibleEvent {
+      override def uniqueItemSpecification: UniqueItemSpecification = ???
+    }
+
+    case class IndivisibleMeasurement(patch: AbstractPatch)
+        extends IndivisibleEvent {
+      override def uniqueItemSpecification: UniqueItemSpecification = ???
+    }
+
+    case class EndOfLifecycle(
+        override val uniqueItemSpecification: UniqueItemSpecification)
+        extends IndivisibleEvent {}
   }
 
-  trait Lifecycle {
-    val startTime: ItemStateUpdateTime
+  class Lifecycle(
+      typeTags: Bag[TypeTag[_]],
+      eventsArrangedInTimeOrder: SortedMap[ItemStateUpdateTime,
+                                           IndivisibleEvent],
+      itemStateUpdateTimesByEventId: Map[EventId, Set[ItemStateUpdateTime]]) {
+    require(typeTags.nonEmpty)
 
-    val endTime: ItemStateUpdateTime
+    require(eventsArrangedInTimeOrder.nonEmpty)
+
+    require(eventsArrangedInTimeOrder.init.forall {
+      case (_, indivisibleEvent) =>
+        indivisibleEvent match {
+          case _: EndOfLifecycle => false
+          case _                 => true
+        }
+    })
+
+    require(
+      itemStateUpdateTimesByEventId.nonEmpty && itemStateUpdateTimesByEventId
+        .forall { case (_, times) => times.nonEmpty })
+
+    def this(eventId: EventId,
+             itemStateUpdateKey: ItemStateUpdateKey,
+             indivisibleEvent: IndivisibleEvent) {
+      this(
+        typeTags = Bag(indivisibleEvent.uniqueItemSpecification.typeTag),
+        eventsArrangedInTimeOrder = SortedMap(
+          (itemStateUpdateKey: ItemStateUpdateTime) -> indivisibleEvent),
+        itemStateUpdateTimesByEventId =
+          Map(eventId -> Set(itemStateUpdateKey: ItemStateUpdateTime))
+      )
+    }
+
+    val startTime: ItemStateUpdateTime = eventsArrangedInTimeOrder.firstKey
+
+    val endTime: ItemStateUpdateTime = eventsArrangedInTimeOrder.lastKey
 
     require(Ordering[ItemStateUpdateTime].lt(startTime, endTime))
 
@@ -66,13 +141,18 @@ object AllEventsImplementation {
         .lteq(this.startTime, another.endTime) && Ordering[ItemStateUpdateTime]
         .lteq(another.startTime, this.endTime)
 
-    val uniqueItemSpecification: UniqueItemSpecification
+    val uniqueItemSpecification: UniqueItemSpecification =
+      UniqueItemSpecification(id, lowerBoundTypeTag)
 
-    def id = uniqueItemSpecification.id
+    def id: Any = eventsArrangedInTimeOrder.head._2.uniqueItemSpecification.id
 
-    val lowerBoundTypeTag = uniqueItemSpecification.typeTag
+    def lowerBoundTypeTag: TypeTag[_] = typeTags.distinct.reduce[TypeTag[_]] {
+      case (first, second) => if (first.tpe <:< second.tpe) first else second
+    }
 
-    val upperBoundTypeTag: TypeTag[_]
+    def upperBoundTypeTag: TypeTag[_] = typeTags.distinct.reduce[TypeTag[_]] {
+      case (first, second) => if (first.tpe <:< second.tpe) second else first
+    }
 
     require(lowerBoundTypeTag.tpe <:< upperBoundTypeTag.tpe)
 
@@ -89,11 +169,12 @@ object AllEventsImplementation {
       another.upperBoundTypeTag.tpe <:< this.upperBoundTypeTag.tpe || this.upperBoundTypeTag.tpe <:< another.upperBoundTypeTag.tpe
 
     // NOTE: this is quite defensive, we can answer with 'None' if 'when' is not greater than the start time.
-    def retainUpTo(when: Unbounded[Instant]): Option[Lifecycle]
+    def retainUpTo(when: Unbounded[Instant]): Option[Lifecycle] = ???
 
-    def isRelevantTo(eventId: EventId): Boolean
+    def isRelevantTo(eventId: EventId): Boolean =
+      itemStateUpdateTimesByEventId.contains(eventId)
 
-    def annul(eventId: EventId): Option[Lifecycle]
+    def annul(eventId: EventId): Option[Lifecycle] = ???
 
     // The lower type bounds are compatible and there is overlap.
     def isFusibleWith(another: Lifecycle): Boolean =
@@ -101,17 +182,17 @@ object AllEventsImplementation {
       // of interfaces in Java and trait mixins in Scala; you'll see why.
       this.lowerTypeIsConsistentWith(another) && this.overlapsWith(another)
 
-    def fuseWith(another: Lifecycle): Lifecycle
+    def fuseWith(another: Lifecycle): Lifecycle = ???
 
     // NOTE: these will have best patches applied along with type adjustments, including on the arguments. That's why
     // 'lifecyclesById' is provided - although the any reference to the same unique item as that references by the receiver
     // lifecycle will ignore the argument and use the receiver lifecycle. The item state update key of the update is used
     // to select the correct lifecycle to resolve an argument type, if there is more than one lifecycle for that unique item.
     def itemStateUpdates(lifecyclesById: LifecyclesById)
-      : Set[(ItemStateUpdateKey, ItemStateUpdate)]
+      : Set[(ItemStateUpdateKey, ItemStateUpdate)] = ???
 
     def uniqueItemSpecificationToTypeTagMap
-      : collection.Map[UniqueItemSpecification, TypeTag[_]]
+      : collection.Map[UniqueItemSpecification, TypeTag[_]] = ???
   }
 
   trait LifecycleContracts extends Lifecycle {
@@ -457,7 +538,8 @@ class AllEventsImplementation(
                 itemStateUpdateKey = ItemStateUpdateKey(eventOrderingKey =
                                                           eventOrderingKey,
                                                         intraEventIndex = 0),
-                annihilation = annihilation))
+                uniqueItemSpecification = annihilation.uniqueItemSpecification
+              ))
         }
     }
   }
