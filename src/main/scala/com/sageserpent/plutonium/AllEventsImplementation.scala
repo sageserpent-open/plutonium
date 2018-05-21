@@ -82,12 +82,14 @@ object AllEventsImplementation {
 
     case class IndivisibleChange(patch: AbstractPatch)
         extends IndivisibleEvent {
-      override def uniqueItemSpecification: UniqueItemSpecification = ???
+      override def uniqueItemSpecification: UniqueItemSpecification =
+        patch.targetItemSpecification
     }
 
     case class IndivisibleMeasurement(patch: AbstractPatch)
         extends IndivisibleEvent {
-      override def uniqueItemSpecification: UniqueItemSpecification = ???
+      override def uniqueItemSpecification: UniqueItemSpecification =
+        patch.targetItemSpecification
     }
 
     case class EndOfLifecycle(
