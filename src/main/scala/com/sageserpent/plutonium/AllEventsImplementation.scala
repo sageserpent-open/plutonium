@@ -132,7 +132,12 @@ object AllEventsImplementation {
 
     val startTime: ItemStateUpdateTime = eventsArrangedInTimeOrder.firstKey
 
-    val endTime: ItemStateUpdateTime = eventsArrangedInTimeOrder.lastKey
+    // TODO: the way annihilations are just mixed in with all the other events in 'eventsArrangedInTimeOrder' feels hokey:
+    // it necessitates a pesky invariant check, along with the special case logic below. Sort this out!
+    val endTime: ItemStateUpdateTime = eventsArrangedInTimeOrder.last match {
+      case (itemStateUpdateTime, _: EndOfLifecycle) => itemStateUpdateTime
+      case _                                        => sentinelForEndTimeOfLifecycleWithoutAnnihilation
+    }
 
     require(Ordering[ItemStateUpdateTime].lt(startTime, endTime))
 
