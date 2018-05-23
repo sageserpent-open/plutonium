@@ -176,7 +176,37 @@ object AllEventsImplementation {
       another.upperBoundTypeTag.tpe <:< this.upperBoundTypeTag.tpe || this.upperBoundTypeTag.tpe <:< another.upperBoundTypeTag.tpe
 
     // NOTE: this is quite defensive, we can answer with 'None' if 'when' is not greater than the start time.
-    def retainUpTo(when: Unbounded[Instant]): Option[Lifecycle] = ???
+    def retainUpTo(when: Unbounded[Instant]): Option[Lifecycle] = {
+      val cutoff = UpperBoundOfTimeslice(when)
+
+      val (retainedEvents, trimmedEvents) =
+        eventsArrangedInTimeOrder.partition {
+          case (itemStateUpdateTime, _) =>
+            Ordering[ItemStateUpdateTime].gteq(cutoff, itemStateUpdateTime)
+        }
+
+      if (retainedEvents.nonEmpty) {
+        val retainedTypeTags = (typeTags /: trimmedEvents) {
+          case (typeTags, (_, trimmedEvent)) =>
+            typeTags - trimmedEvent.uniqueItemSpecification.typeTag
+        }
+
+        // TODO - consider just using 'itemStateUpdateTimesByEventId' - this will result in
+        // extraneous entries, however 'annul' can be made to tolerate these. Just a thought...
+        val retainedItemStateUpdateTimesByEventId =
+          itemStateUpdateTimesByEventId
+            .mapValues(_.filter(Ordering[ItemStateUpdateTime].gteq(cutoff, _)))
+            .filter {
+              case (_, itemStateUpdateTimes) => itemStateUpdateTimes.nonEmpty
+            }
+
+        Some(
+          new Lifecycle(typeTags = retainedTypeTags,
+                        eventsArrangedInTimeOrder = retainedEvents,
+                        itemStateUpdateTimesByEventId =
+                          retainedItemStateUpdateTimesByEventId))
+      } else None
+    }
 
     def isRelevantTo(eventId: EventId): Boolean =
       itemStateUpdateTimesByEventId.contains(eventId)
