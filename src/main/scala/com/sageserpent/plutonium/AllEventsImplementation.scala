@@ -211,7 +211,27 @@ object AllEventsImplementation {
     def isRelevantTo(eventId: EventId): Boolean =
       itemStateUpdateTimesByEventId.contains(eventId)
 
-    def annul(eventId: EventId): Option[Lifecycle] = ???
+    def annul(eventId: EventId): Option[Lifecycle] = {
+      itemStateUpdateTimesByEventId.get(eventId) match {
+        case Some(itemStateUpdateTimes) =>
+          val preservedEvents =
+            (eventsArrangedInTimeOrder /: itemStateUpdateTimes)(_ - _)
+          if (preservedEvents.nonEmpty) {
+            val annulledEvents = itemStateUpdateTimes map (eventsArrangedInTimeOrder.apply)
+            val preservedTypeTags = (typeTags /: annulledEvents) {
+              case (typeTags, annulledEvent) =>
+                typeTags - annulledEvent.uniqueItemSpecification.typeTag
+            }
+            val preservedItemStateUpdateTimesByEventId = itemStateUpdateTimesByEventId - eventId
+            Some(
+              new Lifecycle(typeTags = preservedTypeTags,
+                            eventsArrangedInTimeOrder = preservedEvents,
+                            itemStateUpdateTimesByEventId =
+                              preservedItemStateUpdateTimesByEventId))
+          } else None
+        case None => Some(this)
+      }
+    }
 
     // The lower type bounds are compatible and there is overlap.
     def isFusibleWith(another: Lifecycle): Boolean =
