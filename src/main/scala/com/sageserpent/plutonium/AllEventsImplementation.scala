@@ -192,9 +192,6 @@ object AllEventsImplementation {
     // to select the correct lifecycle to resolve an argument type, if there is more than one lifecycle for that unique item.
     def itemStateUpdates(lifecyclesById: LifecyclesById)
       : Set[(ItemStateUpdateKey, ItemStateUpdate)] = ???
-
-    def uniqueItemSpecificationToTypeTagMap
-      : collection.Map[UniqueItemSpecification, TypeTag[_]] = ???
   }
 
   trait LifecycleContracts extends Lifecycle {
