@@ -187,7 +187,7 @@ object AllEventsImplementation {
     def fuseWith(another: Lifecycle): Lifecycle = ???
 
     // NOTE: these will have best patches applied along with type adjustments, including on the arguments. That's why
-    // 'lifecyclesById' is provided - although the any reference to the same unique item as that references by the receiver
+    // 'lifecyclesById' is provided - although any reference to the same unique item as that referenced by the receiver
     // lifecycle will ignore the argument and use the receiver lifecycle. The item state update key of the update is used
     // to select the correct lifecycle to resolve an argument type, if there is more than one lifecycle for that unique item.
     def itemStateUpdates(lifecyclesById: LifecyclesById)
