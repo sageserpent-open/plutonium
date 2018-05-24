@@ -138,7 +138,7 @@ object AllEventsImplementation {
       case _                                        => sentinelForEndTimeOfLifecycleWithoutAnnihilation
     }
 
-    require(Ordering[ItemStateUpdateTime].lt(startTime, endTime))
+    require(Ordering[ItemStateUpdateTime].lteq(startTime, endTime))
 
     val endPoints: LifecycleEndPoints = startTime -> endTime
 
