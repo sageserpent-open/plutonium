@@ -11,7 +11,9 @@ import com.sageserpent.americium.{
 import com.sageserpent.plutonium.AllEvents.ItemStateUpdatesDelta
 import com.sageserpent.plutonium.AllEventsImplementation.Lifecycle.{
   EndOfLifecycle,
-  IndivisibleEvent
+  IndivisibleChange,
+  IndivisibleEvent,
+  IndivisibleMeasurement
 }
 import com.sageserpent.plutonium.AllEventsImplementation.{
   EventFootprint,
@@ -44,10 +46,9 @@ object AllEventsImplementation {
               indivisibleEvent: IndivisibleEvent): Lifecycle =
       Lifecycle(
         typeTags = Bag(indivisibleEvent.uniqueItemSpecification.typeTag),
-        eventsArrangedInTimeOrder = SortedMap(
-          (itemStateUpdateKey: ItemStateUpdateTime) -> indivisibleEvent),
-        itemStateUpdateTimesByEventId =
-          Map(eventId -> Set(itemStateUpdateKey: ItemStateUpdateTime))
+        eventsArrangedInTimeOrder =
+          SortedMap(itemStateUpdateKey              -> indivisibleEvent),
+        itemStateUpdateTimesByEventId = Map(eventId -> Set(itemStateUpdateKey))
       )
 
     def fromChange(eventId: EventId,
@@ -64,13 +65,12 @@ object AllEventsImplementation {
                 itemStateUpdateKey = itemStateUpdateKey,
                 indivisibleEvent = IndivisibleMeasurement(patch))
 
-    def fromAnnihilation(
-        eventId: EventId,
-        itemStateUpdateKey: ItemStateUpdateKey,
-        uniqueItemSpecification: UniqueItemSpecification): Lifecycle =
+    def fromAnnihilation(eventId: EventId,
+                         itemStateUpdateKey: ItemStateUpdateKey,
+                         annihilation: Annihilation): Lifecycle =
       Lifecycle(eventId = eventId,
                 itemStateUpdateKey = itemStateUpdateKey,
-                indivisibleEvent = EndOfLifecycle(uniqueItemSpecification))
+                indivisibleEvent = EndOfLifecycle(annihilation))
 
     def fromArgumentTypeReference(
         eventId: EventId,
@@ -101,16 +101,18 @@ object AllEventsImplementation {
         patch.targetItemSpecification
     }
 
-    case class EndOfLifecycle(
-        override val uniqueItemSpecification: UniqueItemSpecification)
-        extends IndivisibleEvent {}
+    case class EndOfLifecycle(annihilation: Annihilation)
+        extends IndivisibleEvent {
+      override def uniqueItemSpecification: UniqueItemSpecification =
+        annihilation.uniqueItemSpecification
+    }
   }
 
   case class Lifecycle(
       typeTags: Bag[TypeTag[_]],
-      eventsArrangedInTimeOrder: SortedMap[ItemStateUpdateTime,
+      eventsArrangedInTimeOrder: SortedMap[ItemStateUpdateKey,
                                            IndivisibleEvent],
-      itemStateUpdateTimesByEventId: Map[EventId, Set[ItemStateUpdateTime]]) {
+      itemStateUpdateTimesByEventId: Map[EventId, Set[ItemStateUpdateKey]]) {
     require(typeTags.nonEmpty)
 
     require(eventsArrangedInTimeOrder.nonEmpty)
@@ -237,11 +239,11 @@ object AllEventsImplementation {
       val fusedTypeTags = typeTags ++ another.typeTags
 
       val fusedEventsArrangedInTimeOrder: SortedMap[
-        ItemStateUpdateTime,
+        ItemStateUpdateKey,
         IndivisibleEvent] = eventsArrangedInTimeOrder ++ another.eventsArrangedInTimeOrder
 
       val fusedItemStateUpdateTimesByEventId
-        : Map[EventId, Set[ItemStateUpdateTime]] =
+        : Map[EventId, Set[ItemStateUpdateKey]] =
         (itemStateUpdateTimesByEventId.keys ++ another.itemStateUpdateTimesByEventId.keys) map (
             eventId =>
               eventId ->
@@ -261,7 +263,18 @@ object AllEventsImplementation {
     // lifecycle will ignore the argument and use the receiver lifecycle. The item state update key of the update is used
     // to select the correct lifecycle to resolve an argument type, if there is more than one lifecycle for that unique item.
     def itemStateUpdates(lifecyclesById: LifecyclesById)
-      : Set[(ItemStateUpdateKey, ItemStateUpdate)] = ???
+      : Set[(ItemStateUpdateKey, ItemStateUpdate)] = {
+      //  TODO: this is a deliberately hokey implementation just put in to do some obvious smoke testing of the implementation as a whole - needs fixing!
+
+      // TODO: the subclasses of 'IndivisibleEvent' look rather like a more refined form of the subclasses of 'ItemStateUpdate'. Hmmm....
+      eventsArrangedInTimeOrder.collect {
+        case (itemStateUpdateTime, IndivisibleChange(patch)) =>
+          itemStateUpdateTime -> ItemStatePatch(patch)
+        case (itemStateUpdateTime, IndivisibleMeasurement(patch)) => ???
+        case (itemStateUpdateTime, EndOfLifecycle(annihilation)) =>
+          itemStateUpdateTime -> ItemStateAnnihilation(annihilation)
+      }.toSet
+    }
   }
 
   trait LifecycleContracts extends Lifecycle {
@@ -607,7 +620,7 @@ class AllEventsImplementation(
                 itemStateUpdateKey = ItemStateUpdateKey(eventOrderingKey =
                                                           eventOrderingKey,
                                                         intraEventIndex = 0),
-                uniqueItemSpecification = annihilation.uniqueItemSpecification
+                annihilation = annihilation
               ))
         }
     }
