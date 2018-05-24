@@ -209,25 +209,22 @@ object AllEventsImplementation {
       itemStateUpdateTimesByEventId.contains(eventId)
 
     def annul(eventId: EventId): Option[Lifecycle] = {
-      itemStateUpdateTimesByEventId.get(eventId) match {
-        case Some(itemStateUpdateTimes) =>
-          val preservedEvents =
-            (eventsArrangedInTimeOrder /: itemStateUpdateTimes)(_ - _)
-          if (preservedEvents.nonEmpty) {
-            val annulledEvents = itemStateUpdateTimes map (eventsArrangedInTimeOrder.apply)
-            val preservedTypeTags = (typeTags /: annulledEvents) {
-              case (typeTags, annulledEvent) =>
-                typeTags - annulledEvent.uniqueItemSpecification.typeTag
-            }
-            val preservedItemStateUpdateTimesByEventId = itemStateUpdateTimesByEventId - eventId
-            Some(
-              Lifecycle(typeTags = preservedTypeTags,
-                        eventsArrangedInTimeOrder = preservedEvents,
-                        itemStateUpdateTimesByEventId =
-                          preservedItemStateUpdateTimesByEventId))
-          } else None
-        case None => Some(this)
-      }
+      val itemStateUpdateTimes = itemStateUpdateTimesByEventId(eventId)
+      val preservedEvents =
+        (eventsArrangedInTimeOrder /: itemStateUpdateTimes)(_ - _)
+      if (preservedEvents.nonEmpty) {
+        val annulledEvents = itemStateUpdateTimes map (eventsArrangedInTimeOrder.apply)
+        val preservedTypeTags = (typeTags /: annulledEvents) {
+          case (typeTags, annulledEvent) =>
+            typeTags - annulledEvent.uniqueItemSpecification.typeTag
+        }
+        val preservedItemStateUpdateTimesByEventId = itemStateUpdateTimesByEventId - eventId
+        Some(
+          Lifecycle(typeTags = preservedTypeTags,
+                    eventsArrangedInTimeOrder = preservedEvents,
+                    itemStateUpdateTimesByEventId =
+                      preservedItemStateUpdateTimesByEventId))
+      } else None
     }
 
     // The lower type bounds are compatible and there is overlap.
@@ -419,15 +416,18 @@ class AllEventsImplementation(
                 val lifecyclesIncludingEventTime =
                   lifecycles.intersect(Split.alignedWith(timeslice)).toSeq
 
+                val lifecyclesIncludingEventId = lifecyclesIncludingEventTime filter (_.isRelevantTo(
+                  eventId))
+
                 val lifecyclesWithAnnulments =
-                  lifecyclesIncludingEventTime.flatMap(_.annul(eventId))
+                  lifecyclesIncludingEventId.flatMap(_.annul(eventId))
 
                 val otherLifecycles =
-                  (lifecycles /: lifecyclesIncludingEventTime)(_ - _)
+                  (lifecycles /: lifecyclesIncludingEventId)(_ - _)
 
                 (itemId -> (otherLifecycles /: lifecyclesWithAnnulments)(_ + _),
                  lifecyclesWithAnnulments,
-                 lifecyclesIncludingEventTime)
+                 lifecyclesIncludingEventId)
             }).unzip3
 
           CalculationState(
