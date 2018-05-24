@@ -6,6 +6,9 @@ import com.sageserpent.plutonium.intersperseObsoleteEvents.EventId
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{FlatSpec, LoneElement, Matchers}
 import com.sageserpent.americium.PositiveInfinity
+import org.scalacheck.Gen
+
+import scala.util.Random
 
 class WorldEfficientInMemoryImplementationBugs
     extends FlatSpec
@@ -307,6 +310,67 @@ class WorldEfficientInMemoryImplementationBugs
             }),
             sharedAsOf
           )
+        }
+      }
+    }
+  }
+
+  "events that refer to items using inconsistent types" should "be rejected" in {
+    forAll(worldResourceGenerator,
+           Gen.containerOfN[Vector, Instant](4, instantGenerator),
+           seedGenerator) { (worldResource, threeWhens, seed) =>
+      val sharedAsOf = Instant.ofEpochSecond(0)
+
+      val itemId = "Frieda"
+
+      val random = new Random(seed)
+
+      val actions = Vector(
+        { world: World[Int] =>
+          world.revise(
+            1,
+            Change.forOneItem[History](threeWhens(0))(itemId, { item =>
+              item.shouldBeUnchanged = true
+            }),
+            sharedAsOf
+          )
+        }, { world: World[Int] =>
+          world.revise(
+            2,
+            Change.forOneItem[FooHistory](threeWhens(1))(itemId, { item =>
+              item.property1 = "La-di-dah"
+            }),
+            sharedAsOf
+          )
+        }, { world: World[Int] =>
+          world.revise(
+            3,
+            Change.forOneItem[MoreSpecificFooHistory](threeWhens(2))(itemId, {
+              item =>
+                item.property1 = "Gunner"
+            }),
+            sharedAsOf
+          )
+        }, { world: World[Int] =>
+          world.revise(
+            4,
+            Change
+              .forOneItem[AnotherSpecificFooHistory](threeWhens(3))(itemId, {
+                item =>
+                  item.property1 = "Graham"
+              }),
+            sharedAsOf
+          )
+        }
+      )
+
+      worldResource acquireAndGet { world =>
+        intercept[RuntimeException] {
+          val permutedActions = random.shuffle(actions)
+
+          for (action <- permutedActions) {
+            action(world)
+          }
         }
       }
     }
