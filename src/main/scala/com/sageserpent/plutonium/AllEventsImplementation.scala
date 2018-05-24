@@ -11,8 +11,7 @@ import com.sageserpent.americium.{
 import com.sageserpent.plutonium.AllEvents.ItemStateUpdatesDelta
 import com.sageserpent.plutonium.AllEventsImplementation.Lifecycle.{
   EndOfLifecycle,
-  IndivisibleEvent,
-  bagConfiguration
+  IndivisibleEvent
 }
 import com.sageserpent.plutonium.AllEventsImplementation.{
   EventFootprint,
@@ -40,36 +39,46 @@ object AllEventsImplementation {
   object Lifecycle {
     implicit val bagConfiguration = HashedBagConfiguration.compact[TypeTag[_]]
 
+    def apply(eventId: EventId,
+              itemStateUpdateKey: ItemStateUpdateKey,
+              indivisibleEvent: IndivisibleEvent): Lifecycle =
+      Lifecycle(
+        typeTags = Bag(indivisibleEvent.uniqueItemSpecification.typeTag),
+        eventsArrangedInTimeOrder = SortedMap(
+          (itemStateUpdateKey: ItemStateUpdateTime) -> indivisibleEvent),
+        itemStateUpdateTimesByEventId =
+          Map(eventId -> Set(itemStateUpdateKey: ItemStateUpdateTime))
+      )
+
     def fromChange(eventId: EventId,
                    itemStateUpdateKey: ItemStateUpdateKey,
                    patch: AbstractPatch): Lifecycle =
-      new Lifecycle(eventId = eventId,
-                    itemStateUpdateKey = itemStateUpdateKey,
-                    indivisibleEvent = IndivisibleChange(patch))
+      Lifecycle(eventId = eventId,
+                itemStateUpdateKey = itemStateUpdateKey,
+                indivisibleEvent = IndivisibleChange(patch))
 
     def fromMeasurement(eventId: EventId,
                         itemStateUpdateKey: ItemStateUpdateKey,
                         patch: AbstractPatch): Lifecycle =
-      new Lifecycle(eventId = eventId,
-                    itemStateUpdateKey = itemStateUpdateKey,
-                    indivisibleEvent = IndivisibleMeasurement(patch))
+      Lifecycle(eventId = eventId,
+                itemStateUpdateKey = itemStateUpdateKey,
+                indivisibleEvent = IndivisibleMeasurement(patch))
 
     def fromAnnihilation(
         eventId: EventId,
         itemStateUpdateKey: ItemStateUpdateKey,
         uniqueItemSpecification: UniqueItemSpecification): Lifecycle =
-      new Lifecycle(eventId = eventId,
-                    itemStateUpdateKey = itemStateUpdateKey,
-                    indivisibleEvent = EndOfLifecycle(uniqueItemSpecification))
+      Lifecycle(eventId = eventId,
+                itemStateUpdateKey = itemStateUpdateKey,
+                indivisibleEvent = EndOfLifecycle(uniqueItemSpecification))
 
     def fromArgumentTypeReference(
         eventId: EventId,
         itemStateUpdateKey: ItemStateUpdateKey,
         uniqueItemSpecification: UniqueItemSpecification): Lifecycle = {
-      new Lifecycle(eventId = eventId,
-                    itemStateUpdateKey = itemStateUpdateKey,
-                    indivisibleEvent =
-                      ArgumentReference(uniqueItemSpecification))
+      Lifecycle(eventId = eventId,
+                itemStateUpdateKey = itemStateUpdateKey,
+                indivisibleEvent = ArgumentReference(uniqueItemSpecification))
     }
 
     sealed trait IndivisibleEvent {
@@ -97,7 +106,7 @@ object AllEventsImplementation {
         extends IndivisibleEvent {}
   }
 
-  class Lifecycle(
+  case class Lifecycle(
       typeTags: Bag[TypeTag[_]],
       eventsArrangedInTimeOrder: SortedMap[ItemStateUpdateTime,
                                            IndivisibleEvent],
@@ -117,18 +126,6 @@ object AllEventsImplementation {
     require(
       itemStateUpdateTimesByEventId.nonEmpty && itemStateUpdateTimesByEventId
         .forall { case (_, times) => times.nonEmpty })
-
-    def this(eventId: EventId,
-             itemStateUpdateKey: ItemStateUpdateKey,
-             indivisibleEvent: IndivisibleEvent) {
-      this(
-        typeTags = Bag(indivisibleEvent.uniqueItemSpecification.typeTag),
-        eventsArrangedInTimeOrder = SortedMap(
-          (itemStateUpdateKey: ItemStateUpdateTime) -> indivisibleEvent),
-        itemStateUpdateTimesByEventId =
-          Map(eventId -> Set(itemStateUpdateKey: ItemStateUpdateTime))
-      )
-    }
 
     val startTime: ItemStateUpdateTime = eventsArrangedInTimeOrder.firstKey
 
@@ -199,10 +196,10 @@ object AllEventsImplementation {
             }
 
         Some(
-          new Lifecycle(typeTags = retainedTypeTags,
-                        eventsArrangedInTimeOrder = retainedEvents,
-                        itemStateUpdateTimesByEventId =
-                          retainedItemStateUpdateTimesByEventId))
+          Lifecycle(typeTags = retainedTypeTags,
+                    eventsArrangedInTimeOrder = retainedEvents,
+                    itemStateUpdateTimesByEventId =
+                      retainedItemStateUpdateTimesByEventId))
       } else None
     }
 
@@ -222,10 +219,10 @@ object AllEventsImplementation {
             }
             val preservedItemStateUpdateTimesByEventId = itemStateUpdateTimesByEventId - eventId
             Some(
-              new Lifecycle(typeTags = preservedTypeTags,
-                            eventsArrangedInTimeOrder = preservedEvents,
-                            itemStateUpdateTimesByEventId =
-                              preservedItemStateUpdateTimesByEventId))
+              Lifecycle(typeTags = preservedTypeTags,
+                        eventsArrangedInTimeOrder = preservedEvents,
+                        itemStateUpdateTimesByEventId =
+                          preservedItemStateUpdateTimesByEventId))
           } else None
         case None => Some(this)
       }
@@ -236,7 +233,28 @@ object AllEventsImplementation {
       this.lowerTypeIsConsistentWith(another) && this.upperTypeIsConsistentWith(
         another) && this.overlapsWith(another)
 
-    def fuseWith(another: Lifecycle): Lifecycle = ???
+    def fuseWith(another: Lifecycle): Lifecycle = {
+      val fusedTypeTags = typeTags ++ another.typeTags
+
+      val fusedEventsArrangedInTimeOrder: SortedMap[
+        ItemStateUpdateTime,
+        IndivisibleEvent] = eventsArrangedInTimeOrder ++ another.eventsArrangedInTimeOrder
+
+      val fusedItemStateUpdateTimesByEventId
+        : Map[EventId, Set[ItemStateUpdateTime]] =
+        (itemStateUpdateTimesByEventId.keys ++ another.itemStateUpdateTimesByEventId.keys) map (
+            eventId =>
+              eventId ->
+                itemStateUpdateTimesByEventId.getOrElse(
+                  eventId,
+                  Set.empty ++ another.itemStateUpdateTimesByEventId
+                    .getOrElse(eventId, Set.empty))) toMap
+
+      Lifecycle(typeTags = fusedTypeTags,
+                eventsArrangedInTimeOrder = fusedEventsArrangedInTimeOrder,
+                itemStateUpdateTimesByEventId =
+                  fusedItemStateUpdateTimesByEventId)
+    }
 
     // NOTE: these will have best patches applied along with type adjustments, including on the arguments. That's why
     // 'lifecyclesById' is provided - although any reference to the same unique item as that referenced by the receiver
