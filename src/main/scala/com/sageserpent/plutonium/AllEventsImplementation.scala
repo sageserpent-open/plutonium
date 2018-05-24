@@ -401,38 +401,46 @@ class AllEventsImplementation(
 
     def annul(lifecyclesById: LifecyclesById,
               eventId: EventId): CalculationState = {
-      val EventFootprint(when, itemIds) = lifecycleFootprintPerEvent(eventId)
+      lifecycleFootprintPerEvent.get(eventId) match {
+        case Some(EventFootprint(when, itemIds)) =>
+          val timeslice = UpperBoundOfTimeslice(when)
 
-      val timeslice = UpperBoundOfTimeslice(when)
+          val (lifecyclesWithRelevantIds: LifecyclesById,
+               lifecyclesWithIrrelevantIds: LifecyclesById) =
+            lifecyclesById.partition {
+              case (lifecycleId, lifecycles) => itemIds.contains(lifecycleId)
+            }
 
-      val (lifecyclesWithRelevantIds: LifecyclesById,
-           lifecyclesWithIrrelevantIds: LifecyclesById) =
-        lifecyclesById.partition {
-          case (lifecycleId, lifecycles) => itemIds.contains(lifecycleId)
-        }
+          val (lifecyclesByIdWithAnnulments,
+               changedLifecycles,
+               defunctLifecycles) =
+            (lifecyclesWithRelevantIds map {
+              case (itemId, lifecycles) =>
+                val lifecyclesIncludingEventTime =
+                  lifecycles.intersect(Split.alignedWith(timeslice)).toSeq
 
-      val (lifecyclesByIdWithAnnulments, changedLifecycles, defunctLifecycles) =
-        (lifecyclesWithRelevantIds map {
-          case (itemId, lifecycles) =>
-            val lifecyclesIncludingEventTime =
-              lifecycles.intersect(Split.alignedWith(timeslice)).toSeq
+                val lifecyclesWithAnnulments =
+                  lifecyclesIncludingEventTime.flatMap(_.annul(eventId))
 
-            val lifecyclesWithAnnulments =
-              lifecyclesIncludingEventTime.flatMap(_.annul(eventId))
+                val otherLifecycles =
+                  (lifecycles /: lifecyclesIncludingEventTime)(_ - _)
 
-            val otherLifecycles =
-              (lifecycles /: lifecyclesIncludingEventTime)(_ - _)
+                (itemId -> (otherLifecycles /: lifecyclesWithAnnulments)(_ + _),
+                 lifecyclesWithAnnulments,
+                 lifecyclesIncludingEventTime)
+            }).unzip3
 
-            (itemId -> (otherLifecycles /: lifecyclesWithAnnulments)(_ + _),
-             lifecyclesWithAnnulments,
-             lifecyclesIncludingEventTime)
-        }).unzip3
+          CalculationState(
+            defunctLifecycles = defunctLifecycles.flatten.toSet,
+            newLifecycles = (Set.empty[Lifecycle] /: changedLifecycles)(_ ++ _),
+            lifecyclesById = lifecyclesByIdWithAnnulments.toMap
+          )
 
-      CalculationState(
-        defunctLifecycles = defunctLifecycles.flatten.toSet,
-        newLifecycles = (Set.empty[Lifecycle] /: changedLifecycles)(_ ++ _),
-        lifecyclesById = lifecyclesByIdWithAnnulments.toMap
-      )
+        case None =>
+          CalculationState(defunctLifecycles = Set.empty,
+                           newLifecycles = Set.empty,
+                           lifecyclesById = this.lifecyclesById)
+      }
     }
 
     val initialCalculationState = CalculationState(
