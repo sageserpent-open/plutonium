@@ -164,9 +164,7 @@ object AllEventsImplementation {
     require(lowerBoundTypeTag.tpe <:< upperBoundTypeTag.tpe)
 
     def typeBoundsAreInconsistentWith(another: Lifecycle): Boolean =
-      // NOTE: the conjunction of the negatives of the two sub-predicates isn't checked. Think of
-      // multiple inheritance of interfaces in Java and trait mixins in Scala; you'll see why.
-      this.upperTypeIsConsistentWith(another) && !this
+      this.upperTypeIsConsistentWith(another) ^ this
         .lowerTypeIsConsistentWith(another)
 
     def lowerTypeIsConsistentWith(another: Lifecycle): Boolean =
@@ -235,9 +233,8 @@ object AllEventsImplementation {
 
     // The lower type bounds are compatible and there is overlap.
     def isFusibleWith(another: Lifecycle): Boolean =
-      // NOTE: there is no check on upper types. Think of multiple inheritance
-      // of interfaces in Java and trait mixins in Scala; you'll see why.
-      this.lowerTypeIsConsistentWith(another) && this.overlapsWith(another)
+      this.lowerTypeIsConsistentWith(another) && this.upperTypeIsConsistentWith(
+        another) && this.overlapsWith(another)
 
     def fuseWith(another: Lifecycle): Lifecycle = ???
 
