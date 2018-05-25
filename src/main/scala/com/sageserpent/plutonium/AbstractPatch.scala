@@ -1,8 +1,10 @@
 package com.sageserpent.plutonium
 
 import java.lang.reflect.Method
-import scala.reflect.runtime.universe._
 
+import com.sageserpent.plutonium.AbstractPatch.TypeRefinement
+
+import scala.reflect.runtime.universe._
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 
 object AbstractPatch {
@@ -14,14 +16,13 @@ object AbstractPatch {
         .firstMethodIsOverrideCompatibleWithSecond(rhs.method, lhs.method)
     bothReferToTheSameItem && bothReferToTheSameMethod
   }
+
+  type TypeRefinement = UniqueItemSpecification => TypeTag[_]
 }
 
 // TODO: will need to be able to lower the typetags for the target and arguments somehow if we are going to build an update plan with these.
 abstract class AbstractPatch {
-  def rewriteItemTypeTags(
-      uniqueItemSpecificationToTypeTagMap: collection.Map[
-        UniqueItemSpecification,
-        TypeTag[_]]): AbstractPatch
+  def rewriteItemTypeTags(typeRefinement: TypeRefinement): AbstractPatch
 
   val method: Method
   val targetItemSpecification: UniqueItemSpecification
