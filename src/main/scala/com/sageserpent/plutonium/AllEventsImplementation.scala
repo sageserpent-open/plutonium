@@ -391,7 +391,8 @@ class AllEventsImplementation(
               (lifecycle.filterOverlaps(candidateForFusion) ++ lifecycle
                 .filterIncludes(startTime -> startTime) ++ lifecycle
                 .filterIncludes(endTime   -> endTime)).toSeq.distinct
-                .filterNot(_ == candidateForFusion)
+                .filterNot(
+                  priorityQueueOfLifecyclesConsideredForFusionOrAddition.contains)
             }
             .toList
 
