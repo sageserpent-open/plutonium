@@ -144,10 +144,9 @@ class PatchRecorderSpec
                             if (patchStandInIsNotForbiddenByEventTimeCutoff && bestPatch == patch) {
                               (patch.rewriteItemTypeTags _)
                                 .expects(*)
-                                .onCall {
-                                  (_: collection.Map[UniqueItemSpecification,
-                                                     TypeTag[_]]) =>
-                                    patch
+                                .onCall { (_: UniqueItemSpecification => TypeTag[
+                                  _]) =>
+                                  patch
                                 }
                                 .once
                               (updateConsumer.capturePatch _)

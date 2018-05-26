@@ -13,7 +13,8 @@ import com.sageserpent.plutonium.AllEventsImplementation.Lifecycle.{
   EndOfLifecycle,
   IndivisibleChange,
   IndivisibleEvent,
-  IndivisibleMeasurement
+  IndivisibleMeasurement,
+  refineTypeFor
 }
 import com.sageserpent.plutonium.AllEventsImplementation.{
   EventFootprint,
@@ -37,6 +38,11 @@ object AllEventsImplementation {
     PositiveInfinity())
 
   type LifecycleEndPoints = (ItemStateUpdateTime, ItemStateUpdateTime)
+
+  implicit def closedOpenEndPoints(lifecycle: Lifecycle)
+    : (Split[ItemStateUpdateTime], Split[ItemStateUpdateTime]) =
+    Split.alignedWith(lifecycle.startTime) -> Split.upperBoundOf(
+      lifecycle.endTime)
 
   object Lifecycle {
     implicit val bagConfiguration = HashedBagConfiguration.compact[TypeTag[_]]
@@ -105,6 +111,20 @@ object AllEventsImplementation {
         extends IndivisibleEvent {
       override def uniqueItemSpecification: UniqueItemSpecification =
         annihilation.uniqueItemSpecification
+    }
+
+    def refineTypeFor(itemStateUpdateTime: ItemStateUpdateTime,
+                      lifecyclesById: LifecyclesById)(
+        uniqueItemSpecification: UniqueItemSpecification): TypeTag[_] = {
+      val Seq(relevantLifecycle: Lifecycle) =
+        lifecyclesById(uniqueItemSpecification.id)
+          .filterIncludes(
+            Split.alignedWith(itemStateUpdateTime) -> Split.alignedWith(
+              itemStateUpdateTime))
+          .filter(lifecycle =>
+            lifecycle.lowerBoundTypeTag.tpe <:< uniqueItemSpecification.typeTag.tpe)
+          .toList
+      relevantLifecycle.lowerBoundTypeTag
     }
   }
 
@@ -261,15 +281,19 @@ object AllEventsImplementation {
     // to select the correct lifecycle to resolve an argument type, if there is more than one lifecycle for that unique item.
     def itemStateUpdates(lifecyclesById: LifecyclesById)
       : Set[(ItemStateUpdateKey, ItemStateUpdate)] = {
+
       //  TODO: this is a deliberately hokey implementation just put in to do some obvious smoke testing of the implementation as a whole - needs fixing!
 
       // TODO: the subclasses of 'IndivisibleEvent' look rather like a more refined form of the subclasses of 'ItemStateUpdate'. Hmmm....
       eventsArrangedInTimeOrder.collect {
         case (itemStateUpdateTime, IndivisibleChange(patch)) =>
-          itemStateUpdateTime -> ItemStatePatch(patch)
+          itemStateUpdateTime -> ItemStatePatch(
+            patch.rewriteItemTypeTags(
+              refineTypeFor(itemStateUpdateTime, lifecyclesById)))
         case (itemStateUpdateTime, IndivisibleMeasurement(patch)) => ???
         case (itemStateUpdateTime, EndOfLifecycle(annihilation)) =>
-          itemStateUpdateTime -> ItemStateAnnihilation(annihilation)
+          itemStateUpdateTime -> ItemStateAnnihilation(
+            annihilation.rewriteItemTypeTag(lowerBoundTypeTag))
       }.toSet
     }
   }
@@ -289,11 +313,17 @@ object AllEventsImplementation {
       require(isFusibleWith(another))
       super.fuseWith(another)
     }
-  }
 
-  implicit val endPoints = (lifecycle: Lifecycle) =>
-    Split.alignedWith(lifecycle.startTime) -> Split.upperBoundOf(
-      lifecycle.endTime)
+    abstract override def itemStateUpdates(lifecyclesById: LifecyclesById) = {
+      val id = uniqueItemSpecification.id
+      require(lifecyclesById.contains(id))
+      require(
+        lifecyclesById(id)
+          .filterOverlaps(this)
+          .contains(this))
+      super.itemStateUpdates(lifecyclesById)
+    }
+  }
 
   type Lifecycles = RangedSeq[Lifecycle, Split[ItemStateUpdateTime]]
 
@@ -557,7 +587,7 @@ class AllEventsImplementation(
 
     val timespanUpToAndIncludingTheCutoff = (Split.alignedWith(
       LowerBoundOfTimeslice(NegativeInfinity())): Split[ItemStateUpdateTime]) -> (Split
-      .upperBoundOf(cutoff): Split[ItemStateUpdateTime])
+      .alignedWith(cutoff): Split[ItemStateUpdateTime])
 
     new AllEventsImplementation(
       lifecycleFootprintPerEvent = lifecycleFootprintPerEvent.filter {
