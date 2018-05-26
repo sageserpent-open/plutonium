@@ -357,9 +357,15 @@ class AllEventsImplementation(
                              newLifecyclesFromStep,
                              lifecyclesByIdFromStep) = step(lifecyclesById)
 
+        val combinedDefunctLifecycles
+          : Set[Lifecycle] = defunctLifecycles ++ defunctLifecyclesFromStep
+
+        val combinedNewLifecycles
+          : Set[Lifecycle] = newLifecycles ++ newLifecyclesFromStep
+
         CalculationState(
-          defunctLifecycles = defunctLifecycles -- newLifecyclesFromStep ++ defunctLifecyclesFromStep,
-          newLifecycles = newLifecycles -- defunctLifecyclesFromStep ++ newLifecyclesFromStep,
+          defunctLifecycles = combinedDefunctLifecycles -- combinedNewLifecycles,
+          newLifecycles = combinedNewLifecycles -- combinedDefunctLifecycles,
           lifecyclesById = lifecyclesByIdFromStep
         )
       }
@@ -372,21 +378,22 @@ class AllEventsImplementation(
             newLifecycles.toSeq.map(lifecycle =>
               lifecycle -> lifecycle.startTime): _*)): CalculationState = {
         if (priorityQueueOfLifecyclesConsideredForFusionOrAddition.nonEmpty) {
-          val (candidateForFusion, startTimeOfCandidate) =
+          val (candidateForFusion, _) =
             priorityQueueOfLifecyclesConsideredForFusionOrAddition.head
 
           val itemId = candidateForFusion.id
 
           val overlappingLifecycles = lifecyclesById
             .get(itemId)
-            .fold(Iterator.empty: Iterator[Lifecycle]) { lifecycle => // NASTY HACK - the 'RangedSeq' API has a strange way of dealing with intervals - have to work around it here...
+            .fold(Seq.empty[Lifecycle]) { lifecycle => // NASTY HACK - the 'RangedSeq' API has a strange way of dealing with intervals - have to work around it here...
               val startTime = Split.alignedWith(candidateForFusion.startTime)
               val endTime   = Split.alignedWith(candidateForFusion.endTime)
               (lifecycle.filterOverlaps(candidateForFusion) ++ lifecycle
                 .filterIncludes(startTime -> startTime) ++ lifecycle
-                .filterIncludes(endTime   -> endTime))
+                .filterIncludes(endTime   -> endTime)).toSeq.distinct
                 .filterNot(_ == candidateForFusion)
             }
+            .toList
 
           val conflictingLifecycles = overlappingLifecycles.filter(
             _.typeBoundsAreInconsistentWith(candidateForFusion))
@@ -399,7 +406,6 @@ class AllEventsImplementation(
           val fusibleLifecycles =
             overlappingLifecycles
               .filter(_.isFusibleWith(candidateForFusion))
-              .toList
 
           fusibleLifecycles match {
             case Nil =>
@@ -407,13 +413,15 @@ class AllEventsImplementation(
                 priorityQueueOfLifecyclesConsideredForFusionOrAddition.drop(1))
             case matchForFusion :: Nil =>
               val fusedLifecycle = candidateForFusion.fuseWith(matchForFusion)
-              val nextState = CalculationState(
-                defunctLifecycles = Set(candidateForFusion, matchForFusion),
-                newLifecycles = Set(fusedLifecycle),
-                lifecyclesById = lifecyclesById.updated(
-                  itemId,
-                  lifecyclesById(itemId) - matchForFusion - candidateForFusion + fusedLifecycle)
-              )
+              val nextState = this.flatMap(
+                lifecyclesById =>
+                  CalculationState(
+                    defunctLifecycles = Set(candidateForFusion, matchForFusion),
+                    newLifecycles = Set(fusedLifecycle),
+                    lifecyclesById = lifecyclesById.updated(
+                      itemId,
+                      lifecyclesById(itemId) - matchForFusion - candidateForFusion + fusedLifecycle)
+                ))
 
               nextState.fuseLifecycles(
                 priorityQueueOfLifecyclesConsideredForFusionOrAddition
@@ -513,7 +521,8 @@ class AllEventsImplementation(
     val CalculationState(finalDefunctLifecyles,
                          finalNewLifecycles,
                          finalLifecyclesById) =
-      calculationStateWithSimpleLifecyclesAddedIn.fuseLifecycles()
+      calculationStateWithSimpleLifecyclesAddedIn.flatMap(_ =>
+        calculationStateWithSimpleLifecyclesAddedIn.fuseLifecycles())
 
     // NOTE: is it really valid to use *'lifecycleById'* with 'finalDefunctLifecycles'? Yes, because any lifecycle *not* in 'lifecycleById'
     // either makes it all the way through in the above code to 'finalLifecyclesById', or is made defunct itself and thrown away by the
