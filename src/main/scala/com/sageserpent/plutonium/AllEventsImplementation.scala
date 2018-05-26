@@ -439,8 +439,6 @@ class AllEventsImplementation(
               eventId: EventId): CalculationState = {
       lifecycleFootprintPerEvent.get(eventId) match {
         case Some(EventFootprint(when, itemIds)) =>
-          val timeslice = UpperBoundOfTimeslice(when)
-
           val (lifecyclesWithRelevantIds: LifecyclesById,
                lifecyclesWithIrrelevantIds: LifecyclesById) =
             lifecyclesById.partition {
@@ -452,8 +450,17 @@ class AllEventsImplementation(
                defunctLifecycles) =
             (lifecyclesWithRelevantIds map {
               case (itemId, lifecycles) =>
+                val lowerBound = Split.alignedWith(
+                  LowerBoundOfTimeslice(when): ItemStateUpdateTime)
+                val upperBound = Split.alignedWith(
+                  UpperBoundOfTimeslice(when): ItemStateUpdateTime)
+
                 val lifecyclesIncludingEventTime =
-                  lifecycles.intersect(Split.alignedWith(timeslice)).toSeq
+                  // NASTY HACK - the 'RangedSeq' API has a strange way of dealing with intervals - have to work around it here...
+                  (lifecycles
+                    .filterOverlaps(lowerBound           -> upperBound) ++
+                    lifecycles.filterIncludes(lowerBound -> lowerBound) ++
+                    lifecycles.filterIncludes(upperBound -> upperBound)).toSeq.distinct
 
                 val lifecyclesIncludingEventId = lifecyclesIncludingEventTime filter (_.isRelevantTo(
                   eventId))
@@ -478,7 +485,7 @@ class AllEventsImplementation(
         case None =>
           CalculationState(defunctLifecycles = Set.empty,
                            newLifecycles = Set.empty,
-                           lifecyclesById = this.lifecyclesById)
+                           lifecyclesById = lifecyclesById)
       }
     }
 
