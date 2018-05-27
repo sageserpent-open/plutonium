@@ -901,31 +901,34 @@ trait Bugs
 
         val sharedAsOf = Instant.ofEpochSecond(0)
 
+        val sharedPhysicalTime = Instant.ofEpochSecond(999L)
+
         val expectedHistory = Seq(11, 22, 33, 44, 55)
 
         worldResource acquireAndGet { world =>
           world.revise(
             TreeMap(
-              10 -> Some(Change.forOneItem(Instant.ofEpochSecond(-1L))(itemId, {
+              10 -> Some(Change.forOneItem(Instant.ofEpochSecond(0L))(itemId, {
                 item: IntegerHistory =>
                   item.integerProperty = 11
               })),
-              20 -> Some(Change.forOneItem(Instant.ofEpochSecond(0L))(itemId, {
+              20 -> Some(Change.forOneItem(Instant.ofEpochSecond(1L))(itemId, {
                 item: IntegerHistory =>
                   item.integerProperty = 22
               })),
-              30 -> Some(Change.forOneItem(Instant.ofEpochSecond(1L))(itemId, {
+              30 -> Some(Change.forOneItem(sharedPhysicalTime)(itemId, {
                 item: IntegerHistory =>
                   item.integerProperty = 33
               })),
-              40 -> Some(Change.forOneItem(Instant.ofEpochSecond(1L))(itemId, {
+              40 -> Some(Change.forOneItem(sharedPhysicalTime)(itemId, {
                 item: IntegerHistory =>
                   item.integerProperty = 44
               })),
-              50 -> Some(Change.forOneItem(Instant.ofEpochSecond(2L))(itemId, {
-                item: IntegerHistory =>
-                  item.integerProperty = 55
-              }))
+              50 -> Some(
+                Change.forOneItem(Instant.ofEpochSecond(1000L))(itemId, {
+                  item: IntegerHistory =>
+                    item.integerProperty = 55
+                }))
             ),
             sharedAsOf
           )
