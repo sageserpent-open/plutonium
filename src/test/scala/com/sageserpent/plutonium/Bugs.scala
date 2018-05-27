@@ -11,8 +11,7 @@ import com.sageserpent.americium.PositiveInfinity
 import org.scalacheck.Gen
 
 import scala.util.Random
-
-import scala.collection.immutable.SortedMap
+import scala.collection.immutable.{SortedMap, TreeMap}
 import scala.util.Random
 
 trait Bugs
@@ -892,6 +891,56 @@ trait Bugs
               action(world)
             }
           }
+        }
+      }
+    }
+
+    "booking in events at the same physical time in one revision" should "work" in {
+      forAll(worldResourceGenerator) { worldResource =>
+        val itemId = "Fred"
+
+        val sharedAsOf = Instant.ofEpochSecond(0)
+
+        val expectedHistory = Seq(11, 22, 33, 44, 55, 66)
+
+        worldResource acquireAndGet { world =>
+          world.revise(
+            TreeMap(
+              10 -> Some(Change.forOneItem(Instant.ofEpochSecond(0L))(itemId, {
+                item: IntegerHistory =>
+                  item.integerProperty = 11
+              })),
+              20 -> Some(Change.forOneItem(Instant.ofEpochSecond(0L))(itemId, {
+                item: IntegerHistory =>
+                  item.integerProperty = 22
+              })),
+              30 -> Some(Change.forOneItem(Instant.ofEpochSecond(1L))(itemId, {
+                item: IntegerHistory =>
+                  item.integerProperty = 33
+              })),
+              40 -> Some(Change.forOneItem(Instant.ofEpochSecond(1L))(itemId, {
+                item: IntegerHistory =>
+                  item.integerProperty = 44
+              })),
+              50 -> Some(Change.forOneItem(Instant.ofEpochSecond(2L))(itemId, {
+                item: IntegerHistory =>
+                  item.integerProperty = 55
+              })),
+              60 -> Some(Change.forOneItem(Instant.ofEpochSecond(2L))(itemId, {
+                item: IntegerHistory =>
+                  item.integerProperty = 66
+              }))
+            ),
+            sharedAsOf
+          )
+
+          val scope =
+            world.scopeFor(PositiveInfinity[Instant](), world.nextRevision)
+
+          scope
+            .render(Bitemporal.withId[IntegerHistory](itemId))
+            .loneElement
+            .datums should contain theSameElementsInOrderAs expectedHistory
         }
       }
     }
