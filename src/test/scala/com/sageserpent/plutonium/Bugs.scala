@@ -906,7 +906,7 @@ trait Bugs
         worldResource acquireAndGet { world =>
           world.revise(
             TreeMap(
-              10 -> Some(Change.forOneItem(Instant.ofEpochSecond(0L))(itemId, {
+              10 -> Some(Change.forOneItem(Instant.ofEpochSecond(-1L))(itemId, {
                 item: IntegerHistory =>
                   item.integerProperty = 11
               })),
