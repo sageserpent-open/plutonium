@@ -502,7 +502,7 @@ class AllEventsImplementation(
           calculationState.flatMap(annul(_, eventId))
       }
 
-    val newAndModifiedEvents: Map[EventId, Event] = events.collect {
+    val newAndModifiedEvents: Seq[(EventId, Event)] = events.toSeq.collect {
       case (eventId, Some(event)) => eventId -> event
     }
 
@@ -626,7 +626,7 @@ class AllEventsImplementation(
   }
 
   private def buildSimpleLifecyclesFrom(
-      events: Map[EventId, Event]): Iterable[Lifecycle] = {
+      events: Seq[(EventId, Event)]): Iterable[Lifecycle] = {
     events.zipWithIndex.flatMap {
       case ((eventId, event), eventOrderingTiebreakerIndex) =>
         event match {
