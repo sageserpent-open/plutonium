@@ -901,7 +901,7 @@ trait Bugs
 
         val sharedAsOf = Instant.ofEpochSecond(0)
 
-        val expectedHistory = Seq(11, 22, 33, 44, 55, 66)
+        val expectedHistory = Seq(11, 22, 33, 44, 55)
 
         worldResource acquireAndGet { world =>
           world.revise(
@@ -925,10 +925,6 @@ trait Bugs
               50 -> Some(Change.forOneItem(Instant.ofEpochSecond(2L))(itemId, {
                 item: IntegerHistory =>
                   item.integerProperty = 55
-              })),
-              60 -> Some(Change.forOneItem(Instant.ofEpochSecond(2L))(itemId, {
-                item: IntegerHistory =>
-                  item.integerProperty = 66
               }))
             ),
             sharedAsOf
