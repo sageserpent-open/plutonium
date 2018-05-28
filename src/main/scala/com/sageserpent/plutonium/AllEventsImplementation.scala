@@ -545,8 +545,7 @@ class AllEventsImplementation(
     val CalculationState(finalDefunctLifecyles,
                          finalNewLifecycles,
                          finalLifecyclesById) =
-      calculationStateWithSimpleLifecyclesAddedIn.flatMap(_ =>
-        calculationStateWithSimpleLifecyclesAddedIn.fuseLifecycles())
+      calculationStateWithSimpleLifecyclesAddedIn.fuseLifecycles()
 
     // NOTE: is it really valid to use *'lifecycleById'* with 'finalDefunctLifecycles'? Yes, because any lifecycle *not* in 'lifecycleById'
     // either makes it all the way through in the above code to 'finalLifecyclesById', or is made defunct itself and thrown away by the
