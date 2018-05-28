@@ -11,9 +11,11 @@ import com.sageserpent.americium.{
 import com.sageserpent.plutonium.AllEvents.ItemStateUpdatesDelta
 import com.sageserpent.plutonium.AllEventsImplementation.Lifecycle.{
   EndOfLifecycle,
+  FusionResult,
   IndivisibleChange,
   IndivisibleEvent,
   IndivisibleMeasurement,
+  LifecycleMerge,
   refineTypeFor
 }
 import com.sageserpent.plutonium.AllEventsImplementation.{
@@ -85,6 +87,18 @@ object AllEventsImplementation {
       Lifecycle(eventId = eventId,
                 itemStateUpdateKey = itemStateUpdateKey,
                 indivisibleEvent = ArgumentReference(uniqueItemSpecification))
+    }
+
+    sealed trait FusionResult
+
+    case class LifecycleMerge(mergedLifecycle: Lifecycle) extends FusionResult
+
+    case class LifecycleSplit(endsInAnnihilation: Lifecycle,
+                              phoenixLifecycle: Lifecycle)
+        extends FusionResult {
+      require(
+        Ordering[ItemStateUpdateTime].lt(endsInAnnihilation.endTime,
+                                         phoenixLifecycle.startTime))
     }
 
     sealed trait IndivisibleEvent {
@@ -252,7 +266,7 @@ object AllEventsImplementation {
       this.lowerTypeIsConsistentWith(another) && this.upperTypeIsConsistentWith(
         another) && this.overlapsWith(another)
 
-    def fuseWith(another: Lifecycle): Lifecycle = {
+    def fuseWith(another: Lifecycle): FusionResult = {
       val fusedTypeTags = typeTags ++ another.typeTags
 
       val fusedEventsArrangedInTimeOrder: SortedMap[
@@ -269,10 +283,11 @@ object AllEventsImplementation {
                   Set.empty ++ another.itemStateUpdateTimesByEventId
                     .getOrElse(eventId, Set.empty))) toMap
 
-      Lifecycle(typeTags = fusedTypeTags,
-                eventsArrangedInTimeOrder = fusedEventsArrangedInTimeOrder,
-                itemStateUpdateTimesByEventId =
-                  fusedItemStateUpdateTimesByEventId)
+      LifecycleMerge(
+        Lifecycle(typeTags = fusedTypeTags,
+                  eventsArrangedInTimeOrder = fusedEventsArrangedInTimeOrder,
+                  itemStateUpdateTimesByEventId =
+                    fusedItemStateUpdateTimesByEventId))
     }
 
     // NOTE: these will have best patches applied along with type adjustments, including on the arguments. That's why
@@ -309,7 +324,7 @@ object AllEventsImplementation {
       super.isFusibleWith(another)
     }
 
-    abstract override def fuseWith(another: Lifecycle): Lifecycle = {
+    abstract override def fuseWith(another: Lifecycle): FusionResult = {
       require(isFusibleWith(another))
       super.fuseWith(another)
     }
@@ -429,20 +444,24 @@ class AllEventsImplementation(
               this.fuseLifecycles(
                 priorityQueueOfLifecyclesConsideredForFusionOrAddition.drop(1))
             case matchForFusion :: Nil =>
-              val fusedLifecycle = candidateForFusion.fuseWith(matchForFusion)
-              val nextState = this.flatMap(
-                lifecyclesById =>
-                  CalculationState(
-                    defunctLifecycles = Set(candidateForFusion, matchForFusion),
-                    newLifecycles = Set(fusedLifecycle),
-                    lifecyclesById = lifecyclesById.updated(
-                      itemId,
-                      lifecyclesById(itemId) - matchForFusion - candidateForFusion + fusedLifecycle)
-                ))
+              candidateForFusion.fuseWith(matchForFusion) match {
+                case LifecycleMerge(mergedLifecycle) =>
+                  val nextState = this.flatMap(
+                    lifecyclesById =>
+                      CalculationState(
+                        defunctLifecycles =
+                          Set(candidateForFusion, matchForFusion),
+                        newLifecycles = Set(mergedLifecycle),
+                        lifecyclesById = lifecyclesById.updated(
+                          itemId,
+                          lifecyclesById(itemId) - matchForFusion - candidateForFusion + mergedLifecycle)
+                    ))
 
-              nextState.fuseLifecycles(
-                priorityQueueOfLifecyclesConsideredForFusionOrAddition
-                  .drop(1) + (fusedLifecycle -> fusedLifecycle.startTime))
+                  nextState.fuseLifecycles(
+                    priorityQueueOfLifecyclesConsideredForFusionOrAddition
+                      .drop(1) + (mergedLifecycle -> mergedLifecycle.startTime))
+              }
+
             case _ =>
               throw new scala.RuntimeException(
                 s"There is more than one item of id: '${itemId}' compatible with type '${candidateForFusion.lowerBoundTypeTag.tpe}', these have types: '${fusibleLifecycles map (_.lowerBoundTypeTag.tpe)}'.")
