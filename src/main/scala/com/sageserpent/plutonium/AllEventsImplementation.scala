@@ -408,7 +408,23 @@ class AllEventsImplementation(
             overlappingLifecycles
               .filter(_.isFusibleWith(candidateForFusion))
 
-          fusibleLifecycles match {
+          val fusibleLifecyclesThatAreNotOccludedByAnnihilations = {
+            def filterOccluded(fusibleLifecycles: List[Lifecycle],
+                               cutoff: ItemStateUpdateTime): List[Lifecycle] =
+              fusibleLifecycles match {
+                case Nil => Nil
+                case head :: tail
+                    if Ordering[ItemStateUpdateTime].lteq(head.startTime,
+                                                          cutoff) =>
+                  head :: filterOccluded(
+                    tail,
+                    Ordering[ItemStateUpdateTime].min(cutoff, head.endTime))
+                case _ => Nil
+              }
+            filterOccluded(fusibleLifecycles, candidateForFusion.endTime)
+          }
+
+          fusibleLifecyclesThatAreNotOccludedByAnnihilations match {
             case Nil =>
               this.fuseLifecycles(
                 priorityQueueOfLifecyclesConsideredForFusionOrAddition.drop(1))
