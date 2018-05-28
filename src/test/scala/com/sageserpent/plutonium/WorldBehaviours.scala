@@ -165,7 +165,7 @@ trait WorldBehaviours
                     Prop.all(
                       (actualHistory zip expectedHistory zipWithIndex) map {
                         case ((actual, expected), step) =>
-                          (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}"
+                          (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} was expected to be: ${expected}"
                       }: _*)
               }: _*)
             else Prop.undecided
@@ -497,7 +497,7 @@ trait WorldBehaviours
               if (checks.nonEmpty)
                 Prop.all(checks.map {
                   case (historyId, ((actual, expected), step)) =>
-                    (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} == ${expected}"
+                    (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} was expected to be: ${expected}"
                 }: _*)
               else Prop.undecided
           }
@@ -2462,7 +2462,7 @@ trait WorldBehaviours
                         Prop.all(
                           (actualHistory zip expectedHistory zipWithIndex) map {
                             case ((actual, expected), step) =>
-                              (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} should be: ${expected}"
+                              (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} was expected to be: ${expected}"
                           }: _*)
                   }: _*)
                 else Prop.undecided
@@ -2732,7 +2732,7 @@ trait WorldBehaviours
                         Prop.all(
                           (actualHistory zip expectedHistory zipWithIndex) map {
                             case ((actual, expected), step) =>
-                              (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} should be: ${expected}"
+                              (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} was expected to be: ${expected}"
                           }: _*)
                   }: _*)
               } catch {
@@ -3304,7 +3304,7 @@ trait WorldBehaviours
                       Prop.all(
                         (actualHistory zip expectedHistory zipWithIndex) map {
                           case ((actual, expected), step) =>
-                            (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} should be ${expected}"
+                            (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} was expected to be ${expected}"
                         }: _*)
                 }: _*)
               else Prop.undecided
@@ -3479,7 +3479,7 @@ trait WorldBehaviours
                       Prop.all(
                         (actualHistory zip expectedHistory zipWithIndex) map {
                           case ((actual, expected), step) =>
-                            (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} should be: ${expected}"
+                            (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} was expected to be: ${expected}"
                         }: _*)
                 }: _*)
               else Prop.undecided
@@ -3616,7 +3616,7 @@ trait WorldBehaviours
                         Prop.all(
                           (actualHistory zip expectedHistory zipWithIndex) map {
                             case ((actual, expected), step) =>
-                              (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} should be: ${expected}"
+                              (actual == expected) :| s"For ${historyId}, @step ${step}, ${actual} was expected to be: ${expected}"
                           }: _*)
                   }: _*)
                 }).force
