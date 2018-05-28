@@ -2,15 +2,13 @@ package com.sageserpent.plutonium
 
 import java.time.Instant
 
-import com.sageserpent.americium.PositiveInfinity
+import com.sageserpent.americium.{PositiveInfinity, NegativeInfinity}
 import com.sageserpent.americium.randomEnrichment._
+import org.scalacheck.Gen
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{FlatSpec, LoneElement, Matchers}
-import com.sageserpent.americium.PositiveInfinity
-import org.scalacheck.Gen
 
-import scala.util.Random
 import scala.collection.immutable.{SortedMap, TreeMap}
 import scala.util.Random
 
@@ -940,6 +938,48 @@ trait Bugs
             .render(Bitemporal.withId[IntegerHistory](itemId))
             .loneElement
             .datums should contain theSameElementsInOrderAs expectedHistory
+        }
+      }
+    }
+    "an annihilation without any following lifecycle" should "work" in {
+      forAll(worldResourceGenerator) { worldResource =>
+        val itemId = "Name: 98"
+
+        val bystanderId = "-9"
+
+        val sharedAsOf = Instant.ofEpochSecond(0)
+
+        val expectedHistory = Seq(11)
+
+        worldResource acquireAndGet { world =>
+          world.revise(0,
+                       Change.forOneItem(NegativeInfinity[Instant]())(itemId, {
+                         item: MoreSpecificFooHistory =>
+                           item.property1 = ""
+                       }),
+                       sharedAsOf)
+
+          world.revise(
+            TreeMap(
+              1 -> Some(
+                Change.forOneItem(Instant.ofEpochSecond(-2L))(bystanderId, {
+                  item: BarHistory =>
+                    item.property1 = -5.8368005564593E89
+                })),
+              2 -> Some(Annihilation[BarHistory](Instant.ofEpochSecond(-1L),
+                                                 bystanderId)),
+              3 -> Some(
+                Annihilation[FooHistory](Instant.ofEpochSecond(0L), itemId))
+            ),
+            sharedAsOf
+          )
+
+          val scope =
+            world.scopeFor(PositiveInfinity[Instant](), world.nextRevision)
+
+          scope
+            .render(Bitemporal.withId[IntegerHistory](itemId))
+            .isEmpty
         }
       }
     }
