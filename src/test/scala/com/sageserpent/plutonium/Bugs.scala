@@ -1024,7 +1024,7 @@ trait Bugs
             revisionAction(world)
           }
 
-          world.revise(TreeMap(0 to 3 map (_ -> None): _*), sharedAsOf)
+          world.revise(TreeMap(0 until 3 map (_ -> None): _*), sharedAsOf)
 
           for (revisionAction <- revisionActions) {
             revisionAction(world)
