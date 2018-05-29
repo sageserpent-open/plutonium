@@ -616,7 +616,7 @@ class AllEventsImplementation(
           CalculationState(
             defunctLifecycles = defunctLifecycles.flatten.toSet,
             newLifecycles = (Set.empty[Lifecycle] /: changedLifecycles)(_ ++ _),
-            lifecyclesById = lifecyclesByIdWithAnnulments.toMap
+            lifecyclesById = lifecyclesWithIrrelevantIds ++ lifecyclesByIdWithAnnulments.toMap
           )
 
         case None =>

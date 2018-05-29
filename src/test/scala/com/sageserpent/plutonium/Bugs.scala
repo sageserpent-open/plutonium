@@ -984,7 +984,7 @@ trait Bugs
       }
     }
 
-    "anulling all events" should "yield a history with the same effects as prior to the annulments" in {
+    "annuling all events" should "yield a history with the same effects as prior to the annulments" in {
       forAll(worldResourceGenerator) { worldResource =>
         val itemId = "Name: 84"
 
