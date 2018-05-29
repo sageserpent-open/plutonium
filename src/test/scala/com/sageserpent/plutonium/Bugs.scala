@@ -758,7 +758,7 @@ trait Bugs
       }
     }
 
-    "anulling an annihilation" should "fuse the earlier lifecycle with a subsequent one" in {
+    "annulling an annihilation" should "fuse the earlier lifecycle with a subsequent one" in {
       forAll(worldResourceGenerator) { worldResource =>
         val itemId = "Fred"
 
@@ -984,7 +984,7 @@ trait Bugs
       }
     }
 
-    "annuling all events" should "yield a history with the same effects as prior to the annulments" in {
+    "annulling all events" should "yield a history with the same effects as prior to the annulments" in {
       forAll(worldResourceGenerator) { worldResource =>
         val itemId = "Name: 84"
 
