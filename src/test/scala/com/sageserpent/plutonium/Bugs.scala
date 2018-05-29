@@ -983,6 +983,62 @@ trait Bugs
         }
       }
     }
+
+    "anulling all events" should "yield a history with the same effects as prior to the annulments" in {
+      forAll(worldResourceGenerator) { worldResource =>
+        val itemId = "Name: 84"
+
+        val bystanderId = "Name: 50"
+
+        val sharedAsOf = Instant.ofEpochSecond(0)
+
+        val expectedHistory = Seq(11)
+
+        val revisionActions = Array(
+          (world: World) => {
+            world.revise(
+              0,
+              Change.forOneItem(Instant.ofEpochSecond(1L))(bystanderId, {
+                item: IntegerHistory =>
+                  item.integerProperty = 0
+              }),
+              sharedAsOf)
+          },
+          (world: World) => {
+            world.revise(
+              TreeMap(
+                1 -> Some(Change.forOneItem(Instant.ofEpochSecond(0L))(itemId, {
+                  item: FooHistory =>
+                    item.property2 = false
+                })),
+                2 -> Some(
+                  Annihilation[FooHistory](Instant.ofEpochSecond(2L), itemId))
+              ),
+              sharedAsOf
+            )
+          }
+        )
+
+        worldResource acquireAndGet { world =>
+          for (revisionAction <- revisionActions) {
+            revisionAction(world)
+          }
+
+          world.revise(TreeMap(0 to 3 map (_ -> None): _*), sharedAsOf)
+
+          for (revisionAction <- revisionActions) {
+            revisionAction(world)
+          }
+
+          val scope =
+            world.scopeFor(PositiveInfinity[Instant](), world.nextRevision)
+
+          scope
+            .render(Bitemporal.withId[IntegerHistory](itemId))
+            .isEmpty
+        }
+      }
+    }
   }
 }
 
