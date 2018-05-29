@@ -16,6 +16,8 @@ import com.sageserpent.plutonium.AllEventsImplementation.Lifecycle.{
   IndivisibleEvent,
   IndivisibleMeasurement,
   LifecycleMerge,
+  LifecycleSplit,
+  fuse,
   refineTypeFor
 }
 import com.sageserpent.plutonium.AllEventsImplementation.{
@@ -140,6 +142,56 @@ object AllEventsImplementation {
           .toList
       relevantLifecycle.lowerBoundTypeTag
     }
+
+    def fuse(firstLifecycle: Lifecycle, secondLifecycle: Lifecycle) = {
+      val fusedTypeTags = firstLifecycle.typeTags ++ secondLifecycle.typeTags
+
+      val fusedEventsArrangedInTimeOrder: SortedMap[
+        ItemStateUpdateKey,
+        IndivisibleEvent] = firstLifecycle.eventsArrangedInTimeOrder ++ secondLifecycle.eventsArrangedInTimeOrder
+
+      val fusedItemStateUpdateTimesByEventId
+        : Map[EventId, Set[ItemStateUpdateKey]] =
+        (firstLifecycle.itemStateUpdateTimesByEventId.keys ++ secondLifecycle.itemStateUpdateTimesByEventId.keys) map (
+            eventId =>
+              eventId ->
+                firstLifecycle.itemStateUpdateTimesByEventId.getOrElse(
+                  eventId,
+                  Set.empty ++ secondLifecycle.itemStateUpdateTimesByEventId
+                    .getOrElse(eventId, Set.empty))) toMap
+
+      Lifecycle(typeTags = fusedTypeTags,
+                eventsArrangedInTimeOrder = fusedEventsArrangedInTimeOrder,
+                itemStateUpdateTimesByEventId =
+                  fusedItemStateUpdateTimesByEventId)
+    }
+
+    def apply(
+        inclusionPredicate: ItemStateUpdateTime => Boolean,
+        retainedEvents: SortedMap[ItemStateUpdateKey, IndivisibleEvent],
+        trimmedEvents: SortedMap[ItemStateUpdateKey, IndivisibleEvent],
+        typeTags: Bag[TypeTag[_]],
+        itemStateUpdateTimesByEventId: Map[EventId, Set[ItemStateUpdateKey]])
+      : Lifecycle = {
+      val retainedTypeTags = (typeTags /: trimmedEvents) {
+        case (typeTags, (_, trimmedEvent)) =>
+          typeTags - trimmedEvent.uniqueItemSpecification.typeTag
+      }
+
+      // TODO - consider just using 'itemStateUpdateTimesByEventId' - this will result in
+      // extraneous entries, however 'annul' can be made to tolerate these. Just a thought...
+      val retainedItemStateUpdateTimesByEventId =
+        itemStateUpdateTimesByEventId
+          .mapValues(_.filter(inclusionPredicate))
+          .filter {
+            case (_, itemStateUpdateTimes) => itemStateUpdateTimes.nonEmpty
+          }
+
+      Lifecycle(typeTags = retainedTypeTags,
+                eventsArrangedInTimeOrder = retainedEvents,
+                itemStateUpdateTimesByEventId =
+                  retainedItemStateUpdateTimesByEventId)
+    }
   }
 
   case class Lifecycle(
@@ -208,34 +260,23 @@ object AllEventsImplementation {
 
     // NOTE: this is quite defensive, we can answer with 'None' if 'when' is not greater than the start time.
     def retainUpTo(when: Unbounded[Instant]): Option[Lifecycle] = {
-      val cutoff = UpperBoundOfTimeslice(when)
+      val inclusionPredicate =
+        Ordering[ItemStateUpdateTime]
+          .lteq(_: ItemStateUpdateTime, UpperBoundOfTimeslice(when))
 
       val (retainedEvents, trimmedEvents) =
         eventsArrangedInTimeOrder.partition {
           case (itemStateUpdateTime, _) =>
-            Ordering[ItemStateUpdateTime].gteq(cutoff, itemStateUpdateTime)
+            inclusionPredicate(itemStateUpdateTime)
         }
 
       if (retainedEvents.nonEmpty) {
-        val retainedTypeTags = (typeTags /: trimmedEvents) {
-          case (typeTags, (_, trimmedEvent)) =>
-            typeTags - trimmedEvent.uniqueItemSpecification.typeTag
-        }
-
-        // TODO - consider just using 'itemStateUpdateTimesByEventId' - this will result in
-        // extraneous entries, however 'annul' can be made to tolerate these. Just a thought...
-        val retainedItemStateUpdateTimesByEventId =
-          itemStateUpdateTimesByEventId
-            .mapValues(_.filter(Ordering[ItemStateUpdateTime].gteq(cutoff, _)))
-            .filter {
-              case (_, itemStateUpdateTimes) => itemStateUpdateTimes.nonEmpty
-            }
-
         Some(
-          Lifecycle(typeTags = retainedTypeTags,
-                    eventsArrangedInTimeOrder = retainedEvents,
-                    itemStateUpdateTimesByEventId =
-                      retainedItemStateUpdateTimesByEventId))
+          Lifecycle(inclusionPredicate,
+                    retainedEvents,
+                    trimmedEvents,
+                    typeTags,
+                    itemStateUpdateTimesByEventId))
       } else None
     }
 
@@ -247,7 +288,7 @@ object AllEventsImplementation {
       val preservedEvents =
         (eventsArrangedInTimeOrder /: itemStateUpdateTimes)(_ - _)
       if (preservedEvents.nonEmpty) {
-        val annulledEvents = itemStateUpdateTimes map (eventsArrangedInTimeOrder.apply)
+        val annulledEvents = itemStateUpdateTimes map eventsArrangedInTimeOrder.apply
         val preservedTypeTags = (typeTags /: annulledEvents) {
           case (typeTags, annulledEvent) =>
             typeTags - annulledEvent.uniqueItemSpecification.typeTag
@@ -266,29 +307,75 @@ object AllEventsImplementation {
       this.lowerTypeIsConsistentWith(another) && this.upperTypeIsConsistentWith(
         another) && this.overlapsWith(another)
 
-    def fuseWith(another: Lifecycle): FusionResult = {
-      val fusedTypeTags = typeTags ++ another.typeTags
+    def fuseWith(another: Lifecycle): FusionResult =
+      this.eventsArrangedInTimeOrder.last -> another.eventsArrangedInTimeOrder.last match {
+        case ((whenThisLifecycleEnds, _: EndOfLifecycle),
+              (whenTheLastEventInTheOtherLifecycleTakesPlace, _))
+            if Ordering[ItemStateUpdateTime].lt(
+              whenThisLifecycleEnds,
+              whenTheLastEventInTheOtherLifecycleTakesPlace) =>
+          val inclusionPredicate =
+            Ordering[ItemStateUpdateTime]
+              .lteq(_: ItemStateUpdateTime, whenThisLifecycleEnds)
 
-      val fusedEventsArrangedInTimeOrder: SortedMap[
-        ItemStateUpdateKey,
-        IndivisibleEvent] = eventsArrangedInTimeOrder ++ another.eventsArrangedInTimeOrder
+          val (eventsFromTheOtherForEarlierLifecycle,
+               eventsFromTheOtherForLaterLifecycle) =
+            another.eventsArrangedInTimeOrder.partition {
+              case (itemStateUpdateTime, _) =>
+                inclusionPredicate(itemStateUpdateTime)
+            }
+          LifecycleSplit(
+            fuse(
+              this,
+              Lifecycle(inclusionPredicate,
+                        eventsFromTheOtherForEarlierLifecycle,
+                        eventsFromTheOtherForLaterLifecycle,
+                        another.typeTags,
+                        another.itemStateUpdateTimesByEventId)
+            ),
+            Lifecycle(
+              inclusionPredicate andThen (!_),
+              eventsFromTheOtherForLaterLifecycle,
+              eventsFromTheOtherForEarlierLifecycle,
+              another.typeTags,
+              another.itemStateUpdateTimesByEventId
+            )
+          )
+        case ((whenTheLastEventInThisLifecycleTakesPlace, _),
+              (whenTheOtherLifecycleEnds, _: EndOfLifecycle))
+            if Ordering[ItemStateUpdateTime].lt(
+              whenTheOtherLifecycleEnds,
+              whenTheLastEventInThisLifecycleTakesPlace) =>
+          val inclusionPredicate =
+            Ordering[ItemStateUpdateTime]
+              .lteq(_: ItemStateUpdateTime, whenTheOtherLifecycleEnds)
 
-      val fusedItemStateUpdateTimesByEventId
-        : Map[EventId, Set[ItemStateUpdateKey]] =
-        (itemStateUpdateTimesByEventId.keys ++ another.itemStateUpdateTimesByEventId.keys) map (
-            eventId =>
-              eventId ->
-                itemStateUpdateTimesByEventId.getOrElse(
-                  eventId,
-                  Set.empty ++ another.itemStateUpdateTimesByEventId
-                    .getOrElse(eventId, Set.empty))) toMap
-
-      LifecycleMerge(
-        Lifecycle(typeTags = fusedTypeTags,
-                  eventsArrangedInTimeOrder = fusedEventsArrangedInTimeOrder,
-                  itemStateUpdateTimesByEventId =
-                    fusedItemStateUpdateTimesByEventId))
-    }
+          val (eventsFromThisForEarlierLifecycle,
+               eventsFromThisForLaterLifecycle) =
+            this.eventsArrangedInTimeOrder.partition {
+              case (itemStateUpdateTime, _) =>
+                inclusionPredicate(itemStateUpdateTime)
+            }
+          LifecycleSplit(
+            fuse(
+              another,
+              Lifecycle(inclusionPredicate,
+                        eventsFromThisForEarlierLifecycle,
+                        eventsFromThisForLaterLifecycle,
+                        another.typeTags,
+                        another.itemStateUpdateTimesByEventId)
+            ),
+            Lifecycle(
+              inclusionPredicate andThen (!_),
+              eventsFromThisForLaterLifecycle,
+              eventsFromThisForEarlierLifecycle,
+              another.typeTags,
+              another.itemStateUpdateTimesByEventId
+            )
+          )
+        case _ =>
+          LifecycleMerge(fuse(this, another))
+      }
 
     // NOTE: these will have best patches applied along with type adjustments, including on the arguments. That's why
     // 'lifecyclesById' is provided - although any reference to the same unique item as that referenced by the receiver
@@ -460,6 +547,21 @@ class AllEventsImplementation(
                   nextState.fuseLifecycles(
                     priorityQueueOfLifecyclesConsideredForFusionOrAddition
                       .drop(1) + (mergedLifecycle -> mergedLifecycle.startTime))
+                case LifecycleSplit(firstLifecycle, secondLifecycle) =>
+                  val nextState = this.flatMap(
+                    lifecyclesById =>
+                      CalculationState(
+                        defunctLifecycles =
+                          Set(candidateForFusion, matchForFusion),
+                        newLifecycles = Set(firstLifecycle, secondLifecycle),
+                        lifecyclesById = lifecyclesById.updated(
+                          itemId,
+                          lifecyclesById(itemId) - matchForFusion - candidateForFusion + firstLifecycle + secondLifecycle)
+                    ))
+
+                  nextState.fuseLifecycles(
+                    priorityQueueOfLifecyclesConsideredForFusionOrAddition
+                      .drop(1) + (firstLifecycle -> firstLifecycle.startTime) + (secondLifecycle -> secondLifecycle.startTime))
               }
 
             case _ =>
