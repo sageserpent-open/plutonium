@@ -378,10 +378,6 @@ object AllEventsImplementation {
           LifecycleMerge(fuse(this, another))
       }
 
-    // NOTE: these will have best patches applied along with type adjustments, including on the arguments. That's why
-    // 'lifecyclesById' is provided - although any reference to the same unique item as that referenced by the receiver
-    // lifecycle will ignore the argument and use the receiver lifecycle. The item state update key of the update is used
-    // to select the correct lifecycle to resolve an argument type, if there is more than one lifecycle for that unique item.
     def itemStateUpdates(lifecyclesById: LifecyclesById)
       : Set[(ItemStateUpdateKey, ItemStateUpdate)] = {
 
