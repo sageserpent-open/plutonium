@@ -23,6 +23,7 @@ import com.sageserpent.plutonium.AllEventsImplementation.Lifecycle.{
 import com.sageserpent.plutonium.AllEventsImplementation.{
   EventFootprint,
   Lifecycle,
+  Lifecycles,
   LifecyclesById,
   noLifecycles
 }
@@ -444,6 +445,19 @@ class AllEventsImplementation(
       Map.empty,
     lifecyclesById: LifecyclesById = Map.empty)
     extends AllEvents {
+  lifecyclesById.foreach {
+    case (id, lifecycles: Lifecycles) =>
+      for {
+        oneLifecycle     <- lifecycles.toList
+        anotherLifecycle <- lifecycles.toList
+        if oneLifecycle != anotherLifecycle
+      } {
+        require(
+          !oneLifecycle.isFusibleWith(anotherLifecycle),
+          s"Found counterexample where lifecycles should have been fused together, id: $id, one lifecycle is: $oneLifecycle, the other is: $anotherLifecycle"
+        )
+      }
+  }
   override type AllEventsType = AllEventsImplementation
 
   override def revise(events: Map[_ <: EventId, Option[Event]])
