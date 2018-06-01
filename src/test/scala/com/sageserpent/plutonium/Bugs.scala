@@ -978,8 +978,7 @@ trait Bugs
             world.scopeFor(PositiveInfinity[Instant](), world.nextRevision)
 
           scope
-            .render(Bitemporal.withId[IntegerHistory](itemId))
-            .isEmpty
+            .render(Bitemporal.withId[IntegerHistory](itemId)) shouldBe empty
         }
       }
     }
