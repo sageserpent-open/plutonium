@@ -1034,11 +1034,65 @@ trait Bugs
             world.scopeFor(PositiveInfinity[Instant](), world.nextRevision)
 
           scope
-            .render(Bitemporal.withId[IntegerHistory](itemId))
-            .isEmpty
+            .render(Bitemporal.withId[IntegerHistory](itemId)) shouldBe empty
         }
       }
     }
+
+    "annulling an event that shares an argument reference with another event to an item that is not directly referenced as a target" should "work" in {
+      forAll(worldResourceGenerator) { worldResource =>
+        val firstReferringId = "The Central Scrutinizer"
+
+        val secondReferringId = "Big Brother"
+
+        val referredId = "Joe"
+
+        val sharedAsOf = Instant.ofEpochSecond(0)
+
+        val eventToBeAnnulled = 0
+
+        worldResource acquireAndGet { world =>
+          world.revise(
+            eventToBeAnnulled,
+            Change
+              .forTwoItems(Instant.ofEpochSecond(2L))(
+                secondReferringId,
+                referredId, {
+                  (item: ReferringHistory,
+                   fooHistory: MoreSpecificFooHistory) =>
+                    item.referTo(fooHistory)
+                }),
+            sharedAsOf
+          )
+
+          world.revise(
+            1,
+            Change
+              .forTwoItems(Instant.ofEpochSecond(0L))(
+                firstReferringId,
+                referredId, {
+                  (item: ReferringHistory, fooHistory: FooHistory) =>
+                    item.referTo(fooHistory)
+                }),
+            sharedAsOf
+          )
+
+          world.annul(eventToBeAnnulled, sharedAsOf)
+
+          val scope =
+            world.scopeFor(PositiveInfinity[Instant](), world.nextRevision)
+
+          scope
+            .render(Bitemporal.withId[MoreSpecificFooHistory](referredId)) shouldBe empty
+
+          scope
+            .render(Bitemporal.withId[FooHistory](referredId))
+            .loneElement
+            .datums shouldBe empty
+        }
+      }
+    }
+
   }
 }
 
