@@ -10,6 +10,7 @@ import com.sageserpent.americium.{
 }
 import com.sageserpent.plutonium.AllEvents.ItemStateUpdatesDelta
 import com.sageserpent.plutonium.AllEventsImplementation.Lifecycle.{
+  ArgumentReference,
   EndOfLifecycle,
   FusionResult,
   IndivisibleChange,
@@ -18,7 +19,8 @@ import com.sageserpent.plutonium.AllEventsImplementation.Lifecycle.{
   LifecycleMerge,
   LifecycleSplit,
   fuse,
-  refineTypeFor
+  refineTypeFor,
+  lifecycleFor
 }
 import com.sageserpent.plutonium.AllEventsImplementation.{
   EventFootprint,
@@ -86,10 +88,13 @@ object AllEventsImplementation {
     def fromArgumentTypeReference(
         eventId: EventId,
         itemStateUpdateKey: ItemStateUpdateKey,
-        uniqueItemSpecification: UniqueItemSpecification): Lifecycle = {
+        uniqueItemSpecification: UniqueItemSpecification,
+        targetUniqueItemSpecification: UniqueItemSpecification): Lifecycle = {
       Lifecycle(eventId = eventId,
                 itemStateUpdateKey = itemStateUpdateKey,
-                indivisibleEvent = ArgumentReference(uniqueItemSpecification))
+                indivisibleEvent =
+                  ArgumentReference(uniqueItemSpecification,
+                                    targetUniqueItemSpecification))
     }
 
     sealed trait FusionResult
@@ -109,7 +114,8 @@ object AllEventsImplementation {
     }
 
     case class ArgumentReference(
-        override val uniqueItemSpecification: UniqueItemSpecification)
+        override val uniqueItemSpecification: UniqueItemSpecification,
+        targetUniqueItemSpecification: UniqueItemSpecification)
         extends IndivisibleEvent {}
 
     case class IndivisibleChange(patch: AbstractPatch)
@@ -131,8 +137,14 @@ object AllEventsImplementation {
     }
 
     def refineTypeFor(itemStateUpdateTime: ItemStateUpdateTime,
-                      lifecyclesById: LifecyclesById)(
-        uniqueItemSpecification: UniqueItemSpecification): TypeTag[_] = {
+                      uniqueItemSpecification: UniqueItemSpecification,
+                      lifecyclesById: LifecyclesById): TypeTag[_] = {
+      lifecycleFor(itemStateUpdateTime, uniqueItemSpecification, lifecyclesById).lowerBoundTypeTag
+    }
+
+    def lifecycleFor(itemStateUpdateTime: ItemStateUpdateTime,
+                     uniqueItemSpecification: UniqueItemSpecification,
+                     lifecyclesById: LifecyclesById): Lifecycle = {
       val Seq(relevantLifecycle: Lifecycle) =
         lifecyclesById(uniqueItemSpecification.id)
           .filterIncludes(
@@ -141,7 +153,7 @@ object AllEventsImplementation {
           .filter(lifecycle =>
             lifecycle.lowerBoundTypeTag.tpe <:< uniqueItemSpecification.typeTag.tpe)
           .toList
-      relevantLifecycle.lowerBoundTypeTag
+      relevantLifecycle
     }
 
     def fuse(firstLifecycle: Lifecycle, secondLifecycle: Lifecycle) = {
@@ -384,11 +396,25 @@ object AllEventsImplementation {
       //  TODO: this is a deliberately hokey implementation just put in to do some obvious smoke testing of the implementation as a whole - needs fixing!
 
       // TODO: the subclasses of 'IndivisibleEvent' look rather like a more refined form of the subclasses of 'ItemStateUpdate'. Hmmm....
-      eventsArrangedInTimeOrder.collect {
+      eventsArrangedInTimeOrder.map {
+        case (itemStateUpdateTime,
+              ArgumentReference(uniqueItemSpecification,
+                                targetUniqueItemSpecification)) =>
+          val lifecycleOfTargetItem =
+            lifecycleFor(itemStateUpdateTime,
+                         targetUniqueItemSpecification,
+                         lifecyclesById)
+          lifecycleOfTargetItem.eventsArrangedInTimeOrder(itemStateUpdateTime) match {
+            case IndivisibleChange(patch) =>
+              itemStateUpdateTime -> ItemStatePatch(
+                patch.rewriteItemTypeTags(
+                  refineTypeFor(itemStateUpdateTime, _, lifecyclesById)))
+            case IndivisibleMeasurement(patch) => ???
+          }
         case (itemStateUpdateTime, IndivisibleChange(patch)) =>
           itemStateUpdateTime -> ItemStatePatch(
             patch.rewriteItemTypeTags(
-              refineTypeFor(itemStateUpdateTime, lifecyclesById)))
+              refineTypeFor(itemStateUpdateTime, _, lifecyclesById)))
         case (itemStateUpdateTime, IndivisibleMeasurement(patch)) => ???
         case (itemStateUpdateTime, EndOfLifecycle(annihilation)) =>
           itemStateUpdateTime -> ItemStateAnnihilation(
@@ -792,7 +818,10 @@ class AllEventsImplementation(
                     Lifecycle.fromArgumentTypeReference(
                       eventId = eventId,
                       itemStateUpdateKey = itemStateUpdateKey,
-                      uniqueItemSpecification = uniqueItemSpecification))
+                      uniqueItemSpecification = uniqueItemSpecification,
+                      targetUniqueItemSpecification =
+                        patch.targetItemSpecification
+                  ))
             }
           case Measurement(when, patches) =>
             patches.zipWithIndex.flatMap {
@@ -810,7 +839,10 @@ class AllEventsImplementation(
                     Lifecycle.fromArgumentTypeReference(
                       eventId = eventId,
                       itemStateUpdateKey = itemStateUpdateKey,
-                      uniqueItemSpecification = uniqueItemSpecification))
+                      uniqueItemSpecification = uniqueItemSpecification,
+                      targetUniqueItemSpecification =
+                        patch.targetItemSpecification
+                  ))
             }
           case annihilation @ Annihilation(when, _) =>
             val eventOrderingKey =
