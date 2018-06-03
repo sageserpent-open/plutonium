@@ -696,7 +696,7 @@ class AllEventsImplementation(
                 addLifecycle)
         ))
 
-    val CalculationState(finalDefunctLifecyles,
+    val CalculationState(finalDefunctLifecycles,
                          finalNewLifecycles,
                          finalLifecyclesById) =
       calculationStateWithSimpleLifecyclesAddedIn.fuseLifecycles()
@@ -706,7 +706,7 @@ class AllEventsImplementation(
     // balancing done when flat-mapping a 'CalculationState'.
     val itemStateUpdatesFromDefunctLifecycles
       : Set[(ItemStateUpdateKey, ItemStateUpdate)] =
-      finalDefunctLifecyles.flatMap(_.itemStateUpdates(lifecyclesById))
+      finalDefunctLifecycles.flatMap(_.itemStateUpdates(lifecyclesById))
 
     val itemStateUpdatesFromNewOrModifiedLifecycles
       : Set[(ItemStateUpdateKey, ItemStateUpdate)] =
