@@ -37,7 +37,13 @@ import de.ummels.prioritymap.PriorityMap
 
 import scala.PartialFunction
 import scala.annotation.tailrec
-import scala.collection.immutable.{Bag, HashedBagConfiguration, Map, SortedMap}
+import scala.collection.immutable.{
+  Bag,
+  HashedBagConfiguration,
+  Map,
+  Set,
+  SortedMap
+}
 import scala.reflect.runtime.universe.TypeTag
 
 object AllEventsImplementation {
@@ -235,6 +241,11 @@ object AllEventsImplementation {
     }
 
     require(Ordering[ItemStateUpdateTime].lteq(startTime, endTime))
+
+    def isIsolatedAnnihilation: Boolean =
+      PartialFunction.cond(eventsArrangedInTimeOrder) {
+        case Seq((_, _: EndOfLifecycle)) => true
+      }
 
     val endPoints: LifecycleEndPoints = startTime -> endTime
 
@@ -467,7 +478,8 @@ class AllEventsImplementation(
   lifecyclesById.foreach {
     case (id, lifecycles: Lifecycles) =>
       for {
-        oneLifecycle     <- lifecycles.toList
+        oneLifecycle <- lifecycles.toList
+        _ = require(!oneLifecycle.isIsolatedAnnihilation)
         anotherLifecycle <- lifecycles.toList
         if oneLifecycle != anotherLifecycle
       } {
@@ -597,9 +609,25 @@ class AllEventsImplementation(
                       .drop(1) + (firstLifecycle -> firstLifecycle.startTime) + (secondLifecycle -> secondLifecycle.startTime))
               }
 
-            case _ =>
-              throw new scala.RuntimeException(
-                s"There is more than one item of id: '${itemId}' compatible with type '${candidateForFusion.lowerBoundTypeTag.tpe}', these have types: '${fusibleLifecycles map (_.lowerBoundTypeTag.tpe)}'.")
+            case matchForFusion :: _ =>
+              if (candidateForFusion.isIsolatedAnnihilation) {
+                val eventId =
+                  candidateForFusion.itemStateUpdateTimesByEventId.head._1
+                val (itemStateUpdateTime, endOfLifecycle: EndOfLifecycle) =
+                  candidateForFusion.eventsArrangedInTimeOrder.head
+                val candidateForFusionWithRefinedLowerBound = Lifecycle(
+                  eventId = eventId,
+                  itemStateUpdateKey = itemStateUpdateTime,
+                  indivisibleEvent = endOfLifecycle.copy(
+                    annihilation = endOfLifecycle.annihilation
+                      .rewriteItemTypeTag(matchForFusion.lowerBoundTypeTag))
+                )
+                this.fuseLifecycles(
+                  priorityQueueOfLifecyclesConsideredForFusionOrAddition
+                    .drop(1) + (candidateForFusionWithRefinedLowerBound -> candidateForFusionWithRefinedLowerBound.startTime) + priorityQueueOfLifecyclesConsideredForFusionOrAddition.head)
+              } else
+                throw new scala.RuntimeException(
+                  s"There is more than one item of id: '${itemId}' compatible with type '${candidateForFusion.lowerBoundTypeTag.tpe}', these have types: '${fusibleLifecycles map (_.lowerBoundTypeTag.tpe)}'.")
           }
         } else this
       }
