@@ -19,8 +19,8 @@ import com.sageserpent.plutonium.AllEventsImplementation.Lifecycle.{
   LifecycleMerge,
   LifecycleSplit,
   fuse,
-  refineTypeFor,
-  lifecycleFor
+  lifecycleFor,
+  refineTypeFor
 }
 import com.sageserpent.plutonium.AllEventsImplementation.{
   EventFootprint,
@@ -35,6 +35,7 @@ import com.sageserpent.plutonium.World.{Revision, initialRevision}
 import de.sciss.fingertree.RangedSeq
 import de.ummels.prioritymap.PriorityMap
 
+import scala.PartialFunction
 import scala.annotation.tailrec
 import scala.collection.immutable.{Bag, HashedBagConfiguration, Map, SortedMap}
 import scala.reflect.runtime.universe.TypeTag
@@ -216,13 +217,9 @@ object AllEventsImplementation {
 
     require(eventsArrangedInTimeOrder.nonEmpty)
 
-    require(eventsArrangedInTimeOrder.init.forall {
-      case (_, indivisibleEvent) =>
-        indivisibleEvent match {
-          case _: EndOfLifecycle => false
-          case _                 => true
-        }
-    })
+    require(!eventsArrangedInTimeOrder.init.exists(PartialFunction.cond(_) {
+      case (_, _: EndOfLifecycle) => true
+    }))
 
     require(
       itemStateUpdateTimesByEventId.nonEmpty && itemStateUpdateTimesByEventId
