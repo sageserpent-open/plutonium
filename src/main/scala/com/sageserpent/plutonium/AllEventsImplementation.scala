@@ -224,7 +224,7 @@ object AllEventsImplementation {
     require(Ordering[ItemStateUpdateTime].lteq(startTime, endTime))
 
     def isIsolatedAnnihilation: Boolean =
-      PartialFunction.cond(eventsArrangedInTimeOrder) {
+      PartialFunction.cond(eventsArrangedInTimeOrder.toSeq) {
         case Seq((_, _: EndOfLifecycle)) => true
       }
 
@@ -593,22 +593,40 @@ class AllEventsImplementation(
                       .drop(1) + (firstLifecycle -> firstLifecycle.startTime) + (secondLifecycle -> secondLifecycle.startTime))
               }
 
-            case matchForFusion :: _ =>
+            case matchesForFusion =>
               if (candidateForFusion.isIsolatedAnnihilation) {
                 val eventId =
                   candidateForFusion.itemStateUpdateTimesByEventId.head._1
                 val (itemStateUpdateTime, endOfLifecycle: EndOfLifecycle) =
                   candidateForFusion.eventsArrangedInTimeOrder.head
-                val candidateForFusionWithRefinedLowerBound = Lifecycle(
-                  eventId = eventId,
-                  itemStateUpdateKey = itemStateUpdateTime,
-                  indivisibleEvent = endOfLifecycle.copy(
-                    annihilation = endOfLifecycle.annihilation
-                      .rewriteItemTypeTag(matchForFusion.lowerBoundTypeTag))
-                )
-                this.fuseLifecycles(
+                val candidatesForFusionWithRefinedLowerBound =
+                  matchesForFusion.zipWithIndex.map {
+                    case (matchForFusion, intraEventIndex) =>
+                      Lifecycle(
+                        eventId = eventId,
+                        itemStateUpdateKey = itemStateUpdateTime.copy(
+                          intraEventIndex = intraEventIndex),
+                        indivisibleEvent = endOfLifecycle.copy(
+                          annihilation = endOfLifecycle.annihilation
+                            .rewriteItemTypeTag(
+                              matchForFusion.lowerBoundTypeTag))
+                      )
+                  }.toSet
+                val nextState = this.flatMap(
+                  lifecyclesById =>
+                    CalculationState(
+                      defunctLifecycles = Set(candidateForFusion),
+                      newLifecycles = candidatesForFusionWithRefinedLowerBound,
+                      lifecyclesById = lifecyclesById.updated(
+                        itemId,
+                        ((lifecyclesById(itemId) - candidateForFusion) /: candidatesForFusionWithRefinedLowerBound)(
+                          _ + _))
+                  ))
+
+                nextState.fuseLifecycles(
                   priorityQueueOfLifecyclesConsideredForFusionOrAddition
-                    .drop(1) + (candidateForFusionWithRefinedLowerBound -> candidateForFusionWithRefinedLowerBound.startTime) + priorityQueueOfLifecyclesConsideredForFusionOrAddition.head)
+                    .drop(1) ++ (candidatesForFusionWithRefinedLowerBound map (
+                      lifecycle => lifecycle -> lifecycle.startTime)))
               } else
                 throw new scala.RuntimeException(
                   s"There is more than one item of id: '${itemId}' compatible with type '${candidateForFusion.lowerBoundTypeTag.tpe}', these have types: '${fusibleLifecycles map (_.lowerBoundTypeTag.tpe)}'.")
