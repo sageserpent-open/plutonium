@@ -9,33 +9,14 @@ import com.sageserpent.americium.{
   Unbounded
 }
 import com.sageserpent.plutonium.AllEvents.ItemStateUpdatesDelta
-import com.sageserpent.plutonium.AllEventsImplementation.Lifecycle.{
-  ArgumentReference,
-  EndOfLifecycle,
-  FusionResult,
-  IndivisibleChange,
-  IndivisibleEvent,
-  IndivisibleMeasurement,
-  LifecycleMerge,
-  LifecycleSplit,
-  fuse,
-  lifecycleFor,
-  refineTypeFor
-}
-import com.sageserpent.plutonium.AllEventsImplementation.{
-  EventFootprint,
-  Lifecycle,
-  Lifecycles,
-  LifecyclesById,
-  noLifecycles
-}
+import com.sageserpent.plutonium.AllEventsImplementation.Lifecycle._
+import com.sageserpent.plutonium.AllEventsImplementation._
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.ItemStateUpdateTime.ordering
 import com.sageserpent.plutonium.World.{Revision, initialRevision}
 import de.sciss.fingertree.RangedSeq
 import de.ummels.prioritymap.PriorityMap
 
-import scala.PartialFunction
 import scala.annotation.tailrec
 import scala.collection.immutable.{
   Bag,
