@@ -97,6 +97,7 @@ object AllEventsImplementation {
                                          phoenixLifecycle.startTime))
     }
 
+    // TODO: the subclasses of 'IndivisibleEvent' look rather like a more refined form of the subclasses of 'ItemStateUpdate'. Hmmm....
     sealed trait IndivisibleEvent {
       def uniqueItemSpecification: UniqueItemSpecification
     }
@@ -225,7 +226,7 @@ object AllEventsImplementation {
 
     def isIsolatedAnnihilation: Boolean =
       PartialFunction.cond(eventsArrangedInTimeOrder.toSeq) {
-        case Seq((_, _: EndOfLifecycle)) => true
+        case Seq((_, EndOfLifecycle(_))) => true
       }
 
     val endPoints: LifecycleEndPoints = startTime -> endTime
@@ -379,27 +380,19 @@ object AllEventsImplementation {
           LifecycleMerge(fuse(this, another))
       }
 
-    def itemStateUpdates(lifecyclesById: LifecyclesById)
-      : Set[(ItemStateUpdateKey, ItemStateUpdate)] = {
-
-      //  TODO: this is a deliberately hokey implementation just put in to do some obvious smoke testing of the implementation as a whole - needs fixing!
-
-      // TODO: the subclasses of 'IndivisibleEvent' look rather like a more refined form of the subclasses of 'ItemStateUpdate'. Hmmm....
-      eventsArrangedInTimeOrder.map {
+    def referencingLifecycles(lifecyclesById: LifecyclesById): Set[Lifecycle] =
+      eventsArrangedInTimeOrder.collect {
         case (itemStateUpdateTime,
               ArgumentReference(uniqueItemSpecification,
                                 targetUniqueItemSpecification)) =>
-          val lifecycleOfTargetItem =
-            lifecycleFor(itemStateUpdateTime,
-                         targetUniqueItemSpecification,
-                         lifecyclesById)
-          lifecycleOfTargetItem.eventsArrangedInTimeOrder(itemStateUpdateTime) match {
-            case IndivisibleChange(patch) =>
-              itemStateUpdateTime -> ItemStatePatch(
-                patch.rewriteItemTypeTags(
-                  refineTypeFor(itemStateUpdateTime, _, lifecyclesById)))
-            case IndivisibleMeasurement(patch) => ???
-          }
+          lifecycleFor(itemStateUpdateTime,
+                       targetUniqueItemSpecification,
+                       lifecyclesById)
+      }.toSet
+
+    def itemStateUpdates(lifecyclesById: LifecyclesById)
+      : Set[(ItemStateUpdateKey, ItemStateUpdate)] =
+      eventsArrangedInTimeOrder.collect {
         case (itemStateUpdateTime, IndivisibleChange(patch)) =>
           itemStateUpdateTime -> ItemStatePatch(
             patch.rewriteItemTypeTags(
@@ -409,7 +402,6 @@ object AllEventsImplementation {
           itemStateUpdateTime -> ItemStateAnnihilation(
             annihilation.rewriteItemTypeTag(lowerBoundTypeTag))
       }.toSet
-    }
   }
 
   trait LifecycleContracts extends Lifecycle {
@@ -736,11 +728,15 @@ class AllEventsImplementation(
     // balancing done when flat-mapping a 'CalculationState'.
     val itemStateUpdatesFromDefunctLifecycles
       : Set[(ItemStateUpdateKey, ItemStateUpdate)] =
-      finalDefunctLifecycles.flatMap(_.itemStateUpdates(lifecyclesById))
+      (finalDefunctLifecycles ++ finalDefunctLifecycles.flatMap(
+        _.referencingLifecycles(lifecyclesById)))
+        .flatMap(_.itemStateUpdates(lifecyclesById))
 
     val itemStateUpdatesFromNewOrModifiedLifecycles
       : Set[(ItemStateUpdateKey, ItemStateUpdate)] =
-      finalNewLifecycles.flatMap(_.itemStateUpdates(finalLifecyclesById))
+      (finalNewLifecycles ++ finalNewLifecycles.flatMap(
+        _.referencingLifecycles(finalLifecyclesById)))
+        .flatMap(_.itemStateUpdates(finalLifecyclesById))
 
     val itemStateUpdateKeysThatNeedToBeRevoked: Set[ItemStateUpdateKey] =
       (itemStateUpdatesFromDefunctLifecycles -- itemStateUpdatesFromNewOrModifiedLifecycles)
