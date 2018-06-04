@@ -130,7 +130,6 @@ object AllEventsImplementation {
       lifecycleFor(itemStateUpdateTime, uniqueItemSpecification, lifecyclesById).lowerBoundTypeTag
     }
 
-    // TODO - can we inline this?
     def lifecycleFor(itemStateUpdateTime: ItemStateUpdateTime,
                      uniqueItemSpecification: UniqueItemSpecification,
                      lifecyclesById: LifecyclesById): Lifecycle = {
@@ -143,25 +142,6 @@ object AllEventsImplementation {
             lifecycle.lowerBoundTypeTag.tpe <:< uniqueItemSpecification.typeTag.tpe)
           .toList
       relevantLifecycle
-    }
-
-    def itemStateUpdates(lifecycles: Set[Lifecycle],
-                         lifecyclesByIdForTypeRefinement: LifecyclesById)
-      : Set[(ItemStateUpdateKey, ItemStateUpdate)] = {
-
-      /*      // TODO: the subclasses of 'IndivisibleEvent' look rather like a more refined form of the subclasses of 'ItemStateUpdate'. Hmmm....
-      eventsArrangedInTimeOrder.map {
-        case (itemStateUpdateTime, IndivisibleChange(patch)) =>
-          itemStateUpdateTime -> ItemStatePatch(
-            patch.rewriteItemTypeTags(
-              refineTypeFor(itemStateUpdateTime, _, lifecyclesByIdForTypeRefinement)))
-        case (itemStateUpdateTime, IndivisibleMeasurement(patch)) => ???
-        case (itemStateUpdateTime, EndOfLifecycle(annihilation)) =>
-          itemStateUpdateTime -> ItemStateAnnihilation(
-            annihilation.rewriteItemTypeTag(lowerBoundTypeTag))
-      }.toSet*/
-
-      ???
     }
 
     def fuse(firstLifecycle: Lifecycle, secondLifecycle: Lifecycle) = {
@@ -398,6 +378,38 @@ object AllEventsImplementation {
         case _ =>
           LifecycleMerge(fuse(this, another))
       }
+
+    def itemStateUpdates(lifecyclesById: LifecyclesById)
+      : Set[(ItemStateUpdateKey, ItemStateUpdate)] = {
+
+      //  TODO: this is a deliberately hokey implementation just put in to do some obvious smoke testing of the implementation as a whole - needs fixing!
+
+      // TODO: the subclasses of 'IndivisibleEvent' look rather like a more refined form of the subclasses of 'ItemStateUpdate'. Hmmm....
+      eventsArrangedInTimeOrder.map {
+        case (itemStateUpdateTime,
+              ArgumentReference(uniqueItemSpecification,
+                                targetUniqueItemSpecification)) =>
+          val lifecycleOfTargetItem =
+            lifecycleFor(itemStateUpdateTime,
+                         targetUniqueItemSpecification,
+                         lifecyclesById)
+          lifecycleOfTargetItem.eventsArrangedInTimeOrder(itemStateUpdateTime) match {
+            case IndivisibleChange(patch) =>
+              itemStateUpdateTime -> ItemStatePatch(
+                patch.rewriteItemTypeTags(
+                  refineTypeFor(itemStateUpdateTime, _, lifecyclesById)))
+            case IndivisibleMeasurement(patch) => ???
+          }
+        case (itemStateUpdateTime, IndivisibleChange(patch)) =>
+          itemStateUpdateTime -> ItemStatePatch(
+            patch.rewriteItemTypeTags(
+              refineTypeFor(itemStateUpdateTime, _, lifecyclesById)))
+        case (itemStateUpdateTime, IndivisibleMeasurement(patch)) => ???
+        case (itemStateUpdateTime, EndOfLifecycle(annihilation)) =>
+          itemStateUpdateTime -> ItemStateAnnihilation(
+            annihilation.rewriteItemTypeTag(lowerBoundTypeTag))
+      }.toSet
+    }
   }
 
   trait LifecycleContracts extends Lifecycle {
@@ -414,6 +426,16 @@ object AllEventsImplementation {
     abstract override def fuseWith(another: Lifecycle): FusionResult = {
       require(isFusibleWith(another))
       super.fuseWith(another)
+    }
+
+    abstract override def itemStateUpdates(lifecyclesById: LifecyclesById) = {
+      val id = uniqueItemSpecification.id
+      require(lifecyclesById.contains(id))
+      require(
+        lifecyclesById(id)
+          .filterOverlaps(this)
+          .contains(this))
+      super.itemStateUpdates(lifecyclesById)
     }
   }
 
@@ -692,16 +714,15 @@ class AllEventsImplementation(
       calculationStateWithSimpleLifecyclesAddedIn.fuseLifecycles()
 
     // NOTE: is it really valid to use *'lifecycleById'* with 'finalDefunctLifecycles'? Yes, because any lifecycle *not* in 'lifecycleById'
-    // either makes it all the way through in the above code to 'finalLifecyclesById' - so it is a new or modified lifecycle and thus should
-    // not be used for type refinement, or is made defunct itself and thrown away by the balancing done when flat-mapping a 'CalculationState',
-    // so it can't be relevant. Remember, we want the item state updates as they were *prior* to the revision currently being made.
+    // either makes it all the way through in the above code to 'finalLifecyclesById', or is made defunct itself and thrown away by the
+    // balancing done when flat-mapping a 'CalculationState'.
     val itemStateUpdatesFromDefunctLifecycles
       : Set[(ItemStateUpdateKey, ItemStateUpdate)] =
-      Lifecycle.itemStateUpdates(finalDefunctLifecycles, lifecyclesById)
+      finalDefunctLifecycles.flatMap(_.itemStateUpdates(lifecyclesById))
 
     val itemStateUpdatesFromNewOrModifiedLifecycles
       : Set[(ItemStateUpdateKey, ItemStateUpdate)] =
-      Lifecycle.itemStateUpdates(finalNewLifecycles, finalLifecyclesById)
+      finalNewLifecycles.flatMap(_.itemStateUpdates(finalLifecyclesById))
 
     val itemStateUpdateKeysThatNeedToBeRevoked: Set[ItemStateUpdateKey] =
       (itemStateUpdatesFromDefunctLifecycles -- itemStateUpdatesFromNewOrModifiedLifecycles)
