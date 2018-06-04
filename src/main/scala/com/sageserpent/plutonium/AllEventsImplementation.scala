@@ -425,6 +425,8 @@ object AllEventsImplementation {
 
   // NOTE: an event footprint an cover several item state updates, each of which in turn can affect several items.
   case class EventFootprint(when: Unbounded[Instant], itemIds: Set[Any])
+
+  object bestPatchSelection extends BestPatchSelectionImplementation
 }
 
 class AllEventsImplementation(
@@ -432,7 +434,8 @@ class AllEventsImplementation(
     lifecycleFootprintPerEvent: Map[EventId,
                                     AllEventsImplementation.EventFootprint] =
       Map.empty,
-    lifecyclesById: LifecyclesById = Map.empty)
+    lifecyclesById: LifecyclesById = Map.empty,
+    bestPatchSelection: BestPatchSelection = bestPatchSelection)
     extends AllEvents {
   lifecyclesById.foreach {
     case (id, lifecycles: Lifecycles) =>
@@ -745,11 +748,12 @@ class AllEventsImplementation(
       }
 
     ItemStateUpdatesDelta(
-      allEvents =
-        new AllEventsImplementation(nextRevision = 1 + this.nextRevision,
-                                    lifecycleFootprintPerEvent =
-                                      finalLifecycleFootprintPerEvent,
-                                    lifecyclesById = finalLifecyclesById),
+      allEvents = new AllEventsImplementation(
+        nextRevision = 1 + this.nextRevision,
+        lifecycleFootprintPerEvent = finalLifecycleFootprintPerEvent,
+        lifecyclesById = finalLifecyclesById,
+        bestPatchSelection = this.bestPatchSelection
+      ),
       itemStateUpdateKeysThatNeedToBeRevoked =
         itemStateUpdateKeysThatNeedToBeRevoked,
       newOrModifiedItemStateUpdates = newOrModifiedItemStateUpdates
@@ -778,7 +782,8 @@ class AllEventsImplementation(
 
         (noLifecycles /: (retainedUnchangedLifecycles ++ retainedTrimmedLifecycles
           .flatMap(_.retainUpTo(when))))(_ + _)
-      }
+      },
+      bestPatchSelection = this.bestPatchSelection
     )
   }
 
