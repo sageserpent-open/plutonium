@@ -48,8 +48,9 @@ object AllEventsImplementation {
               indivisibleEvent: IndivisibleEvent): Lifecycle =
       Lifecycle(
         typeTags = Bag(indivisibleEvent.uniqueItemSpecification.typeTag),
-        eventsArrangedInTimeOrder =
-          SortedMap(itemStateUpdateKey              -> indivisibleEvent),
+        eventsArrangedInReverseTimeOrder =
+          SortedMap(itemStateUpdateKey -> indivisibleEvent)(
+            Ordering[ItemStateUpdateKey].reverse),
         itemStateUpdateTimesByEventId = Map(eventId -> Set(itemStateUpdateKey))
       )
 
@@ -149,9 +150,9 @@ object AllEventsImplementation {
     def fuse(firstLifecycle: Lifecycle, secondLifecycle: Lifecycle) = {
       val fusedTypeTags = firstLifecycle.typeTags ++ secondLifecycle.typeTags
 
-      val fusedEventsArrangedInTimeOrder: SortedMap[
+      val fusedEventsArrangedInReverseTimeOrder: SortedMap[
         ItemStateUpdateKey,
-        IndivisibleEvent] = firstLifecycle.eventsArrangedInTimeOrder ++ secondLifecycle.eventsArrangedInTimeOrder
+        IndivisibleEvent] = firstLifecycle.eventsArrangedInReverseTimeOrder ++ secondLifecycle.eventsArrangedInReverseTimeOrder
 
       val fusedItemStateUpdateTimesByEventId
         : Map[EventId, Set[ItemStateUpdateKey]] =
@@ -163,10 +164,11 @@ object AllEventsImplementation {
                   Set.empty ++ secondLifecycle.itemStateUpdateTimesByEventId
                     .getOrElse(eventId, Set.empty))) toMap
 
-      Lifecycle(typeTags = fusedTypeTags,
-                eventsArrangedInTimeOrder = fusedEventsArrangedInTimeOrder,
-                itemStateUpdateTimesByEventId =
-                  fusedItemStateUpdateTimesByEventId)
+      Lifecycle(
+        typeTags = fusedTypeTags,
+        eventsArrangedInReverseTimeOrder = fusedEventsArrangedInReverseTimeOrder,
+        itemStateUpdateTimesByEventId = fusedItemStateUpdateTimesByEventId
+      )
     }
 
     def apply(
@@ -191,7 +193,7 @@ object AllEventsImplementation {
           }
 
       Lifecycle(typeTags = retainedTypeTags,
-                eventsArrangedInTimeOrder = retainedEvents,
+                eventsArrangedInReverseTimeOrder = retainedEvents,
                 itemStateUpdateTimesByEventId =
                   retainedItemStateUpdateTimesByEventId)
     }
@@ -199,34 +201,37 @@ object AllEventsImplementation {
 
   case class Lifecycle(
       typeTags: Bag[TypeTag[_]],
-      eventsArrangedInTimeOrder: SortedMap[ItemStateUpdateKey,
-                                           IndivisibleEvent],
+      eventsArrangedInReverseTimeOrder: SortedMap[ItemStateUpdateKey,
+                                                  IndivisibleEvent],
       itemStateUpdateTimesByEventId: Map[EventId, Set[ItemStateUpdateKey]]) {
     require(typeTags.nonEmpty)
 
-    require(eventsArrangedInTimeOrder.nonEmpty)
+    require(eventsArrangedInReverseTimeOrder.nonEmpty)
 
-    require(!eventsArrangedInTimeOrder.init.exists(PartialFunction.cond(_) {
-      case (_, _: EndOfLifecycle) => true
-    }))
+    require(
+      !eventsArrangedInReverseTimeOrder.tail.exists(PartialFunction.cond(_) {
+        case (_, _: EndOfLifecycle) => true
+      }))
 
     require(
       itemStateUpdateTimesByEventId.nonEmpty && itemStateUpdateTimesByEventId
         .forall { case (_, times) => times.nonEmpty })
 
-    val startTime: ItemStateUpdateTime = eventsArrangedInTimeOrder.firstKey
+    val startTime: ItemStateUpdateTime =
+      eventsArrangedInReverseTimeOrder.lastKey
 
     // TODO: the way annihilations are just mixed in with all the other events in 'eventsArrangedInTimeOrder' feels hokey:
     // it necessitates a pesky invariant check, along with the special case logic below. Sort this out!
-    val endTime: ItemStateUpdateTime = eventsArrangedInTimeOrder.last match {
-      case (itemStateUpdateTime, _: EndOfLifecycle) => itemStateUpdateTime
-      case _                                        => sentinelForEndTimeOfLifecycleWithoutAnnihilation
-    }
+    val endTime: ItemStateUpdateTime =
+      eventsArrangedInReverseTimeOrder.head match {
+        case (itemStateUpdateTime, _: EndOfLifecycle) => itemStateUpdateTime
+        case _                                        => sentinelForEndTimeOfLifecycleWithoutAnnihilation
+      }
 
     require(Ordering[ItemStateUpdateTime].lteq(startTime, endTime))
 
     def isIsolatedAnnihilation: Boolean =
-      PartialFunction.cond(eventsArrangedInTimeOrder.toSeq) {
+      PartialFunction.cond(eventsArrangedInReverseTimeOrder.toSeq) {
         case Seq((_, EndOfLifecycle(_))) => true
       }
 
@@ -240,7 +245,8 @@ object AllEventsImplementation {
     val uniqueItemSpecification: UniqueItemSpecification =
       UniqueItemSpecification(id, lowerBoundTypeTag)
 
-    def id: Any = eventsArrangedInTimeOrder.head._2.uniqueItemSpecification.id
+    def id: Any =
+      eventsArrangedInReverseTimeOrder.head._2.uniqueItemSpecification.id
 
     def lowerBoundTypeTag: TypeTag[_] = typeTags.distinct.reduce[TypeTag[_]] {
       case (first, second) => if (first.tpe <:< second.tpe) first else second
@@ -269,7 +275,7 @@ object AllEventsImplementation {
           .lteq(_: ItemStateUpdateTime, UpperBoundOfTimeslice(when))
 
       val (retainedEvents, trimmedEvents) =
-        eventsArrangedInTimeOrder.partition {
+        eventsArrangedInReverseTimeOrder.partition {
           case (itemStateUpdateTime, _) =>
             inclusionPredicate(itemStateUpdateTime)
         }
@@ -290,9 +296,9 @@ object AllEventsImplementation {
     def annul(eventId: EventId): Option[Lifecycle] = {
       val itemStateUpdateTimes = itemStateUpdateTimesByEventId(eventId)
       val preservedEvents =
-        (eventsArrangedInTimeOrder /: itemStateUpdateTimes)(_ - _)
+        (eventsArrangedInReverseTimeOrder /: itemStateUpdateTimes)(_ - _)
       if (preservedEvents.nonEmpty) {
-        val annulledEvents = itemStateUpdateTimes map eventsArrangedInTimeOrder.apply
+        val annulledEvents = itemStateUpdateTimes map eventsArrangedInReverseTimeOrder.apply
         val preservedTypeTags = (typeTags /: annulledEvents) {
           case (typeTags, annulledEvent) =>
             typeTags - annulledEvent.uniqueItemSpecification.typeTag
@@ -300,7 +306,7 @@ object AllEventsImplementation {
         val preservedItemStateUpdateTimesByEventId = itemStateUpdateTimesByEventId - eventId
         Some(
           Lifecycle(typeTags = preservedTypeTags,
-                    eventsArrangedInTimeOrder = preservedEvents,
+                    eventsArrangedInReverseTimeOrder = preservedEvents,
                     itemStateUpdateTimesByEventId =
                       preservedItemStateUpdateTimesByEventId))
       } else None
@@ -312,7 +318,7 @@ object AllEventsImplementation {
         another) && this.overlapsWith(another)
 
     def fuseWith(another: Lifecycle): FusionResult =
-      this.eventsArrangedInTimeOrder.last -> another.eventsArrangedInTimeOrder.last match {
+      this.eventsArrangedInReverseTimeOrder.head -> another.eventsArrangedInReverseTimeOrder.head match {
         case ((whenThisLifecycleEnds, _: EndOfLifecycle),
               (whenTheLastEventInTheOtherLifecycleTakesPlace, _))
             if Ordering[ItemStateUpdateTime].lt(
@@ -324,7 +330,7 @@ object AllEventsImplementation {
 
           val (eventsFromTheOtherForEarlierLifecycle,
                eventsFromTheOtherForLaterLifecycle) =
-            another.eventsArrangedInTimeOrder.partition {
+            another.eventsArrangedInReverseTimeOrder.partition {
               case (itemStateUpdateTime, _) =>
                 inclusionPredicate(itemStateUpdateTime)
             }
@@ -356,7 +362,7 @@ object AllEventsImplementation {
 
           val (eventsFromThisForEarlierLifecycle,
                eventsFromThisForLaterLifecycle) =
-            this.eventsArrangedInTimeOrder.partition {
+            this.eventsArrangedInReverseTimeOrder.partition {
               case (itemStateUpdateTime, _) =>
                 inclusionPredicate(itemStateUpdateTime)
             }
@@ -382,7 +388,7 @@ object AllEventsImplementation {
       }
 
     def referencingLifecycles(lifecyclesById: LifecyclesById): Set[Lifecycle] =
-      eventsArrangedInTimeOrder.collect {
+      eventsArrangedInReverseTimeOrder.collect {
         case (itemStateUpdateTime,
               ArgumentReference(_, targetUniqueItemSpecification)) =>
           lifecycleFor(itemStateUpdateTime,
@@ -392,17 +398,17 @@ object AllEventsImplementation {
 
     def itemStateUpdates(lifecyclesById: LifecyclesById)
       : Set[(ItemStateUpdateKey, ItemStateUpdate)] =
-      eventsArrangedInTimeOrder.collect {
-            case (itemStateUpdateTime, IndivisibleChange(patch)) =>
-              itemStateUpdateTime -> ItemStatePatch(
-                patch.rewriteItemTypeTags(
-                  refineTypeFor(itemStateUpdateTime, _, lifecyclesById)))
-            case (itemStateUpdateTime, IndivisibleMeasurement(patch)) => ???
-            case (itemStateUpdateTime, EndOfLifecycle(annihilation)) =>
-              itemStateUpdateTime -> ItemStateAnnihilation(
-                annihilation.rewriteItemTypeTag(lowerBoundTypeTag))
+      eventsArrangedInReverseTimeOrder.collect {
+        case (itemStateUpdateTime, IndivisibleChange(patch)) =>
+          itemStateUpdateTime -> ItemStatePatch(
+            patch.rewriteItemTypeTags(
+              refineTypeFor(itemStateUpdateTime, _, lifecyclesById)))
+        case (itemStateUpdateTime, IndivisibleMeasurement(patch)) => ???
+        case (itemStateUpdateTime, EndOfLifecycle(annihilation)) =>
+          itemStateUpdateTime -> ItemStateAnnihilation(
+            annihilation.rewriteItemTypeTag(lowerBoundTypeTag))
       }.toSet
-      }
+  }
 
   trait LifecycleContracts extends Lifecycle {
     abstract override def annul(eventId: EventId): Option[Lifecycle] = {
@@ -590,7 +596,7 @@ class AllEventsImplementation(
                 val eventId =
                   candidateForFusion.itemStateUpdateTimesByEventId.head._1
                 val (itemStateUpdateTime, endOfLifecycle: EndOfLifecycle) =
-                  candidateForFusion.eventsArrangedInTimeOrder.head
+                  candidateForFusion.eventsArrangedInReverseTimeOrder.last
                 val candidatesForFusionWithRefinedLowerBound =
                   matchesForFusion.zipWithIndex.map {
                     case (matchForFusion, intraEventIndex) =>
