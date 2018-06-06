@@ -17,6 +17,7 @@ import com.sageserpent.plutonium.ItemStateUpdateTime.ordering
 import com.sageserpent.plutonium.World.{Revision, initialRevision}
 import de.sciss.fingertree.RangedSeq
 import de.ummels.prioritymap.PriorityMap
+import scalaz.Monad
 
 import scala.annotation.tailrec
 import scala.collection.immutable.{
@@ -27,6 +28,7 @@ import scala.collection.immutable.{
   SortedMap
 }
 import scala.reflect.runtime.universe.TypeTag
+import scalaz.std.stream
 
 object AllEventsImplementation {
   // TODO - can we get rid of this? As long as the support for a closed-open interval exists, maybe we don't need an explicit end time?
@@ -397,17 +399,97 @@ object AllEventsImplementation {
       }.toSet
 
     def itemStateUpdates(lifecyclesById: LifecyclesById)
-      : Set[(ItemStateUpdateKey, ItemStateUpdate)] =
-      eventsArrangedInReverseTimeOrder.collect {
-        case (itemStateUpdateTime, IndivisibleChange(patch)) =>
-          itemStateUpdateTime -> ItemStatePatch(
-            patch.rewriteItemTypeTags(
-              refineTypeFor(itemStateUpdateTime, _, lifecyclesById)))
-        case (itemStateUpdateTime, IndivisibleMeasurement(patch)) => ???
-        case (itemStateUpdateTime, EndOfLifecycle(annihilation)) =>
-          itemStateUpdateTime -> ItemStateAnnihilation(
-            annihilation.rewriteItemTypeTag(lowerBoundTypeTag))
-      }.toSet
+      : Set[(ItemStateUpdateKey, ItemStateUpdate)] = {
+      // Welcome to hell...
+
+      import scalaz.syntax.writer._
+
+      import scalaz.Writer
+
+      import scalaz.WriterT._
+
+      import scalaz.syntax.foldable._
+
+      import scalaz.std.iterable._
+
+      import scalaz.std.vector._
+
+      import scalaz.syntax.monad._
+
+      type ResultsWriter[X] =
+        Writer[Vector[(ItemStateUpdateKey, ItemStateUpdate)], X]
+
+      class PatchAccumulationState(
+          accumulatedPatchesByMethod: Map[Method, List[AbstractPatch]] =
+            Map.empty) {
+        def recordChangePatch(
+            itemStateUpdateKey: ItemStateUpdateKey,
+            patch: AbstractPatch): ResultsWriter[PatchAccumulationState] =
+          for {
+            patchAccumulationStateWithChangePatch <- this
+              .recordMeasurementPatch(
+                itemStateUpdateKey,
+                patch.rewriteItemTypeTags(
+                  refineTypeFor(itemStateUpdateKey, _, lifecyclesById)))
+            // TODO: should only write the best patch for the specific method referenced by this change.
+            patchAccumulationStateAfterFlushing <- patchAccumulationStateWithChangePatch
+              .writeBestPatch(???)
+          } yield patchAccumulationStateAfterFlushing
+
+        def recordMeasurementPatch(
+            itemStateUpdateKey: ItemStateUpdateKey,
+            patch: AbstractPatch): ResultsWriter[PatchAccumulationState] = ???
+
+        def recordAnnihilation(
+            itemStateUpdateKey: ItemStateUpdateKey,
+            annihilation: Annihilation): ResultsWriter[PatchAccumulationState] =
+          for {
+            _ <- Vector(itemStateUpdateKey -> (ItemStateAnnihilation(
+              annihilation): ItemStateUpdate)).tell
+          } yield
+            this // We can get away with this (ha-ha) because an annihilation must be the latest event, so comes *first*, so there will be no patches to select from.
+
+        def writeBestPatch(method: Method)
+          : Writer[Vector[(ItemStateUpdateKey, ItemStateUpdate)],
+                   PatchAccumulationState] = ???
+
+        def writeBestPatches
+          : Writer[Vector[(ItemStateUpdateKey, ItemStateUpdate)],
+                   PatchAccumulationState] = ???
+      }
+
+      val writtenState: ResultsWriter[PatchAccumulationState] =
+        eventsArrangedInReverseTimeOrder.toIterable.foldLeftM(
+          new PatchAccumulationState(): PatchAccumulationState) {
+          case (patchAccumulationState: PatchAccumulationState,
+                (itemStateUpdateKey: ItemStateUpdateKey,
+                 indivisibleEvent: IndivisibleEvent)) =>
+            indivisibleEvent match {
+              case _: ArgumentReference =>
+                patchAccumulationState.pure(implicitly[Monad[ResultsWriter]])
+              case IndivisibleChange(patch) =>
+                patchAccumulationState.recordChangePatch(
+                  itemStateUpdateKey,
+                  patch.rewriteItemTypeTags(
+                    refineTypeFor(itemStateUpdateKey, _, lifecyclesById)))
+              case IndivisibleMeasurement(patch) =>
+                patchAccumulationState.recordMeasurementPatch(
+                  itemStateUpdateKey,
+                  patch.rewriteItemTypeTags(
+                    refineTypeFor(itemStateUpdateKey, _, lifecyclesById)))
+              case EndOfLifecycle(annihilation) =>
+                require(endTime == itemStateUpdateKey)
+                patchAccumulationState.recordAnnihilation(itemStateUpdateKey,
+                                                          annihilation)
+            }
+        }
+
+      val writtenStateWithFinalBestPatchesWritten =
+        for (patchAccumulationState <- writtenState)
+          yield patchAccumulationState.writeBestPatches
+
+      writtenStateWithFinalBestPatchesWritten.run._1.toSet // ... hope you had a pleasant stay.
+    }
   }
 
   trait LifecycleContracts extends Lifecycle {
