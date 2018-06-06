@@ -17,7 +17,6 @@ import com.sageserpent.plutonium.ItemStateUpdateTime.ordering
 import com.sageserpent.plutonium.World.{Revision, initialRevision}
 import de.sciss.fingertree.RangedSeq
 import de.ummels.prioritymap.PriorityMap
-import scalaz.Monad
 
 import scala.annotation.tailrec
 import scala.collection.immutable.{
@@ -28,7 +27,6 @@ import scala.collection.immutable.{
   SortedMap
 }
 import scala.reflect.runtime.universe.TypeTag
-import scalaz.std.stream
 
 object AllEventsImplementation {
   // TODO - can we get rid of this? As long as the support for a closed-open interval exists, maybe we don't need an explicit end time?
@@ -405,16 +403,13 @@ object AllEventsImplementation {
       import scalaz.syntax.writer._
 
       import scalaz.Writer
-
-      import scalaz.WriterT._
+      import scalaz.Monad
 
       import scalaz.syntax.foldable._
+      import scalaz.syntax.monad._
 
       import scalaz.std.iterable._
-
       import scalaz.std.vector._
-
-      import scalaz.syntax.monad._
 
       type ResultsWriter[X] =
         Writer[Vector[(ItemStateUpdateKey, ItemStateUpdate)], X]
