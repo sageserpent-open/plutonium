@@ -1,5 +1,6 @@
 package com.sageserpent.plutonium
 
+import java.lang.reflect.Method
 import java.time.Instant
 
 import com.sageserpent.americium.{
@@ -383,8 +384,7 @@ object AllEventsImplementation {
     def referencingLifecycles(lifecyclesById: LifecyclesById): Set[Lifecycle] =
       eventsArrangedInTimeOrder.collect {
         case (itemStateUpdateTime,
-              ArgumentReference(uniqueItemSpecification,
-                                targetUniqueItemSpecification)) =>
+              ArgumentReference(_, targetUniqueItemSpecification)) =>
           lifecycleFor(itemStateUpdateTime,
                        targetUniqueItemSpecification,
                        lifecyclesById)
@@ -393,16 +393,16 @@ object AllEventsImplementation {
     def itemStateUpdates(lifecyclesById: LifecyclesById)
       : Set[(ItemStateUpdateKey, ItemStateUpdate)] =
       eventsArrangedInTimeOrder.collect {
-        case (itemStateUpdateTime, IndivisibleChange(patch)) =>
-          itemStateUpdateTime -> ItemStatePatch(
-            patch.rewriteItemTypeTags(
-              refineTypeFor(itemStateUpdateTime, _, lifecyclesById)))
-        case (itemStateUpdateTime, IndivisibleMeasurement(patch)) => ???
-        case (itemStateUpdateTime, EndOfLifecycle(annihilation)) =>
-          itemStateUpdateTime -> ItemStateAnnihilation(
-            annihilation.rewriteItemTypeTag(lowerBoundTypeTag))
+            case (itemStateUpdateTime, IndivisibleChange(patch)) =>
+              itemStateUpdateTime -> ItemStatePatch(
+                patch.rewriteItemTypeTags(
+                  refineTypeFor(itemStateUpdateTime, _, lifecyclesById)))
+            case (itemStateUpdateTime, IndivisibleMeasurement(patch)) => ???
+            case (itemStateUpdateTime, EndOfLifecycle(annihilation)) =>
+              itemStateUpdateTime -> ItemStateAnnihilation(
+                annihilation.rewriteItemTypeTag(lowerBoundTypeTag))
       }.toSet
-  }
+      }
 
   trait LifecycleContracts extends Lifecycle {
     abstract override def annul(eventId: EventId): Option[Lifecycle] = {
@@ -634,7 +634,7 @@ class AllEventsImplementation(
           val (lifecyclesWithRelevantIds: LifecyclesById,
                lifecyclesWithIrrelevantIds: LifecyclesById) =
             lifecyclesById.partition {
-              case (lifecycleId, lifecycles) => itemIds.contains(lifecycleId)
+              case (lifecycleId, _) => itemIds.contains(lifecycleId)
             }
 
           val (lifecyclesByIdWithAnnulments,
@@ -746,7 +746,8 @@ class AllEventsImplementation(
       : Map[ItemStateUpdateKey, ItemStateUpdate] =
       (itemStateUpdatesFromNewOrModifiedLifecycles -- itemStateUpdatesFromDefunctLifecycles).toMap
 
-    val allEventIdsBookedIn: Set[EventId] = events map (_._1) toSet
+    val allEventIdsBookedIn: Set[EventId] =
+      events.keySet.asInstanceOf[Set[EventId]]
 
     def eventFootprintFrom(event: Event): EventFootprint = event match {
       case Change(when, patches) =>
