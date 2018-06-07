@@ -192,7 +192,7 @@ abstract class PatchRecorderImplementation(
                  sequenceIndex: SequenceIndex) = {
       val candidatePatchTuple = (sequenceIndex, patch, when, eventId)
       methodAndItsCandidatePatchTuplesFor(patch.method) match {
-        case (Some((exemplarMethod, candidatePatchTuples))) =>
+        case Some((exemplarMethod, candidatePatchTuples)) =>
           candidatePatchTuples += candidatePatchTuple
           if (WorldImplementationCodeFactoring
                 .firstMethodIsOverrideCompatibleWithSecond(exemplarMethod,
