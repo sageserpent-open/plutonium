@@ -400,11 +400,10 @@ object AllEventsImplementation {
       : Set[(ItemStateUpdateKey, ItemStateUpdate)] = {
       // Welcome to hell...
 
-      import scalaz.syntax.writer._
-
       import scalaz.Writer
       import scalaz.Monad
 
+      import scalaz.syntax.writer._
       import scalaz.syntax.foldable._
       import scalaz.syntax.monad._
 
@@ -415,7 +414,9 @@ object AllEventsImplementation {
         Writer[Vector[(ItemStateUpdateKey, ItemStateUpdate)], X]
 
       class PatchAccumulationState(
-          accumulatedPatchesByMethod: Map[Method, List[AbstractPatch]] =
+          accumulatedPatchesByMethod: Map[Method,
+                                          List[(AbstractPatch,
+                                                ItemStateUpdateKey)]] =
             Map.empty) {
         def recordChangePatch(
             itemStateUpdateKey: ItemStateUpdateKey,
@@ -428,12 +429,21 @@ object AllEventsImplementation {
                   refineTypeFor(itemStateUpdateKey, _, lifecyclesById)))
             // TODO: should only write the best patch for the specific method referenced by this change.
             patchAccumulationStateAfterFlushing <- patchAccumulationStateWithChangePatch
-              .writeBestPatch(???)
+              .writeBestPatch(patch.method)
           } yield patchAccumulationStateAfterFlushing
 
         def recordMeasurementPatch(
             itemStateUpdateKey: ItemStateUpdateKey,
-            patch: AbstractPatch): ResultsWriter[PatchAccumulationState] = ???
+            patch: AbstractPatch): ResultsWriter[PatchAccumulationState] = {
+          val method = patch.method
+          // TODO - need to have flexibility on method lookup so that method signatures can be fused.
+          new PatchAccumulationState(
+            accumulatedPatchesByMethod = accumulatedPatchesByMethod.updated(
+              method,
+              (patch -> itemStateUpdateKey) :: accumulatedPatchesByMethod
+                .getOrElse(method, List.empty)))
+            .pure(implicitly[Monad[ResultsWriter]])
+        }
 
         def recordAnnihilation(
             itemStateUpdateKey: ItemStateUpdateKey,
@@ -446,11 +456,32 @@ object AllEventsImplementation {
 
         def writeBestPatch(method: Method)
           : Writer[Vector[(ItemStateUpdateKey, ItemStateUpdate)],
-                   PatchAccumulationState] = ???
+                   PatchAccumulationState] = {
+          // TODO - need to have flexibility on method lookup so that method signatures can be fused.
+          val candidatePatches = accumulatedPatchesByMethod(method)
+
+          // TODO - use the best patch selection strategy.
+          val bestPatch = candidatePatches.last._1
+
+          val itemStateUpdateKeyForRepresentativePatch =
+            candidatePatches.head._2
+
+          new PatchAccumulationState(
+            accumulatedPatchesByMethod = accumulatedPatchesByMethod - method)
+            .set(
+              Vector(
+                itemStateUpdateKeyForRepresentativePatch -> ItemStatePatch(
+                  bestPatch)))
+        }
 
         def writeBestPatches
           : Writer[Vector[(ItemStateUpdateKey, ItemStateUpdate)],
-                   PatchAccumulationState] = ???
+                   PatchAccumulationState] =
+          accumulatedPatchesByMethod.keys.foldLeftM(this) {
+            case (patchAccumulationState: PatchAccumulationState,
+                  method: Method) =>
+              patchAccumulationState.writeBestPatch(method)
+          }
       }
 
       val writtenState: ResultsWriter[PatchAccumulationState] =
