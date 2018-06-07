@@ -449,8 +449,9 @@ object AllEventsImplementation {
             itemStateUpdateKey: ItemStateUpdateKey,
             annihilation: Annihilation): ResultsWriter[PatchAccumulationState] =
           for {
-            _ <- Vector(itemStateUpdateKey -> (ItemStateAnnihilation(
-              annihilation): ItemStateUpdate)).tell
+            _ <- Vector(
+              itemStateUpdateKey -> (ItemStateAnnihilation(annihilation
+                .rewriteItemTypeTag(lowerBoundTypeTag)): ItemStateUpdate)).tell
           } yield
             this // We can get away with this (ha-ha) because an annihilation must be the latest event, so comes *first*, so there will be no patches to select from.
 
