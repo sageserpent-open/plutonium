@@ -512,8 +512,7 @@ object AllEventsImplementation {
         }
 
       val writtenStateWithFinalBestPatchesWritten =
-        for (patchAccumulationState <- writtenState)
-          yield patchAccumulationState.writeBestPatches
+        writtenState.flatMap(_.writeBestPatches)
 
       writtenStateWithFinalBestPatchesWritten.run._1.toSet // ... hope you had a pleasant stay.
     }
