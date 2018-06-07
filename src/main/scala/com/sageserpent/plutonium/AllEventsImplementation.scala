@@ -945,8 +945,9 @@ class AllEventsImplementation(
       },
       lifecyclesById = lifecyclesById.mapValues { lifecycles =>
         val (retainedUnchangedLifecycles, retainedTrimmedLifecycles) =
-          lifecycles
-            .filterIncludes(timespanUpToAndIncludingTheCutoff)
+          (lifecycles
+            .filterIncludes(timespanUpToAndIncludingTheCutoff) ++ lifecycles
+            .filterOverlaps(timespanUpToAndIncludingTheCutoff))
             .partition(lifecycle =>
               Ordering[ItemStateUpdateTime].lteq(lifecycle.endTime, cutoff))
 
