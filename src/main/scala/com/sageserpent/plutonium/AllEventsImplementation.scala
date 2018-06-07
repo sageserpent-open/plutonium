@@ -464,7 +464,7 @@ object AllEventsImplementation {
         def writeBestPatch(method: Method)
           : Writer[Vector[(ItemStateUpdateKey, ItemStateUpdate)],
                    PatchAccumulationState] = {
-          val Some((_, candidatePatches)) =
+          val Some((exemplarMethod, candidatePatches)) =
             exemplarMethodAndPatchesFor(method)
 
           // TODO - use the best patch selection strategy.
@@ -474,7 +474,7 @@ object AllEventsImplementation {
             candidatePatches.head
 
           new PatchAccumulationState(
-            accumulatedPatchesByExemplarMethod = accumulatedPatchesByExemplarMethod - method)
+            accumulatedPatchesByExemplarMethod = accumulatedPatchesByExemplarMethod - exemplarMethod)
             .set(
               Vector(
                 itemStateUpdateKeyForRepresentativePatch -> ItemStatePatch(
