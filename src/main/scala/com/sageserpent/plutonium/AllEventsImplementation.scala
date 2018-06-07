@@ -414,20 +414,16 @@ object AllEventsImplementation {
         Writer[Vector[(ItemStateUpdateKey, ItemStateUpdate)], X]
 
       class PatchAccumulationState(
-          accumulatedPatchesByMethod: Map[Method,
-                                          List[(AbstractPatch,
-                                                ItemStateUpdateKey)]] =
+          accumulatedPatchesByExemplarMethod: Map[Method,
+                                                  List[(AbstractPatch,
+                                                        ItemStateUpdateKey)]] =
             Map.empty) {
         def recordChangePatch(
             itemStateUpdateKey: ItemStateUpdateKey,
             patch: AbstractPatch): ResultsWriter[PatchAccumulationState] =
           for {
             patchAccumulationStateWithChangePatch <- this
-              .recordMeasurementPatch(
-                itemStateUpdateKey,
-                patch.rewriteItemTypeTags(
-                  refineTypeFor(itemStateUpdateKey, _, lifecyclesById)))
-            // TODO: should only write the best patch for the specific method referenced by this change.
+              .recordMeasurementPatch(itemStateUpdateKey, patch)
             patchAccumulationStateAfterFlushing <- patchAccumulationStateWithChangePatch
               .writeBestPatch(patch.method)
           } yield patchAccumulationStateAfterFlushing
@@ -435,13 +431,23 @@ object AllEventsImplementation {
         def recordMeasurementPatch(
             itemStateUpdateKey: ItemStateUpdateKey,
             patch: AbstractPatch): ResultsWriter[PatchAccumulationState] = {
-          val method = patch.method
-          // TODO - need to have flexibility on method lookup so that method signatures can be fused.
+          val (exemplarMethod, associatedPatches) =
+            exemplarMethodAndPatchesFor(patch.method)
+              .getOrElse(patch.method -> List.empty)
+
+          val updatedCandidatePatches = (patch, itemStateUpdateKey) :: associatedPatches
+
+          val updatedAccumulatedPatchesByExemplarMethod =
+            if (WorldImplementationCodeFactoring
+                  .firstMethodIsOverrideCompatibleWithSecond(exemplarMethod,
+                                                             patch.method))
+              accumulatedPatchesByExemplarMethod - exemplarMethod + (patch.method -> updatedCandidatePatches)
+            else
+              accumulatedPatchesByExemplarMethod + (exemplarMethod -> updatedCandidatePatches)
+
           new PatchAccumulationState(
-            accumulatedPatchesByMethod = accumulatedPatchesByMethod.updated(
-              method,
-              (patch -> itemStateUpdateKey) :: accumulatedPatchesByMethod
-                .getOrElse(method, List.empty)))
+            accumulatedPatchesByExemplarMethod =
+              updatedAccumulatedPatchesByExemplarMethod)
             .pure(implicitly[Monad[ResultsWriter]])
         }
 
@@ -458,17 +464,17 @@ object AllEventsImplementation {
         def writeBestPatch(method: Method)
           : Writer[Vector[(ItemStateUpdateKey, ItemStateUpdate)],
                    PatchAccumulationState] = {
-          // TODO - need to have flexibility on method lookup so that method signatures can be fused.
-          val candidatePatches = accumulatedPatchesByMethod(method)
+          val Some((_, candidatePatches)) =
+            exemplarMethodAndPatchesFor(method)
 
           // TODO - use the best patch selection strategy.
-          val bestPatch = candidatePatches.last._1
+          val (bestPatch, _) = candidatePatches.last
 
-          val itemStateUpdateKeyForRepresentativePatch =
-            candidatePatches.head._2
+          val (_, itemStateUpdateKeyForRepresentativePatch) =
+            candidatePatches.head
 
           new PatchAccumulationState(
-            accumulatedPatchesByMethod = accumulatedPatchesByMethod - method)
+            accumulatedPatchesByExemplarMethod = accumulatedPatchesByExemplarMethod - method)
             .set(
               Vector(
                 itemStateUpdateKeyForRepresentativePatch -> ItemStatePatch(
@@ -478,10 +484,24 @@ object AllEventsImplementation {
         def writeBestPatches
           : Writer[Vector[(ItemStateUpdateKey, ItemStateUpdate)],
                    PatchAccumulationState] =
-          accumulatedPatchesByMethod.keys.foldLeftM(this) {
+          accumulatedPatchesByExemplarMethod.keys.foldLeftM(this) {
             case (patchAccumulationState: PatchAccumulationState,
                   method: Method) =>
               patchAccumulationState.writeBestPatch(method)
+          }
+
+        private def exemplarMethodAndPatchesFor(method: Method)
+          : Option[(Method, List[(AbstractPatch, ItemStateUpdateKey)])] =
+          accumulatedPatchesByExemplarMethod.get(method) map (method -> _) orElse {
+            accumulatedPatchesByExemplarMethod.find {
+              case (exemplarMethod, _) =>
+                WorldImplementationCodeFactoring
+                  .firstMethodIsOverrideCompatibleWithSecond(method,
+                                                             exemplarMethod) ||
+                  WorldImplementationCodeFactoring
+                    .firstMethodIsOverrideCompatibleWithSecond(exemplarMethod,
+                                                               method)
+            }
           }
       }
 
