@@ -9,6 +9,7 @@ import com.sageserpent.americium
 import com.sageserpent.americium._
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.seqEnrichment._
+import com.sageserpent.plutonium.Benchmark.Thing
 import org.scalacheck.Prop.BooleanOperators
 import org.scalacheck.{Gen, Prop}
 import org.scalatest.exceptions.TestFailedException
@@ -20,7 +21,6 @@ import scalaz.syntax.applicativePlus._
 import scala.collection.immutable
 import scala.collection.immutable.{::, TreeMap}
 import scala.util.Random
-
 import scala.reflect.runtime.universe.TypeTag
 
 trait WorldBehaviours
@@ -2976,6 +2976,82 @@ trait WorldBehaviours
   }
 
   def worldWithEventsThatHaveSinceBeenCorrectedBehaviour = {
+    it should "allow correction of events that set up potentially self-referencing inter-item references" in {
+      val testCaseGenerator = for {
+        worldResource <- worldResourceGenerator
+        size          <- Gen.posNum[Int]
+        seed          <- seedGenerator
+        random = new Random(seed)
+      } yield (worldResource, size, random)
+
+      check(
+        Prop.forAllNoShrink(testCaseGenerator) {
+          case (worldResource, size, random) =>
+            worldResource acquireAndGet {
+              world =>
+                println("*** Test case ***")
+
+                val eventIds = 0 until 1 + (size / 10)
+
+                val idSet = 0 until 1 + (size / 5)
+
+                val checks = for (step <- 0 until size) yield {
+                  val oneId     = random.chooseOneOf(idSet)
+                  val anotherId = random.chooseOneOf(idSet)
+
+                  val eventId = random.chooseOneOf(eventIds)
+
+                  val theHourFromTheStart =
+                    if (0 < random
+                          .chooseAnyNumberFromZeroToOneLessThan(3)) step
+                    else
+                      random
+                        .chooseAnyNumberFromZeroToOneLessThan(step)
+
+                  println(
+                    s"Size: $size, revision step: $step, event id: $eventId, one id: $oneId, another id: $anotherId, the hour from the start: $theHourFromTheStart")
+
+                  val when = Instant.ofEpochSecond(3600L * theHourFromTheStart)
+
+                  world.revise(
+                    eventId,
+                    Change.forTwoItems[Thing, Thing](when)(
+                      oneId,
+                      anotherId,
+                      (oneThing, anotherThing) => {
+                        oneThing.property = step
+                        oneThing.acquireReference(anotherThing)
+                      }),
+                    Instant.now()
+                  )
+
+                  val scope = world.scopeFor(when, world.nextRevision)
+
+                  val queryForOneItem: Bitemporal[Thing] =
+                    Bitemporal.withId[Thing](oneId)
+                  val queryForAnotherItem: Bitemporal[Thing] =
+                    Bitemporal.withId[Thing](anotherId)
+
+                  val agglomeratedQuery: Bitemporal[(Thing, Thing)] =
+                    (queryForOneItem |@| queryForAnotherItem)(
+                      (_: Thing, _: Thing))
+                  val Seq((oneItem, anotherItem)) =
+                    scope.render(agglomeratedQuery)
+
+                  val propertyIsCorrect = (oneItem.property == step) :| s"Item: $oneItem has a property value of: ${oneItem.property}, was expecting: $step"
+
+                  val referenceIsCorrect = oneItem.reference.contains(
+                    anotherItem) :| s"Item: $oneItem has a reference value of: ${oneItem.reference}, was expecting: ${Some(anotherItem)}"
+
+                  (propertyIsCorrect && referenceIsCorrect) :| s"Size: $size, revision step: $step, event id: $eventId, one id: $oneId, another id: $anotherId, the hour from the start: $theHourFromTheStart"
+                }
+
+                Prop.all(checks: _*)
+            }
+
+        })
+    }
+
     it should "extend the history of an item whose annihilation is annulled to pick up any subsequent events relating to that item." in {
       val itemId = "Fred"
 

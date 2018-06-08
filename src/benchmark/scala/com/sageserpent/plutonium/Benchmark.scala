@@ -13,6 +13,10 @@ object Benchmark extends Bench.OfflineRegressionReport {
   abstract class Thing {
     var property: Int = 0
 
+    def acquireReference(referred: Thing): Unit = {
+      reference = Some(referred)
+    }
+
     var reference: Option[Thing] = None
   }
 
@@ -34,22 +38,22 @@ object Benchmark extends Bench.OfflineRegressionReport {
 
         val eventId = randomBehaviour.chooseOneOf(eventIds)
 
-        val theHourFromTheStart = 3600L * (if (0 < randomBehaviour
-                                                 .chooseAnyNumberFromZeroToOneLessThan(
-                                                   3)) step
-                                           else
-                                             randomBehaviour
-                                               .chooseAnyNumberFromZeroToOneLessThan(
-                                                 step))
+        val theHourFromTheStart =
+          if (0 < randomBehaviour
+                .chooseAnyNumberFromZeroToOneLessThan(3)) step
+          else
+            randomBehaviour
+              .chooseAnyNumberFromZeroToOneLessThan(step)
+
         world.revise(
           eventId,
           Change.forTwoItems[Thing, Thing](
-            Instant.ofEpochSecond(theHourFromTheStart))(
+            Instant.ofEpochSecond(3600L * theHourFromTheStart))(
             oneId,
             anotherId,
             (oneThing, anotherThing) => {
               oneThing.property = step
-              oneThing.reference = Some(anotherThing)
+              oneThing.acquireReference(anotherThing)
             }),
           Instant.now()
         )
