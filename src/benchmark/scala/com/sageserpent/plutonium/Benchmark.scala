@@ -13,7 +13,7 @@ object Benchmark extends Bench.OfflineRegressionReport {
   abstract class Thing {
     var property: Int = 0
 
-    def acquireReference(referred: Thing): Unit = {
+    def referTo(referred: Thing): Unit = {
       reference = Some(referred)
     }
 
@@ -53,7 +53,7 @@ object Benchmark extends Bench.OfflineRegressionReport {
             anotherId,
             (oneThing, anotherThing) => {
               oneThing.property = step
-              oneThing.acquireReference(anotherThing)
+              oneThing.referTo(anotherThing)
             }),
           Instant.now()
         )

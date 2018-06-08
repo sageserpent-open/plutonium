@@ -3020,7 +3020,7 @@ trait WorldBehaviours
                       anotherId,
                       (oneThing, anotherThing) => {
                         oneThing.property = step
-                        oneThing.acquireReference(anotherThing)
+                        oneThing.referTo(anotherThing)
                       }),
                     Instant.now()
                   )
