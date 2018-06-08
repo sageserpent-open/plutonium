@@ -1110,8 +1110,8 @@ trait Bugs
             Change
               .forTwoItems(Instant.ofEpochSecond(0L))(referringId, referredId, {
                 (referrer: Thing, referred: Thing) =>
-                  referrer.property = 23
-                  referrer.referTo(referred)
+                  referrer.property1 = 23
+                  referrer.property2 = "Hi"
               }),
             sharedAsOf
           )
@@ -1121,8 +1121,8 @@ trait Bugs
             Change
               .forTwoItems(Instant.ofEpochSecond(0L))(referringId, referredId, {
                 (referrer: Thing, referred: Thing) =>
-                  referrer.property = 45
-                  referrer.referTo(referred)
+                  referrer.property1 = 45
+                  referrer.property2 = "There"
               }),
             sharedAsOf
           )
@@ -1131,13 +1131,14 @@ trait Bugs
             world.scopeFor(PositiveInfinity[Instant](), world.nextRevision)
 
           scope
-            .render((Bitemporal.withId[Thing](referringId) |@| Bitemporal
-              .withId[Thing](referredId))({
-              case (referrer, referred) =>
-                referrer.reference should contain(referred)
-                referrer.property shouldBe 45
-            }))
+            .render(Bitemporal.withId[Thing](referringId))
             .loneElement
+            .property1 shouldBe 45
+
+          scope
+            .render(Bitemporal.withId[Thing](referringId))
+            .loneElement
+            .property2 shouldBe "There"
         }
       }
     }

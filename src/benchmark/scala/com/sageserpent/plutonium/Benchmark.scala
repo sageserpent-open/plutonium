@@ -11,7 +11,9 @@ object Benchmark extends Bench.OfflineRegressionReport {
     RegressionReporter.Historian.Complete()
 
   abstract class Thing {
-    var property: Int = 0
+    var property1: Int = 0
+
+    var property2: String = ""
 
     def referTo(referred: Thing): Unit = {
       reference = Some(referred)
@@ -52,7 +54,7 @@ object Benchmark extends Bench.OfflineRegressionReport {
             oneId,
             anotherId,
             (oneThing, anotherThing) => {
-              oneThing.property = step
+              oneThing.property1 = step
               oneThing.referTo(anotherThing)
             }),
           Instant.now()

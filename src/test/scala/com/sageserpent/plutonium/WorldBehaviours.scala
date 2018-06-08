@@ -3019,7 +3019,7 @@ trait WorldBehaviours
                       oneId,
                       anotherId,
                       (oneThing, anotherThing) => {
-                        oneThing.property = step
+                        oneThing.property1 = step
                         oneThing.referTo(anotherThing)
                       }),
                     Instant.now()
@@ -3038,7 +3038,7 @@ trait WorldBehaviours
                   val Seq((oneItem, anotherItem)) =
                     scope.render(agglomeratedQuery)
 
-                  val propertyIsCorrect = (oneItem.property == step) :| s"Item: $oneItem has a property value of: ${oneItem.property}, was expecting: $step"
+                  val propertyIsCorrect = (oneItem.property1 == step) :| s"Item: $oneItem has a property value of: ${oneItem.property1}, was expecting: $step"
 
                   val referenceIsCorrect = oneItem.reference.contains(
                     anotherItem) :| s"Item: $oneItem has a reference value of: ${oneItem.reference}, was expecting: ${Some(anotherItem)}"
