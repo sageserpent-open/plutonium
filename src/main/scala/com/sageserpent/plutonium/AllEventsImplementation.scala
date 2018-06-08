@@ -159,9 +159,9 @@ object AllEventsImplementation {
         (firstLifecycle.itemStateUpdateTimesByEventId.keys ++ secondLifecycle.itemStateUpdateTimesByEventId.keys) map (
             eventId =>
               eventId ->
-                firstLifecycle.itemStateUpdateTimesByEventId.getOrElse(
-                  eventId,
-                  Set.empty ++ secondLifecycle.itemStateUpdateTimesByEventId
+                firstLifecycle.itemStateUpdateTimesByEventId
+                  .getOrElse(eventId, Set.empty)
+                  .union(secondLifecycle.itemStateUpdateTimesByEventId
                     .getOrElse(eventId, Set.empty))) toMap
 
       Lifecycle(
@@ -216,6 +216,11 @@ object AllEventsImplementation {
     require(
       itemStateUpdateTimesByEventId.nonEmpty && itemStateUpdateTimesByEventId
         .forall { case (_, times) => times.nonEmpty })
+
+    require(
+      eventsArrangedInReverseTimeOrder.keys.size == itemStateUpdateTimesByEventId
+        .map(_._2.size)
+        .sum)
 
     val startTime: ItemStateUpdateTime =
       eventsArrangedInReverseTimeOrder.lastKey
