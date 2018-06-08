@@ -1094,11 +1094,9 @@ trait Bugs
       }
     }
 
-    "correcting an event that sets up an inter-item reference" should "work" in {
+    "correcting an event that breaks down into more than one patch" should "work" in {
       forAll(worldResourceGenerator) { worldResource =>
         val referringId = "The Central Scrutinizer"
-
-        val referredId = "Joe"
 
         val sharedAsOf = Instant.ofEpochSecond(0)
 
@@ -1108,8 +1106,8 @@ trait Bugs
           world.revise(
             eventToBeCorrected,
             Change
-              .forTwoItems(Instant.ofEpochSecond(0L))(referringId, referredId, {
-                (referrer: Thing, referred: Thing) =>
+              .forOneItem(Instant.ofEpochSecond(0L))(referringId, {
+                referrer: Thing =>
                   referrer.property1 = 23
                   referrer.property2 = "Hi"
               }),
@@ -1119,10 +1117,9 @@ trait Bugs
           world.revise(
             eventToBeCorrected,
             Change
-              .forTwoItems(Instant.ofEpochSecond(0L))(referringId, referredId, {
-                (referrer: Thing, referred: Thing) =>
+              .forOneItem(Instant.ofEpochSecond(0L))(referringId, {
+                referrer: Thing =>
                   referrer.property1 = 45
-                  referrer.property2 = "There"
               }),
             sharedAsOf
           )
@@ -1134,11 +1131,6 @@ trait Bugs
             .render(Bitemporal.withId[Thing](referringId))
             .loneElement
             .property1 shouldBe 45
-
-          scope
-            .render(Bitemporal.withId[Thing](referringId))
-            .loneElement
-            .property2 shouldBe "There"
         }
       }
     }
