@@ -1136,58 +1136,59 @@ trait Bugs
     }
 
     "correcting events that relate a common pool of items to each other" should "work" in {
-      forAll(worldResourceGenerator,
-             seedGenerator,
-             Gen.choose(1, 2),
-             MinSuccessful(1400)) { (worldResource, seed, size) =>
-        val random = new Random(seed)
+      val idGenerator = Gen.chooseNum(10, 20)
 
-        val zeroId = 0
+      case class Booking(eventId: Int, referrerId: Int, referredId: Int)
 
-        val oneId = 1
+      val eventAndTwoIdsGenerator = for {
+        eventId    <- Gen.chooseNum(0, 5)
+        referrerId <- idGenerator
+        referredId <- idGenerator
+      } yield Booking(eventId, referrerId, referredId)
 
-        val sharedAsOf = Instant.ofEpochSecond(0)
+      val eventsGenerator = for {
+        numberOfStepsGenerator <- Gen.chooseNum(1, 20)
+        events                 <- Gen.listOfN(numberOfStepsGenerator, eventAndTwoIdsGenerator)
+      } yield events
 
-        val eventZero = 0
+      forAll(worldResourceGenerator, eventsGenerator, MinSuccessful(200)) {
+        (worldResource, events) =>
+          val zeroId = 0
 
-        val eventOne = 1
+          val oneId = 1
 
-        worldResource acquireAndGet { world =>
-          println(s"*** Test Case (size: $size)***")
+          val sharedAsOf = Instant.ofEpochSecond(0)
 
-          for (step <- 0 to size) {
-            val eventId = if (random.nextBoolean()) eventZero else eventOne
+          val eventZero = 0
 
-            val referrerId = if (random.nextBoolean()) zeroId else oneId
-            val referredId = if (random.nextBoolean()) zeroId else oneId
+          val eventOne = 1
 
-            println(
-              s"Step: $step, event id: $eventId, referrer id: $referrerId, referredId: $referredId")
+          worldResource acquireAndGet { world =>
+            for ((Booking(eventId, referrerId, referredId), step) <- events.zipWithIndex) {
+              world.revise(
+                eventId,
+                Change
+                  .forTwoItems(Instant.ofEpochSecond(0L))(
+                    referrerId,
+                    referredId, { (referrer: Thing, referred: Thing) =>
+                      referrer.property1 = step
+                      referrer.referTo(referred)
+                    }),
+                sharedAsOf
+              )
 
-            world.revise(
-              eventId,
-              Change
-                .forTwoItems(Instant.ofEpochSecond(0L))(
-                  referrerId,
-                  referredId, { (referrer: Thing, referred: Thing) =>
-                    referrer.property1 = step
-                    referrer.referTo(referred)
-                  }),
-              sharedAsOf
-            )
+              val scope =
+                world.scopeFor(PositiveInfinity[Instant](), world.nextRevision)
 
-            val scope =
-              world.scopeFor(PositiveInfinity[Instant](), world.nextRevision)
+              val Seq((referrer, referred)) = scope
+                .render(
+                  (Bitemporal.withId[Thing](referrerId) |@| Bitemporal
+                    .withId[Thing](referredId))((_, _)))
 
-            val Seq((referrer, referred)) = scope
-              .render(
-                (Bitemporal.withId[Thing](referrerId) |@| Bitemporal
-                  .withId[Thing](referredId))((_, _)))
-
-            referrer.property1 shouldBe step
-            referrer.reference should contain(referred)
+              referrer.property1 shouldBe step
+              referrer.reference should contain(referred)
+            }
           }
-        }
       }
     }
   }
