@@ -1153,15 +1153,7 @@ trait Bugs
 
       forAll(worldResourceGenerator, eventsGenerator, MinSuccessful(200)) {
         (worldResource, events) =>
-          val zeroId = 0
-
-          val oneId = 1
-
           val sharedAsOf = Instant.ofEpochSecond(0)
-
-          val eventZero = 0
-
-          val eventOne = 1
 
           worldResource acquireAndGet { world =>
             for ((Booking(eventId, referrerId, referredId), step) <- events.zipWithIndex) {
