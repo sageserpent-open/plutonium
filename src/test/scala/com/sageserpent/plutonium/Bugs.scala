@@ -5,10 +5,10 @@ import java.time.Instant
 import com.sageserpent.americium.{NegativeInfinity, PositiveInfinity}
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.plutonium.Benchmark.Thing
-import org.scalacheck.Gen
+import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
-import org.scalatest.{FlatSpec, LoneElement, Matchers}
+import org.scalatest.{FlatSpec, LoneElement, Matchers, Succeeded}
 
 import scala.collection.immutable.{SortedMap, TreeMap}
 import scala.util.Random
@@ -1131,6 +1131,62 @@ trait Bugs
             .render(Bitemporal.withId[Thing](referringId))
             .loneElement
             .property1 shouldBe 45
+        }
+      }
+    }
+
+    "correcting events that relate a common pool of items to each other" should "work" in {
+      forAll(worldResourceGenerator,
+             seedGenerator,
+             Gen.choose(1, 2),
+             MinSuccessful(1400)) { (worldResource, seed, size) =>
+        val random = new Random(seed)
+
+        val zeroId = 0
+
+        val oneId = 1
+
+        val sharedAsOf = Instant.ofEpochSecond(0)
+
+        val eventZero = 0
+
+        val eventOne = 1
+
+        worldResource acquireAndGet { world =>
+          println(s"*** Test Case (size: $size)***")
+
+          for (step <- 0 to size) {
+            val eventId = if (random.nextBoolean()) eventZero else eventOne
+
+            val referrerId = if (random.nextBoolean()) zeroId else oneId
+            val referredId = if (random.nextBoolean()) zeroId else oneId
+
+            println(
+              s"Step: $step, event id: $eventId, referrer id: $referrerId, referredId: $referredId")
+
+            world.revise(
+              eventId,
+              Change
+                .forTwoItems(Instant.ofEpochSecond(0L))(
+                  referrerId,
+                  referredId, { (referrer: Thing, referred: Thing) =>
+                    referrer.property1 = step
+                    referrer.referTo(referred)
+                  }),
+              sharedAsOf
+            )
+
+            val scope =
+              world.scopeFor(PositiveInfinity[Instant](), world.nextRevision)
+
+            val Seq((referrer, referred)) = scope
+              .render(
+                (Bitemporal.withId[Thing](referrerId) |@| Bitemporal
+                  .withId[Thing](referredId))((_, _)))
+
+            referrer.property1 shouldBe step
+            referrer.reference should contain(referred)
+          }
         }
       }
     }
