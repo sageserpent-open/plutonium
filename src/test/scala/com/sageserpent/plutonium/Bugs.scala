@@ -2,8 +2,9 @@ package com.sageserpent.plutonium
 
 import java.time.Instant
 
-import com.sageserpent.americium.{PositiveInfinity, NegativeInfinity}
+import com.sageserpent.americium.{NegativeInfinity, PositiveInfinity}
 import com.sageserpent.americium.randomEnrichment._
+import com.sageserpent.plutonium.Benchmark.Thing
 import org.scalacheck.Gen
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
@@ -11,6 +12,7 @@ import org.scalatest.{FlatSpec, LoneElement, Matchers}
 
 import scala.collection.immutable.{SortedMap, TreeMap}
 import scala.util.Random
+import scalaz.syntax.applicativePlus._
 
 trait Bugs
     extends FlatSpec
@@ -1092,6 +1094,46 @@ trait Bugs
       }
     }
 
+    "correcting an event that breaks down into more than one patch" should "work" in {
+      forAll(worldResourceGenerator) { worldResource =>
+        val referringId = "The Central Scrutinizer"
+
+        val sharedAsOf = Instant.ofEpochSecond(0)
+
+        val eventToBeCorrected = 0
+
+        worldResource acquireAndGet { world =>
+          world.revise(
+            eventToBeCorrected,
+            Change
+              .forOneItem(Instant.ofEpochSecond(0L))(referringId, {
+                referrer: Thing =>
+                  referrer.property1 = 23
+                  referrer.property2 = "Hi"
+              }),
+            sharedAsOf
+          )
+
+          world.revise(
+            eventToBeCorrected,
+            Change
+              .forOneItem(Instant.ofEpochSecond(0L))(referringId, {
+                referrer: Thing =>
+                  referrer.property1 = 45
+              }),
+            sharedAsOf
+          )
+
+          val scope =
+            world.scopeFor(PositiveInfinity[Instant](), world.nextRevision)
+
+          scope
+            .render(Bitemporal.withId[Thing](referringId))
+            .loneElement
+            .property1 shouldBe 45
+        }
+      }
+    }
   }
 }
 
