@@ -984,15 +984,17 @@ class AllEventsImplementation(
                 Lifecycle.fromChange(
                   eventId = eventId,
                   itemStateUpdateKey,
-                  patch = patch) +: patch.argumentItemSpecifications.map(
-                  uniqueItemSpecification =>
+                  patch = patch) +: patch.argumentItemSpecifications.collect {
+                  case uniqueItemSpecification
+                      if patch.targetItemSpecification != uniqueItemSpecification =>
                     Lifecycle.fromArgumentTypeReference(
                       eventId = eventId,
                       itemStateUpdateKey = itemStateUpdateKey,
                       uniqueItemSpecification = uniqueItemSpecification,
                       targetUniqueItemSpecification =
                         patch.targetItemSpecification
-                  ))
+                    )
+                }
             }
           case Measurement(when, patches) =>
             patches.zipWithIndex.flatMap {
