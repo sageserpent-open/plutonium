@@ -963,7 +963,7 @@ class AllEventsImplementation(
 
         (noLifecycles /: (retainedUnchangedLifecycles ++ retainedTrimmedLifecycles
           .flatMap(_.retainUpTo(when))))(_ + _)
-      },
+      } filter (_._2.nonEmpty),
       bestPatchSelection = this.bestPatchSelection
     )
   }
