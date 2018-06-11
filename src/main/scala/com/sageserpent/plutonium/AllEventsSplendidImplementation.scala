@@ -31,9 +31,6 @@ class AllEventsSplendidImplementation extends AllEvents {
 
   override def retainUpTo(when: Unbounded[Instant]): AllEvents = ???
 
-  override def itemStateUpdateTime(
-      itemStateUpdateKey: ItemStateUpdate.Key): ItemStateUpdateTime = ???
-
   def annul(eventId: EventId): EventsRevisionOutcome[AllEventsType] = ???
 
   def record(eventId: EventId,

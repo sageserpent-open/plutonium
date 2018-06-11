@@ -18,7 +18,7 @@ object ItemCacheUsingBlobStorage {
 }
 
 class ItemCacheUsingBlobStorage[Time](
-    blobStorage: BlobStorage[Time, ItemStateUpdate.Key, SnapshotBlob],
+    blobStorage: BlobStorage[Time, ItemStateUpdateKey, SnapshotBlob],
     when: Time)
     extends ItemCacheImplementation
     with itemStateStorageUsingProxies.ReconstitutionContext {
@@ -54,7 +54,7 @@ class ItemCacheUsingBlobStorage[Time](
   override protected def createItemFor[Item](
       _uniqueItemSpecification: UniqueItemSpecification,
       lifecycleUUID: UUID,
-      itemStateUpdateKey: Option[ItemStateUpdate.Key]) = {
+      itemStateUpdateKey: Option[ItemStateUpdateKey]) = {
     import ItemCacheUsingBlobStorage.proxyFactory.AcquiredState
 
     val stateToBeAcquiredByProxy: AcquiredState =
