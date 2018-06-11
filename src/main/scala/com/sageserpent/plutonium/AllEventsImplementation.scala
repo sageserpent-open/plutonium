@@ -395,7 +395,8 @@ object AllEventsImplementation {
     def referencingLifecycles(lifecyclesById: LifecyclesById): Set[Lifecycle] =
       eventsArrangedInReverseTimeOrder.collect {
         case (itemStateUpdateTime,
-              ArgumentReference(_, targetUniqueItemSpecification)) =>
+              ArgumentReference(_, targetUniqueItemSpecification))
+            if targetUniqueItemSpecification != uniqueItemSpecification =>
           lifecycleFor(itemStateUpdateTime,
                        targetUniqueItemSpecification,
                        lifecyclesById)
@@ -590,6 +591,8 @@ class AllEventsImplementation(
     lifecyclesById: LifecyclesById = Map.empty,
     bestPatchSelection: BestPatchSelection = bestPatchSelection)
     extends AllEvents {
+  require(lifecyclesById.values.forall(_.nonEmpty))
+
   lifecyclesById.foreach {
     case (id, lifecycles: Lifecycles) =>
       for {
