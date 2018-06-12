@@ -402,7 +402,8 @@ object AllEventsImplementation {
                        lifecyclesById)
       }.toSet
 
-    def itemStateUpdates(lifecyclesById: LifecyclesById)
+    def itemStateUpdates(lifecyclesById: LifecyclesById,
+                         bestPatchSelection: BestPatchSelection)
       : Set[(ItemStateUpdateKey, ItemStateUpdate)] = {
       // Welcome to hell...
 
@@ -473,9 +474,8 @@ object AllEventsImplementation {
           val Some((exemplarMethod, candidatePatches)) =
             exemplarMethodAndPatchesFor(method)
 
-          // TODO - use the best patch selection strategy.
-          val (bestPatch, itemStateUpdateKeyForBestPatch) =
-            candidatePatches.last
+          val (bestPatch, itemStateUpdateKeyForBestPatch) = bestPatchSelection(
+            candidatePatches)
 
           val (_, itemStateUpdateKeyForAnchorPatchRepresentingTheEvent) =
             candidatePatches.head
@@ -590,14 +590,16 @@ object AllEventsImplementation {
       super.fuseWith(another)
     }
 
-    abstract override def itemStateUpdates(lifecyclesById: LifecyclesById) = {
+    abstract override def itemStateUpdates(
+        lifecyclesById: LifecyclesById,
+        bestPatchSelection: BestPatchSelection) = {
       val id = uniqueItemSpecification.id
       require(lifecyclesById.contains(id))
       require(
         lifecyclesById(id)
           .filterOverlaps(this)
           .contains(this))
-      super.itemStateUpdates(lifecyclesById)
+      super.itemStateUpdates(lifecyclesById, bestPatchSelection)
     }
   }
 
@@ -904,13 +906,13 @@ class AllEventsImplementation(
       : Set[(ItemStateUpdateKey, ItemStateUpdate)] =
       (finalDefunctLifecycles ++ finalDefunctLifecycles.flatMap(
         _.referencingLifecycles(lifecyclesById)))
-        .flatMap(_.itemStateUpdates(lifecyclesById))
+        .flatMap(_.itemStateUpdates(lifecyclesById, bestPatchSelection))
 
     val itemStateUpdatesFromNewOrModifiedLifecycles
       : Set[(ItemStateUpdateKey, ItemStateUpdate)] =
       (finalNewLifecycles ++ finalNewLifecycles.flatMap(
         _.referencingLifecycles(finalLifecyclesById)))
-        .flatMap(_.itemStateUpdates(finalLifecyclesById))
+        .flatMap(_.itemStateUpdates(finalLifecyclesById, bestPatchSelection))
 
     val itemStateUpdateKeysThatNeedToBeRevoked: Set[ItemStateUpdateKey] =
       (itemStateUpdatesFromDefunctLifecycles -- itemStateUpdatesFromNewOrModifiedLifecycles)
