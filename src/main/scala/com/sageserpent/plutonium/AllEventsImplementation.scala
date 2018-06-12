@@ -474,16 +474,46 @@ object AllEventsImplementation {
             exemplarMethodAndPatchesFor(method)
 
           // TODO - use the best patch selection strategy.
-          val (bestPatch, _) = candidatePatches.last
+          val (bestPatch, itemStateUpdateKeyForBestPatch) =
+            candidatePatches.last
 
-          val (_, itemStateUpdateKeyForRepresentativePatch) =
+          val (_, itemStateUpdateKeyForAnchorPatchRepresentingTheEvent) =
             candidatePatches.head
+
+          val relatedItems: Seq[UniqueItemSpecification] =
+            bestPatch.argumentItemSpecifications
+
+          val lifecyclesForRelatedItemsFromThePerspectiveOfTheBestPatch
+            : Set[Lifecycle] = relatedItems
+            .map(
+              uniqueItemSpecification =>
+                Lifecycle.lifecycleFor(itemStateUpdateKeyForBestPatch,
+                                       uniqueItemSpecification,
+                                       lifecyclesById))
+            .toSet
+
+          val lifecyclesForRelatedItemsFromThePerspectiveOfTheAnchorPatch
+            : Set[Lifecycle] = relatedItems
+            .map(
+              uniqueItemSpecification =>
+                Lifecycle.lifecycleFor(
+                  itemStateUpdateKeyForAnchorPatchRepresentingTheEvent,
+                  uniqueItemSpecification,
+                  lifecyclesById))
+            .toSet
+
+          val lifecyclesStartingAfterTheAnchorPatch = lifecyclesForRelatedItemsFromThePerspectiveOfTheBestPatch diff lifecyclesForRelatedItemsFromThePerspectiveOfTheAnchorPatch
+
+          if (lifecyclesStartingAfterTheAnchorPatch.nonEmpty) {
+            throw new RuntimeException(
+              s"Attempt to execute patch involving items: '$id': '${lifecyclesStartingAfterTheAnchorPatch map (_.uniqueItemSpecification)}' whose lifecycles start later than: $itemStateUpdateKeyForBestPatch.")
+          }
 
           new PatchAccumulationState(
             accumulatedPatchesByExemplarMethod = accumulatedPatchesByExemplarMethod - exemplarMethod)
             .set(
               Vector(
-                itemStateUpdateKeyForRepresentativePatch -> ItemStatePatch(
+                itemStateUpdateKeyForAnchorPatchRepresentingTheEvent -> ItemStatePatch(
                   bestPatch)))
         }
 
