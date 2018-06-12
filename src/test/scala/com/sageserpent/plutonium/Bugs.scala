@@ -2,17 +2,16 @@ package com.sageserpent.plutonium
 
 import java.time.Instant
 
-import com.sageserpent.americium.{NegativeInfinity, PositiveInfinity}
 import com.sageserpent.americium.randomEnrichment._
-import com.sageserpent.plutonium.Benchmark.Thing
-import org.scalacheck.{Arbitrary, Gen}
+import com.sageserpent.americium.{NegativeInfinity, PositiveInfinity}
+import org.scalacheck.Gen
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
-import org.scalatest.{FlatSpec, LoneElement, Matchers, Succeeded}
+import org.scalatest.{FlatSpec, LoneElement, Matchers}
+import scalaz.syntax.applicativePlus._
 
 import scala.collection.immutable.{SortedMap, TreeMap}
 import scala.util.Random
-import scalaz.syntax.applicativePlus._
 
 trait Bugs
     extends FlatSpec

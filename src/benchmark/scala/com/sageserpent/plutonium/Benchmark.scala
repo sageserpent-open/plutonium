@@ -10,18 +10,6 @@ object Benchmark extends Bench.OfflineRegressionReport {
   override def historian: RegressionReporter.Historian =
     RegressionReporter.Historian.Complete()
 
-  abstract class Thing {
-    var property1: Int = 0
-
-    var property2: String = ""
-
-    def referTo(referred: Thing): Unit = {
-      reference = Some(referred)
-    }
-
-    var reference: Option[Thing] = None
-  }
-
   val sizes = Gen.range("Number of bookings")(0, 500, 50)
 
   performance of "Bookings" in {
