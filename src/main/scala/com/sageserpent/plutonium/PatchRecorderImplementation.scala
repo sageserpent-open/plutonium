@@ -192,7 +192,7 @@ abstract class PatchRecorderImplementation(
                  sequenceIndex: SequenceIndex) = {
       val candidatePatchTuple = (sequenceIndex, patch, when, eventId)
       methodAndItsCandidatePatchTuplesFor(patch.method) match {
-        case (Some((exemplarMethod, candidatePatchTuples))) =>
+        case Some((exemplarMethod, candidatePatchTuples)) =>
           candidatePatchTuples += candidatePatchTuple
           if (WorldImplementationCodeFactoring
                 .firstMethodIsOverrideCompatibleWithSecond(exemplarMethod,
@@ -286,7 +286,7 @@ abstract class PatchRecorderImplementation(
       case (sequenceIndex, patch, _, _) => patch -> sequenceIndex
     })
 
-    val patchRepresentingTheEvent = candidatePatchTuples.head
+    val anchorPatchRepresentingTheEvent = candidatePatchTuples.head
 
     // The best patch has to be applied as if it occurred when the anchor patch representing
     // the event would have taken place - so it steals the anchor patch's sequence index and physical time.
@@ -294,7 +294,7 @@ abstract class PatchRecorderImplementation(
          _,
          whenTheAnchorPatchOccurs,
          eventIdForAnchorPatch) =
-      patchRepresentingTheEvent
+      anchorPatchRepresentingTheEvent
 
     val reconstitutionDataToItemStateMap =
       sequenceIndexToItemStatesMap.remove(sequenceIndexForBestPatch).get

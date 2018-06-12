@@ -2,6 +2,7 @@ package com.sageserpent.plutonium
 
 import java.lang.reflect.{InvocationTargetException, Method}
 
+import com.sageserpent.plutonium.AbstractPatch.TypeRefinement
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.Patch.MethodPieces
 
@@ -49,18 +50,15 @@ case class Patch(methodPieces: MethodPieces,
     s"Patch for: '$targetItemSpecification', method: '${method.getName}', arguments: '${wrappedArguments.toList}''"
 
   override def rewriteItemTypeTags(
-      uniqueItemSpecificationToTypeTagMap: collection.Map[
-        UniqueItemSpecification,
-        TypeTag[_]]): AbstractPatch = {
+      typeRefinement: TypeRefinement): AbstractPatch = {
     val rewrittenTargetItemSpecification: UniqueItemSpecification =
-      UniqueItemSpecification(
-        targetItemSpecification.id,
-        uniqueItemSpecificationToTypeTagMap(targetItemSpecification))
+      UniqueItemSpecification(targetItemSpecification.id,
+                              typeRefinement(targetItemSpecification))
     val rewrittenArguments: Seq[WrappedArgument] = wrappedArguments map (_.map(
       argumentUniqueItemSpecification =>
-        UniqueItemSpecification(argumentUniqueItemSpecification.id,
-                                uniqueItemSpecificationToTypeTagMap(
-                                  argumentUniqueItemSpecification))))
+        UniqueItemSpecification(
+          argumentUniqueItemSpecification.id,
+          typeRefinement(argumentUniqueItemSpecification))))
     new Patch(methodPieces,
               rewrittenTargetItemSpecification,
               rewrittenArguments)

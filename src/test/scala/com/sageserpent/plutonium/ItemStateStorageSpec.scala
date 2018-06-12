@@ -71,8 +71,8 @@ trait GraphNode {
 
   var lifecycleUUID: UUID = UUID.randomUUID()
 
-  var itemStateUpdateKey: Option[ItemStateUpdate.Key] =
-    Some(ItemStateUpdate.Key(UUID.randomUUID().toString, 0))
+  var itemStateUpdateKey: Option[ItemStateUpdateKey] =
+    None
 }
 
 class OddGraphNode(@transient override val id: OddGraphNode#Id)
@@ -108,9 +108,8 @@ class ItemStateStorageSpec
     with Matchers
     with Checkers
     with SharedGenerators {
-  import MarkSyntax._
   import ItemStateStorage.SnapshotBlob
-  import GraphNode.EventId
+  import MarkSyntax._
 
   val oddGraphNodeTypeTag = typeTag[OddGraphNode]
 
@@ -163,7 +162,7 @@ class ItemStateStorageSpec
       item.lifecycleUUID
 
     override protected def itemStateUpdateKey(
-        item: ItemSuperType): Option[ItemStateUpdate.Key] =
+        item: ItemSuperType): Option[ItemStateUpdateKey] =
       item.itemStateUpdateKey
 
     override protected def noteAnnihilationOnItem(item: ItemSuperType): Unit =
@@ -244,7 +243,7 @@ class ItemStateStorageSpec
           override protected def createItemFor[Item](
               uniqueItemSpecification: UniqueItemSpecification,
               lifecycleUUID: UUID,
-              itemStateUpdateKey: Option[ItemStateUpdate.Key]): Item = {
+              itemStateUpdateKey: Option[ItemStateUpdateKey]): Item = {
             val item = uniqueItemSpecification match {
               case UniqueItemSpecification(id: OddGraphNode#Id, itemTypeTag)
                   if itemTypeTag == oddGraphNodeTypeTag =>
