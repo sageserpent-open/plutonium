@@ -10,7 +10,7 @@ object Benchmark extends Bench.OfflineRegressionReport {
   override def historian: RegressionReporter.Historian =
     RegressionReporter.Historian.Complete()
 
-  val sizes = Gen.range("Number of bookings")(0, 500, 50)
+  val sizes = Gen.range("Number of bookings")(0, 700, 20)
 
   performance of "Bookings" in {
     using(sizes) in { size =>
@@ -20,33 +20,41 @@ object Benchmark extends Bench.OfflineRegressionReport {
 
       val idSet = 0 until 1 + (size / 5)
 
-      val world = new WorldEfficientInMemoryImplementation()
+      val world = new WorldReferenceImplementation()
 
       for (step <- 0 until size) {
-        val oneId     = randomBehaviour.chooseOneOf(idSet)
-        val anotherId = randomBehaviour.chooseOneOf(idSet)
-
         val eventId = randomBehaviour.chooseOneOf(eventIds)
 
-        val theHourFromTheStart =
-          if (0 < randomBehaviour
-                .chooseAnyNumberFromZeroToOneLessThan(3)) step
-          else
-            randomBehaviour
-              .chooseAnyNumberFromZeroToOneLessThan(step)
+        val probabilityOfNotBackdatingAnEvent = 0 < randomBehaviour
+          .chooseAnyNumberFromZeroToOneLessThan(3)
 
-        world.revise(
-          eventId,
-          Change.forTwoItems[Thing, Thing](
-            Instant.ofEpochSecond(3600L * theHourFromTheStart))(
-            oneId,
-            anotherId,
-            (oneThing, anotherThing) => {
-              oneThing.property1 = step
-              oneThing.referTo(anotherThing)
-            }),
-          Instant.now()
-        )
+        val theHourFromTheStart =
+          if (probabilityOfNotBackdatingAnEvent) step
+          else
+            step - randomBehaviour
+              .chooseAnyNumberFromOneTo(step / 3 min 20)
+
+        val probablityOfBookingANewOrCorrectingEvent = 0 < randomBehaviour
+          .chooseAnyNumberFromZeroToOneLessThan(5)
+
+        if (probablityOfBookingANewOrCorrectingEvent) {
+          val oneId = randomBehaviour.chooseOneOf(idSet)
+
+          val anotherId = randomBehaviour.chooseOneOf(idSet)
+
+          world.revise(
+            eventId,
+            Change.forTwoItems[Thing, Thing](
+              Instant.ofEpochSecond(3600L * theHourFromTheStart))(
+              oneId,
+              anotherId,
+              (oneThing, anotherThing) => {
+                oneThing.property1 = step
+                oneThing.referTo(anotherThing)
+              }),
+            Instant.now()
+          )
+        } else world.annul(eventId, Instant.now())
       }
     }
   }
