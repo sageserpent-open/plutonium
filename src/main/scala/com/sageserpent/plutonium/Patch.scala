@@ -2,6 +2,7 @@ package com.sageserpent.plutonium
 
 import java.lang.reflect.{InvocationTargetException, Method}
 
+import com.sageserpent.plutonium.AbstractPatch.TypeRefinement
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.Patch.MethodPieces
 
@@ -21,7 +22,7 @@ object Patch {
 
   def apply(targetRecorder: Recorder,
             method: Method,
-            arguments: Array[AnyRef]) = {
+            arguments: Seq[AnyRef]) = {
     val methodPieces = MethodPieces(method.getDeclaringClass,
                                     method.getName,
                                     method.getParameterTypes)
@@ -32,7 +33,7 @@ object Patch {
 
   case class MethodPieces(declaringClassOfMethod: Class[_],
                           methodName: String,
-                          methodParameterTypes: Array[Class[_]]) {
+                          methodParameterTypes: Seq[Class[_]]) {
     def method =
       declaringClassOfMethod.getMethod(methodName, methodParameterTypes: _*)
   }
@@ -41,7 +42,7 @@ object Patch {
 
 case class Patch(methodPieces: MethodPieces,
                  override val targetItemSpecification: UniqueItemSpecification,
-                 wrappedArguments: Array[Patch.WrappedArgument])
+                 wrappedArguments: Seq[Patch.WrappedArgument])
     extends AbstractPatch {
   import Patch._
 
@@ -49,19 +50,15 @@ case class Patch(methodPieces: MethodPieces,
     s"Patch for: '$targetItemSpecification', method: '${method.getName}', arguments: '${wrappedArguments.toList}''"
 
   override def rewriteItemTypeTags(
-      uniqueItemSpecificationToTypeTagMap: collection.Map[
-        UniqueItemSpecification,
-        TypeTag[_]]): AbstractPatch = {
+      typeRefinement: TypeRefinement): AbstractPatch = {
     val rewrittenTargetItemSpecification: UniqueItemSpecification =
-      UniqueItemSpecification(
-        targetItemSpecification.id,
-        uniqueItemSpecificationToTypeTagMap(targetItemSpecification))
-    val rewrittenArguments
-      : Array[WrappedArgument] = wrappedArguments map (_.map(
+      UniqueItemSpecification(targetItemSpecification.id,
+                              typeRefinement(targetItemSpecification))
+    val rewrittenArguments: Seq[WrappedArgument] = wrappedArguments map (_.map(
       argumentUniqueItemSpecification =>
-        UniqueItemSpecification(argumentUniqueItemSpecification.id,
-                                uniqueItemSpecificationToTypeTagMap(
-                                  argumentUniqueItemSpecification))))
+        UniqueItemSpecification(
+          argumentUniqueItemSpecification.id,
+          typeRefinement(argumentUniqueItemSpecification))))
     new Patch(methodPieces,
               rewrittenTargetItemSpecification,
               rewrittenArguments)

@@ -24,9 +24,9 @@ public class DeliveringPackages {
 
         RedisClient redisClient = RedisClient.create();
 
-        World<String> world = justADemo ?
-                new WorldReferenceImplementation<>(new MutableState<>()) :
-                new WorldRedisBasedImplementation<>(redisClient,
+        World world = justADemo ?
+                new WorldEfficientInMemoryImplementation() :
+                new WorldRedisBasedImplementation(redisClient,
                                                     "TheBigStoreOfDataOwnedByTheDispatchLineOfBusiness");
 
         {

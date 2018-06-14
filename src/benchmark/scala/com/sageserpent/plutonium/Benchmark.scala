@@ -3,22 +3,22 @@ package com.sageserpent.plutonium
 import java.time.Instant
 
 import com.sageserpent.americium.randomEnrichment._
-import org.scalameter.reporting.RegressionReporter
-import org.scalameter.{Bench, Gen}
+import org.scalameter.execution.invocation.InvocationCountMatcher
+import org.scalameter.picklers.noPickler._
+import org.scalameter.api._
 
-object Benchmark extends Bench.OfflineRegressionReport {
-  override def historian: RegressionReporter.Historian =
-    RegressionReporter.Historian.Complete()
+object Benchmark extends Bench.Forked[Long] {
+  val sizes = Gen.range("Number of bookings")(0, 2000, 20)
 
-  type EventId = Int
+  lazy val classRegex  = ".*Thing.*".r
+  lazy val methodRegex = ".*".r
 
-  abstract class Thing {
-    var property: Int = 0
-
-    var reference: Option[Thing] = None
-  }
-
-  val sizes = Gen.range("Number of bookings")(0, 500, 50)
+  override def measurer: Measurer[Long] =
+    Measurer.MethodInvocationCount(
+      InvocationCountMatcher.forRegex(classRegex, methodRegex)) map (quantity =>
+      quantity.copy(value = quantity.value.values.sum))
+  override def aggregator: Aggregator[Long] = Aggregator.median
+  override def defaultConfig: Context       = Context(exec.independentSamples -> 1)
 
   performance of "Bookings" in {
     using(sizes) in { size =>
@@ -28,33 +28,41 @@ object Benchmark extends Bench.OfflineRegressionReport {
 
       val idSet = 0 until 1 + (size / 5)
 
-      val world = new WorldEfficientInMemoryImplementation[EventId]()
+      val world = new WorldEfficientInMemoryImplementation()
 
       for (step <- 0 until size) {
-        val oneId     = randomBehaviour.chooseOneOf(idSet)
-        val anotherId = randomBehaviour.chooseOneOf(idSet)
-
         val eventId = randomBehaviour.chooseOneOf(eventIds)
 
-        val theHourFromTheStart = 3600L * (if (0 < randomBehaviour
-                                                 .chooseAnyNumberFromZeroToOneLessThan(
-                                                   3)) step
-                                           else
-                                             randomBehaviour
-                                               .chooseAnyNumberFromZeroToOneLessThan(
-                                                 step))
-        world.revise(
-          eventId,
-          Change.forTwoItems[Thing, Thing](
-            Instant.ofEpochSecond(theHourFromTheStart))(
-            oneId,
-            anotherId,
-            (oneThing, anotherThing) => {
-              oneThing.property = step
-              oneThing.reference = Some(anotherThing)
-            }),
-          Instant.now()
-        )
+        val probabilityOfNotBackdatingAnEvent = 0 < randomBehaviour
+          .chooseAnyNumberFromZeroToOneLessThan(3)
+
+        val theHourFromTheStart =
+          if (probabilityOfNotBackdatingAnEvent) step
+          else
+            step - randomBehaviour
+              .chooseAnyNumberFromOneTo(step / 3 min 20)
+
+        val probablityOfBookingANewOrCorrectingEvent = 0 < randomBehaviour
+          .chooseAnyNumberFromZeroToOneLessThan(5)
+
+        if (probablityOfBookingANewOrCorrectingEvent) {
+          val oneId = randomBehaviour.chooseOneOf(idSet)
+
+          val anotherId = randomBehaviour.chooseOneOf(idSet)
+
+          world.revise(
+            eventId,
+            Change.forTwoItems[Thing, Thing](
+              Instant.ofEpochSecond(3600L * theHourFromTheStart))(
+              oneId,
+              anotherId,
+              (oneThing, anotherThing) => {
+                oneThing.property1 = step
+                oneThing.referTo(anotherThing)
+              }),
+            Instant.now()
+          )
+        } else world.annul(eventId, Instant.now())
       }
     }
   }

@@ -40,7 +40,7 @@ object MutableState {
   }
 }
 
-class MutableState[EventId] {
+class MutableState {
 
   import MutableState._
   import World._
@@ -109,18 +109,18 @@ class MutableState[EventId] {
   }
 }
 
-class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
-    extends WorldInefficientImplementationCodeFactoring[EventId] {
+class WorldReferenceImplementation(mutableState: MutableState)
+    extends WorldInefficientImplementationCodeFactoring {
 
   import World._
   import WorldImplementationCodeFactoring._
 
-  def this() = this(new MutableState[EventId])
+  def this() = this(new MutableState)
 
   override def nextRevision: Revision = mutableState.nextRevision
 
-  override def forkExperimentalWorld(scope: javaApi.Scope): World[EventId] = {
-    val forkedMutableState = new MutableState[EventId] {
+  override def forkExperimentalWorld(scope: javaApi.Scope): World = {
+    val forkedMutableState = new MutableState {
       val baseMutableState                     = mutableState
       val numberOfRevisionsInCommon            = scope.nextRevision
       val cutoffWhenAfterWhichHistoriesDiverge = scope.when
@@ -158,7 +158,7 @@ class WorldReferenceImplementation[EventId](mutableState: MutableState[EventId])
       }
     }
 
-    new WorldReferenceImplementation[EventId](forkedMutableState)
+    new WorldReferenceImplementation(forkedMutableState)
   }
 
   override def revisionAsOfs: Array[Instant] = mutableState.revisionAsOfs
