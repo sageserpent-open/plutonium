@@ -3,13 +3,9 @@ package com.sageserpent.plutonium
 import java.time.Instant
 
 import com.sageserpent.americium.randomEnrichment._
-import org.scalameter.reporting.RegressionReporter
 import org.scalameter.{Bench, Gen}
 
-object Benchmark extends Bench.OfflineRegressionReport {
-  override def historian: RegressionReporter.Historian =
-    RegressionReporter.Historian.Complete()
-
+object Benchmark extends Bench.ForkedTime {
   val sizes = Gen.range("Number of bookings")(0, 700, 20)
 
   performance of "Bookings" in {
@@ -20,7 +16,7 @@ object Benchmark extends Bench.OfflineRegressionReport {
 
       val idSet = 0 until 1 + (size / 5)
 
-      val world = new WorldReferenceImplementation()
+      val world = new WorldEfficientInMemoryImplementation()
 
       for (step <- 0 until size) {
         val eventId = randomBehaviour.chooseOneOf(eventIds)
