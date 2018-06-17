@@ -52,13 +52,13 @@ case class BlobStorageInMemory[Time, RecordingId, SnapshotBlob] private (
     recordingRevisions: Map[RecordingId, BlobStorageInMemory.Revision],
     lifecycles: Map[
       Any,
-      Seq[BlobStorageInMemory[Time, RecordingId, SnapshotBlob]#Lifecycle]])(
+      Seq[BlobStorageInMemory[Time, RecordingId, SnapshotBlob]#PhoenixLifecycleSpanningAnnihilations]])(
     override implicit val timeOrdering: Ordering[Time])
     extends BlobStorage[Time, RecordingId, SnapshotBlob] { thisBlobStorage =>
   import BlobStorage._
   import BlobStorageInMemory._
 
-  case class Lifecycle(
+  case class PhoenixLifecycleSpanningAnnihilations(
       itemTypeTag: TypeTag[_ <: Any],
       snapshotBlobs: Vector[(Split[Time],
                              (Option[SnapshotBlob], RecordingId, Revision))] =
@@ -97,10 +97,11 @@ case class BlobStorageInMemory[Time, RecordingId, SnapshotBlob] private (
       }
     }
 
-    def addSnapshotBlob(key: RecordingId,
-                        when: Split[Time],
-                        snapshotBlob: Option[SnapshotBlob],
-                        revision: Revision): Lifecycle = {
+    def addSnapshotBlob(
+        key: RecordingId,
+        when: Split[Time],
+        snapshotBlob: Option[SnapshotBlob],
+        revision: Revision): PhoenixLifecycleSpanningAnnihilations = {
       require(!snapshotBlobs.contains(when))
       val insertionPoint =
         indexToSearchDownFromOrInsertAt(when, snapshotBlobTimes)
@@ -135,23 +136,20 @@ case class BlobStorageInMemory[Time, RecordingId, SnapshotBlob] private (
 
         val newAndModifiedExplodedLifecycles =
           (Map
-            .empty[
-              UniqueItemSpecification,
-              BlobStorageInMemory[Time, RecordingId, SnapshotBlob]#Lifecycle] /: recordings) {
+            .empty[UniqueItemSpecification,
+                   BlobStorageInMemory[Time, RecordingId, SnapshotBlob]#PhoenixLifecycleSpanningAnnihilations] /: recordings) {
             case (explodedLifecycles, (keys, when, snapshots)) =>
               val explodedLifecyclesWithDefault = explodedLifecycles withDefault {
                 case UniqueItemSpecification(id, itemTypeTag) =>
                   thisBlobStorage.lifecycles
                     .get(id)
-                    .flatMap(_.find(itemTypeTag == _.itemTypeTag)) getOrElse Lifecycle(
+                    .flatMap(_.find(itemTypeTag == _.itemTypeTag)) getOrElse PhoenixLifecycleSpanningAnnihilations(
                     itemTypeTag = itemTypeTag)
               }
 
-              val updatedExplodedLifecycles: Map[UniqueItemSpecification,
-                                                 BlobStorageInMemory[
-                                                   Time,
-                                                   RecordingId,
-                                                   SnapshotBlob]#Lifecycle] = snapshots map {
+              val updatedExplodedLifecycles
+                : Map[UniqueItemSpecification,
+                      BlobStorageInMemory[Time, RecordingId, SnapshotBlob]#PhoenixLifecycleSpanningAnnihilations] = snapshots map {
                 case (uniqueItemSpecification, snapshot) =>
                   val lifecycleForSnapshot =
                     explodedLifecyclesWithDefault(uniqueItemSpecification)
@@ -176,9 +174,10 @@ case class BlobStorageInMemory[Time, RecordingId, SnapshotBlob] private (
                 lifecycles
                   .get(id)
                   .fold(
-                    Seq.empty[BlobStorageInMemory[Time,
-                                                  RecordingId,
-                                                  SnapshotBlob]#Lifecycle])(
+                    Seq.empty[BlobStorageInMemory[
+                      Time,
+                      RecordingId,
+                      SnapshotBlob]#PhoenixLifecycleSpanningAnnihilations])(
                     _.filterNot(itemTypeTag == _.itemTypeTag)) :+ lifecycle
               )
           }
@@ -248,7 +247,9 @@ case class BlobStorageInMemory[Time, RecordingId, SnapshotBlob] private (
       lifecycles = this.lifecycles mapValues (_.flatMap(lifecycle =>
         lifecycle.snapshotBlobs.filter(Split.alignedWith(when) >= _._1) match {
           case retainedSnapshotBlobs if retainedSnapshotBlobs.nonEmpty =>
-            Some(Lifecycle(lifecycle.itemTypeTag, retainedSnapshotBlobs))
+            Some(
+              PhoenixLifecycleSpanningAnnihilations(lifecycle.itemTypeTag,
+                                                    retainedSnapshotBlobs))
           case _ => None
       })) filter (_._2.nonEmpty)
     )
