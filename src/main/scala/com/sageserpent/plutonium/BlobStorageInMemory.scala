@@ -67,14 +67,13 @@ case class BlobStorageInMemory[Time, RecordingId, SnapshotBlob] private (
       }))
 
     private def indexOf(when: Split[Time],
-                        validRevisionFor: RecordingId => Revision) = {
+                        validRevisionFor: RecordingId => Revision) =
       snapshotBlobs
         .view(0, indexToSearchDownFromOrInsertAt(when, snapshotBlobTimes))
         .lastIndexWhere(PartialFunction.cond(_) {
           case (_, (_, key, blobRevision)) =>
             blobRevision == validRevisionFor(key)
         })
-    }
 
     def isValid(when: Split[Time],
                 validRevisionFor: RecordingId => Revision): Boolean = {
@@ -140,21 +139,17 @@ case class BlobStorageInMemory[Time, RecordingId, SnapshotBlob] private (
                         id,
                         itemTypeTag),
                       snapshot) =>
-                  val lifecyclesForId =
-                    lifecycles.getOrElse(
-                      id,
-                      Seq.empty[Lifecycle]
-                    )
-                  uniqueItemSpecification -> {
-                    val lifecycleForSnapshot = lifecyclesForId find (itemTypeTag == _.itemTypeTag) getOrElse Lifecycle(
-                      itemTypeTag = itemTypeTag)
+                  val lifecycleForSnapshot = lifecycles
+                    .get(id)
+                    .flatMap(_.find(itemTypeTag == _.itemTypeTag)) getOrElse Lifecycle(
+                    itemTypeTag = itemTypeTag)
 
+                  uniqueItemSpecification ->
                     lifecycleForSnapshot
                       .addSnapshotBlob(keys,
                                        Split.alignedWith(when),
                                        snapshot,
                                        newRevision)
-                  }
               }
 
               val explodedLifecyles = lifecycles flatMap {
