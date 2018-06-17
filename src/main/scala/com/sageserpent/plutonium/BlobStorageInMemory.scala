@@ -104,11 +104,9 @@ case class BlobStorageInMemory[Time, RecordingId, SnapshotBlob] private (
       require(!snapshotBlobs.contains(when))
       val insertionPoint =
         indexToSearchDownFromOrInsertAt(when, snapshotBlobTimes)
-      Lifecycle(itemTypeTag = this.itemTypeTag,
-                snapshotBlobs = snapshotBlobs.patch(
-                  insertionPoint,
-                  Seq((when, (snapshotBlob, key, revision))),
-                  0))
+      this.copy(
+        snapshotBlobs = snapshotBlobs
+          .patch(insertionPoint, Seq((when, (snapshotBlob, key, revision))), 0))
     }
   }
 
