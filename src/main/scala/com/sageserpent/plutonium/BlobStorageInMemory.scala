@@ -133,18 +133,28 @@ case class BlobStorageInMemory[Time, RecordingId, SnapshotBlob] private (
           case (key, _, _) => key
         }).distinct.map(_ -> newRevision)
 
-        val newLifecycles =
-          (thisBlobStorage.lifecycles /: recordings) {
-            case (lifecycles, (keys, when, snapshots)) =>
-              val updatedLifecycles = snapshots map {
-                case (uniqueItemSpecification @ UniqueItemSpecification(
-                        id,
-                        itemTypeTag),
-                      snapshot) =>
-                  val lifecycleForSnapshot = lifecycles
+        val newAndModifiedExplodedLifecycles =
+          (Map
+            .empty[
+              UniqueItemSpecification,
+              BlobStorageInMemory[Time, RecordingId, SnapshotBlob]#Lifecycle] /: recordings) {
+            case (explodedLifecycles, (keys, when, snapshots)) =>
+              val explodedLifecyclesWithDefault = explodedLifecycles withDefault {
+                case UniqueItemSpecification(id, itemTypeTag) =>
+                  thisBlobStorage.lifecycles
                     .get(id)
                     .flatMap(_.find(itemTypeTag == _.itemTypeTag)) getOrElse Lifecycle(
                     itemTypeTag = itemTypeTag)
+              }
+
+              val updatedExplodedLifecycles: Map[UniqueItemSpecification,
+                                                 BlobStorageInMemory[
+                                                   Time,
+                                                   RecordingId,
+                                                   SnapshotBlob]#Lifecycle] = snapshots map {
+                case (uniqueItemSpecification, snapshot) =>
+                  val lifecycleForSnapshot =
+                    explodedLifecyclesWithDefault(uniqueItemSpecification)
 
                   uniqueItemSpecification ->
                     lifecycleForSnapshot
@@ -154,21 +164,23 @@ case class BlobStorageInMemory[Time, RecordingId, SnapshotBlob] private (
                                        newRevision)
               }
 
-              val explodedLifecyles = lifecycles flatMap {
-                case (id, lifecyclesForAnId) =>
-                  lifecyclesForAnId map (lifecycle =>
-                    UniqueItemSpecification(id, lifecycle.itemTypeTag) -> lifecycle)
-              }
+              explodedLifecycles ++ updatedExplodedLifecycles
+          }
 
-              val resultLifecycles = explodedLifecyles ++ updatedLifecycles
-
-              resultLifecycles.toSeq map {
-                case ((uniqueItemSpecification, lifecycle)) =>
-                  uniqueItemSpecification.id -> lifecycle
-              } groupBy (_._1) map {
-                case (id, group) =>
-                  id -> group.map(_._2)
-              }
+        val newLifecycles =
+          (thisBlobStorage.lifecycles /: newAndModifiedExplodedLifecycles) {
+            case (lifecycles,
+                  (UniqueItemSpecification(id, itemTypeTag), lifecycle)) =>
+              lifecycles.updated(
+                id,
+                lifecycles
+                  .get(id)
+                  .fold(
+                    Seq.empty[BlobStorageInMemory[Time,
+                                                  RecordingId,
+                                                  SnapshotBlob]#Lifecycle])(
+                    _.filterNot(itemTypeTag == _.itemTypeTag)) :+ lifecycle
+              )
           }
 
         thisBlobStorage.copy(revision = newRevision,
