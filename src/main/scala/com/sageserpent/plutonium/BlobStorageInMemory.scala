@@ -106,8 +106,19 @@ case class BlobStorageInMemory[Time, RecordingId, SnapshotBlob] private (
       val insertionPoint =
         indexToSearchDownFromOrInsertAt(when, snapshotBlobTimes)
       this.copy(
-        snapshotBlobs = snapshotBlobs
+        snapshotBlobs = this.snapshotBlobs
           .patch(insertionPoint, Seq((when, (snapshotBlob, key, revision))), 0))
+    }
+
+    def retainUpTo(
+        when: Split[Time]): Option[PhoenixLifecycleSpanningAnnihilations] = {
+      val cutoffPoint = indexToSearchDownFromOrInsertAt(when, snapshotBlobTimes)
+
+      val retainedSnapshotBlobs = this.snapshotBlobs.take(cutoffPoint)
+
+      if (retainedSnapshotBlobs.nonEmpty)
+        Some(this.copy(snapshotBlobs = retainedSnapshotBlobs))
+      else None
     }
   }
 
@@ -244,13 +255,7 @@ case class BlobStorageInMemory[Time, RecordingId, SnapshotBlob] private (
     thisBlobStorage.copy(
       revision = this.revision,
       recordingRevisions = this.recordingRevisions,
-      lifecycles = this.lifecycles mapValues (_.flatMap(lifecycle =>
-        lifecycle.snapshotBlobs.filter(Split.alignedWith(when) >= _._1) match {
-          case retainedSnapshotBlobs if retainedSnapshotBlobs.nonEmpty =>
-            Some(
-              PhoenixLifecycleSpanningAnnihilations(lifecycle.itemTypeTag,
-                                                    retainedSnapshotBlobs))
-          case _ => None
-      })) filter (_._2.nonEmpty)
+      lifecycles = this.lifecycles mapValues (_.flatMap(
+        _.retainUpTo(Split.alignedWith(when)))) filter (_._2.nonEmpty)
     )
 }
