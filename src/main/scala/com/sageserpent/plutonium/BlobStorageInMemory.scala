@@ -3,24 +3,28 @@ package com.sageserpent.plutonium
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 
 import scala.collection.Searching._
-import scala.collection.generic.IsSeqLike
-import scala.collection.{SeqLike, SeqView, mutable}
+import scala.collection.mutable
 import scala.math.Ordered.orderingToOrdered
 import scala.reflect.runtime.universe._
 
 object BlobStorageInMemory {
   type Revision = Int
 
-  implicit def isSeqLike[Time] = new IsSeqLike[SeqView[Time, Seq[_]]] {
-    type A = Time
-    override val conversion
-      : SeqView[Time, Seq[_]] => SeqLike[this.A, SeqView[Time, Seq[_]]] =
-      identity
+  // NOTE: this is a workaround the lack of support for random-access indexing in the Scala
+  // immutable views. Otherwise we would create a view and map it to extract the times. Oddly
+  // enough, the view implementation in the Scala collections does the right thing, but won't
+  // admit to doing so with an appropriate marker trait.
+  implicit class timesSyntax[Time](underlying: Vector[(Time, _)]) {
+    def times: IndexedSeq[Time] = new IndexedSeq[Time] {
+      override def length: Revision = underlying.length
+
+      override def apply(idx: Revision): Time = underlying(idx)._1
+    }
   }
 
   def indexToSearchDownFromOrInsertAt[Time: Ordering](
       when: Split[Time],
-      snapshotBlobTimes: Seq[Split[Time]]) = {
+      snapshotBlobTimes: IndexedSeq[Split[Time]]) = {
 
     snapshotBlobTimes.search(when) match {
       case Found(foundIndex) =>
@@ -59,7 +63,7 @@ case class BlobStorageInMemory[Time, RecordingId, SnapshotBlob] private (
       snapshotBlobs: Vector[(Split[Time],
                              (Option[SnapshotBlob], RecordingId, Revision))] =
         Vector.empty) {
-    val snapshotBlobTimes = snapshotBlobs.view.map(_._1)
+    val snapshotBlobTimes = snapshotBlobs.times
 
     require(
       snapshotBlobTimes.isEmpty || (snapshotBlobTimes zip snapshotBlobTimes.tail forall {
