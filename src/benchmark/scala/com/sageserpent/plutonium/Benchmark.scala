@@ -4,12 +4,13 @@ import java.time.Instant
 
 import com.sageserpent.americium.randomEnrichment._
 import org.scalameter.{Bench, Gen}
+import org.scalameter.api.exec
 
 object Benchmark extends Bench.ForkedTime {
-  val sizes = Gen.range("Number of bookings")(0, 700, 20)
+  val sizes = Gen.range("Number of bookings")(0, 2000, 50)
 
   performance of "Bookings" in {
-    using(sizes) in { size =>
+    using(sizes) config (exec.benchRuns -> 3) in { size =>
       val randomBehaviour = new scala.util.Random(1368234L)
 
       val eventIds = 0 until 1 + (size / 10)
