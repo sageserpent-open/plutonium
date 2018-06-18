@@ -65,10 +65,11 @@ case class BlobStorageInMemory[Time, RecordingId, SnapshotBlob] private (
         Vector.empty) {
     val snapshotBlobTimes = snapshotBlobs.times
 
-    require(
+    // EXPENSIVE PRECONDITION....
+    /*require(
       snapshotBlobTimes.isEmpty || (snapshotBlobTimes zip snapshotBlobTimes.tail forall {
         case (first, second) => first <= second
-      }))
+      }))*/
 
     private def indexOf(when: Split[Time],
                         validRevisionFor: RecordingId => Revision) =
@@ -102,12 +103,16 @@ case class BlobStorageInMemory[Time, RecordingId, SnapshotBlob] private (
         when: Split[Time],
         snapshotBlob: Option[SnapshotBlob],
         revision: Revision): PhoenixLifecycleSpanningAnnihilations = {
-      require(!snapshotBlobs.contains(when))
+      // EXPENSIVE PRECONDITION...
+      /*require(!snapshotBlobs.contains(when))*/
       val insertionPoint =
         indexToSearchDownFromOrInsertAt(when, snapshotBlobTimes)
-      this.copy(
-        snapshotBlobs = this.snapshotBlobs
-          .patch(insertionPoint, Seq((when, (snapshotBlob, key, revision))), 0))
+      val updatedSnapshotBlobs = {
+        val (precedingBlobs, succeedingBlobs) =
+          snapshotBlobs.splitAt(insertionPoint)
+        (precedingBlobs :+ (when, (snapshotBlob, key, revision))) ++ succeedingBlobs
+      }
+      this.copy(snapshotBlobs = updatedSnapshotBlobs)
     }
 
     def retainUpTo(
