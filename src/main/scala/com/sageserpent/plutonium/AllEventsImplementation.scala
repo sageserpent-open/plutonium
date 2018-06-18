@@ -625,7 +625,8 @@ class AllEventsImplementation(
     extends AllEvents {
   require(lifecyclesById.values.forall(_.nonEmpty))
 
-  lifecyclesById.foreach {
+  // EXPENSIVE PRECONDITION
+  /*  lifecyclesById.foreach {
     case (id, lifecycles: Lifecycles) =>
       for {
         oneLifecycle <- lifecycles.toList
@@ -638,7 +639,7 @@ class AllEventsImplementation(
           s"Found counterexample where lifecycles should have been fused together, id: $id, one lifecycle is: $oneLifecycle, the other is: $anotherLifecycle"
         )
       }
-  }
+  }*/
   override type AllEventsType = AllEventsImplementation
 
   override def revise(events: Map[_ <: EventId, Option[Event]])
