@@ -172,7 +172,6 @@ object AllEventsImplementation {
     }
 
     def apply(
-        inclusionPredicate: ItemStateUpdateKey => Boolean,
         retainedEvents: SortedMap[ItemStateUpdateKey, IndivisibleEvent],
         trimmedEvents: SortedMap[ItemStateUpdateKey, IndivisibleEvent],
         typeTags: Bag[TypeTag[_]],
@@ -183,19 +182,9 @@ object AllEventsImplementation {
           typeTags - trimmedEvent.uniqueItemSpecification.typeTag
       }
 
-      // TODO - consider just using 'itemStateUpdateTimesByEventId' - this will result in
-      // extraneous entries, however 'annul' can be made to tolerate these. Just a thought...
-      val retainedItemStateUpdateTimesByEventId =
-        itemStateUpdateTimesByEventId
-          .mapValues(_.filter(inclusionPredicate))
-          .filter {
-            case (_, itemStateUpdateTimes) => itemStateUpdateTimes.nonEmpty
-          }
-
       Lifecycle(typeTags = retainedTypeTags,
                 eventsArrangedInReverseTimeOrder = retainedEvents,
-                itemStateUpdateTimesByEventId =
-                  retainedItemStateUpdateTimesByEventId)
+                itemStateUpdateTimesByEventId = itemStateUpdateTimesByEventId)
     }
   }
 
@@ -217,10 +206,11 @@ object AllEventsImplementation {
       itemStateUpdateTimesByEventId.nonEmpty && itemStateUpdateTimesByEventId
         .forall { case (_, times) => times.nonEmpty })
 
-    require(
-      eventsArrangedInReverseTimeOrder.keys.size == itemStateUpdateTimesByEventId
-        .map(_._2.size)
-        .sum)
+    require(eventsArrangedInReverseTimeOrder.keys.forall(itemStateUpdateKey =>
+      itemStateUpdateTimesByEventId.exists {
+        case (_, itemStateUpdateTimes) =>
+          itemStateUpdateTimes.contains(itemStateUpdateKey)
+    }))
 
     val startTime: ItemStateUpdateTime =
       eventsArrangedInReverseTimeOrder.lastKey
@@ -290,8 +280,7 @@ object AllEventsImplementation {
 
       if (retainedEvents.nonEmpty) {
         Some(
-          Lifecycle(inclusionPredicate,
-                    retainedEvents,
+          Lifecycle(retainedEvents,
                     trimmedEvents,
                     typeTags,
                     itemStateUpdateTimesByEventId))
@@ -299,10 +288,16 @@ object AllEventsImplementation {
     }
 
     def isRelevantTo(eventId: EventId): Boolean =
-      itemStateUpdateTimesByEventId.contains(eventId)
+      (for {
+        itemStateUpdateTimes <- itemStateUpdateTimesByEventId.get(eventId)
+
+      } yield
+        itemStateUpdateTimes.exists(eventsArrangedInReverseTimeOrder.contains))
+        .getOrElse(false)
 
     def annul(eventId: EventId): Option[Lifecycle] = {
-      val itemStateUpdateTimes = itemStateUpdateTimesByEventId(eventId)
+      val itemStateUpdateTimes = itemStateUpdateTimesByEventId(eventId).filter(
+        eventsArrangedInReverseTimeOrder.contains)
       val preservedEvents =
         (eventsArrangedInReverseTimeOrder /: itemStateUpdateTimes)(_ - _)
       if (preservedEvents.nonEmpty) {
@@ -332,10 +327,6 @@ object AllEventsImplementation {
             if Ordering[ItemStateUpdateKey].lt(
               whenThisLifecycleEnds,
               whenTheLastEventInTheOtherLifecycleTakesPlace) =>
-          val inclusionPredicate =
-            Ordering[ItemStateUpdateKey]
-              .lteq(_: ItemStateUpdateKey, whenThisLifecycleEnds)
-
           val eventsFromTheOtherForEarlierLifecycle =
             another.eventsArrangedInReverseTimeOrder.from(whenThisLifecycleEnds)
           val eventsFromTheOtherForLaterLifecycle =
@@ -345,14 +336,12 @@ object AllEventsImplementation {
           LifecycleSplit(
             fuse(
               this,
-              Lifecycle(inclusionPredicate,
-                        eventsFromTheOtherForEarlierLifecycle,
+              Lifecycle(eventsFromTheOtherForEarlierLifecycle,
                         eventsFromTheOtherForLaterLifecycle,
                         another.typeTags,
                         another.itemStateUpdateTimesByEventId)
             ),
             Lifecycle(
-              inclusionPredicate andThen (!_),
               eventsFromTheOtherForLaterLifecycle,
               eventsFromTheOtherForEarlierLifecycle,
               another.typeTags,
@@ -364,10 +353,6 @@ object AllEventsImplementation {
             if Ordering[ItemStateUpdateKey].lt(
               whenTheOtherLifecycleEnds,
               whenTheLastEventInThisLifecycleTakesPlace) =>
-          val inclusionPredicate =
-            Ordering[ItemStateUpdateKey]
-              .lteq(_: ItemStateUpdateKey, whenTheOtherLifecycleEnds)
-
           val eventsFromThisForEarlierLifecycle =
             this.eventsArrangedInReverseTimeOrder
               .from(whenTheOtherLifecycleEnds)
@@ -378,14 +363,12 @@ object AllEventsImplementation {
           LifecycleSplit(
             fuse(
               another,
-              Lifecycle(inclusionPredicate,
-                        eventsFromThisForEarlierLifecycle,
+              Lifecycle(eventsFromThisForEarlierLifecycle,
                         eventsFromThisForLaterLifecycle,
                         another.typeTags,
                         another.itemStateUpdateTimesByEventId)
             ),
             Lifecycle(
-              inclusionPredicate andThen (!_),
               eventsFromThisForLaterLifecycle,
               eventsFromThisForEarlierLifecycle,
               another.typeTags,
