@@ -280,6 +280,7 @@ object AllEventsImplementation {
           .lteq(_: ItemStateUpdateTime, UpperBoundOfTimeslice(when))
 
       val (retainedEvents, trimmedEvents) =
+        // TODO: make use of the intrinsic ordering to do the partition in logarithmic time.
         eventsArrangedInReverseTimeOrder.partition {
           case (itemStateUpdateTime, _) =>
             inclusionPredicate(itemStateUpdateTime)
