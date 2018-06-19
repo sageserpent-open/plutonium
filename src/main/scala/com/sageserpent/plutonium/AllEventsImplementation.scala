@@ -236,8 +236,10 @@ object AllEventsImplementation {
     require(Ordering[ItemStateUpdateTime].lteq(startTime, endTime))
 
     def isIsolatedAnnihilation: Boolean =
-      PartialFunction.cond(eventsArrangedInReverseTimeOrder.toSeq) {
-        case Seq((_, EndOfLifecycle(_))) => true
+      // Don't use sequence pattern matching here, it is too much overhead due to needing to build a sequence.
+      1 == eventsArrangedInReverseTimeOrder.size && PartialFunction.cond(
+        eventsArrangedInReverseTimeOrder.head) {
+        case (_, EndOfLifecycle(_)) => true
       }
 
     val endPoints: LifecycleEndPoints = startTime -> endTime
