@@ -172,7 +172,7 @@ object AllEventsImplementation {
     }
 
     def apply(
-        inclusionPredicate: ItemStateUpdateTime => Boolean,
+        inclusionPredicate: ItemStateUpdateKey => Boolean,
         retainedEvents: SortedMap[ItemStateUpdateKey, IndivisibleEvent],
         trimmedEvents: SortedMap[ItemStateUpdateKey, IndivisibleEvent],
         typeTags: Bag[TypeTag[_]],
@@ -327,12 +327,12 @@ object AllEventsImplementation {
       this.eventsArrangedInReverseTimeOrder.head -> another.eventsArrangedInReverseTimeOrder.head match {
         case ((whenThisLifecycleEnds, _: EndOfLifecycle),
               (whenTheLastEventInTheOtherLifecycleTakesPlace, _))
-            if Ordering[ItemStateUpdateTime].lt(
+            if Ordering[ItemStateUpdateKey].lt(
               whenThisLifecycleEnds,
               whenTheLastEventInTheOtherLifecycleTakesPlace) =>
           val inclusionPredicate =
-            Ordering[ItemStateUpdateTime]
-              .lteq(_: ItemStateUpdateTime, whenThisLifecycleEnds)
+            Ordering[ItemStateUpdateKey]
+              .lteq(_: ItemStateUpdateKey, whenThisLifecycleEnds)
 
           val (eventsFromTheOtherForEarlierLifecycle,
                eventsFromTheOtherForLaterLifecycle) =
@@ -359,12 +359,12 @@ object AllEventsImplementation {
           )
         case ((whenTheLastEventInThisLifecycleTakesPlace, _),
               (whenTheOtherLifecycleEnds, _: EndOfLifecycle))
-            if Ordering[ItemStateUpdateTime].lt(
+            if Ordering[ItemStateUpdateKey].lt(
               whenTheOtherLifecycleEnds,
               whenTheLastEventInThisLifecycleTakesPlace) =>
           val inclusionPredicate =
-            Ordering[ItemStateUpdateTime]
-              .lteq(_: ItemStateUpdateTime, whenTheOtherLifecycleEnds)
+            Ordering[ItemStateUpdateKey]
+              .lteq(_: ItemStateUpdateKey, whenTheOtherLifecycleEnds)
 
           val (eventsFromThisForEarlierLifecycle,
                eventsFromThisForLaterLifecycle) =
