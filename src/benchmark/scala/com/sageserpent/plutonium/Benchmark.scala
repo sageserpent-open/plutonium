@@ -10,7 +10,7 @@ import org.scalameter.api._
 object Benchmark extends Bench.Forked[Long] {
   val sizes = Gen.range("Number of bookings")(0, 3000, 20)
 
-  lazy val classRegex  = ".*(AllEvents).*".r // Timeline|AllEvents|ItemState
+  lazy val classRegex  = ".*(ItemState).*".r // Timeline|AllEvents|ItemState
   lazy val methodRegex = ".*".r
 
   override def measurer: Measurer[Long] =
