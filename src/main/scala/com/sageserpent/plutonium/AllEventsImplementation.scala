@@ -245,11 +245,11 @@ object AllEventsImplementation {
     def id: Any =
       eventsArrangedInReverseTimeOrder.head._2.uniqueItemSpecification.id
 
-    def lowerBoundTypeTag: TypeTag[_] = typeTags.distinct.reduce[TypeTag[_]] {
+    def lowerBoundTypeTag: TypeTag[_] = typeTags.reduce[TypeTag[_]] {
       case (first, second) => if (first.tpe <:< second.tpe) first else second
     }
 
-    def upperBoundTypeTag: TypeTag[_] = typeTags.distinct.reduce[TypeTag[_]] {
+    def upperBoundTypeTag: TypeTag[_] = typeTags.reduce[TypeTag[_]] {
       case (first, second) => if (first.tpe <:< second.tpe) second else first
     }
 
