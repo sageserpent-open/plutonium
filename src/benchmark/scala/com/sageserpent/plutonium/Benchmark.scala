@@ -10,8 +10,8 @@ import org.scalameter.api._
 object Benchmark extends Bench.Forked[Long] {
   val sizes = Gen.range("Number of bookings")(0, 3000, 20)
 
-  lazy val classRegex  = ".*(ItemStateUpdate).*".r // Timeline|AllEvents|ItemStateUpdate
-  lazy val methodRegex = ".*".r
+  lazy val classRegex  = ".*(ItemStateUpdateKey).*".r // Timeline|AllEvents|ItemStateUpdate
+  lazy val methodRegex = ".*([Oo]rdering).*".r
 
   override def measurer: Measurer[Long] =
     Measurer.MethodInvocationCount(
