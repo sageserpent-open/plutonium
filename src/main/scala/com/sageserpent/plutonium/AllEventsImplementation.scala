@@ -336,12 +336,12 @@ object AllEventsImplementation {
             Ordering[ItemStateUpdateKey]
               .lteq(_: ItemStateUpdateKey, whenThisLifecycleEnds)
 
-          val (eventsFromTheOtherForEarlierLifecycle,
-               eventsFromTheOtherForLaterLifecycle) =
-            another.eventsArrangedInReverseTimeOrder.partition {
-              case (itemStateUpdateTime, _) =>
-                inclusionPredicate(itemStateUpdateTime)
-            }
+          val eventsFromTheOtherForEarlierLifecycle =
+            another.eventsArrangedInReverseTimeOrder.from(whenThisLifecycleEnds)
+          val eventsFromTheOtherForLaterLifecycle =
+            another.eventsArrangedInReverseTimeOrder.until(
+              whenThisLifecycleEnds)
+
           LifecycleSplit(
             fuse(
               this,
@@ -368,12 +368,13 @@ object AllEventsImplementation {
             Ordering[ItemStateUpdateKey]
               .lteq(_: ItemStateUpdateKey, whenTheOtherLifecycleEnds)
 
-          val (eventsFromThisForEarlierLifecycle,
-               eventsFromThisForLaterLifecycle) =
-            this.eventsArrangedInReverseTimeOrder.partition {
-              case (itemStateUpdateTime, _) =>
-                inclusionPredicate(itemStateUpdateTime)
-            }
+          val eventsFromThisForEarlierLifecycle =
+            this.eventsArrangedInReverseTimeOrder
+              .from(whenTheOtherLifecycleEnds)
+          val eventsFromThisForLaterLifecycle =
+            this.eventsArrangedInReverseTimeOrder
+              .until(whenTheOtherLifecycleEnds)
+
           LifecycleSplit(
             fuse(
               another,
