@@ -45,7 +45,7 @@ sealed trait ItemStateUpdateTime
 
 object ItemStateUpdateKey {
   implicit val ordering: Ordering[ItemStateUpdateKey] = Ordering.by {
-    case (ItemStateUpdateKey(eventOrderingKey, intraEventIndex)) =>
+    case ItemStateUpdateKey(eventOrderingKey, intraEventIndex) =>
       eventOrderingKey -> intraEventIndex
   }
 }

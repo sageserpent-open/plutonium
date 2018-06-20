@@ -13,7 +13,7 @@ import com.sageserpent.plutonium.AllEvents.ItemStateUpdatesDelta
 import com.sageserpent.plutonium.AllEventsImplementation.Lifecycle._
 import com.sageserpent.plutonium.AllEventsImplementation._
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
-import com.sageserpent.plutonium.ItemStateUpdateTime.ordering
+
 import com.sageserpent.plutonium.World.{Revision, initialRevision}
 import de.sciss.fingertree.RangedSeq
 import de.ummels.prioritymap.PriorityMap
