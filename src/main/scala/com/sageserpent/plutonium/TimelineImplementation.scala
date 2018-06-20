@@ -75,10 +75,8 @@ class TimelineImplementation(
               }
 
             def successorsOf(itemStateUpdateKey: ItemStateUpdateKey)
-              : SortedSet[ItemStateUpdateKey] =
-              SortedSet(
-                itemStateUpdatesDag
-                  .successors(itemStateUpdateKey): _*)
+              : Set[ItemStateUpdateKey] =
+              Set(itemStateUpdatesDag.successors(itemStateUpdateKey): _*)
 
             itemStateUpdate match {
               case ItemStateAnnihilation(annihilation) =>
@@ -99,9 +97,9 @@ class TimelineImplementation(
                   }
 
                 val keyStartingNewLifecycleIfThisAnnihilationIsNotAlreadyADependencyInTheDag
-                  : SortedSet[ItemStateUpdateKey] =
+                  : Set[ItemStateUpdateKey] =
                   if (isAlreadyReferencedAsADependencyInTheDag)
-                    SortedSet.empty[ItemStateUpdateKey]
+                    Set.empty[ItemStateUpdateKey]
                   else
                     successorsOf(ancestorKey).filter(successorKey =>
                       itemStateUpdatesDag.label(successorKey) match {
@@ -126,7 +124,8 @@ class TimelineImplementation(
                     lifecycleStartKeysPerItem
                       .get(annihilation.uniqueItemSpecification)
                       .fold(
-                        keyStartingNewLifecycleIfThisAnnihilationIsNotAlreadyADependencyInTheDag)(
+                        keyStartingNewLifecycleIfThisAnnihilationIsNotAlreadyADependencyInTheDag
+                          .to[SortedSet])(
                         _ ++ keyStartingNewLifecycleIfThisAnnihilationIsNotAlreadyADependencyInTheDag)
                   )
 
@@ -212,17 +211,18 @@ class TimelineImplementation(
                 val keysStartingLifecyclesAccordingToPreviousRevisionIfThisPatchIsNotAlreadyADependencyInTheDag
                   : Set[ItemStateUpdateKey] =
                   if (isAlreadyReferencedAsADependencyInTheDag)
-                    SortedSet.empty[ItemStateUpdateKey]
+                    Set.empty[ItemStateUpdateKey]
                   else
                     itemsStartingLifecyclesDueToThisPatch flatMap lifecycleStartKeysPerItem.get flatMap (
                         keys =>
                           keys
-                            .from(itemStateUpdateKey)
+                            .keysIteratorFrom(itemStateUpdateKey)
                             .dropWhile(
                               key =>
                                 !Ordering[ItemStateUpdateKey]
                                   .gt(key, itemStateUpdateKey)
                             )
+                            .toStream
                             .headOption)
 
                 val itemStateUpdateKeysToScheduleForRecalculation =
@@ -288,20 +288,20 @@ class TimelineImplementation(
                 .get(annihilation.uniqueItemSpecification)
                 .flatMap(
                   _.keySet
-                    .from(itemStateUpdateKey)
+                    .keysIteratorFrom(itemStateUpdateKey)
                     .dropWhile(
                       key =>
                         !Ordering[ItemStateUpdateKey]
                           .gt(key, itemStateUpdateKey)
                     )
+                    .toStream
                     .headOption)
           }
     ) filterNot itemStateUpdateKeysThatNeedToBeRevoked.contains
 
     val unrevokedLifecycleStartKeysPerItem: Map[
       UniqueItemSpecification,
-      SortedSet[ItemStateUpdateKey]] = lifecycleStartKeysPerItem mapValues (_ -- itemStateUpdateKeysThatNeedToBeRevoked) filter (_._2.nonEmpty) mapValues (
-        keys => SortedSet(keys.toSeq: _*))
+      SortedSet[ItemStateUpdateKey]] = lifecycleStartKeysPerItem mapValues (_ -- itemStateUpdateKeysThatNeedToBeRevoked) filter (_._2.nonEmpty)
 
     val itemStateUpdatesToApply
       : PriorityMap[PriorityQueueKey, ItemStateUpdateKey] =
