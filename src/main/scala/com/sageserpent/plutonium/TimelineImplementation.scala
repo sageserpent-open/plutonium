@@ -284,18 +284,11 @@ class TimelineImplementation(
             case ItemStatePatch(_) =>
               itemStateUpdatesDag.successors(itemStateUpdateKey)
             case ItemStateAnnihilation(annihilation) =>
-              lifecycleStartKeysPerItem
-                .get(annihilation.uniqueItemSpecification)
-                .flatMap(
-                  _.keySet
-                    .keysIteratorFrom(itemStateUpdateKey)
-                    .dropWhile(
-                      key =>
-                        !Ordering[ItemStateUpdateKey]
-                          .gt(key, itemStateUpdateKey)
-                    )
-                    .toStream
-                    .headOption)
+              allEvents
+                .startOfFollowingLifecycleFor(
+                  annihilation.uniqueItemSpecification,
+                  itemStateUpdateKey)
+                .toSeq
           }
     ) filterNot itemStateUpdateKeysThatNeedToBeRevoked.contains
 

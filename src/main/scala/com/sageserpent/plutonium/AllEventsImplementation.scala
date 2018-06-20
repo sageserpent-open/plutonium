@@ -37,8 +37,8 @@ object AllEventsImplementation {
 
   implicit def closedOpenEndPoints(lifecycle: Lifecycle)
     : (Split[ItemStateUpdateTime], Split[ItemStateUpdateTime]) =
-    Split.alignedWith(lifecycle.startTime) -> Split.upperBoundOf(
-      lifecycle.endTime)
+    Split.alignedWith(lifecycle.startTime: ItemStateUpdateTime) -> Split
+      .upperBoundOf(lifecycle.endTime)
 
   object Lifecycle {
     implicit val bagConfiguration = HashedBagConfiguration.compact[TypeTag[_]]
@@ -212,7 +212,7 @@ object AllEventsImplementation {
           itemStateUpdateTimes.contains(itemStateUpdateKey)
     }))
 
-    val startTime: ItemStateUpdateTime =
+    val startTime: ItemStateUpdateKey =
       eventsArrangedInReverseTimeOrder.lastKey
 
     // TODO: the way annihilations are just mixed in with all the other events in 'eventsArrangedInTimeOrder' feels hokey:
@@ -670,8 +670,9 @@ class AllEventsImplementation(
           val overlappingLifecycles = lifecyclesById
             .get(itemId)
             .fold(Seq.empty[Lifecycle]) { lifecycle => // NASTY HACK - the 'RangedSeq' API has a strange way of dealing with intervals - have to work around it here...
-              val startTime = Split.alignedWith(candidateForFusion.startTime)
-              val endTime   = Split.alignedWith(candidateForFusion.endTime)
+              val startTime = Split.alignedWith(
+                candidateForFusion.startTime: ItemStateUpdateTime)
+              val endTime = Split.alignedWith(candidateForFusion.endTime)
               (lifecycle.filterOverlaps(candidateForFusion) ++ lifecycle
                 .filterIncludes(startTime -> startTime) ++ lifecycle
                 .filterIncludes(endTime   -> endTime)).toSeq.distinct
@@ -1049,5 +1050,25 @@ class AllEventsImplementation(
               ))
         }
     }
+  }
+
+  override def startOfFollowingLifecycleFor(
+      uniqueItemSpecification: UniqueItemSpecification,
+      itemStateUpdateTime: ItemStateUpdateTime): Option[ItemStateUpdateKey] = {
+    val UniqueItemSpecification(itemId, itemTypeTag) = uniqueItemSpecification
+
+    val timespanGoingBeyondItemStateUpdateKey = Split.alignedWith(
+      itemStateUpdateTime: ItemStateUpdateTime) -> Split.upperBoundOf(
+      sentinelForEndTimeOfLifecycleWithoutAnnihilation: ItemStateUpdateTime)
+
+    val lifecycleIterator: Iterator[Lifecycle] = lifecyclesById(itemId)
+      .filterOverlaps(timespanGoingBeyondItemStateUpdateKey)
+      .filter(lifecycle =>
+        Ordering[ItemStateUpdateTime].gt(lifecycle.startTime,
+                                         itemStateUpdateTime))
+      .filter(itemTypeTag.tpe =:= _.lowerBoundTypeTag.tpe)
+
+    if (lifecycleIterator.hasNext) Some(lifecycleIterator.next().startTime)
+    else None
   }
 }
