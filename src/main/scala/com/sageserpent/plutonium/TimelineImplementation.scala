@@ -27,17 +27,14 @@ object TimelineImplementation {
                               isAlreadyReferencedAsADependencyInTheDag: Boolean)
 }
 
-class TimelineImplementation(
-    allEvents: AllEvents = noEvents,
-    itemStateUpdatesDag: ItemStateUpdatesDag = empty,
-    lifecycleStartKeysPerItem: Map[UniqueItemSpecification,
-                                   SortedSet[ItemStateUpdateKey]] = Map.empty,
-    blobStorage: BlobStorage[ItemStateUpdateTime,
-                             ItemStateUpdateKey,
-                             SnapshotBlob] =
-      BlobStorageInMemory[ItemStateUpdateTime,
-                          ItemStateUpdateKey,
-                          SnapshotBlob]())
+class TimelineImplementation(allEvents: AllEvents = noEvents,
+                             itemStateUpdatesDag: ItemStateUpdatesDag = empty,
+                             blobStorage: BlobStorage[ItemStateUpdateTime,
+                                                      ItemStateUpdateKey,
+                                                      SnapshotBlob] =
+                               BlobStorageInMemory[ItemStateUpdateTime,
+                                                   ItemStateUpdateKey,
+                                                   SnapshotBlob]())
     extends Timeline {
   override def revise(events: Map[_ <: EventId, Option[Event]]): Timeline = {
     val ItemStateUpdatesDelta(allEventsForNewTimeline,
@@ -50,8 +47,6 @@ class TimelineImplementation(
         itemStateUpdatesToApply: PriorityMap[PriorityQueueKey,
                                              ItemStateUpdateKey],
         itemStateUpdatesDag: Graph[ItemStateUpdateKey, ItemStateUpdate, Unit],
-        lifecycleStartKeysPerItem: Map[UniqueItemSpecification,
-                                       SortedSet[ItemStateUpdateKey]],
         blobStorage: BlobStorage[ItemStateUpdateTime,
                                  ItemStateUpdateKey,
                                  SnapshotBlob]) {
@@ -118,17 +113,6 @@ class TimelineImplementation(
                           .compare(itemStateUpdateKey, key)}, recalculated: $itemStateUpdateKey, scheduled: $key"
                     ))
 
-                val updatedLifecycleStartKeysPerItem =
-                  lifecycleStartKeysPerItem.updated(
-                    annihilation.uniqueItemSpecification,
-                    lifecycleStartKeysPerItem
-                      .get(annihilation.uniqueItemSpecification)
-                      .fold(
-                        keyStartingNewLifecycleIfThisAnnihilationIsNotAlreadyADependencyInTheDag
-                          .to[SortedSet])(
-                        _ ++ keyStartingNewLifecycleIfThisAnnihilationIsNotAlreadyADependencyInTheDag)
-                  )
-
                 RecalculationStep(
                   itemStateUpdatesToApply
                     .drop(1) ++ keyStartingNewLifecycleIfThisAnnihilationIsNotAlreadyADependencyInTheDag
@@ -137,7 +121,6 @@ class TimelineImplementation(
                                        isAlreadyReferencedAsADependencyInTheDag =
                                          true) -> key),
                   itemStateUpdatesDagWithUpdatedDependency,
-                  updatedLifecycleStartKeysPerItem,
                   revisionBuilder.build()
                 ).afterRecalculations
 
@@ -183,47 +166,16 @@ class TimelineImplementation(
 
                 val itemsStartingLifecyclesDueToThisPatch = mutatedItemSnapshots.keys.toSet -- itemsNotStartingLifecyclesDueToThisPatch
 
-                val lifecycleStartKeysWithoutObsoleteEntries =
-                  (lifecycleStartKeysPerItem /: itemsNotStartingLifecyclesDueToThisPatch) {
-                    case (lifecycleStartKeysPerItem, uniqueItemSpecification) =>
-                      lifecycleStartKeysPerItem
-                        .get(uniqueItemSpecification)
-                        .map(_ - itemStateUpdateKey)
-                        .filter(_.nonEmpty)
-                        .fold(
-                          lifecycleStartKeysPerItem - uniqueItemSpecification)(
-                          keys =>
-                            lifecycleStartKeysPerItem
-                              .updated(uniqueItemSpecification, keys))
-                  }
-
-                val updatedLifecycleStartKeysPerItem =
-                  (lifecycleStartKeysWithoutObsoleteEntries /: itemsStartingLifecyclesDueToThisPatch) {
-                    case (lifecycleStartKeysPerItem, uniqueItemSpecification) =>
-                      lifecycleStartKeysPerItem.updated(
-                        uniqueItemSpecification,
-                        lifecycleStartKeysPerItem
-                          .get(uniqueItemSpecification)
-                          .fold(SortedSet(itemStateUpdateKey))(
-                            _ + itemStateUpdateKey))
-                  }
-
                 val keysStartingLifecyclesAccordingToPreviousRevisionIfThisPatchIsNotAlreadyADependencyInTheDag
                   : Set[ItemStateUpdateKey] =
                   if (isAlreadyReferencedAsADependencyInTheDag)
                     Set.empty[ItemStateUpdateKey]
                   else
-                    itemsStartingLifecyclesDueToThisPatch flatMap lifecycleStartKeysPerItem.get flatMap (
-                        keys =>
-                          keys
-                            .keysIteratorFrom(itemStateUpdateKey)
-                            .dropWhile(
-                              key =>
-                                !Ordering[ItemStateUpdateKey]
-                                  .gt(key, itemStateUpdateKey)
-                            )
-                            .toStream
-                            .headOption)
+                    itemsStartingLifecyclesDueToThisPatch flatMap (
+                        uniqueItemSpecification =>
+                          allEvents.startOfFollowingLifecycleFor(
+                            uniqueItemSpecification,
+                            itemStateUpdateKey)) diff itemStateUpdateKeysThatNeedToBeRevoked
 
                 val itemStateUpdateKeysToScheduleForRecalculation =
                   successorsAccordingToPreviousRevision ++
@@ -246,7 +198,6 @@ class TimelineImplementation(
                                          isAlreadyReferencedAsADependencyInTheDag =
                                            true) -> key)),
                   itemStateUpdatesDagWithUpdatedDependencies,
-                  updatedLifecycleStartKeysPerItem,
                   revisionBuilder.build()
                 ).afterRecalculations
             }
@@ -292,10 +243,6 @@ class TimelineImplementation(
           }
     ) filterNot itemStateUpdateKeysThatNeedToBeRevoked.contains
 
-    val unrevokedLifecycleStartKeysPerItem: Map[
-      UniqueItemSpecification,
-      SortedSet[ItemStateUpdateKey]] = lifecycleStartKeysPerItem mapValues (_ -- itemStateUpdateKeysThatNeedToBeRevoked) filter (_._2.nonEmpty)
-
     val itemStateUpdatesToApply
       : PriorityMap[PriorityQueueKey, ItemStateUpdateKey] =
       PriorityMap(
@@ -310,27 +257,23 @@ class TimelineImplementation(
       val initialState = RecalculationStep(
         itemStateUpdatesToApply,
         itemStateUpdatesDagWithNewNodesAddedIn,
-        unrevokedLifecycleStartKeysPerItem,
         blobStorageWithRevocations
       )
 
       val RecalculationStep(_,
                             itemStateUpdatesDagForNewTimeline,
-                            lifecycleStartKeysPerItemForNewTimeline,
                             blobStorageForNewTimeline) =
         initialState.afterRecalculations
 
       new TimelineImplementation(
         allEvents = allEventsForNewTimeline,
         itemStateUpdatesDag = itemStateUpdatesDagForNewTimeline,
-        lifecycleStartKeysPerItem = lifecycleStartKeysPerItemForNewTimeline,
         blobStorage = blobStorageForNewTimeline
       )
     } else
       new TimelineImplementation(
         allEvents = allEventsForNewTimeline,
         itemStateUpdatesDag = itemStateUpdatesDagWithNewNodesAddedIn,
-        lifecycleStartKeysPerItem = unrevokedLifecycleStartKeysPerItem,
         blobStorage = blobStorageWithRevocations
       )
   }
@@ -340,9 +283,6 @@ class TimelineImplementation(
       allEvents = this.allEvents.retainUpTo(when),
       itemStateUpdatesDag = this.itemStateUpdatesDag nfilter (key =>
         when >= key.when),
-      lifecycleStartKeysPerItem = lifecycleStartKeysPerItem mapValues (_.filter(
-        key => when >= key.when
-      )) filter (_._2.nonEmpty),
       blobStorage = this.blobStorage.retainUpTo(UpperBoundOfTimeslice(when))
     )
 

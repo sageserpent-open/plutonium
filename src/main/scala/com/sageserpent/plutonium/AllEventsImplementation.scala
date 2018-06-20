@@ -1061,14 +1061,16 @@ class AllEventsImplementation(
       itemStateUpdateTime: ItemStateUpdateTime) -> Split.upperBoundOf(
       sentinelForEndTimeOfLifecycleWithoutAnnihilation: ItemStateUpdateTime)
 
-    val lifecycleIterator: Iterator[Lifecycle] = lifecyclesById(itemId)
-      .filterOverlaps(timespanGoingBeyondItemStateUpdateKey)
-      .filter(lifecycle =>
-        Ordering[ItemStateUpdateTime].gt(lifecycle.startTime,
-                                         itemStateUpdateTime))
-      .filter(itemTypeTag.tpe =:= _.lowerBoundTypeTag.tpe)
+    lifecyclesById.get(itemId).flatMap { lifecycles =>
+      val lifecycleIterator: Iterator[Lifecycle] = lifecycles
+        .filterOverlaps(timespanGoingBeyondItemStateUpdateKey)
+        .filter(lifecycle =>
+          Ordering[ItemStateUpdateTime].gt(lifecycle.startTime,
+                                           itemStateUpdateTime))
+        .filter(itemTypeTag.tpe =:= _.lowerBoundTypeTag.tpe)
 
-    if (lifecycleIterator.hasNext) Some(lifecycleIterator.next().startTime)
-    else None
+      if (lifecycleIterator.hasNext) Some(lifecycleIterator.next().startTime)
+      else None
+    }
   }
 }
