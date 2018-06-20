@@ -3,31 +3,22 @@ package com.sageserpent.plutonium
 import java.time.Instant
 
 import com.sageserpent.americium.randomEnrichment._
-import org.scalameter._
-import org.scalameter.api.exec
 import org.scalameter.execution.invocation.InvocationCountMatcher
 import org.scalameter.picklers.noPickler._
+import org.scalameter.api._
 
-import scala.collection.immutable.SortedMap
-
-object Benchmark extends Bench.Forked[Map[String, Long]] {
+object Benchmark extends Bench.Forked[Long] {
   val sizes = Gen.range("Number of bookings")(0, 4000, 20)
 
-  lazy val classRegex =
-    ".*(Timeline|AllEvents|ItemStateUpdate).*".r
+  lazy val classRegex  = ".*(Timeline|AllEvents|ItemStateUpdate).*".r
   lazy val methodRegex = ".*".r
 
-  override def measurer: Measurer[Map[String, Long]] =
+  override def measurer: Measurer[Long] =
     Measurer.MethodInvocationCount(
-      InvocationCountMatcher.forRegex(classRegex, methodRegex)) map {
-      quantity =>
-        val pairsWithHighestCounts =
-          quantity.value.toSeq.sortBy(-_._2).take(3)
-        quantity.copy(value = SortedMap(pairsWithHighestCounts: _*))
-    }
-  override def aggregator: Aggregator[Map[String, Long]] =
-    Aggregator("first")(_.head)
-  override def defaultConfig: Context = Context(exec.independentSamples -> 1)
+      InvocationCountMatcher.forRegex(classRegex, methodRegex)) map (quantity =>
+      quantity.copy(value = quantity.value.values.sum))
+  override def aggregator: Aggregator[Long] = Aggregator.median
+  override def defaultConfig: Context       = Context(exec.independentSamples -> 1)
 
   performance of "Bookings" in {
     using(sizes) config (exec.benchRuns -> 1, exec.jvmflags -> List("-Xmx3G")) in {
