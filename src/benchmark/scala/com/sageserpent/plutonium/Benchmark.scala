@@ -8,17 +8,23 @@ import org.scalameter.api.exec
 import org.scalameter.execution.invocation.InvocationCountMatcher
 import org.scalameter.picklers.noPickler._
 
+import scala.collection.immutable.SortedMap
+
 object Benchmark extends Bench.Forked[Map[String, Long]] {
-  val sizes = Gen.range("Number of bookings")(0, 2500, 20)
+  val sizes = Gen.range("Number of bookings")(0, 4000, 20)
 
   lazy val classRegex =
-    ".*(AllEventsImplementation).*".r
+    ".*(Timeline|AllEvents|ItemStateUpdate).*".r
   lazy val methodRegex = ".*".r
 
   override def measurer: Measurer[Map[String, Long]] =
     Measurer.MethodInvocationCount(
-      InvocationCountMatcher.forRegex(classRegex, methodRegex)) map (quantity =>
-      quantity.copy(value = quantity.value.filter(10 <= _._2)))
+      InvocationCountMatcher.forRegex(classRegex, methodRegex)) map {
+      quantity =>
+        val pairsWithHighestCounts =
+          quantity.value.toSeq.sortBy(-_._2).take(3)
+        quantity.copy(value = SortedMap(pairsWithHighestCounts: _*))
+    }
   override def aggregator: Aggregator[Map[String, Long]] =
     Aggregator("first")(_.head)
   override def defaultConfig: Context = Context(exec.independentSamples -> 1)
