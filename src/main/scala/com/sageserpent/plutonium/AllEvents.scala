@@ -4,6 +4,7 @@ import java.time.Instant
 
 import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.AllEvents.ItemStateUpdatesDelta
+import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 
 import scala.collection.immutable.Map
 
@@ -25,4 +26,8 @@ trait AllEvents {
     : ItemStateUpdatesDelta[AllEventsType]
 
   def retainUpTo(when: Unbounded[Instant]): AllEvents
+
+  def startOfFollowingLifecycleFor(
+      uniqueItemSpecification: UniqueItemSpecification,
+      itemStateUpdateKey: ItemStateUpdateTime): Option[ItemStateUpdateKey]
 }
