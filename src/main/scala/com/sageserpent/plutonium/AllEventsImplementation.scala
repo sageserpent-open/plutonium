@@ -288,12 +288,9 @@ object AllEventsImplementation {
     }
 
     def isRelevantTo(eventId: EventId): Boolean =
-      (for {
-        itemStateUpdateTimes <- itemStateUpdateTimesByEventId.get(eventId)
-
-      } yield
-        itemStateUpdateTimes.exists(eventsArrangedInReverseTimeOrder.contains))
-        .getOrElse(false)
+      itemStateUpdateTimesByEventId
+        .get(eventId)
+        .fold(false)(_.exists(eventsArrangedInReverseTimeOrder.contains))
 
     def annul(eventId: EventId): Option[Lifecycle] = {
       val itemStateUpdateTimes = itemStateUpdateTimesByEventId(eventId).filter(
@@ -615,10 +612,9 @@ class AllEventsImplementation(
   lifecyclesById.foreach {
     case (id, lifecycles: Lifecycles) =>
       for {
-        oneLifecycle <- lifecycles.toList
+        (oneLifecycle, index) <- lifecycles.iterator.zipWithIndex
         _ = require(!oneLifecycle.isIsolatedAnnihilation)
-        anotherLifecycle <- lifecycles.toList
-        if oneLifecycle != anotherLifecycle
+        anotherLifecycle <- lifecycles.iterator.take(index)
       } {
         require(
           !oneLifecycle.isFusibleWith(anotherLifecycle),
