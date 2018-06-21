@@ -12,6 +12,7 @@ object Benchmark extends Bench.ForkedTime {
   performance of "Bookings" in {
     using(sizes) config (exec.benchRuns -> 5, exec.jvmflags -> List("-Xmx3G")) in {
       size =>
+        if (0 == size % 1000) println(s"*** Size: $size")
         val randomBehaviour = new scala.util.Random(1368234L)
 
         val eventIds = 0 until 1 + (size / 10)
