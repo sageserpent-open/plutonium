@@ -8,9 +8,10 @@ import org.scalameter.picklers.noPickler._
 import org.scalameter.api._
 
 object Benchmark extends Bench.Forked[Long] {
-  val sizes = Gen.range("Number of bookings")(0, 4000, 20)
+  val sizes = Gen.range("Number of bookings")(0, 5500, 20)
 
-  lazy val classRegex  = ".*(Timeline|AllEvents|ItemStateUpdate).*".r
+  lazy val classRegex =
+    ".*(Timeline|AllEvents|ItemState|BlobStorage|ItemCache).*".r
   lazy val methodRegex = ".*".r
 
   override def measurer: Measurer[Long] =
