@@ -3,26 +3,14 @@ package com.sageserpent.plutonium
 import java.time.Instant
 
 import com.sageserpent.americium.randomEnrichment._
-import org.scalameter.execution.invocation.InvocationCountMatcher
-import org.scalameter.picklers.noPickler._
-import org.scalameter.api._
+import org.scalameter.{Bench, Gen}
+import org.scalameter.api.exec
 
-object Benchmark extends Bench.Forked[Long] {
-  val sizes = Gen.range("Number of bookings")(0, 5500, 20)
-
-  lazy val classRegex =
-    ".*(Timeline|AllEvents|ItemState|BlobStorage|ItemCache).*".r
-  lazy val methodRegex = ".*".r
-
-  override def measurer: Measurer[Long] =
-    Measurer.MethodInvocationCount(
-      InvocationCountMatcher.forRegex(classRegex, methodRegex)) map (quantity =>
-      quantity.copy(value = quantity.value.values.sum))
-  override def aggregator: Aggregator[Long] = Aggregator.median
-  override def defaultConfig: Context       = Context(exec.independentSamples -> 1)
+object Benchmark extends Bench.ForkedTime {
+  val sizes = Gen.range("Number of bookings")(0, 5500, 50)
 
   performance of "Bookings" in {
-    using(sizes) config (exec.benchRuns -> 1, exec.jvmflags -> List("-Xmx3G")) in {
+    using(sizes) config (exec.benchRuns -> 5, exec.jvmflags -> List("-Xmx3G")) in {
       size =>
         val randomBehaviour = new scala.util.Random(1368234L)
 
