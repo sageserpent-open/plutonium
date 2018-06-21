@@ -13,12 +13,12 @@ import com.sageserpent.plutonium.AllEvents.ItemStateUpdatesDelta
 import com.sageserpent.plutonium.AllEventsImplementation.Lifecycle._
 import com.sageserpent.plutonium.AllEventsImplementation._
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
-
 import com.sageserpent.plutonium.World.{Revision, initialRevision}
 import de.sciss.fingertree.RangedSeq
 import de.ummels.prioritymap.PriorityMap
 
 import scala.annotation.tailrec
+import scala.collection.IterableView
 import scala.collection.immutable.{
   Bag,
   HashedBagConfiguration,
@@ -793,11 +793,11 @@ class AllEventsImplementation(
               eventId: EventId): CalculationState = {
       lifecycleFootprintPerEvent.get(eventId) match {
         case Some(EventFootprint(when, itemIds)) =>
-          val (lifecyclesWithRelevantIds: LifecyclesById,
-               lifecyclesWithIrrelevantIds: LifecyclesById) =
-            lifecyclesById.partition {
-              case (lifecycleId, _) => itemIds.contains(lifecycleId)
-            }
+          val lifecyclesWithRelevantIds
+            : IterableView[(Any, Lifecycles), Iterable[_]] =
+            itemIds.view.map(itemId => itemId -> lifecyclesById(itemId))
+          val lifecyclesWithIrrelevantIds
+            : LifecyclesById = lifecyclesById -- itemIds
 
           val (lifecyclesByIdWithAnnulments,
                changedLifecycles,
