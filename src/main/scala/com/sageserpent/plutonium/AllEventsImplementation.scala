@@ -937,9 +937,7 @@ class AllEventsImplementation(
 
     val lifecycleFootprintPerEventWithoutEventIdsForThisRevisionBooking: Map[
       EventId,
-      AllEventsImplementation.EventFootprint] = lifecycleFootprintPerEvent filterNot {
-      case (eventId, _) => allEventIdsBookedIn.contains(eventId)
-    }
+      AllEventsImplementation.EventFootprint] = lifecycleFootprintPerEvent -- allEventIdsBookedIn
 
     val finalLifecycleFootprintPerEvent =
       (lifecycleFootprintPerEventWithoutEventIdsForThisRevisionBooking /: newAndModifiedEvents) {
