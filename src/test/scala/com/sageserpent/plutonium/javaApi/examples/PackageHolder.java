@@ -8,7 +8,7 @@ import scala.collection.JavaConverters$;
 import java.util.Set;
 
 public abstract class PackageHolder {
-    private Set<PackageItem> packageItems = JavaConverters$.MODULE$.setAsJavaSet(new HashSet());
+    private Set<PackageItem> packageItems = JavaConverters$.MODULE$.mutableSetAsJavaSet(new HashSet());
     private String location;
 
     public abstract String id();
