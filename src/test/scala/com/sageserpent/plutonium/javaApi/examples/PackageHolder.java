@@ -1,11 +1,14 @@
 package com.sageserpent.plutonium.javaApi.examples;
 
+import scala.collection.mutable.HashSet;
+
 import java.util.Collections;
-import java.util.HashSet;
+import scala.collection.JavaConverters$;
+
 import java.util.Set;
 
 public abstract class PackageHolder {
-    private Set<PackageItem> packageItems = new HashSet<>();
+    private Set<PackageItem> packageItems = JavaConverters$.MODULE$.setAsJavaSet(new HashSet());
     private String location;
 
     public abstract String id();
