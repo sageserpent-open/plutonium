@@ -8,43 +8,56 @@ import com.sageserpent.plutonium.World.Revision
 import scala.collection.mutable.MutableList
 
 class WorldEfficientInMemoryImplementation(
-    timelines: MutableList[(Instant, Timeline)])
+    var timelineStorage: Array[(Instant, Timeline)],
+    var numberOfTimelines: Revision)
     extends WorldImplementationCodeFactoring {
-  def this() = this(MutableList.empty[(Instant, Timeline)])
+  def this() = this(Array.ofDim[(Instant, Timeline)](4), World.initialRevision)
 
-  override def revisionAsOfs: Array[Instant] = timelines.map(_._1).toArray
+  override def revisionAsOfs: Array[Instant] =
+    timelineStorage.slice(0, numberOfTimelines).map(_._1)
 
-  override def nextRevision: Revision = timelines.size
+  override def nextRevision: Revision = numberOfTimelines
 
   override def revise(events: Map[_ <: EventId, Option[Event]],
                       asOf: Instant): Revision = {
     val resultCapturedBeforeMutation = nextRevision
 
-    val baseTimeline
-      : Timeline = timelines.lastOption map (_._2) getOrElse emptyTimeline()
+    val baseTimeline: Timeline =
+      if (World.initialRevision < nextRevision)
+        timelineStorage(nextRevision - 1)._2
+      else emptyTimeline()
 
     val newTimeline = baseTimeline.revise(events)
 
-    timelines += (asOf -> newTimeline)
+    if (nextRevision == timelineStorage.length) {
+      val sourceOfCopy = timelineStorage
+      timelineStorage = Array.ofDim(2 * timelineStorage.length)
+      sourceOfCopy.copyToArray(timelineStorage)
+    }
+
+    timelineStorage(nextRevision) = asOf -> newTimeline
+
+    numberOfTimelines += 1
 
     resultCapturedBeforeMutation
   }
 
   override def forkExperimentalWorld(scope: javaApi.Scope): World = {
-    val relevantTimelines = timelines.take(scope.nextRevision)
+    val relevantTimelines = timelineStorage.take(scope.nextRevision)
 
     val relevantTimelinesEachWithHistorySharedWithThis = relevantTimelines map {
       case (asOf, timeline) => asOf -> timeline.retainUpTo(scope.when)
     }
 
     new WorldEfficientInMemoryImplementation(
-      relevantTimelinesEachWithHistorySharedWithThis)
+      relevantTimelinesEachWithHistorySharedWithThis,
+      scope.nextRevision)
   }
 
   trait ScopeUsingStorage extends com.sageserpent.plutonium.Scope {
     lazy val itemCache: ItemCache = {
       val timeline = if (nextRevision > World.initialRevision) {
-        timelines(nextRevision - 1)._2
+        timelineStorage(nextRevision - 1)._2
       } else emptyTimeline()
 
       timeline.itemCacheAt(when)
