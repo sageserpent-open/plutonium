@@ -27,10 +27,10 @@ trait Benchmark {
           step - randomBehaviour
             .chooseAnyNumberFromOneTo(step / 3 min 20)
 
-      val probablityOfBookingANewOrCorrectingEvent = 0 < randomBehaviour
+      val probabilityOfBookingANewOrCorrectingEvent = 0 < randomBehaviour
         .chooseAnyNumberFromZeroToOneLessThan(5)
 
-      if (probablityOfBookingANewOrCorrectingEvent) {
+      if (probabilityOfBookingANewOrCorrectingEvent) {
         val oneId = randomBehaviour.chooseOneOf(idSet)
 
         val anotherId = randomBehaviour.chooseOneOf(idSet)
