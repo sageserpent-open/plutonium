@@ -56,7 +56,7 @@ trait Benchmark {
         )
       } else world.annul(eventId, Instant.now())
 
-      val onePastQueryRevision = world.nextRevision
+      /*      val onePastQueryRevision = world.nextRevision
 
       val queryTime = Instant.ofEpochSecond(
         3600L * randomBehaviour.chooseAnyNumberFromZeroToOneLessThan(
@@ -66,7 +66,7 @@ trait Benchmark {
 
       val queryId = randomBehaviour.chooseOneOfRange(idSet)
 
-      scope.render(Bitemporal.withId[Thing](queryId)).force
+      scope.render(Bitemporal.withId[Thing](queryId)).force*/
     }
 
     world
