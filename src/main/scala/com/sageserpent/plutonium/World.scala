@@ -97,4 +97,9 @@ trait WorldContracts extends World {
       result.nextRevision == revisionAsOfs.count(Finite(_) <= result.asOf))
     result
   }
+
+  abstract override def forkExperimentalWorld(scope: javaApi.Scope): World = {
+    require(scope.nextRevision <= this.nextRevision)
+    super.forkExperimentalWorld(scope)
+  }
 }
