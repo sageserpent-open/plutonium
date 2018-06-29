@@ -95,7 +95,7 @@ abstract class WorldImplementationCodeFactoring extends World {
   abstract class ScopeBasedOnNextRevision(val when: Unbounded[Instant],
                                           val nextRevision: Revision)
       extends com.sageserpent.plutonium.Scope {
-    val asOf = nextRevision match {
+    def asOf = nextRevision match {
       case World.initialRevision => NegativeInfinity[Instant]()
       case _ =>
         if (nextRevision <= revisionAsOfs.size)
