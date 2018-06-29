@@ -56,7 +56,9 @@ trait Benchmark {
         )
       } else world.annul(eventId, Instant.now())
 
-      val onePastQueryRevision = world.nextRevision
+      val onePastQueryRevision =
+        randomBehaviour.chooseAnyNumberFromZeroToOneLessThan(
+          1 + world.nextRevision)
 
       val queryTime = Instant.ofEpochSecond(
         3600L * randomBehaviour.chooseAnyNumberFromZeroToOneLessThan(
