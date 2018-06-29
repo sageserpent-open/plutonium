@@ -5,13 +5,11 @@ import java.time.Instant
 import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.World.Revision
 
-import scala.collection.mutable.MutableList
-
 class WorldEfficientInMemoryImplementation(
     var timelineStorage: Array[(Instant, Timeline)],
-    var numberOfTimelines: Revision)
+    var numberOfTimelines: Int)
     extends WorldImplementationCodeFactoring {
-  def this() = this(Array.ofDim[(Instant, Timeline)](4), World.initialRevision)
+  def this() = this(Array.empty[(Instant, Timeline)], World.initialRevision)
 
   override def revisionAsOfs: Array[Instant] =
     timelineStorage.slice(0, numberOfTimelines).map(_._1)
@@ -31,7 +29,7 @@ class WorldEfficientInMemoryImplementation(
 
     if (nextRevision == timelineStorage.length) {
       val sourceOfCopy = timelineStorage
-      timelineStorage = Array.ofDim(2 * timelineStorage.length)
+      timelineStorage = Array.ofDim(4 max 2 * timelineStorage.length)
       sourceOfCopy.copyToArray(timelineStorage)
     }
 
