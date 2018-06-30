@@ -34,10 +34,12 @@ public abstract class PackageHolder {
         return Collections.unmodifiableSet(packageItems);
     }
 
+    // TODO: make package-private again once this is supported correctly.
     public void hold(PackageItem packageItem) {
         packageItems.add(packageItem);
     }
 
+    // TODO: make package-private again once this is supported correctly.
     public void release(PackageItem packageItem) {
         packageItems.remove(packageItem);
     }

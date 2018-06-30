@@ -8,6 +8,11 @@ import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import scala.collection.concurrent.TrieMap
 import scala.reflect.runtime.universe._
 
+// TODO: this should really be for 'TypeTag' but because the implementations of 'TypeTag' mix it in,
+// attempting to register a special case serializer for the 'TypeTag' *trait* fail to pick up instances
+// whose classes mix-in the trait. We could work around this by registering all of the implementations
+// of 'TypeTag', but a) this is terribly brittle and b) they are private and thus inaccessible. So for now
+// this stays...
 object UniqueItemSpecificationSerializationSupport {
   val javaSerializer = new JavaSerializer
 
