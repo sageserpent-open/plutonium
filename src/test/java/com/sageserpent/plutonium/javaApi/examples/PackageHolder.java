@@ -34,11 +34,11 @@ public abstract class PackageHolder {
         return Collections.unmodifiableCollection(packageItems);
     }
 
-    void hold(PackageItem packageItem) {
+    public void hold(PackageItem packageItem) {
         packageItems.add(packageItem);
     }
 
-    void release(PackageItem packageItem) {
+    public void release(PackageItem packageItem) {
         packageItems.remove(packageItem);
     }
 }
