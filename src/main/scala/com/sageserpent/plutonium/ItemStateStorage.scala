@@ -1,10 +1,14 @@
 package com.sageserpent.plutonium
 
+import java.util
 import java.util.UUID
 
 import com.esotericsoftware.kryo.factories.ReflectionSerializerFactory
 import com.esotericsoftware.kryo.io.{Input, Output}
-import com.esotericsoftware.kryo.serializers.FieldSerializer
+import com.esotericsoftware.kryo.serializers.{
+  CollectionSerializer,
+  FieldSerializer
+}
 import com.esotericsoftware.kryo.util.ObjectMap
 import com.esotericsoftware.kryo.{Kryo, Serializer}
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
@@ -163,6 +167,8 @@ trait ItemStateStorage { itemStateStorageObject =>
     }
   }.withRegistrar { (kryo: Kryo) =>
     kryo.register(classOf[UniqueItemSpecification], new SpecialSerializer)
+    kryo.register(classOf[util.HashSet[_]],
+                  HashSetSerializer.asInstanceOf[Serializer[util.HashSet[_]]])
   }
 
   private val kryoPool =
