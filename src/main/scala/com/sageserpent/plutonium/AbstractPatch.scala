@@ -27,8 +27,8 @@ abstract class AbstractPatch {
   val method: Method
   val targetItemSpecification: UniqueItemSpecification
   val argumentItemSpecifications: Seq[UniqueItemSpecification]
-  lazy val UniqueItemSpecification(targetId, targetTypeTag) =
-    targetItemSpecification
+  def targetId      = targetItemSpecification.id
+  def targetTypeTag = targetItemSpecification.typeTag
   def apply(identifiedItemAccess: IdentifiedItemAccess): Unit
   def checkInvariants(identifiedItemAccess: IdentifiedItemAccess): Unit
 }
