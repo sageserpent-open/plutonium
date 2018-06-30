@@ -1,11 +1,11 @@
 package com.sageserpent.plutonium.javaApi.examples;
 
-import java.util.Collection;
 import java.util.Collections;
-import java.util.LinkedList;
+import java.util.HashSet;
+import java.util.Set;
 
 public abstract class PackageHolder {
-    private Collection<PackageItem> packageItems = new LinkedList<>();
+    private Set<PackageItem> packageItems = new HashSet<>();
     private String location;
 
     public abstract String id();
@@ -30,15 +30,15 @@ public abstract class PackageHolder {
         this.location = location;
     }
 
-    public Collection<PackageItem> packageItems() {
-        return Collections.unmodifiableCollection(packageItems);
+    public Set<PackageItem> packageItems() {
+        return Collections.unmodifiableSet(packageItems);
     }
 
-    void hold(PackageItem packageItem) {
+    public void hold(PackageItem packageItem) {
         packageItems.add(packageItem);
     }
 
-    void release(PackageItem packageItem) {
+    public void release(PackageItem packageItem) {
         packageItems.remove(packageItem);
     }
 }
