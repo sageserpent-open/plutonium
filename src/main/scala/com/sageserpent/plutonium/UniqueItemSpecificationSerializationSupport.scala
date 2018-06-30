@@ -16,8 +16,6 @@ import scala.reflect.runtime.universe._
 object UniqueItemSpecificationSerializationSupport {
   val javaSerializer = new JavaSerializer
 
-  type TypeTagForUniqueItemSpecification = TypeTag[UniqueItemSpecification]
-
   class SpecialSerializer extends Serializer[UniqueItemSpecification] {
     override def write(kryo: Kryo,
                        output: Output,
@@ -36,10 +34,5 @@ object UniqueItemSpecificationSerializationSupport {
         .readObject(input, classOf[Class[_]], javaSerializer)
       UniqueItemSpecification(id, typeTagForClass(clazz))
     }
-
-    // Type tags are rum beasts - they depend on the whatever mirror was in force when they were created,
-    // so they may or may not be equal, even though they appear to be equivalent by casual inspection. Fix
-    // this by mapping from whatever deserialization yields to what we really want.
-    val stableTypeTagCache = TrieMap.empty[TypeTag[_], TypeTag[_]]
   }
 }
