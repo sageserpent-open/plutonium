@@ -19,7 +19,7 @@ object UniqueItemSpecificationSerializationSupport {
                        data: UniqueItemSpecification): Unit = {
       val UniqueItemSpecification(id, typeTag) = data
       kryo.writeClassAndObject(output, id)
-      kryo.writeObject(output, typeTag, javaSerializer)
+      kryo.writeObject(output, classFromType(typeTag.tpe), javaSerializer)
     }
 
     override def read(
@@ -27,14 +27,9 @@ object UniqueItemSpecificationSerializationSupport {
         input: Input,
         dataType: Class[UniqueItemSpecification]): UniqueItemSpecification = {
       val id = kryo.readClassAndObject(input).asInstanceOf[Any]
-      val typeTag = kryo
-        .readObject[TypeTagForUniqueItemSpecification](
-          input,
-          classOf[TypeTagForUniqueItemSpecification],
-          javaSerializer)
-      UniqueItemSpecification(id, stableTypeTagCache.getOrElseUpdate(typeTag, {
-        typeTag.in(scala.reflect.runtime.currentMirror)
-      }))
+      val clazz = kryo
+        .readObject(input, classOf[Class[_]], javaSerializer)
+      UniqueItemSpecification(id, typeTagForClass(clazz))
     }
 
     // Type tags are rum beasts - they depend on the whatever mirror was in force when they were created,
