@@ -1,14 +1,11 @@
 package com.sageserpent.plutonium.javaApi.examples;
 
-import scala.collection.mutable.HashSet;
-
+import java.util.Collection;
 import java.util.Collections;
-import scala.collection.JavaConverters$;
-
-import java.util.Set;
+import java.util.LinkedList;
 
 public abstract class PackageHolder {
-    private Set<PackageItem> packageItems = JavaConverters$.MODULE$.mutableSetAsJavaSet(new HashSet());
+    private Collection<PackageItem> packageItems = new LinkedList<>();
     private String location;
 
     public abstract String id();
@@ -33,8 +30,8 @@ public abstract class PackageHolder {
         this.location = location;
     }
 
-    public Set<PackageItem> packageItems() {
-        return Collections.unmodifiableSet(packageItems);
+    public Collection<PackageItem> packageItems() {
+        return Collections.unmodifiableCollection(packageItems);
     }
 
     void hold(PackageItem packageItem) {
