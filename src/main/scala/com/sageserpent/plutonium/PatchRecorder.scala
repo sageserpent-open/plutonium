@@ -19,8 +19,9 @@ trait BestPatchSelectionContracts extends BestPatchSelection {
       relatedPatches: Seq[(AbstractPatch, AssociatedData)])
     : (AbstractPatch, AssociatedData) = {
     require(relatedPatches.nonEmpty)
-    require(
-      1 == (relatedPatches map { case (patch, _) => patch.targetId } distinct).size)
+    require(1 == (relatedPatches map {
+      case (patch, _) => patch.targetItemSpecification.id
+    } distinct).size)
     require((for {
       lhs <- relatedPatches
       rhs <- relatedPatches if lhs != rhs

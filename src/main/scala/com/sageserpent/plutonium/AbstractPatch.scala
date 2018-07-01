@@ -9,7 +9,9 @@ import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 
 object AbstractPatch {
   def patchesAreRelated(lhs: AbstractPatch, rhs: AbstractPatch): Boolean = {
-    val bothReferToTheSameItem = lhs.targetId == rhs.targetId && (lhs.targetTypeTag.tpe <:< rhs.targetTypeTag.tpe || rhs.targetTypeTag.tpe <:< lhs.targetTypeTag.tpe)
+    val bothReferToTheSameItem =
+      lhs.targetItemSpecification.id == rhs.targetItemSpecification.id && (lhs.targetItemSpecification.typeTag.tpe <:< rhs.targetItemSpecification.typeTag.tpe
+        || rhs.targetItemSpecification.typeTag.tpe <:< lhs.targetItemSpecification.typeTag.tpe)
     val bothReferToTheSameMethod = WorldImplementationCodeFactoring
       .firstMethodIsOverrideCompatibleWithSecond(lhs.method, rhs.method) ||
       WorldImplementationCodeFactoring
@@ -27,8 +29,6 @@ abstract class AbstractPatch {
   val method: Method
   val targetItemSpecification: UniqueItemSpecification
   val argumentItemSpecifications: Seq[UniqueItemSpecification]
-  def targetId      = targetItemSpecification.id
-  def targetTypeTag = targetItemSpecification.typeTag
   def apply(identifiedItemAccess: IdentifiedItemAccess): Unit
   def checkInvariants(identifiedItemAccess: IdentifiedItemAccess): Unit
 }
