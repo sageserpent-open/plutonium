@@ -5,8 +5,8 @@ import com.esotericsoftware.kryo.serializers.JavaSerializer
 import com.esotericsoftware.kryo.{Kryo, Serializer}
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 
-import scala.collection.concurrent.TrieMap
 import scala.reflect.runtime.universe._
+import scala.util.Try
 
 // TODO: this should really be for 'TypeTag' but because the implementations of 'TypeTag' mix it in,
 // attempting to register a special case serializer for the 'TypeTag' *trait* fail to pick up instances
@@ -22,7 +22,10 @@ object UniqueItemSpecificationSerializationSupport {
                        data: UniqueItemSpecification): Unit = {
       val UniqueItemSpecification(id, typeTag) = data
       kryo.writeClassAndObject(output, id)
-      kryo.writeObject(output, classFromType(typeTag.tpe), javaSerializer)
+      val clazzRepresentableInJava: Option[Class[_]] = Try {
+        classFromType(typeTag.tpe)
+      }.toOption
+      kryo.writeObject(output, clazzRepresentableInJava, javaSerializer)
     }
 
     override def read(
@@ -30,9 +33,10 @@ object UniqueItemSpecificationSerializationSupport {
         input: Input,
         dataType: Class[UniqueItemSpecification]): UniqueItemSpecification = {
       val id = kryo.readClassAndObject(input).asInstanceOf[Any]
-      val clazz = kryo
-        .readObject(input, classOf[Class[_]], javaSerializer)
-      UniqueItemSpecification(id, typeTagForClass(clazz))
+      val clazzRepresentableInJava = kryo
+        .readObject(input, classOf[Option[Class[_]]], javaSerializer)
+      clazzRepresentableInJava.fold(UniqueItemSpecification(id, typeTag[Any]))(
+        clazz => UniqueItemSpecification(id, typeTagForClass(clazz)))
     }
   }
 }
