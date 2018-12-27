@@ -5,7 +5,6 @@ import java.time.Instant
 import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.AllEvents.{ItemStateUpdatesDelta, noEvents}
 import com.sageserpent.plutonium.BlobStorage.SnapshotRetrievalApi
-import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
 import com.sageserpent.plutonium.ItemStateUpdateKey.ordering
 import com.sageserpent.plutonium.ItemStateUpdateTime.ordering
@@ -17,7 +16,7 @@ import de.ummels.prioritymap.PriorityMap
 import quiver._
 
 import scala.annotation.tailrec
-import scala.collection.immutable.{Map, SortedSet}
+import scala.collection.immutable.Map
 
 object TimelineImplementation {
   type ItemStateUpdatesDag =
