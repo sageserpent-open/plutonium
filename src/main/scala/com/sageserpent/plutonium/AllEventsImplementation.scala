@@ -48,7 +48,7 @@ object AllEventsImplementation {
     def apply(eventId: EventId,
               itemStateUpdateKey: ItemStateUpdateKey,
               indivisibleEvent: IndivisibleEvent): Lifecycle =
-      new Lifecycle(
+      new LifecycleImplementation(
         typeTags = Bag(indivisibleEvent.uniqueItemSpecification.typeTag),
         eventsArrangedInReverseTimeOrder =
           SortedMap(itemStateUpdateKey -> indivisibleEvent)(
@@ -166,7 +166,7 @@ object AllEventsImplementation {
                   .union(secondLifecycle.itemStateUpdateTimesByEventId
                     .getOrElse(eventId, Set.empty))) toMap
 
-      new Lifecycle(
+      new LifecycleImplementation(
         typeTags = fusedTypeTags,
         eventsArrangedInReverseTimeOrder = fusedEventsArrangedInReverseTimeOrder,
         itemStateUpdateTimesByEventId = fusedItemStateUpdateTimesByEventId
@@ -184,18 +184,62 @@ object AllEventsImplementation {
           typeTags - trimmedEvent.uniqueItemSpecification.typeTag
       }
 
-      new Lifecycle(typeTags = retainedTypeTags,
-                    eventsArrangedInReverseTimeOrder = retainedEvents,
-                    itemStateUpdateTimesByEventId =
-                      itemStateUpdateTimesByEventId) with LifecycleContracts
+      new LifecycleImplementation(
+        typeTags = retainedTypeTags,
+        eventsArrangedInReverseTimeOrder = retainedEvents,
+        itemStateUpdateTimesByEventId = itemStateUpdateTimesByEventId)
+      with LifecycleContracts
     }
   }
 
-  case class Lifecycle private (
+  trait Lifecycle {
+    def annul(eventId: EventId): Option[Lifecycle]
+
+    def isFusibleWith(another: Lifecycle): Boolean
+
+    def isIsolatedAnnihilation: Boolean
+
+    def isRelevantTo(eventId: EventId): Boolean
+
+    def fuseWith(another: Lifecycle): FusionResult
+
+    def itemStateUpdates(lifecyclesById: LifecyclesById,
+                         bestPatchSelection: BestPatchSelection)
+      : Set[(ItemStateUpdateKey, ItemStateUpdate)]
+
+    val startTime: ItemStateUpdateKey
+
+    val endTime: ItemStateUpdateTime
+
+    val uniqueItemSpecification: UniqueItemSpecification
+
+    def id: Any
+
+    def lowerBoundTypeTag: TypeTag[_]
+
+    def upperBoundTypeTag: TypeTag[_]
+
+    def typeBoundsAreInconsistentWith(another: Lifecycle): Boolean
+
+    def referencingLifecycles(lifecyclesById: LifecyclesById): Set[Lifecycle]
+
+    def retainUpTo(when: Unbounded[Instant]): Option[Lifecycle]
+
+    val typeTags: Bag[TypeTag[_]]
+
+    val eventsArrangedInReverseTimeOrder: SortedMap[ItemStateUpdateKey,
+                                                    IndivisibleEvent]
+
+    val itemStateUpdateTimesByEventId: Map[EventId, Set[ItemStateUpdateKey]]
+
+  }
+
+  case class LifecycleImplementation(
       typeTags: Bag[TypeTag[_]],
       eventsArrangedInReverseTimeOrder: SortedMap[ItemStateUpdateKey,
                                                   IndivisibleEvent],
-      itemStateUpdateTimesByEventId: Map[EventId, Set[ItemStateUpdateKey]]) {
+      itemStateUpdateTimesByEventId: Map[EventId, Set[ItemStateUpdateKey]])
+      extends Lifecycle {
     require(typeTags.nonEmpty)
 
     require(eventsArrangedInReverseTimeOrder.nonEmpty)
@@ -308,11 +352,11 @@ object AllEventsImplementation {
         }
         val preservedItemStateUpdateTimesByEventId = itemStateUpdateTimesByEventId - eventId
         Some(
-          new Lifecycle(typeTags = preservedTypeTags,
-                        eventsArrangedInReverseTimeOrder = preservedEvents,
-                        itemStateUpdateTimesByEventId =
-                          preservedItemStateUpdateTimesByEventId)
-          with LifecycleContracts)
+          new LifecycleImplementation(
+            typeTags = preservedTypeTags,
+            eventsArrangedInReverseTimeOrder = preservedEvents,
+            itemStateUpdateTimesByEventId =
+              preservedItemStateUpdateTimesByEventId) with LifecycleContracts)
       } else None
     }
 
@@ -527,30 +571,31 @@ object AllEventsImplementation {
       }
 
       val writtenState: ResultsWriter[PatchAccumulationState] =
-        eventsArrangedInReverseTimeOrder.toIterable.foldLeftM(
-          new PatchAccumulationState(): PatchAccumulationState) {
-          case (patchAccumulationState: PatchAccumulationState,
-                (itemStateUpdateKey: ItemStateUpdateKey,
-                 indivisibleEvent: IndivisibleEvent)) =>
-            indivisibleEvent match {
-              case _: ArgumentReference =>
-                patchAccumulationState.pure(implicitly[Monad[ResultsWriter]])
-              case IndivisibleChange(patch) =>
-                patchAccumulationState.recordChangePatch(
-                  itemStateUpdateKey,
-                  patch.rewriteItemTypeTags(
-                    refineTypeFor(itemStateUpdateKey, _, lifecyclesById)))
-              case IndivisibleMeasurement(patch) =>
-                patchAccumulationState.recordMeasurementPatch(
-                  itemStateUpdateKey,
-                  patch.rewriteItemTypeTags(
-                    refineTypeFor(itemStateUpdateKey, _, lifecyclesById)))
-              case EndOfLifecycle(annihilation) =>
-                require(endTime == itemStateUpdateKey)
-                patchAccumulationState.recordAnnihilation(itemStateUpdateKey,
-                                                          annihilation)
-            }
-        }
+        (eventsArrangedInReverseTimeOrder: Iterable[(ItemStateUpdateKey,
+                                                     IndivisibleEvent)])
+          .foldLeftM(new PatchAccumulationState(): PatchAccumulationState) {
+            case (patchAccumulationState: PatchAccumulationState,
+                  (itemStateUpdateKey: ItemStateUpdateKey,
+                   indivisibleEvent: IndivisibleEvent)) =>
+              indivisibleEvent match {
+                case _: ArgumentReference =>
+                  patchAccumulationState.pure(implicitly[Monad[ResultsWriter]])
+                case IndivisibleChange(patch) =>
+                  patchAccumulationState.recordChangePatch(
+                    itemStateUpdateKey,
+                    patch.rewriteItemTypeTags(
+                      refineTypeFor(itemStateUpdateKey, _, lifecyclesById)))
+                case IndivisibleMeasurement(patch) =>
+                  patchAccumulationState.recordMeasurementPatch(
+                    itemStateUpdateKey,
+                    patch.rewriteItemTypeTags(
+                      refineTypeFor(itemStateUpdateKey, _, lifecyclesById)))
+                case EndOfLifecycle(annihilation) =>
+                  require(endTime == itemStateUpdateKey)
+                  patchAccumulationState.recordAnnihilation(itemStateUpdateKey,
+                                                            annihilation)
+              }
+          }
 
       val writtenStateWithFinalBestPatchesWritten =
         writtenState.flatMap(_.writeBestPatches)
@@ -577,7 +622,8 @@ object AllEventsImplementation {
 
     abstract override def itemStateUpdates(
         lifecyclesById: LifecyclesById,
-        bestPatchSelection: BestPatchSelection) = {
+        bestPatchSelection: BestPatchSelection)
+      : Set[(ItemStateUpdateKey, ItemStateUpdate)] = {
       val id = uniqueItemSpecification.id
       require(lifecyclesById.contains(id))
       require(
