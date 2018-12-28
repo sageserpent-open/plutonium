@@ -48,13 +48,13 @@ object AllEventsImplementation {
     def apply(eventId: EventId,
               itemStateUpdateKey: ItemStateUpdateKey,
               indivisibleEvent: IndivisibleEvent): Lifecycle =
-      Lifecycle(
+      new Lifecycle(
         typeTags = Bag(indivisibleEvent.uniqueItemSpecification.typeTag),
         eventsArrangedInReverseTimeOrder =
           SortedMap(itemStateUpdateKey -> indivisibleEvent)(
             Ordering[ItemStateUpdateKey].reverse),
         itemStateUpdateTimesByEventId = Map(eventId -> Set(itemStateUpdateKey))
-      )
+      ) with LifecycleContracts
 
     def fromChange(eventId: EventId,
                    itemStateUpdateKey: ItemStateUpdateKey,
@@ -166,11 +166,11 @@ object AllEventsImplementation {
                   .union(secondLifecycle.itemStateUpdateTimesByEventId
                     .getOrElse(eventId, Set.empty))) toMap
 
-      Lifecycle(
+      new Lifecycle(
         typeTags = fusedTypeTags,
         eventsArrangedInReverseTimeOrder = fusedEventsArrangedInReverseTimeOrder,
         itemStateUpdateTimesByEventId = fusedItemStateUpdateTimesByEventId
-      )
+      ) with LifecycleContracts
     }
 
     def apply(
@@ -184,13 +184,14 @@ object AllEventsImplementation {
           typeTags - trimmedEvent.uniqueItemSpecification.typeTag
       }
 
-      Lifecycle(typeTags = retainedTypeTags,
-                eventsArrangedInReverseTimeOrder = retainedEvents,
-                itemStateUpdateTimesByEventId = itemStateUpdateTimesByEventId)
+      new Lifecycle(typeTags = retainedTypeTags,
+                    eventsArrangedInReverseTimeOrder = retainedEvents,
+                    itemStateUpdateTimesByEventId =
+                      itemStateUpdateTimesByEventId) with LifecycleContracts
     }
   }
 
-  case class Lifecycle(
+  case class Lifecycle private (
       typeTags: Bag[TypeTag[_]],
       eventsArrangedInReverseTimeOrder: SortedMap[ItemStateUpdateKey,
                                                   IndivisibleEvent],
@@ -307,10 +308,11 @@ object AllEventsImplementation {
         }
         val preservedItemStateUpdateTimesByEventId = itemStateUpdateTimesByEventId - eventId
         Some(
-          Lifecycle(typeTags = preservedTypeTags,
-                    eventsArrangedInReverseTimeOrder = preservedEvents,
-                    itemStateUpdateTimesByEventId =
-                      preservedItemStateUpdateTimesByEventId))
+          new Lifecycle(typeTags = preservedTypeTags,
+                        eventsArrangedInReverseTimeOrder = preservedEvents,
+                        itemStateUpdateTimesByEventId =
+                          preservedItemStateUpdateTimesByEventId)
+          with LifecycleContracts)
       } else None
     }
 
@@ -393,16 +395,12 @@ object AllEventsImplementation {
       : Set[(ItemStateUpdateKey, ItemStateUpdate)] = {
       // Welcome to hell...
 
-      import scalaz.Writer
-      import scalaz.Monad
-
-      import scalaz.syntax.writer._
+      import scalaz.std.iterable._
+      import scalaz.std.vector._
       import scalaz.syntax.foldable._
       import scalaz.syntax.monad._
       import scalaz.syntax.writer._
-
-      import scalaz.std.iterable._
-      import scalaz.std.vector._
+      import scalaz.{Monad, Writer}
 
       type ResultsWriter[X] =
         Writer[Vector[(ItemStateUpdateKey, ItemStateUpdate)], X]
