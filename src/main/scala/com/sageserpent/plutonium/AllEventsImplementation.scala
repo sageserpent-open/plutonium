@@ -394,14 +394,14 @@ object AllEventsImplementation {
       // Welcome to hell...
 
       import scalaz.std.iterable._
-      import scalaz.std.vector._
+      import scalaz.std.set._
       import scalaz.syntax.foldable._
       import scalaz.syntax.monad._
       import scalaz.syntax.writer._
       import scalaz.{Monad, Writer}
 
       type ResultsWriter[X] =
-        Writer[Vector[(ItemStateUpdateKey, ItemStateUpdate)], X]
+        Writer[Set[(ItemStateUpdateKey, ItemStateUpdate)], X]
 
       class PatchAccumulationState(
           accumulatedPatchesByExemplarMethod: Map[Method,
@@ -445,15 +445,15 @@ object AllEventsImplementation {
             itemStateUpdateKey: ItemStateUpdateKey,
             annihilation: Annihilation): ResultsWriter[PatchAccumulationState] =
           for {
-            _ <- Vector(
+            _ <- Set(
               itemStateUpdateKey -> (ItemStateAnnihilation(annihilation
                 .rewriteItemTypeTag(lowerBoundTypeTag)): ItemStateUpdate)).tell
           } yield
             this // We can get away with this (ha-ha) because an annihilation must be the latest event, so comes *first*, so there will be no patches to select from.
 
-        def writeBestPatch(method: Method)
-          : Writer[Vector[(ItemStateUpdateKey, ItemStateUpdate)],
-                   PatchAccumulationState] = {
+        def writeBestPatch(
+            method: Method): Writer[Set[(ItemStateUpdateKey, ItemStateUpdate)],
+                                    PatchAccumulationState] = {
           val Some((exemplarMethod, candidatePatches)) =
             exemplarMethodAndPatchesFor(method)
 
@@ -495,14 +495,13 @@ object AllEventsImplementation {
           new PatchAccumulationState(
             accumulatedPatchesByExemplarMethod = accumulatedPatchesByExemplarMethod - exemplarMethod)
             .set(
-              Vector(
+              Set(
                 itemStateUpdateKeyForAnchorPatchRepresentingTheEvent -> ItemStatePatch(
                   bestPatch)))
         }
 
-        def writeBestPatches
-          : Writer[Vector[(ItemStateUpdateKey, ItemStateUpdate)],
-                   PatchAccumulationState] =
+        def writeBestPatches: Writer[Set[(ItemStateUpdateKey, ItemStateUpdate)],
+                                     PatchAccumulationState] =
           accumulatedPatchesByExemplarMethod.keys.foldLeftM(this) {
             case (patchAccumulationState: PatchAccumulationState,
                   method: Method) =>
@@ -554,7 +553,7 @@ object AllEventsImplementation {
       val writtenStateWithFinalBestPatchesWritten =
         writtenState.flatMap(_.writeBestPatches)
 
-      writtenStateWithFinalBestPatchesWritten.run._1.toSet // ... hope you had a pleasant stay.
+      writtenStateWithFinalBestPatchesWritten.run._1 // ... hope you had a pleasant stay.
     }
 
     def referencingLifecycles(lifecyclesById: LifecyclesById): Set[Lifecycle] =
