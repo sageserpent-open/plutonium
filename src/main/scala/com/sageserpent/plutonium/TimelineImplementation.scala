@@ -45,7 +45,7 @@ class TimelineImplementation(allEvents: AllEvents = noEvents,
     case class RecalculationStep(
         itemStateUpdatesToApply: PriorityMap[PriorityQueueKey,
                                              ItemStateUpdateKey],
-        itemStateUpdatesDag: Graph[ItemStateUpdateKey, ItemStateUpdate, Unit],
+        itemStateUpdatesDag: ItemStateUpdatesDag,
         blobStorage: BlobStorage[ItemStateUpdateTime,
                                  ItemStateUpdateKey,
                                  SnapshotBlob]) {
@@ -216,8 +216,7 @@ class TimelineImplementation(allEvents: AllEvents = noEvents,
       initialMicroRevisionBuilder.build()
     }
 
-    val baseItemStateUpdatesDagToApplyChangesTo
-      : Graph[ItemStateUpdateKey, ItemStateUpdate, Unit] =
+    val baseItemStateUpdatesDagToApplyChangesTo: ItemStateUpdatesDag =
       itemStateUpdatesDag.removeNodes(
         itemStateUpdateKeysThatNeedToBeRevoked.toSeq)
 
