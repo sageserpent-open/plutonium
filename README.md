@@ -1,3 +1,5 @@
+**NOTICE: This repository is now obsolete and has been superseded by https://github.com/sageserpent-open/plutonium, please go there instead.**
+
 # Plutonium - **_bitemporal CQRS for Plain Old Java Objects (and Scala too)_** [![Build Status](https://travis-ci.org/sageserpent-open/open-plutonium.svg?branch=master)](https://travis-ci.org/sageserpent-open/open-plutonium)
 
 ## Pardon? ##
