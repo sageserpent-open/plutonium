@@ -19,8 +19,8 @@ import scalaz.syntax.applicativePlus._
 
 import scala.collection.immutable
 import scala.collection.immutable.{::, TreeMap}
-import scala.util.Random
 import scala.reflect.runtime.universe.TypeTag
+import scala.util.Random
 
 trait WorldBehaviours
     extends FlatSpec

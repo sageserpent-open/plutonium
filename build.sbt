@@ -32,9 +32,9 @@ lazy val settings = Seq(
   testFrameworks in Benchmark += new TestFramework(
     "org.scalameter.ScalaMeterFramework"),
   publishMavenStyle := true,
-  publishTo := Some(
-    Resolver.file("file",
-                  new File(Path.userHome.absolutePath + "/.m2/repository")))
+  bintrayReleaseOnPublish in ThisBuild := false,
+  licenses += ("MIT", url("http://opensource.org/licenses/MIT")),
+  bintrayVcsUrl := Some("git@github.com:sageserpent-open/plutonium.git")
 )
 
 lazy val Benchmark = config("benchmark") extend Test
