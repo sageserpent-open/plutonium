@@ -3710,7 +3710,7 @@ trait WorldBehaviours
   }
 }
 
-class WorldSpecUsingWorldReferenceImplementation
+/*class WorldSpecUsingWorldReferenceImplementation
     extends WorldBehaviours
     with WorldReferenceImplementationResource {
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
@@ -3723,9 +3723,9 @@ class WorldSpecUsingWorldReferenceImplementation
   "A world (using the world reference implementation)" should behave like worldBehaviour
 
   "A world with events that have since been corrected (using the world reference implementation)" should behave like worldWithEventsThatHaveSinceBeenCorrectedBehaviour
-}
+}*/
 
-class WorldSpecUsingWorldEfficientInMemoryImplementation
+/*class WorldSpecUsingWorldEfficientInMemoryImplementation
     extends WorldBehaviours
     with WorldEfficientInMemoryImplementationResource {
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
@@ -3738,7 +3738,7 @@ class WorldSpecUsingWorldEfficientInMemoryImplementation
   "A world (using the world efficient in-memory implementation)" should behave like worldBehaviour
 
   "A world with events that have since been corrected (using the world efficient in-memory implementation)" should behave like worldWithEventsThatHaveSinceBeenCorrectedBehaviour
-}
+}*/
 
 abstract class HistoryWhoseIdWontSerialize extends History {
   type Id = WontSerializeId
@@ -3773,6 +3773,7 @@ case class WontDeserializeId(var id: String) extends KryoSerializable {
     throw BadDeserializationException()
 }
 
+/*
 class WorldSpecUsingWorldRedisBasedImplementation
     extends WorldBehaviours
     with WorldRedisBasedImplementationResource {
@@ -3877,7 +3878,7 @@ class WorldSpecUsingWorldRedisBasedImplementation
     })
   }
 }
-
+ */
 class AllTheWorlds
     extends FlatSpec
     with Matchers
