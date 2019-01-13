@@ -3710,11 +3710,11 @@ trait WorldBehaviours
   }
 }
 
-/*class WorldSpecUsingWorldReferenceImplementation
+class WorldSpecUsingWorldReferenceImplementation
     extends WorldBehaviours
     with WorldReferenceImplementationResource {
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
-    PropertyCheckConfig(maxSize = 40, minSuccessful = 100)
+    PropertyCheckConfig(maxSize = 20, minSuccessful = 50)
 
   "A world with no history (using the world reference implementation)" should behave like worldWithNoHistoryBehaviour
 
@@ -3723,13 +3723,13 @@ trait WorldBehaviours
   "A world (using the world reference implementation)" should behave like worldBehaviour
 
   "A world with events that have since been corrected (using the world reference implementation)" should behave like worldWithEventsThatHaveSinceBeenCorrectedBehaviour
-}*/
+}
 
-/*class WorldSpecUsingWorldEfficientInMemoryImplementation
+class WorldSpecUsingWorldEfficientInMemoryImplementation
     extends WorldBehaviours
     with WorldEfficientInMemoryImplementationResource {
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
-    PropertyCheckConfig(maxSize = 40, minSuccessful = 100)
+    PropertyCheckConfig(maxSize = 20, minSuccessful = 50)
 
   "A world with no history (using the world efficient in-memory implementation)" should behave like worldWithNoHistoryBehaviour
 
@@ -3738,7 +3738,7 @@ trait WorldBehaviours
   "A world (using the world efficient in-memory implementation)" should behave like worldBehaviour
 
   "A world with events that have since been corrected (using the world efficient in-memory implementation)" should behave like worldWithEventsThatHaveSinceBeenCorrectedBehaviour
-}*/
+}
 
 abstract class HistoryWhoseIdWontSerialize extends History {
   type Id = WontSerializeId
@@ -3773,14 +3773,13 @@ case class WontDeserializeId(var id: String) extends KryoSerializable {
     throw BadDeserializationException()
 }
 
-/*
 class WorldSpecUsingWorldRedisBasedImplementation
     extends WorldBehaviours
     with WorldRedisBasedImplementationResource {
   val redisServerPort = 6454
 
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
-    PropertyCheckConfig(maxSize = 15)
+    PropertyCheckConfig(maxSize = 15, minSuccessful = 50)
 
   "A world with no history (using the world Redis-based implementation)" should behave like worldWithNoHistoryBehaviour
 
@@ -3878,7 +3877,6 @@ class WorldSpecUsingWorldRedisBasedImplementation
     })
   }
 }
- */
 class AllTheWorlds
     extends FlatSpec
     with Matchers
