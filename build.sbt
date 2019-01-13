@@ -34,7 +34,8 @@ lazy val settings = Seq(
   publishMavenStyle := true,
   bintrayReleaseOnPublish in ThisBuild := false,
   licenses += ("MIT", url("http://opensource.org/licenses/MIT")),
-  bintrayVcsUrl := Some("git@github.com:sageserpent-open/plutonium.git")
+  bintrayVcsUrl := Some("git@github.com:sageserpent-open/plutonium.git"),
+  parallelExecution in Test := false
 )
 
 lazy val Benchmark = config("benchmark") extend Test
