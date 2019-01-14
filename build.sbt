@@ -29,14 +29,16 @@ lazy val settings = Seq(
   libraryDependencies += "junit"                   % "junit"                      % "4.12" % "test",
   libraryDependencies += "com.novocode"            % "junit-interface"            % "0.11" % "test",
   libraryDependencies += "com.storm-enroute"       %% "scalameter"                % "0.8.2" % "benchmark",
-  testFrameworks in Benchmark += new TestFramework(
+  Benchmark / testFrameworks += new TestFramework(
     "org.scalameter.ScalaMeterFramework"),
   publishMavenStyle := true,
   bintrayReleaseOnPublish in ThisBuild := false,
   licenses += ("MIT", url("http://opensource.org/licenses/MIT")),
   bintrayVcsUrl := Some("git@github.com:sageserpent-open/plutonium.git"),
   parallelExecution in Test := false,
-  compileOrder := CompileOrder.JavaThenScala
+  compileOrder := CompileOrder.JavaThenScala,
+  Compile / compileOrder := CompileOrder.JavaThenScala,
+  Test / compileOrder := CompileOrder.JavaThenScala
 )
 
 lazy val Benchmark = config("benchmark") extend Test
