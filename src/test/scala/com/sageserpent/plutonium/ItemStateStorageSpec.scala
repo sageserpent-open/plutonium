@@ -173,11 +173,7 @@ class ItemStateStorageSpec
     Prop.forAllNoShrink(markMapGenerator, seedGenerator) { (markMap, seed) =>
       val graphNodes: Seq[GraphNode] = buildGraphFrom(markMap).sorted
 
-      println("------------------------------------------------------")
-      println(count)
       count += 1
-
-      println(graphNodes.map(_.toString).mkString("\n"))
 
       val randomBehaviour = new Random(seed)
 
@@ -192,11 +188,6 @@ class ItemStateStorageSpec
         .toSet
 
       val nodesThatAreToBeRoundtripped = graphNodes filterNot nodesThatAreNotToBeRoundtripped.contains
-
-      println(
-        s"To be roundtripped: ${nodesThatAreToBeRoundtripped.map(_.id).toList}")
-      println(
-        s"Not to be roundtripped: ${nodesThatAreNotToBeRoundtripped.map(_.id).toList}")
 
       val snapshotBlobs: Map[UniqueItemSpecification, SnapshotBlob] =
         nodesThatAreToBeRoundtripped map (node =>

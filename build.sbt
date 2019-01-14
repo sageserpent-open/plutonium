@@ -15,7 +15,7 @@ lazy val settings = Seq(
   libraryDependencies += "biz.paluch.redis"        % "lettuce"                    % "4.3.0.Final",
   libraryDependencies += "io.reactivex"            %% "rxscala"                   % "0.26.4",
   libraryDependencies += "io.github.nicolasstucki" %% "multisets"                 % "0.4",
-  libraryDependencies += "com.twitter"             %% "chill"                     % "0.9.2",
+  libraryDependencies += "com.twitter"             %% "chill"                     % "0.9.3",
   libraryDependencies += "io.verizon.quiver"       %% "core"                      % "7.0.19",
   libraryDependencies += "de.ummels"               %% "scala-prioritymap"         % "1.0.0",
   libraryDependencies += "de.sciss"                %% "fingertree"                % "1.5.2",
@@ -32,9 +32,12 @@ lazy val settings = Seq(
   testFrameworks in Benchmark += new TestFramework(
     "org.scalameter.ScalaMeterFramework"),
   publishMavenStyle := true,
-  publishTo := Some(
-    Resolver.file("file",
-                  new File(Path.userHome.absolutePath + "/.m2/repository")))
+  bintrayReleaseOnPublish in ThisBuild := false,
+  licenses += ("MIT", url("http://opensource.org/licenses/MIT")),
+  bintrayVcsUrl := Some("git@github.com:sageserpent-open/plutonium.git"),
+  parallelExecution in Test := false,
+  Compile / doc / sources := Seq.empty,
+  Compile / packageDoc / publishArtifact := false
 )
 
 lazy val Benchmark = config("benchmark") extend Test

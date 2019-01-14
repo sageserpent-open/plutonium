@@ -18,8 +18,6 @@ object AllEvents {
 }
 
 trait AllEvents {
-  // TODO: we can get the lifecycle start keys from there too...
-
   type AllEventsType <: AllEvents
 
   def revise(events: Map[_ <: EventId, Option[Event]])
