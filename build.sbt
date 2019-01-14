@@ -36,7 +36,8 @@ lazy val settings = Seq(
   licenses += ("MIT", url("http://opensource.org/licenses/MIT")),
   bintrayVcsUrl := Some("git@github.com:sageserpent-open/plutonium.git"),
   parallelExecution in Test := false,
-  compileOrder := CompileOrder.JavaThenScala
+  Compile / doc / sources := Seq.empty,
+  Compile / packageDoc / publishArtifact := false
 )
 
 lazy val Benchmark = config("benchmark") extend Test
