@@ -48,13 +48,13 @@ object AllEventsImplementation {
     def apply(eventId: EventId,
               itemStateUpdateKey: ItemStateUpdateKey,
               indivisibleEvent: IndivisibleEvent): Lifecycle =
-      Lifecycle(
+      new LifecycleImplementation(
         typeTags = Bag(indivisibleEvent.uniqueItemSpecification.typeTag),
         eventsArrangedInReverseTimeOrder =
           SortedMap(itemStateUpdateKey -> indivisibleEvent)(
             Ordering[ItemStateUpdateKey].reverse),
         itemStateUpdateTimesByEventId = Map(eventId -> Set(itemStateUpdateKey))
-      )
+      ) with LifecycleContracts
 
     def fromChange(eventId: EventId,
                    itemStateUpdateKey: ItemStateUpdateKey,
@@ -166,11 +166,11 @@ object AllEventsImplementation {
                   .union(secondLifecycle.itemStateUpdateTimesByEventId
                     .getOrElse(eventId, Set.empty))) toMap
 
-      Lifecycle(
+      new LifecycleImplementation(
         typeTags = fusedTypeTags,
         eventsArrangedInReverseTimeOrder = fusedEventsArrangedInReverseTimeOrder,
         itemStateUpdateTimesByEventId = fusedItemStateUpdateTimesByEventId
-      )
+      ) with LifecycleContracts
     }
 
     def apply(
@@ -184,36 +184,64 @@ object AllEventsImplementation {
           typeTags - trimmedEvent.uniqueItemSpecification.typeTag
       }
 
-      Lifecycle(typeTags = retainedTypeTags,
-                eventsArrangedInReverseTimeOrder = retainedEvents,
-                itemStateUpdateTimesByEventId = itemStateUpdateTimesByEventId)
+      new LifecycleImplementation(
+        typeTags = retainedTypeTags,
+        eventsArrangedInReverseTimeOrder = retainedEvents,
+        itemStateUpdateTimesByEventId = itemStateUpdateTimesByEventId)
+      with LifecycleContracts
     }
   }
 
-  case class Lifecycle(
+  trait Lifecycle {
+    val startTime: ItemStateUpdateKey
+
+    val endTime: ItemStateUpdateTime
+
+    val uniqueItemSpecification: UniqueItemSpecification
+
+    def id: Any
+
+    def lowerBoundTypeTag: TypeTag[_]
+
+    def upperBoundTypeTag: TypeTag[_]
+
+    def annul(eventId: EventId): Option[Lifecycle]
+
+    def fuseWith(another: Lifecycle): FusionResult
+
+    // NOTE: this is quite defensive, we can answer with 'None' if 'when' is not greater than the start time.
+    def retainUpTo(when: Unbounded[Instant]): Option[Lifecycle]
+
+    // The lower type bounds are compatible and there is overlap.
+    def isFusibleWith(another: Lifecycle): Boolean
+
+    def isIsolatedAnnihilation: Boolean
+
+    def isRelevantTo(eventId: EventId): Boolean
+
+    def typeBoundsAreInconsistentWith(another: Lifecycle): Boolean
+
+    def itemStateUpdates(lifecyclesById: LifecyclesById,
+                         bestPatchSelection: BestPatchSelection)
+      : Set[(ItemStateUpdateKey, ItemStateUpdate)]
+
+    def referencingLifecycles(lifecyclesById: LifecyclesById): Set[Lifecycle]
+
+    val typeTags: Bag[TypeTag[_]]
+
+    val eventsArrangedInReverseTimeOrder: SortedMap[ItemStateUpdateKey,
+                                                    IndivisibleEvent]
+
+    val itemStateUpdateTimesByEventId: Map[EventId, Set[ItemStateUpdateKey]]
+
+  }
+
+  case class LifecycleImplementation(
       typeTags: Bag[TypeTag[_]],
       eventsArrangedInReverseTimeOrder: SortedMap[ItemStateUpdateKey,
                                                   IndivisibleEvent],
-      itemStateUpdateTimesByEventId: Map[EventId, Set[ItemStateUpdateKey]]) {
-    require(typeTags.nonEmpty)
-
-    require(eventsArrangedInReverseTimeOrder.nonEmpty)
-
-    require(
-      !eventsArrangedInReverseTimeOrder.tail.exists(PartialFunction.cond(_) {
-        case (_, _: EndOfLifecycle) => true
-      }))
-
-    require(
-      itemStateUpdateTimesByEventId.nonEmpty && itemStateUpdateTimesByEventId
-        .forall { case (_, times) => times.nonEmpty })
-
-    require(eventsArrangedInReverseTimeOrder.keys.forall(itemStateUpdateKey =>
-      itemStateUpdateTimesByEventId.exists {
-        case (_, itemStateUpdateTimes) =>
-          itemStateUpdateTimes.contains(itemStateUpdateKey)
-    }))
-
+      itemStateUpdateTimesByEventId: Map[EventId, Set[ItemStateUpdateKey]])
+      extends Lifecycle {
     val startTime: ItemStateUpdateKey =
       eventsArrangedInReverseTimeOrder.lastKey
 
@@ -224,22 +252,6 @@ object AllEventsImplementation {
         case (itemStateUpdateTime, _: EndOfLifecycle) => itemStateUpdateTime
         case _                                        => sentinelForEndTimeOfLifecycleWithoutAnnihilation
       }
-
-    require(Ordering[ItemStateUpdateTime].lteq(startTime, endTime))
-
-    def isIsolatedAnnihilation: Boolean =
-      // Don't use sequence pattern matching here, it is too much overhead due to needing to build a sequence.
-      1 == eventsArrangedInReverseTimeOrder.size && PartialFunction.cond(
-        eventsArrangedInReverseTimeOrder.head) {
-        case (_, EndOfLifecycle(_)) => true
-      }
-
-    val endPoints: LifecycleEndPoints = startTime -> endTime
-
-    def overlapsWith(another: Lifecycle): Boolean =
-      Ordering[ItemStateUpdateTime]
-        .lteq(this.startTime, another.endTime) && Ordering[ItemStateUpdateTime]
-        .lteq(another.startTime, this.endTime)
 
     val uniqueItemSpecification: UniqueItemSpecification =
       UniqueItemSpecification(id, lowerBoundTypeTag)
@@ -255,45 +267,6 @@ object AllEventsImplementation {
       case (first, second) => if (first.tpe <:< second.tpe) second else first
     }
 
-    require(lowerBoundTypeTag.tpe <:< upperBoundTypeTag.tpe)
-
-    def typeBoundsAreInconsistentWith(another: Lifecycle): Boolean =
-      this.upperTypeIsConsistentWith(another) ^ this
-        .lowerTypeIsConsistentWith(another)
-
-    def lowerTypeIsConsistentWith(another: Lifecycle): Boolean =
-      this.lowerBoundTypeTag.tpe <:< another.lowerBoundTypeTag.tpe || another.lowerBoundTypeTag.tpe <:< this.lowerBoundTypeTag.tpe
-
-    def upperTypeIsConsistentWith(another: Lifecycle): Boolean =
-      another.upperBoundTypeTag.tpe <:< this.upperBoundTypeTag.tpe || this.upperBoundTypeTag.tpe <:< another.upperBoundTypeTag.tpe
-
-    // NOTE: this is quite defensive, we can answer with 'None' if 'when' is not greater than the start time.
-    def retainUpTo(when: Unbounded[Instant]): Option[Lifecycle] = {
-      val inclusionPredicate =
-        Ordering[ItemStateUpdateTime]
-          .lteq(_: ItemStateUpdateTime, UpperBoundOfTimeslice(when))
-
-      val (retainedEvents, trimmedEvents) =
-        // TODO: make use of the intrinsic ordering to do the partition in logarithmic time.
-        eventsArrangedInReverseTimeOrder.partition {
-          case (itemStateUpdateTime, _) =>
-            inclusionPredicate(itemStateUpdateTime)
-        }
-
-      if (retainedEvents.nonEmpty) {
-        Some(
-          Lifecycle(retainedEvents,
-                    trimmedEvents,
-                    typeTags,
-                    itemStateUpdateTimesByEventId))
-      } else None
-    }
-
-    def isRelevantTo(eventId: EventId): Boolean =
-      itemStateUpdateTimesByEventId
-        .get(eventId)
-        .fold(false)(_.exists(eventsArrangedInReverseTimeOrder.contains))
-
     def annul(eventId: EventId): Option[Lifecycle] = {
       val itemStateUpdateTimes = itemStateUpdateTimesByEventId(eventId).filter(
         eventsArrangedInReverseTimeOrder.contains)
@@ -307,17 +280,13 @@ object AllEventsImplementation {
         }
         val preservedItemStateUpdateTimesByEventId = itemStateUpdateTimesByEventId - eventId
         Some(
-          Lifecycle(typeTags = preservedTypeTags,
-                    eventsArrangedInReverseTimeOrder = preservedEvents,
-                    itemStateUpdateTimesByEventId =
-                      preservedItemStateUpdateTimesByEventId))
+          new LifecycleImplementation(
+            typeTags = preservedTypeTags,
+            eventsArrangedInReverseTimeOrder = preservedEvents,
+            itemStateUpdateTimesByEventId =
+              preservedItemStateUpdateTimesByEventId) with LifecycleContracts)
       } else None
     }
-
-    // The lower type bounds are compatible and there is overlap.
-    def isFusibleWith(another: Lifecycle): Boolean =
-      this.lowerTypeIsConsistentWith(another) && this.upperTypeIsConsistentWith(
-        another) && this.overlapsWith(another)
 
     def fuseWith(another: Lifecycle): FusionResult =
       this.eventsArrangedInReverseTimeOrder.head -> another.eventsArrangedInReverseTimeOrder.head match {
@@ -378,34 +347,61 @@ object AllEventsImplementation {
           LifecycleMerge(fuse(this, another))
       }
 
-    def referencingLifecycles(lifecyclesById: LifecyclesById): Set[Lifecycle] =
-      eventsArrangedInReverseTimeOrder.collect {
-        case (itemStateUpdateTime,
-              ArgumentReference(_, targetUniqueItemSpecification))
-            if targetUniqueItemSpecification != uniqueItemSpecification =>
-          lifecycleFor(itemStateUpdateTime,
-                       targetUniqueItemSpecification,
-                       lifecyclesById)
-      }.toSet
+    def retainUpTo(when: Unbounded[Instant]): Option[Lifecycle] = {
+      val inclusionPredicate =
+        Ordering[ItemStateUpdateTime]
+          .lteq(_: ItemStateUpdateTime, UpperBoundOfTimeslice(when))
+
+      val (retainedEvents, trimmedEvents) =
+        // TODO: make use of the intrinsic ordering to do the partition in logarithmic time.
+        eventsArrangedInReverseTimeOrder.partition {
+          case (itemStateUpdateTime, _) =>
+            inclusionPredicate(itemStateUpdateTime)
+        }
+
+      if (retainedEvents.nonEmpty) {
+        Some(
+          Lifecycle(retainedEvents,
+                    trimmedEvents,
+                    typeTags,
+                    itemStateUpdateTimesByEventId))
+      } else None
+    }
+
+    def isFusibleWith(another: Lifecycle): Boolean =
+      this.lowerTypeIsConsistentWith(another) && this.upperTypeIsConsistentWith(
+        another) && this.overlapsWith(another)
+
+    def isIsolatedAnnihilation: Boolean =
+      // Don't use sequence pattern matching here, it is too much overhead due to needing to build a sequence.
+      1 == eventsArrangedInReverseTimeOrder.size && PartialFunction.cond(
+        eventsArrangedInReverseTimeOrder.head) {
+        case (_, EndOfLifecycle(_)) => true
+      }
+
+    def isRelevantTo(eventId: EventId): Boolean =
+      itemStateUpdateTimesByEventId
+        .get(eventId)
+        .fold(false)(_.exists(eventsArrangedInReverseTimeOrder.contains))
+
+    def typeBoundsAreInconsistentWith(another: Lifecycle): Boolean =
+      this.upperTypeIsConsistentWith(another) ^ this
+        .lowerTypeIsConsistentWith(another)
 
     def itemStateUpdates(lifecyclesById: LifecyclesById,
                          bestPatchSelection: BestPatchSelection)
       : Set[(ItemStateUpdateKey, ItemStateUpdate)] = {
       // Welcome to hell...
 
-      import scalaz.Writer
-      import scalaz.Monad
-
-      import scalaz.syntax.writer._
+      import scalaz.std.iterable._
+      import scalaz.std.set._
       import scalaz.syntax.foldable._
       import scalaz.syntax.monad._
       import scalaz.syntax.writer._
-
-      import scalaz.std.iterable._
-      import scalaz.std.vector._
+      import scalaz.{Monad, Writer}
 
       type ResultsWriter[X] =
-        Writer[Vector[(ItemStateUpdateKey, ItemStateUpdate)], X]
+        Writer[Set[(ItemStateUpdateKey, ItemStateUpdate)], X]
 
       class PatchAccumulationState(
           accumulatedPatchesByExemplarMethod: Map[Method,
@@ -449,15 +445,15 @@ object AllEventsImplementation {
             itemStateUpdateKey: ItemStateUpdateKey,
             annihilation: Annihilation): ResultsWriter[PatchAccumulationState] =
           for {
-            _ <- Vector(
+            _ <- Set(
               itemStateUpdateKey -> (ItemStateAnnihilation(annihilation
                 .rewriteItemTypeTag(lowerBoundTypeTag)): ItemStateUpdate)).tell
           } yield
             this // We can get away with this (ha-ha) because an annihilation must be the latest event, so comes *first*, so there will be no patches to select from.
 
-        def writeBestPatch(method: Method)
-          : Writer[Vector[(ItemStateUpdateKey, ItemStateUpdate)],
-                   PatchAccumulationState] = {
+        def writeBestPatch(
+            method: Method): Writer[Set[(ItemStateUpdateKey, ItemStateUpdate)],
+                                    PatchAccumulationState] = {
           val Some((exemplarMethod, candidatePatches)) =
             exemplarMethodAndPatchesFor(method)
 
@@ -499,14 +495,13 @@ object AllEventsImplementation {
           new PatchAccumulationState(
             accumulatedPatchesByExemplarMethod = accumulatedPatchesByExemplarMethod - exemplarMethod)
             .set(
-              Vector(
+              Set(
                 itemStateUpdateKeyForAnchorPatchRepresentingTheEvent -> ItemStatePatch(
                   bestPatch)))
         }
 
-        def writeBestPatches
-          : Writer[Vector[(ItemStateUpdateKey, ItemStateUpdate)],
-                   PatchAccumulationState] =
+        def writeBestPatches: Writer[Set[(ItemStateUpdateKey, ItemStateUpdate)],
+                                     PatchAccumulationState] =
           accumulatedPatchesByExemplarMethod.keys.foldLeftM(this) {
             case (patchAccumulationState: PatchAccumulationState,
                   method: Method) =>
@@ -529,47 +524,87 @@ object AllEventsImplementation {
       }
 
       val writtenState: ResultsWriter[PatchAccumulationState] =
-        eventsArrangedInReverseTimeOrder.toIterable.foldLeftM(
-          new PatchAccumulationState(): PatchAccumulationState) {
-          case (patchAccumulationState: PatchAccumulationState,
-                (itemStateUpdateKey: ItemStateUpdateKey,
-                 indivisibleEvent: IndivisibleEvent)) =>
-            indivisibleEvent match {
-              case _: ArgumentReference =>
-                patchAccumulationState.pure(implicitly[Monad[ResultsWriter]])
-              case IndivisibleChange(patch) =>
-                patchAccumulationState.recordChangePatch(
-                  itemStateUpdateKey,
-                  patch.rewriteItemTypeTags(
-                    refineTypeFor(itemStateUpdateKey, _, lifecyclesById)))
-              case IndivisibleMeasurement(patch) =>
-                patchAccumulationState.recordMeasurementPatch(
-                  itemStateUpdateKey,
-                  patch.rewriteItemTypeTags(
-                    refineTypeFor(itemStateUpdateKey, _, lifecyclesById)))
-              case EndOfLifecycle(annihilation) =>
-                require(endTime == itemStateUpdateKey)
-                patchAccumulationState.recordAnnihilation(itemStateUpdateKey,
-                                                          annihilation)
-            }
-        }
+        (eventsArrangedInReverseTimeOrder: Iterable[(ItemStateUpdateKey,
+                                                     IndivisibleEvent)])
+          .foldLeftM(new PatchAccumulationState(): PatchAccumulationState) {
+            case (patchAccumulationState: PatchAccumulationState,
+                  (itemStateUpdateKey: ItemStateUpdateKey,
+                   indivisibleEvent: IndivisibleEvent)) =>
+              indivisibleEvent match {
+                case _: ArgumentReference =>
+                  patchAccumulationState.pure(implicitly[Monad[ResultsWriter]])
+                case IndivisibleChange(patch) =>
+                  patchAccumulationState.recordChangePatch(
+                    itemStateUpdateKey,
+                    patch.rewriteItemTypeTags(
+                      refineTypeFor(itemStateUpdateKey, _, lifecyclesById)))
+                case IndivisibleMeasurement(patch) =>
+                  patchAccumulationState.recordMeasurementPatch(
+                    itemStateUpdateKey,
+                    patch.rewriteItemTypeTags(
+                      refineTypeFor(itemStateUpdateKey, _, lifecyclesById)))
+                case EndOfLifecycle(annihilation) =>
+                  require(endTime == itemStateUpdateKey)
+                  patchAccumulationState.recordAnnihilation(itemStateUpdateKey,
+                                                            annihilation)
+              }
+          }
 
       val writtenStateWithFinalBestPatchesWritten =
         writtenState.flatMap(_.writeBestPatches)
 
-      writtenStateWithFinalBestPatchesWritten.run._1.toSet // ... hope you had a pleasant stay.
+      writtenStateWithFinalBestPatchesWritten.run._1 // ... hope you had a pleasant stay.
     }
+
+    def referencingLifecycles(lifecyclesById: LifecyclesById): Set[Lifecycle] =
+      eventsArrangedInReverseTimeOrder.collect {
+        case (itemStateUpdateTime,
+              ArgumentReference(_, targetUniqueItemSpecification))
+            if targetUniqueItemSpecification != uniqueItemSpecification =>
+          lifecycleFor(itemStateUpdateTime,
+                       targetUniqueItemSpecification,
+                       lifecyclesById)
+      }.toSet
+
+    private def overlapsWith(another: Lifecycle): Boolean =
+      Ordering[ItemStateUpdateTime]
+        .lteq(this.startTime, another.endTime) && Ordering[ItemStateUpdateTime]
+        .lteq(another.startTime, this.endTime)
+
+    private def lowerTypeIsConsistentWith(another: Lifecycle): Boolean =
+      this.lowerBoundTypeTag.tpe <:< another.lowerBoundTypeTag.tpe || another.lowerBoundTypeTag.tpe <:< this.lowerBoundTypeTag.tpe
+
+    private def upperTypeIsConsistentWith(another: Lifecycle): Boolean =
+      another.upperBoundTypeTag.tpe <:< this.upperBoundTypeTag.tpe || this.upperBoundTypeTag.tpe <:< another.upperBoundTypeTag.tpe
   }
 
   trait LifecycleContracts extends Lifecycle {
+    require(typeTags.nonEmpty)
+
+    require(eventsArrangedInReverseTimeOrder.nonEmpty)
+
+    require(
+      !eventsArrangedInReverseTimeOrder.tail.exists(PartialFunction.cond(_) {
+        case (_, _: EndOfLifecycle) => true
+      }))
+
+    require(
+      itemStateUpdateTimesByEventId.nonEmpty && itemStateUpdateTimesByEventId
+        .forall { case (_, times) => times.nonEmpty })
+
+    require(eventsArrangedInReverseTimeOrder.keys.forall(itemStateUpdateKey =>
+      itemStateUpdateTimesByEventId.exists {
+        case (_, itemStateUpdateTimes) =>
+          itemStateUpdateTimes.contains(itemStateUpdateKey)
+    }))
+
+    require(lowerBoundTypeTag.tpe <:< upperBoundTypeTag.tpe)
+
+    require(Ordering[ItemStateUpdateTime].lteq(startTime, endTime))
+
     abstract override def annul(eventId: EventId): Option[Lifecycle] = {
       require(isRelevantTo(eventId))
       super.annul(eventId)
-    }
-
-    abstract override def isFusibleWith(another: Lifecycle): Boolean = {
-      require(this.id == another.id)
-      super.isFusibleWith(another)
     }
 
     abstract override def fuseWith(another: Lifecycle): FusionResult = {
@@ -577,9 +612,15 @@ object AllEventsImplementation {
       super.fuseWith(another)
     }
 
+    abstract override def isFusibleWith(another: Lifecycle): Boolean = {
+      require(this.id == another.id)
+      super.isFusibleWith(another)
+    }
+
     abstract override def itemStateUpdates(
         lifecyclesById: LifecyclesById,
-        bestPatchSelection: BestPatchSelection) = {
+        bestPatchSelection: BestPatchSelection)
+      : Set[(ItemStateUpdateKey, ItemStateUpdate)] = {
       val id = uniqueItemSpecification.id
       require(lifecyclesById.contains(id))
       require(
