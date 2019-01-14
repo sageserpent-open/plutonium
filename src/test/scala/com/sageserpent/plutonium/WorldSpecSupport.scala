@@ -1,8 +1,5 @@
 package com.sageserpent.plutonium
 
-/**
-  * Created by Gerard on 21/09/2015.
-  */
 import java.time.Instant
 import java.util.UUID
 
@@ -11,6 +8,7 @@ import com.sageserpent.americium
 import com.sageserpent.americium._
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.seqEnrichment._
+import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.World._
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.Assertions
@@ -28,25 +26,9 @@ object WorldSpecSupport {
   val changeError = new RuntimeException("Error in making a change.")
 }
 
-trait WorldSpecSupport extends Assertions {
+trait WorldSpecSupport extends Assertions with SharedGenerators {
 
   import WorldSpecSupport._
-
-  val seedGenerator = Arbitrary.arbitrary[Long]
-
-  val instantGenerator = Arbitrary.arbitrary[Long] map Instant.ofEpochMilli
-
-  val unboundedInstantGenerator = Gen.frequency(
-    1  -> Gen.oneOf(NegativeInfinity[Instant], PositiveInfinity[Instant]),
-    10 -> (instantGenerator map Finite.apply))
-
-  val changeWhenGenerator: Gen[Unbounded[Instant]] = Gen.frequency(
-    1  -> Gen.oneOf(Seq(NegativeInfinity[Instant])),
-    10 -> (instantGenerator map (Finite(_))))
-
-  val stringIdGenerator = Gen.chooseNum(50, 100) map ("Name: " + _.toString)
-
-  val integerIdGenerator = Gen.chooseNum(-20, 20)
 
   val fooHistoryIdGenerator = stringIdGenerator
 
@@ -342,8 +324,8 @@ trait WorldSpecSupport extends Assertions {
       anotherRoundOfHeadsItIs <- Arbitrary.arbBool.arbitrary
     } yield
       (historyId,
-       (scope: Scope) =>
-         scope.render(Bitemporal.withId[AHistory](historyId)): Seq[History],
+       (itemCache: ItemCache) =>
+         itemCache.render(Bitemporal.withId[AHistory](historyId)): Seq[History],
        for {
          (index,
           (data,
@@ -363,7 +345,7 @@ trait WorldSpecSupport extends Assertions {
                                                     (item: History) => {
                                                       // A useless event: nothing changes - and the event refers to the item type abstractly to boot.
                                                     })
-       else if (headsItIs)
+       else if (anotherRoundOfHeadsItIs)
          Measurement.forOneItem(_: Unbounded[Instant])(historyId,
                                                        (item: AHistory) => {
                                                          // A useless event: nothing is measured!
@@ -371,14 +353,14 @@ trait WorldSpecSupport extends Assertions {
        else
          Measurement.forOneItem(_: Unbounded[Instant])(historyId,
                                                        (item: History) => {
-                                                         // A useless event: nothing changes - and the event refers to the item type abstractly to boot.
+                                                         // A useless event: nothing is measured - and the event refers to the item type abstractly to boot.
                                                        }))
   }
 
   trait RecordingsForAnId {
     val historyId: Any
 
-    val historiesFrom: Scope => Seq[History]
+    val historiesFrom: ItemCache => Seq[History]
 
     val events: List[(Unbounded[Instant], Event)]
 
@@ -399,20 +381,20 @@ trait WorldSpecSupport extends Assertions {
 
   case class RecordingsNoLaterThan(
       historyId: Any,
-      historiesFrom: Scope => Seq[History],
+      historiesFrom: ItemCache => Seq[History],
       datums: List[(Any, Unbounded[Instant])],
       ineffectiveEventFor: Unbounded[Instant] => Event,
       whenAnnihilated: Option[Unbounded[Instant]])
 
   case class NonExistentRecordings(
       historyId: Any,
-      historiesFrom: Scope => Seq[History],
+      historiesFrom: ItemCache => Seq[History],
       ineffectiveEventFor: Unbounded[Instant] => Event)
 
   class RecordingsForAPhoenixId(
       override val historyId: Any,
-      override val historiesFrom: Scope => Seq[History],
-      annihilationFor: Instant => Annihilation[_],
+      override val historiesFrom: ItemCache => Seq[History],
+      annihilationFor: Instant => Annihilation,
       ineffectiveEventFor: Unbounded[Instant] => Event,
       dataSamplesGroupedForLifespans: Stream[
         Traversable[(Int, Any, (Unbounded[Instant], Boolean) => Event)]],
@@ -609,9 +591,9 @@ trait WorldSpecSupport extends Assertions {
   def recordingsGroupedByIdGenerator_(
       dataSamplesForAnIdGenerator: Gen[
         (Any,
-         Scope => Seq[History],
+         ItemCache => Seq[History],
          List[(Int, Any, (Unbounded[Instant], Boolean) => Event)],
-         Instant => Annihilation[_],
+         Instant => Annihilation,
          Unbounded[Instant] => Event)],
       forbidAnnihilations: Boolean = false,
       forbidMeasurements: Boolean = false) = {
@@ -694,41 +676,39 @@ trait WorldSpecSupport extends Assertions {
     Gen.nonEmptyListOf(recordingsForAnIdGenerator) retryUntil idsAreNotRepeated
   }
 
+  def shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhenForAGivenItem(
+      random: Random,
+      events: List[(Unbounded[Instant], Event)]) = {
+    // NOTE: 'groupBy' actually destroys the sort order, so we have to sort after grouping. We have to do this to
+    // keep the annihilations after the events that define the lifespan of the items that get annihilated.
+    val recordingsGroupedByWhen = (events groupBy (_._1)).toSeq sortBy (_._1) map (_._2)
+
+    def groupContainsAnAnnihilation(group: List[(Unbounded[Instant], Event)]) =
+      group.exists(PartialFunction.cond(_) {
+        case (_, _: Annihilation) => true
+      })
+
+    val groupedGroupsWithAnnihilationsIsolated = recordingsGroupedByWhen groupWhile {
+      case (lhs, rhs) =>
+        !(groupContainsAnAnnihilation(lhs) || groupContainsAnAnnihilation(rhs))
+    }
+
+    groupedGroupsWithAnnihilationsIsolated flatMap (random
+      .shuffle(_)) flatten
+  }
+
   def shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
       random: Random,
       recordingsGroupedById: List[RecordingsForAnId]) = {
     // PLAN: shuffle each lots of events on a per-id basis, keeping the annihilations out of the way. Then merge the results using random picking.
-    def shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
-        random: Random,
-        events: List[(Unbounded[Instant], Event)]) = {
-      // NOTE: 'groupBy' actually destroys the sort order, so we have to sort after grouping. We have to do this to
-      // keep the annihilations after the events that define the lifespan of the items that get annihilated.
-      val recordingsGroupedByWhen = (events groupBy (_._1)).toSeq sortBy (_._1) map (_._2)
-
-      def groupContainsAnAnnihilation(
-          group: List[(Unbounded[Instant], Event)]) =
-        group.exists(PartialFunction.cond(_) {
-          case (_, _: Annihilation[_]) => true
-        })
-
-      val groupedGroupsWithAnnihilationsIsolated = recordingsGroupedByWhen groupWhile {
-        case (lhs, rhs) =>
-          !(groupContainsAnAnnihilation(lhs) || groupContainsAnAnnihilation(
-            rhs))
-      }
-
-      groupedGroupsWithAnnihilationsIsolated flatMap (random
-        .shuffle(_)) flatten
-    }
 
     random.pickAlternatelyFrom(
-      recordingsGroupedById map (_.events) map (shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+      recordingsGroupedById map (_.events) map (shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhenForAGivenItem(
         random,
         _)))
   }
 
-  def historyFrom(world: World[_],
-                  recordingsGroupedById: List[RecordingsForAnId])(
+  def historyFrom(world: World, recordingsGroupedById: List[RecordingsForAnId])(
       scope: Scope): List[(Any, Any)] =
     (for (recordingsForAnId <- recordingsGroupedById)
       yield
@@ -737,8 +717,8 @@ trait WorldSpecSupport extends Assertions {
   def recordEventsInWorld(bigShuffledHistoryOverLotsOfThings: Stream[
                             Traversable[(Option[(Unbounded[Instant], Event)],
                                          intersperseObsoleteEvents.EventId)]],
-                          asOfs: List[Instant],
-                          world: World[Int]) = {
+      asOfs: List[Instant],
+      world: World) = {
     revisionActions(bigShuffledHistoryOverLotsOfThings, asOfs, world) map (_.apply) force // Actually a piece of imperative code that looks functional - 'world' is being mutated as a side-effect; but the revisions are harvested functionally.
   }
 
@@ -758,7 +738,7 @@ trait WorldSpecSupport extends Assertions {
         Traversable[(Option[(Unbounded[Instant], Event)],
                      intersperseObsoleteEvents.EventId)]],
       asOfs: List[Instant],
-      world: World[Int]) = {
+      world: World) = {
     for (revisionAction <- revisionActions(bigShuffledHistoryOverLotsOfThings,
                                            asOfs,
                                            world)) try {
@@ -771,8 +751,8 @@ trait WorldSpecSupport extends Assertions {
   def revisionActions(bigShuffledHistoryOverLotsOfThings: Stream[
                         Traversable[(Option[(Unbounded[Instant], Event)],
                                      intersperseObsoleteEvents.EventId)]],
-                      asOfs: List[Instant],
-                      world: World[Int]): Stream[() => Revision] = {
+      asOfs: List[Instant],
+      world: World): Stream[() => Revision] = {
     assert(bigShuffledHistoryOverLotsOfThings.length == asOfs.length)
     revisionActions(bigShuffledHistoryOverLotsOfThings, asOfs.iterator, world)
   }
@@ -780,8 +760,8 @@ trait WorldSpecSupport extends Assertions {
   def revisionActions(bigShuffledHistoryOverLotsOfThings: Stream[
                         Traversable[(Option[(Unbounded[Instant], Event)],
                                      intersperseObsoleteEvents.EventId)]],
-                      asOfsIterator: Iterator[Instant],
-                      world: World[Int]): Stream[() => Revision] = {
+      asOfsIterator: Iterator[Instant],
+      world: World): Stream[() => Revision] = {
     for {
       pieceOfHistory <- bigShuffledHistoryOverLotsOfThings
       _ = require(
@@ -916,20 +896,27 @@ trait WorldSpecSupport extends Assertions {
 }
 
 trait WorldResource {
-  val worldResourceGenerator: Gen[ManagedResource[World[Int]]]
+  val worldResourceGenerator: Gen[ManagedResource[World]]
 }
 
 trait WorldReferenceImplementationResource extends WorldResource {
-  val worldResourceGenerator: Gen[ManagedResource[World[Int]]] =
+  val worldResourceGenerator: Gen[ManagedResource[World]] =
     Gen.const(
-      makeManagedResource(new WorldReferenceImplementation[Int]
-      with WorldContracts[Int])(_ => {})(List.empty))
+      makeManagedResource(new WorldReferenceImplementation with WorldContracts)(
+        _ => {})(List.empty))
+}
+
+trait WorldEfficientInMemoryImplementationResource extends WorldResource {
+  val worldResourceGenerator: Gen[ManagedResource[World]] =
+    Gen.const(
+      makeManagedResource(new WorldEfficientInMemoryImplementation
+      with WorldContracts)(_ => {})(List.empty))
 }
 
 trait WorldRedisBasedImplementationResource
     extends WorldResource
     with RedisServerFixture {
-  val worldResourceGenerator: Gen[ManagedResource[World[Int]]] =
+  val worldResourceGenerator: Gen[ManagedResource[World]] =
     Gen.const {
       for {
         redisClient <- makeManagedResource(
@@ -937,9 +924,9 @@ trait WorldRedisBasedImplementationResource
             RedisURI.Builder.redis("localhost", redisServerPort).build()))(
           _.shutdown())(List.empty)
         worldResource <- makeManagedResource(
-          new WorldRedisBasedImplementation[Int](redisClient,
-                                                 UUID.randomUUID().toString)
-          with WorldContracts[Int])(_ => {})(List.empty)
+          new WorldRedisBasedImplementation(redisClient,
+                                            UUID.randomUUID().toString)
+          with WorldContracts)(_ => {})(List.empty)
       } yield worldResource
     }
 }

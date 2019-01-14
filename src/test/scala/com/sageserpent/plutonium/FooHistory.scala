@@ -1,8 +1,5 @@
 package com.sageserpent.plutonium
 
-/**
-  * Created by Gerard on 21/09/2015.
-  */
 abstract class FooHistory extends History {
   type Id = String
 

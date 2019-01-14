@@ -4,9 +4,6 @@ import org.scalatest.TestSuite
 import redis.embedded.RedisServer
 import resource._
 
-/**
-  * Created by Gerard on 02/06/2016.
-  */
 trait RedisServerFixture extends TestSuite {
   val redisServerPort: Int
 

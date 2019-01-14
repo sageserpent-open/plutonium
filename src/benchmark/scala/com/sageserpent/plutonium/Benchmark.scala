@@ -3,55 +3,74 @@ package com.sageserpent.plutonium
 import java.time.Instant
 
 import com.sageserpent.americium.randomEnrichment._
-import org.scalameter.{Bench, Gen}
 
-object Benchmark extends Bench.LocalTime {
-  type EventId = Int
+import scala.util.Random
 
-  abstract class Thing {
-    var property: Int = 0
-
-    var reference: Option[Thing] = None
+trait Benchmark {
+  implicit class Enhancement(randomBehaviour: Random) {
+    def chooseOneOfRange(range: Range): Int =
+      range(randomBehaviour.chooseAnyNumberFromZeroToOneLessThan(range.size))
   }
 
-  val sizes = Gen.range("Number of bookings")(0, 2000, 50)
+  def activity(size: Int): World = {
+    if (0 == size % 300) println(s"*** Size: $size")
+    val randomBehaviour = new scala.util.Random(1368234L)
 
-  performance of "Bookings" in {
-    using(sizes) in { size =>
-      val randomBehaviour = new scala.util.Random(1368234L)
+    val eventIds: Range = 0 until 1 + (size / 10)
 
-      val eventIds = 0 until 1 + (size / 10)
+    val idSet: Range = 0 until 1 + (size / 5)
 
-      val idSet = 0 until 1 + (size / 5)
+    val world = new WorldEfficientInMemoryImplementation()
 
-      val world = new WorldReferenceImplementation[EventId]()
+    for (step <- 0 until size) {
+      val eventId = randomBehaviour.chooseOneOfRange(eventIds)
 
-      for (step <- 0 until size) {
-        val oneId     = randomBehaviour.chooseOneOf(idSet)
-        val anotherId = randomBehaviour.chooseOneOf(idSet)
+      val probabilityOfNotBackdatingAnEvent = 0 < randomBehaviour
+        .chooseAnyNumberFromZeroToOneLessThan(3)
 
-        val eventId = randomBehaviour.chooseOneOf(eventIds)
+      val theHourFromTheStart =
+        if (probabilityOfNotBackdatingAnEvent) step
+        else
+          step - randomBehaviour
+            .chooseAnyNumberFromOneTo(step / 3 min 20)
 
-        val theHourFromTheStart = 3600L * (if (0 < randomBehaviour
-                                                 .chooseAnyNumberFromZeroToOneLessThan(
-                                                   3)) step
-                                           else
-                                             randomBehaviour
-                                               .chooseAnyNumberFromZeroToOneLessThan(
-                                                 step))
+      val probabilityOfBookingANewOrCorrectingEvent = 0 < randomBehaviour
+        .chooseAnyNumberFromZeroToOneLessThan(5)
+
+      if (probabilityOfBookingANewOrCorrectingEvent) {
+        val oneId = randomBehaviour.chooseOneOfRange(idSet)
+
+        val anotherId = randomBehaviour.chooseOneOfRange(idSet)
+
         world.revise(
           eventId,
           Change.forTwoItems[Thing, Thing](
-            Instant.ofEpochSecond(theHourFromTheStart))(
+            Instant.ofEpochSecond(3600L * theHourFromTheStart))(
             oneId,
             anotherId,
             (oneThing, anotherThing) => {
-              oneThing.property = step
-              oneThing.reference = Some(anotherThing)
+              oneThing.property1 = step
+              oneThing.referTo(anotherThing)
             }),
           Instant.now()
         )
-      }
+      } else world.annul(eventId, Instant.now())
+
+      val onePastQueryRevision =
+        randomBehaviour.chooseAnyNumberFromZeroToOneLessThan(
+          1 + world.nextRevision)
+
+      val queryTime = Instant.ofEpochSecond(
+        3600L * randomBehaviour.chooseAnyNumberFromZeroToOneLessThan(
+          1 + theHourFromTheStart))
+
+      val scope = world.scopeFor(queryTime, onePastQueryRevision)
+
+      val queryId = randomBehaviour.chooseOneOfRange(idSet)
+
+      scope.render(Bitemporal.withId[Thing](queryId)).force
     }
+
+    world
   }
 }

@@ -1,62 +1,55 @@
-import com.lambdaworks.redis.{RedisClient, RedisURI}
-import rx.lang.scala.JavaConversions._
-import rx.lang.scala.Observable
-
-import scala.concurrent.duration._
 
 
-val redisClient = RedisClient.create(RedisURI.create("localhost", 6379))
+import de.sciss.fingertree.RangedSeq
 
-val redisClient2 = RedisClient.create(RedisURI.create("localhost", 6379))
+type Pair = (Int, Int)
 
-val redisApi = redisClient.connect().sync
-
-val redisApi2 = redisClient2.connect().sync
-
-redisApi.flushall()
-
-redisApi.watch("bar")
-
-redisApi2.set("bar", "1")
-
-redisApi.multi()
-
-redisApi.set("foo", "two")
-
-redisApi.set("bar", "hi")
-
-redisApi.exec()
-
-redisApi.get("foo")
-
-redisApi.get("bar")
-
-println("---------------------")
-
-val redisApi3 = redisClient.connect().reactive()
-
-
-val someBigReactiveMess = for {
-  _ <- toScalaObservable(redisApi3.watch("foo"))
-  _ <- toScalaObservable(redisApi3.set("foo", "bah"))
-  delayedMulti = toScalaObservable(redisApi3.multi())
-  stuff <- delayedMulti concatMap {
-    multi =>
-      val exec = toScalaObservable(redisApi3.exec())
-      val transaction = toScalaObservable(redisApi3.set("fool", "berry")) zip redisApi3.set("barred", "for life")
-
-      transaction zip exec
-  }
-} yield stuff
-
-someBigReactiveMess.toList.toBlocking.single
+val rangedSeq = RangedSeq((1, 2), (-1, 5), (7, 10))(identity, implicitly[Ordering[Int]])
 
 
 
-redisApi.get("fool")
+rangedSeq.intersect(2).toList
 
-redisApi.get("barred")
+rangedSeq.filterIncludes((7, 7)).toList
 
-redisClient.shutdown()
+rangedSeq.filterOverlaps((2, 2)).toList
 
-redisClient2.shutdown()
+rangedSeq.includes(2)
+
+rangedSeq.interval
+
+val biggerRangedSeq = rangedSeq + (1, 45)
+
+biggerRangedSeq.interval
+
+biggerRangedSeq.intersect(2).toList
+
+biggerRangedSeq.filterIncludes((-1, -1)).toList
+
+biggerRangedSeq.filterOverlaps((2, 2)).toList
+
+biggerRangedSeq.includes(2)
+
+biggerRangedSeq - (1 -> 3)
+
+biggerRangedSeq - (1 -> 2)
+
+biggerRangedSeq - (1, 47)
+
+
+import scalaz.State
+import scalaz.StateT.stateMonad
+import scalaz.syntax.monad._
+
+implicit val s = stateMonad[String]
+
+import s.{put, get}
+
+val stuff: State[String, String] = for {
+  x <- 1.pure
+  y <- 2.pure
+  _ <- put("Wiggies")
+  result <- get
+} yield "Hello"
+
+stuff.run("")

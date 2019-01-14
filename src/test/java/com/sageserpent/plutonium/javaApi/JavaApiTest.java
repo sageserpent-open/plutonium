@@ -1,7 +1,7 @@
 package com.sageserpent.plutonium.javaApi;
 
 import com.sageserpent.americium.NegativeInfinity;
-import com.sageserpent.plutonium.WorldReferenceImplementation;
+import com.sageserpent.plutonium.WorldEfficientInMemoryImplementation;
 import org.junit.Test;
 
 import java.time.Instant;
@@ -12,7 +12,7 @@ import java.time.Instant;
 public class JavaApiTest {
     @Test
     public void smokeTestTheApi() {
-        World<Integer> world = new WorldReferenceImplementation<>();
+        World world = new WorldEfficientInMemoryImplementation();
 
         final NegativeInfinity<Instant> atTheBeginningOfTime = NegativeInfinity.apply();
 
@@ -125,7 +125,7 @@ public class JavaApiTest {
             final Iterable<Account> exampleIterable = scope.renderAsIterable(Bitemporal.withId("Fred", Account.class));
 
             assert !exampleIterable.iterator().hasNext();
-        }
+    }
 
         {
             int followingRevision = 5;
@@ -135,6 +135,6 @@ public class JavaApiTest {
             final Account account = scope.render(Bitemporal.withId("Fred", Account.class)).head();
 
             assert 3.0 == account.getCash();
-        }
+}
     }
 }

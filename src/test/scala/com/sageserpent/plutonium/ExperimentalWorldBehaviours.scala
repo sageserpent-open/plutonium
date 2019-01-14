@@ -12,19 +12,16 @@ import org.scalacheck.Prop.BooleanOperators
 import com.sageserpent.americium.randomEnrichment._
 import resource.ManagedResource
 
-/**
-  * Created by Gerard on 13/02/2016.
-  */
 trait ExperimentalWorldBehaviours
     extends FlatSpec
     with Matchers
     with Checkers
     with WorldSpecSupport { this: WorldResource =>
   def experimentalWorldBehaviour = {
-    def scopeAndExperimentalWorldFor(baseWorld: World[Int],
+    def scopeAndExperimentalWorldFor(baseWorld: World,
                                      forkWhen: Unbounded[Instant],
                                      forkAsOf: Instant,
-                                     seed: Long): (Scope, World[Int]) = {
+                                     seed: Long): (Scope, World) = {
       val random = new Random(seed)
 
       if (random.nextBoolean()) {
@@ -661,6 +658,15 @@ class ExperimentalWorldSpecUsingWorldReferenceImplementation
     PropertyCheckConfig(maxSize = 20)
 
   "An experimental world (using the world reference implementation)" should behave like experimentalWorldBehaviour
+}
+
+class ExperimentalWorldSpecUsingWorldEfficientInMemoryImplementation
+    extends ExperimentalWorldBehaviours
+    with WorldEfficientInMemoryImplementationResource {
+  implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
+    PropertyCheckConfig(maxSize = 20)
+
+  "An experimental world (using the world efficient in-memory implementation)" should behave like experimentalWorldBehaviour
 }
 
 class ExperimentalWorldSpecUsingWorldRedisBasedImplementation
