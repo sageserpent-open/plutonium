@@ -15,6 +15,8 @@ import com.sageserpent.plutonium.javaApi.World;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 import java.util.stream.StreamSupport;
 
 public class DeliveringPackages {
@@ -24,13 +26,16 @@ public class DeliveringPackages {
         // Let's get hold of a world to model things in.
         boolean justADemo = true;
 
+        Executor executor = Executors.newSingleThreadExecutor();
+
         RedisClient redisClient = RedisClient.create();
 
         try {
             World world = justADemo ?
                     new WorldEfficientInMemoryImplementation() :
                     new WorldRedisBasedImplementation(redisClient,
-                            "TheBigStoreOfDataOwnedByTheDispatchLineOfBusiness");
+                            "TheBigStoreOfDataOwnedByTheDispatchLineOfBusiness",
+                            executor);
 
             {
                 // Make a query at the end of time for any kind of thing that

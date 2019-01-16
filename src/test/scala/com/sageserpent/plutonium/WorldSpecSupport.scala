@@ -2,6 +2,7 @@ package com.sageserpent.plutonium
 
 import java.time.Instant
 import java.util.UUID
+import java.util.concurrent.Executors
 
 import com.lambdaworks.redis.{RedisClient, RedisURI}
 import com.sageserpent.americium
@@ -921,9 +922,12 @@ trait WorldRedisBasedImplementationResource
           RedisClient.create(
             RedisURI.Builder.redis("localhost", redisServerPort).build()))(
           _.shutdown())(List.empty)
+        executionService <- makeManagedResource(
+          Executors.newFixedThreadPool(5))(_.shutdown)(List.empty)
         worldResource <- makeManagedResource(
           new WorldRedisBasedImplementation(redisClient,
-                                            UUID.randomUUID().toString)
+                                            UUID.randomUUID().toString,
+                                            executionService)
           with WorldContracts)(_ => {})(List.empty)
       } yield worldResource
     }

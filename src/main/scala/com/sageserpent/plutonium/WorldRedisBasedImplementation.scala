@@ -2,6 +2,7 @@ package com.sageserpent.plutonium
 
 import java.nio.ByteBuffer
 import java.time.Instant
+import java.util.concurrent.Executor
 import java.util.{NoSuchElementException, UUID}
 
 import com.esotericsoftware.kryo.Kryo
@@ -20,9 +21,8 @@ import io.netty.handler.codec.EncoderException
 import scala.Ordering.Implicits._
 import scala.collection.JavaConverters._
 import scala.compat.java8.FutureConverters._
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.Duration
-import scala.concurrent.{Await, Future}
+import scala.concurrent.{Await, ExecutionContext, Future}
 
 object WorldRedisBasedImplementation {
   import UniqueItemSpecificationSerializationSupport.SpecialSerializer
@@ -58,13 +58,17 @@ object WorldRedisBasedImplementation {
 // moves too much data back and forth across the Redis connection to do client side processing. It tolerated as a demonstration, and should
 // not be considered fit for anything else.
 class WorldRedisBasedImplementation(redisClient: RedisClient,
-                                    identityGuid: String)
+                                    identityGuid: String,
+                                    executor: Executor)
     extends WorldInefficientImplementationCodeFactoring {
   parentWorld =>
 
   import World._
   import WorldImplementationCodeFactoring._
   import WorldRedisBasedImplementation._
+
+  implicit val executionContext: ExecutionContext =
+    ExecutionContext.fromExecutor(executor)
 
   var redisApi: RedisAsyncCommands[String, Any] = createRedisApi()
 
@@ -92,7 +96,8 @@ class WorldRedisBasedImplementation(redisClient: RedisClient,
     new WorldRedisBasedImplementation(
       redisClient = parentWorld.redisClient,
       identityGuid =
-        s"${parentWorld.identityGuid}-experimental-${UUID.randomUUID()}") {
+        s"${parentWorld.identityGuid}-experimental-${UUID.randomUUID()}",
+      executor) {
       val baseWorld                            = parentWorld
       val numberOfRevisionsInCommon            = scope.nextRevision
       val cutoffWhenAfterWhichHistoriesDiverge = scope.when
@@ -152,23 +157,23 @@ class WorldRedisBasedImplementation(redisClient: RedisClient,
       val eventDatumsFuture = for {
         _           <- redisApi.watch(asOfsKey).toScala
         eventDatums <- pertinentEventDatumsFuture(cutoffRevision)
-        _ <- redisApi.multi().toScala zip
+        (_, transactionCommands) <- redisApi.multi().toScala zip
           // NASTY HACK: there needs to be at least one Redis command sent in a
           // transaction for the result of the 'exec' command to yield a difference
           // between an aborted transaction and a completed one. Yuk!
           redisApi.llen(asOfsKey).toScala zip
           redisApi.exec().toScala
-      } yield eventTimelineFrom(eventDatums)
+      } yield
+        if (!transactionCommands.isEmpty) eventTimelineFrom(eventDatums)
+        else
+          throw new RuntimeException(
+            "Concurrent revision attempt detected in query.")
 
       Await.result(eventDatumsFuture, Duration.Inf)
     } catch {
       case exception: EncoderException =>
         recoverRedisApi
         throw exception.getCause
-
-      case _: NoSuchElementException =>
-        throw new RuntimeException(
-          "Concurrent revision attempt detected in query.")
     }
 
   type EventIdInclusion = EventId => Boolean
@@ -272,7 +277,7 @@ class WorldRedisBasedImplementation(redisClient: RedisClient,
                 .toScala
         })
 
-        _ <- redisApi.multi().toScala zip
+        (_, transactionCommands) <- redisApi.multi().toScala zip
           Future.sequence(newEventDatums map {
             case (eventId, eventDatum) =>
               val eventCorrectionsKey = eventCorrectionsKeyFrom(eventId)
@@ -288,17 +293,17 @@ class WorldRedisBasedImplementation(redisClient: RedisClient,
                   .toScala
           }) zip redisApi.rpush(asOfsKey, asOf).toScala zip
           redisApi.exec().toScala
-      } yield nextRevisionPriorToUpdate
+      } yield
+        if (!transactionCommands.isEmpty) nextRevisionPriorToUpdate
+        else
+          throw new RuntimeException(
+            "Concurrent revision attempt detected in revision.")
 
       Await.result(revisionFuture, Duration.Inf)
     } catch {
       case exception: EncoderException =>
         recoverRedisApi
         throw exception.getCause
-
-      case _: NoSuchElementException =>
-        throw new RuntimeException(
-          "Concurrent revision attempt detected in revision.")
     }
   }
 

@@ -2,6 +2,7 @@ package com.sageserpent.plutonium
 
 import java.time.Instant
 import java.util
+import java.util.concurrent.Executors
 import java.util.{Optional, UUID}
 
 import com.lambdaworks.redis.{RedisClient, RedisURI}
@@ -498,12 +499,16 @@ class WorldStateSharingSpecUsingWorldRedisBasedImplementation
         List.empty)
       redisClientSet <- makeManagedResource(Set.empty[RedisClient])(
         redisClientSet => redisClientSet.foreach(_.shutdown()))(List.empty)
+      executionService <- makeManagedResource(Executors.newWorkStealingPool())(
+        _.shutdown)(List.empty)
     } yield {
       val redisClient = RedisClient.create(
         RedisURI.Builder.redis("localhost", redisServerPort).build())
       redisClientSet += redisClient
       () =>
-        new WorldRedisBasedImplementation(redisClient, sharedGuid)
+        new WorldRedisBasedImplementation(redisClient,
+                                          sharedGuid,
+                                          executionService)
     })
 
   "multiple world instances representing the same world (using the world Redis-based implementation)" should behave like multipleInstancesRepresentingTheSameWorldBehaviour
