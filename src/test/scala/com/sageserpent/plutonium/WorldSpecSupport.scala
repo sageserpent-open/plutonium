@@ -8,19 +8,17 @@ import com.sageserpent.americium
 import com.sageserpent.americium._
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.seqEnrichment._
-import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.World._
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.Assertions
 import resource._
+import scalaz.std.stream
 
 import scala.collection.JavaConversions._
 import scala.collection.Searching._
-import scala.collection.immutable
 import scala.collection.immutable.TreeMap
 import scala.reflect.runtime.universe._
 import scala.util.Random
-import scalaz.std.stream
 
 object WorldSpecSupport {
   val changeError = new RuntimeException("Error in making a change.")
@@ -717,8 +715,8 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
   def recordEventsInWorld(bigShuffledHistoryOverLotsOfThings: Stream[
                             Traversable[(Option[(Unbounded[Instant], Event)],
                                          intersperseObsoleteEvents.EventId)]],
-      asOfs: List[Instant],
-      world: World) = {
+                          asOfs: List[Instant],
+                          world: World) = {
     revisionActions(bigShuffledHistoryOverLotsOfThings, asOfs, world) map (_.apply) force // Actually a piece of imperative code that looks functional - 'world' is being mutated as a side-effect; but the revisions are harvested functionally.
   }
 
@@ -751,8 +749,8 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
   def revisionActions(bigShuffledHistoryOverLotsOfThings: Stream[
                         Traversable[(Option[(Unbounded[Instant], Event)],
                                      intersperseObsoleteEvents.EventId)]],
-      asOfs: List[Instant],
-      world: World): Stream[() => Revision] = {
+                      asOfs: List[Instant],
+                      world: World): Stream[() => Revision] = {
     assert(bigShuffledHistoryOverLotsOfThings.length == asOfs.length)
     revisionActions(bigShuffledHistoryOverLotsOfThings, asOfs.iterator, world)
   }
@@ -760,8 +758,8 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
   def revisionActions(bigShuffledHistoryOverLotsOfThings: Stream[
                         Traversable[(Option[(Unbounded[Instant], Event)],
                                      intersperseObsoleteEvents.EventId)]],
-      asOfsIterator: Iterator[Instant],
-      world: World): Stream[() => Revision] = {
+                      asOfsIterator: Iterator[Instant],
+                      world: World): Stream[() => Revision] = {
     for {
       pieceOfHistory <- bigShuffledHistoryOverLotsOfThings
       _ = require(
