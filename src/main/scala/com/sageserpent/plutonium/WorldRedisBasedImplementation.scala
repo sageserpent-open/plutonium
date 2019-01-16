@@ -276,21 +276,19 @@ class WorldRedisBasedImplementation(redisClient: RedisClient,
                         timeToExpireGarbageInSeconds)
                 .toScala
         })
-
         (_, transactionCommands) <- redisApi.multi().toScala zip
-          Future.sequence(newEventDatums map {
-            case (eventId, eventDatum) =>
-              val eventCorrectionsKey = eventCorrectionsKeyFrom(eventId)
+          Future.sequence(newEventDatums.keys map { eventId =>
+            val eventCorrectionsKey = eventCorrectionsKeyFrom(eventId)
+            redisApi
+              .zunionstore(eventCorrectionsKey,
+                           eventCorrectionsKey,
+                           s"${eventCorrectionsKey}:${transactionGuid}")
+              .toScala zip
               redisApi
-                .zunionstore(eventCorrectionsKey,
-                             eventCorrectionsKey,
-                             s"${eventCorrectionsKey}:${transactionGuid}")
-                .toScala zip
-                redisApi
-                  .sunionstore(eventIdsKey,
-                               eventIdsKey,
-                               s"${eventIdsKey}:${transactionGuid}")
-                  .toScala
+                .sunionstore(eventIdsKey,
+                             eventIdsKey,
+                             s"${eventIdsKey}:${transactionGuid}")
+                .toScala
           }) zip redisApi.rpush(asOfsKey, asOf).toScala zip
           redisApi.exec().toScala
       } yield

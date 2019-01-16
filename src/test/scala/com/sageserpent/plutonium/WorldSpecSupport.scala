@@ -923,7 +923,7 @@ trait WorldRedisBasedImplementationResource
             RedisURI.Builder.redis("localhost", redisServerPort).build()))(
           _.shutdown())(List.empty)
         executionService <- makeManagedResource(
-          Executors.newFixedThreadPool(5))(_.shutdown)(List.empty)
+          Executors.newFixedThreadPool(20))(_.shutdown)(List.empty)
         worldResource <- makeManagedResource(
           new WorldRedisBasedImplementation(redisClient,
                                             UUID.randomUUID().toString,
