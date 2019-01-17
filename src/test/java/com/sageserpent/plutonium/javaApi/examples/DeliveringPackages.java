@@ -1,7 +1,6 @@
 package com.sageserpent.plutonium.javaApi.examples;
 
 import com.google.common.collect.ImmutableMap;
-import com.lambdaworks.redis.RedisClient;
 import com.sageserpent.americium.NegativeInfinity;
 import com.sageserpent.americium.PositiveInfinity;
 import com.sageserpent.plutonium.Event;
@@ -11,6 +10,7 @@ import com.sageserpent.plutonium.javaApi.Bitemporal;
 import com.sageserpent.plutonium.javaApi.Change;
 import com.sageserpent.plutonium.javaApi.Scope;
 import com.sageserpent.plutonium.javaApi.World;
+import io.lettuce.core.RedisClient;
 
 import java.time.Instant;
 import java.util.Map;

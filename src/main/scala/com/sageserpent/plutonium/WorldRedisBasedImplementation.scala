@@ -2,20 +2,20 @@ package com.sageserpent.plutonium
 
 import java.nio.ByteBuffer
 import java.time.Instant
+import java.util.UUID
 import java.util.concurrent.Executor
-import java.util.{NoSuchElementException, UUID}
 
 import com.esotericsoftware.kryo.Kryo
-import com.lambdaworks.redis.api.async.RedisAsyncCommands
-import com.lambdaworks.redis.codec.{ByteArrayCodec, RedisCodec, Utf8StringCodec}
-import com.lambdaworks.redis.{
+import com.sageserpent.americium.{PositiveInfinity, Unbounded}
+import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
+import com.twitter.chill.{KryoPool, ScalaKryoInstantiator}
+import io.lettuce.core.api.async.RedisAsyncCommands
+import io.lettuce.core.codec.{ByteArrayCodec, RedisCodec, Utf8StringCodec}
+import io.lettuce.core.{
   RedisClient,
   Limit => LettuceLimit,
   Range => LettuceRange
 }
-import com.sageserpent.americium.{PositiveInfinity, Unbounded}
-import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
-import com.twitter.chill.{KryoPool, ScalaKryoInstantiator}
 import io.netty.handler.codec.EncoderException
 
 import scala.Ordering.Implicits._

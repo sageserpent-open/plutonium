@@ -5,10 +5,10 @@ import java.util
 import java.util.concurrent.Executors
 import java.util.{Optional, UUID}
 
-import com.lambdaworks.redis.{RedisClient, RedisURI}
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.{PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.World.Revision
+import io.lettuce.core.{RedisClient, RedisURI}
 import org.scalacheck.Prop.BooleanOperators
 import org.scalacheck.{Gen, Prop, Test}
 import org.scalatest.prop.Checkers
