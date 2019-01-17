@@ -493,13 +493,13 @@ class WorldStateSharingSpecUsingWorldRedisBasedImplementation
     Gen.const(for {
       sharedGuid <- makeManagedResource(UUID.randomUUID().toString)(_ => {})(
         List.empty)
+      executionService <- makeManagedResource(Executors.newFixedThreadPool(20))(
+        _.shutdown)(List.empty)
       redisClientSet <- makeManagedResource(mutable.Set.empty[RedisClient])(
         _.foreach(_.shutdown()))(List.empty)
       worldSet <- makeManagedResource(
         mutable.Set.empty[WorldRedisBasedImplementation])(_.foreach(_.close()))(
         List.empty)
-      executionService <- makeManagedResource(Executors.newFixedThreadPool(20))(
-        _.shutdown)(List.empty)
     } yield {
       val redisClient = RedisClient.create(
         RedisURI.Builder.redis("localhost", redisServerPort).build())

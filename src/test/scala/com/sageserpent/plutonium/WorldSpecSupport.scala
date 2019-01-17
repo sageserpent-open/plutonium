@@ -918,12 +918,12 @@ trait WorldRedisBasedImplementationResource
   val worldResourceGenerator: Gen[ManagedResource[World]] =
     Gen.const {
       for {
+        executionService <- makeManagedResource(
+          Executors.newFixedThreadPool(20))(_.shutdown)(List.empty)
         redisClient <- makeManagedResource(
           RedisClient.create(
             RedisURI.Builder.redis("localhost", redisServerPort).build()))(
           _.shutdown())(List.empty)
-        executionService <- makeManagedResource(
-          Executors.newFixedThreadPool(20))(_.shutdown)(List.empty)
         worldResource <- makeManagedResource(
           new WorldRedisBasedImplementation(redisClient,
                                             UUID.randomUUID().toString,
