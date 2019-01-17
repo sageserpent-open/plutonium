@@ -2,7 +2,6 @@ package com.sageserpent.plutonium
 
 import java.time.Instant
 import java.util
-import java.util.concurrent.Executors
 import java.util.{Optional, UUID}
 
 import com.sageserpent.americium.randomEnrichment._
@@ -493,8 +492,6 @@ class WorldStateSharingSpecUsingWorldRedisBasedImplementation
     Gen.const(for {
       sharedGuid <- makeManagedResource(UUID.randomUUID().toString)(_ => {})(
         List.empty)
-      executionService <- makeManagedResource(Executors.newFixedThreadPool(20))(
-        _.shutdown)(List.empty)
       redisClientSet <- makeManagedResource(mutable.Set.empty[RedisClient])(
         _.foreach(_.shutdown()))(List.empty)
       worldSet <- makeManagedResource(
@@ -506,9 +503,7 @@ class WorldStateSharingSpecUsingWorldRedisBasedImplementation
       redisClientSet += redisClient
 
       def worldFactory() = {
-        val world = new WorldRedisBasedImplementation(redisClient,
-                                                      sharedGuid,
-                                                      executionService)
+        val world = new WorldRedisBasedImplementation(redisClient, sharedGuid)
         worldSet += world
         world
       }

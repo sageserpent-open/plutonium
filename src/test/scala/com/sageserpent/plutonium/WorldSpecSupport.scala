@@ -2,7 +2,6 @@ package com.sageserpent.plutonium
 
 import java.time.Instant
 import java.util.UUID
-import java.util.concurrent.Executors
 
 import com.sageserpent.americium
 import com.sageserpent.americium._
@@ -918,16 +917,13 @@ trait WorldRedisBasedImplementationResource
   val worldResourceGenerator: Gen[ManagedResource[World]] =
     Gen.const {
       for {
-        executionService <- makeManagedResource(
-          Executors.newFixedThreadPool(20))(_.shutdown)(List.empty)
         redisClient <- makeManagedResource(
           RedisClient.create(
             RedisURI.Builder.redis("localhost", redisServerPort).build()))(
           _.shutdown())(List.empty)
         worldResource <- makeManagedResource(
           new WorldRedisBasedImplementation(redisClient,
-                                            UUID.randomUUID().toString,
-                                            executionService)
+                                            UUID.randomUUID().toString)
           with WorldContracts)(_.close())(List.empty)
       } yield worldResource
     }
