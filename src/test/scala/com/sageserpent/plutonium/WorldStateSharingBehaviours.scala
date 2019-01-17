@@ -499,7 +499,7 @@ class WorldStateSharingSpecUsingWorldRedisBasedImplementation
         List.empty)
       redisClientSet <- makeManagedResource(Set.empty[RedisClient])(
         redisClientSet => redisClientSet.foreach(_.shutdown()))(List.empty)
-      executionService <- makeManagedResource(Executors.newFixedThreadPool(20))(
+      executionService <- makeManagedResource(Executors.newFixedThreadPool(5))(
         _.shutdown)(List.empty)
     } yield {
       val redisClient = RedisClient.create(
