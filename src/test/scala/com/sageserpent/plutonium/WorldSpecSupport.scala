@@ -928,7 +928,7 @@ trait WorldRedisBasedImplementationResource
           new WorldRedisBasedImplementation(redisClient,
                                             UUID.randomUUID().toString,
                                             executionService)
-          with WorldContracts)(_ => {})(List.empty)
+          with WorldContracts)(_.close())(List.empty)
       } yield worldResource
     }
 }

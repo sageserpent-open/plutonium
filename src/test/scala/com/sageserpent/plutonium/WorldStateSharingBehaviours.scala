@@ -15,7 +15,7 @@ import org.scalatest.prop.Checkers
 import org.scalatest.{FlatSpec, Matchers}
 import resource._
 
-import scala.collection.mutable.Set
+import scala.collection.mutable
 import scala.util.Random
 
 trait WorldStateSharingBehaviours
@@ -36,7 +36,7 @@ trait WorldStateSharingBehaviours
           extends World {
         val random = new scala.util.Random(seed)
 
-        val worlds: Set[World] = Set.empty
+        val worlds: mutable.Set[World] = mutable.Set.empty
 
         def world: World = {
           worlds.synchronized {
@@ -227,7 +227,7 @@ trait WorldStateSharingBehaviours
       check(
         Prop.forAllNoShrink(testCaseGenerator) {
           case (worldSharingCommonStateFactoryResource,
-                recordingsGroupedById,
+                _,
                 bigShuffledHistoryOverLotsOfThings,
                 asOfs) =>
             worldSharingCommonStateFactoryResource acquireAndGet {
@@ -340,7 +340,7 @@ trait WorldStateSharingBehaviours
                       universalSetOfIds map (id =>
                         id -> (if (idSet.contains(id))
                                  Some(Change.forOneItem[Item](id, {
-                                   (item: Item) =>
+                                   item: Item =>
                                      if (ascending)
                                        item.property = id
                                      else
@@ -378,9 +378,6 @@ trait WorldStateSharingBehaviours
 
       val idSequenceLength = 10
 
-      val universalSetOfIds = scala.collection.immutable
-        .Set(0 until (idSequenceLength * numberOfDistinctIdSequences): _*)
-
       val testCaseGenerator = for {
         worldSharingCommonStateFactoryResource <- worldSharingCommonStateFactoryResourceGenerator
         asOfs                                  <- Gen.nonEmptyListOf(instantGenerator) map (_.sorted)
@@ -403,9 +400,8 @@ trait WorldStateSharingBehaviours
                         0 until idSequenceLength map (index % numberOfDistinctIdSequences + numberOfDistinctIdSequences * _) map (
                             id =>
                               id ->
-                                Some(Change.forOneItem[Item](id, {
-                                  (item: Item) =>
-                                    item.property = index
+                                Some(Change.forOneItem[Item](id, { item: Item =>
+                                  item.property = index
                                 }))) toMap,
                         asOfsIterator.next()
                       )
@@ -497,18 +493,26 @@ class WorldStateSharingSpecUsingWorldRedisBasedImplementation
     Gen.const(for {
       sharedGuid <- makeManagedResource(UUID.randomUUID().toString)(_ => {})(
         List.empty)
-      redisClientSet <- makeManagedResource(Set.empty[RedisClient])(
-        redisClientSet => redisClientSet.foreach(_.shutdown()))(List.empty)
+      redisClientSet <- makeManagedResource(mutable.Set.empty[RedisClient])(
+        _.foreach(_.shutdown()))(List.empty)
+      worldSet <- makeManagedResource(
+        mutable.Set.empty[WorldRedisBasedImplementation])(_.foreach(_.close()))(
+        List.empty)
       executionService <- makeManagedResource(Executors.newFixedThreadPool(20))(
         _.shutdown)(List.empty)
     } yield {
       val redisClient = RedisClient.create(
         RedisURI.Builder.redis("localhost", redisServerPort).build())
       redisClientSet += redisClient
-      () =>
-        new WorldRedisBasedImplementation(redisClient,
-                                          sharedGuid,
-                                          executionService)
+
+      def worldFactory() = {
+        val world = new WorldRedisBasedImplementation(redisClient,
+                                                      sharedGuid,
+                                                      executionService)
+        worldSet += world
+        world
+      }
+      worldFactory _
     })
 
   "multiple world instances representing the same world (using the world Redis-based implementation)" should behave like multipleInstancesRepresentingTheSameWorldBehaviour

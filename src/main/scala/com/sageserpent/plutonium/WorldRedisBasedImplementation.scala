@@ -78,6 +78,13 @@ class WorldRedisBasedImplementation(redisClient: RedisClient,
       .connect(new RedisCodecDelegatingKeysToStandardCodec[Value]())
       .async()
 
+  def close(): Unit = {
+    generalRedisCommandsApi.getStatefulConnection.close()
+    redisCommandsApiForEventId.getStatefulConnection.close()
+    redisCommandsApiForEventData.getStatefulConnection.close()
+    redisCommandsApiForInstant.getStatefulConnection.close()
+  }
+
   var generalRedisCommandsApi: RedisAsyncCommands[String, Any] =
     createRedisCommandsApi()
   var redisCommandsApiForEventId: RedisAsyncCommands[String, EventId] =
@@ -318,10 +325,7 @@ class WorldRedisBasedImplementation(redisClient: RedisClient,
   }
 
   private def recoverRedisApi = {
-    generalRedisCommandsApi.getStatefulConnection.close()
-    redisCommandsApiForEventId.getStatefulConnection.close()
-    redisCommandsApiForEventData.getStatefulConnection.close()
-    redisCommandsApiForInstant.getStatefulConnection.close()
+    close()
 
     generalRedisCommandsApi = createRedisCommandsApi()
     redisCommandsApiForEventId = createRedisCommandsApi()
