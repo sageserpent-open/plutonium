@@ -484,7 +484,7 @@ class WorldStateSharingSpecUsingWorldRedisBasedImplementation
   val redisServerPort: Int = 6451
 
   val testParameters: Test.Parameters =
-    Test.Parameters.defaultVerbose.withMaxSize(30).withMinSuccessfulTests(25)
+    Test.Parameters.defaultVerbose.withMaxSize(30).withMinSuccessfulTests(15)
 
   val numberOfConcurrentQueriesPerRevision: Revision = 20
 

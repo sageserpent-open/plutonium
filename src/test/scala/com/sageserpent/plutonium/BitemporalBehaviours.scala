@@ -845,7 +845,7 @@ class BitemporalSpecUsingWorldRedisBasedImplementation
   val redisServerPort = 6453
 
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
-    PropertyCheckConfig(maxSize = 10)
+    PropertyCheckConfig(maxSize = 10, minSuccessful = 20)
 
   "The class Bitemporal (using the world Redis-based implementation)" should behave like bitemporalBehaviour
 

@@ -675,7 +675,7 @@ class ExperimentalWorldSpecUsingWorldRedisBasedImplementation
   val redisServerPort = 6452
 
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
-    PropertyCheckConfig(maxSize = 10)
+    PropertyCheckConfig(maxSize = 10, minSuccessful = 25)
 
   "An experimental world (using the world Redis-based implementation)" should behave like experimentalWorldBehaviour
 }
