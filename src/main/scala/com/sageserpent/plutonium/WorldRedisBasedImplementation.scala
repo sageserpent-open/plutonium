@@ -2,14 +2,15 @@ package com.sageserpent.plutonium
 
 import java.nio.ByteBuffer
 import java.time.Instant
+import java.util.UUID
 import java.util.concurrent.Executor
-import java.util.{NoSuchElementException, UUID}
 
 import com.esotericsoftware.kryo.Kryo
 import com.lambdaworks.redis.api.async.RedisAsyncCommands
 import com.lambdaworks.redis.codec.{ByteArrayCodec, RedisCodec, Utf8StringCodec}
 import com.lambdaworks.redis.{
   RedisClient,
+  RedisURI,
   Limit => LettuceLimit,
   Range => LettuceRange
 }
@@ -59,7 +60,7 @@ object WorldRedisBasedImplementation {
 // NOTE: this implementation is an absolute travesty on so many levels. Apart from a very clumsy use of the Lettuce API, it also
 // moves too much data back and forth across the Redis connection to do client side processing. It tolerated as a demonstration, and should
 // not be considered fit for anything else.
-class WorldRedisBasedImplementation(redisClient: RedisClient,
+class WorldRedisBasedImplementation(redisUri: RedisURI,
                                     identityGuid: String,
                                     executor: Executor)
     extends WorldInefficientImplementationCodeFactoring {
@@ -72,28 +73,42 @@ class WorldRedisBasedImplementation(redisClient: RedisClient,
   implicit val executionContext: ExecutionContext =
     ExecutionContext.fromExecutor(executor)
 
-  private def createRedisCommandsApi[Value]()
-    : RedisAsyncCommands[String, Value] =
+  var redisClient: Option[RedisClient] = None
+
+  var generalRedisCommandsApi: Option[RedisAsyncCommands[String, Any]] = None
+  var redisCommandsApiForEventId: Option[RedisAsyncCommands[String, EventId]] =
+    None
+  var redisCommandsApiForEventData
+    : Option[RedisAsyncCommands[String, AbstractEventData]] = None
+  var redisCommandsApiForInstant: Option[RedisAsyncCommands[String, Instant]] =
+    None
+
+  private def createRedisCommandsApi[Value](
+      redisClient: RedisClient): RedisAsyncCommands[String, Value] =
     redisClient
       .connect(new RedisCodecDelegatingKeysToStandardCodec[Value]())
       .async()
 
-  def close(): Unit = {
-    generalRedisCommandsApi.getStatefulConnection.close()
-    redisCommandsApiForEventId.getStatefulConnection.close()
-    redisCommandsApiForEventData.getStatefulConnection.close()
-    redisCommandsApiForInstant.getStatefulConnection.close()
+  private def setUpRedis() = {
+    redisClient = Some(RedisClient.create(redisUri))
+
+    generalRedisCommandsApi = redisClient.map(createRedisCommandsApi)
+    redisCommandsApiForEventId = redisClient.map(createRedisCommandsApi)
+    redisCommandsApiForEventData = redisClient.map(createRedisCommandsApi)
+    redisCommandsApiForInstant = redisClient.map(createRedisCommandsApi)
   }
 
-  var generalRedisCommandsApi: RedisAsyncCommands[String, Any] =
-    createRedisCommandsApi()
-  var redisCommandsApiForEventId: RedisAsyncCommands[String, EventId] =
-    createRedisCommandsApi()
-  var redisCommandsApiForEventData
-    : RedisAsyncCommands[String, AbstractEventData] =
-    createRedisCommandsApi()
-  var redisCommandsApiForInstant: RedisAsyncCommands[String, Instant] =
-    createRedisCommandsApi()
+  setUpRedis()
+
+  def close(): Unit = {
+    generalRedisCommandsApi.foreach(_.getStatefulConnection.close())
+    redisCommandsApiForEventId.foreach(_.getStatefulConnection.close())
+    redisCommandsApiForEventData.foreach(_.getStatefulConnection.close())
+    redisCommandsApiForInstant.foreach(_.getStatefulConnection.close())
+
+    redisClient.foreach(_.shutdown())
+    redisClient = None
+  }
 
   val asOfsKey = s"${identityGuid}${redisNamespaceComponentSeparator}asOfs"
 
@@ -110,11 +125,11 @@ class WorldRedisBasedImplementation(redisClient: RedisClient,
     Await.result(nextRevisionFuture, Duration.Inf)
 
   protected def nextRevisionFuture: Future[Revision] =
-    generalRedisCommandsApi.llen(asOfsKey).toScala map (_.toInt)
+    generalRedisCommandsApi.get.llen(asOfsKey).toScala map (_.toInt)
 
   override def forkExperimentalWorld(scope: javaApi.Scope): World =
     new WorldRedisBasedImplementation(
-      redisClient = parentWorld.redisClient,
+      redisUri = parentWorld.redisUri,
       identityGuid =
         s"${parentWorld.identityGuid}-experimental-${UUID.randomUUID()}",
       executor) {
@@ -166,7 +181,7 @@ class WorldRedisBasedImplementation(redisClient: RedisClient,
     Await.result(revisionAsOfsFuture, Duration.Inf)
 
   protected def revisionAsOfsFuture: Future[Array[Instant]] =
-    redisCommandsApiForInstant
+    redisCommandsApiForInstant.get
       .lrange(asOfsKey, 0, -1)
       .toScala
       .map(_.asScala.toArray)
@@ -175,14 +190,16 @@ class WorldRedisBasedImplementation(redisClient: RedisClient,
       cutoffRevision: Revision): Seq[(Event, EventId)] =
     try {
       val eventDatumsFuture = for {
-        _           <- generalRedisCommandsApi.watch(asOfsKey).toScala
+        _           <- generalRedisCommandsApi.get.watch(asOfsKey).toScala
         eventDatums <- pertinentEventDatumsFuture(cutoffRevision)
-        (_, transactionCommands) <- generalRedisCommandsApi.multi().toScala zip
+        (_, transactionCommands) <- generalRedisCommandsApi.get
+          .multi()
+          .toScala zip
           // NASTY HACK: there needs to be at least one Redis command sent in a
           // transaction for the result of the 'exec' command to yield a difference
           // between an aborted transaction and a completed one. Yuk!
-          generalRedisCommandsApi.llen(asOfsKey).toScala zip
-          generalRedisCommandsApi.exec().toScala
+          generalRedisCommandsApi.get.llen(asOfsKey).toScala zip
+          generalRedisCommandsApi.get.exec().toScala
       } yield
         if (!transactionCommands.isEmpty) eventTimelineFrom(eventDatums)
         else
@@ -219,13 +236,13 @@ class WorldRedisBasedImplementation(redisClient: RedisClient,
                                    eventIdInclusion: EventIdInclusion)
     : Future[Seq[(EventId, AbstractEventData)]] = {
     for {
-      eventIds <- redisCommandsApiForEventId
+      eventIds <- redisCommandsApiForEventId.get
         .smembers(eventIdsKey)
         .toScala map (_.asScala.toSeq filter eventIdInclusion)
       datums <- Future.sequence(
         eventIds map (
             eventId =>
-              redisCommandsApiForEventData
+              redisCommandsApiForEventData.get
                 .zrevrangebyscore(
                   eventCorrectionsKeyFrom(eventId),
                   LettuceRange
@@ -259,7 +276,7 @@ class WorldRedisBasedImplementation(redisClient: RedisClient,
           Seq[(EventId, AbstractEventData)]) => Unit): Revision = {
     try {
       val revisionFuture = for {
-        _                         <- generalRedisCommandsApi.watch(asOfsKey).toScala
+        _                         <- generalRedisCommandsApi.get.watch(asOfsKey).toScala
         nextRevisionPriorToUpdate <- nextRevisionFuture
         newEventDatums: Map[EventId, AbstractEventData] = newEventDatumsFor(
           nextRevisionPriorToUpdate)
@@ -278,38 +295,40 @@ class WorldRedisBasedImplementation(redisClient: RedisClient,
             val eventCorrectionsKey          = eventCorrectionsKeyFrom(eventId)
             val timeToExpireGarbageInSeconds = 5
 
-            generalRedisCommandsApi
+            generalRedisCommandsApi.get
               .zadd(s"${eventCorrectionsKey}:${transactionGuid}",
                     nextRevisionPriorToUpdate.toDouble,
                     eventDatum)
               .toScala zip
-              generalRedisCommandsApi
+              generalRedisCommandsApi.get
                 .sadd(s"${eventIdsKey}:${transactionGuid}", eventId)
                 .toScala zip
-              generalRedisCommandsApi
+              generalRedisCommandsApi.get
                 .expire(s"${eventCorrectionsKey}:${transactionGuid}",
                         timeToExpireGarbageInSeconds)
                 .toScala zip
-              generalRedisCommandsApi
+              generalRedisCommandsApi.get
                 .expire(s"${eventIdsKey}:${transactionGuid}",
                         timeToExpireGarbageInSeconds)
                 .toScala
         })
-        (_, transactionCommands) <- generalRedisCommandsApi.multi().toScala zip
+        (_, transactionCommands) <- generalRedisCommandsApi.get
+          .multi()
+          .toScala zip
           Future.sequence(newEventDatums.keys map { eventId =>
             val eventCorrectionsKey = eventCorrectionsKeyFrom(eventId)
-            generalRedisCommandsApi
+            generalRedisCommandsApi.get
               .zunionstore(eventCorrectionsKey,
                            eventCorrectionsKey,
                            s"${eventCorrectionsKey}:${transactionGuid}")
               .toScala zip
-              redisCommandsApiForEventId
+              redisCommandsApiForEventId.get
                 .sunionstore(eventIdsKey,
                              eventIdsKey,
                              s"${eventIdsKey}:${transactionGuid}")
                 .toScala
-          }) zip generalRedisCommandsApi.rpush(asOfsKey, asOf).toScala zip
-          generalRedisCommandsApi.exec().toScala
+          }) zip generalRedisCommandsApi.get.rpush(asOfsKey, asOf).toScala zip
+          generalRedisCommandsApi.get.exec().toScala
       } yield
         if (!transactionCommands.isEmpty) nextRevisionPriorToUpdate
         else
@@ -327,12 +346,9 @@ class WorldRedisBasedImplementation(redisClient: RedisClient,
   private def recoverRedisApi = {
     close()
 
-    generalRedisCommandsApi = createRedisCommandsApi()
-    redisCommandsApiForEventId = createRedisCommandsApi()
-    redisCommandsApiForEventData = createRedisCommandsApi()
-    redisCommandsApiForInstant = createRedisCommandsApi()
+    setUpRedis()
 
-    generalRedisCommandsApi.unwatch()
-    generalRedisCommandsApi.discard()
+    generalRedisCommandsApi.foreach(_.unwatch())
+    generalRedisCommandsApi.foreach(_.discard())
   }
 }

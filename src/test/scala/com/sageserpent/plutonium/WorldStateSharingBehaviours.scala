@@ -5,7 +5,7 @@ import java.util
 import java.util.concurrent.Executors
 import java.util.{Optional, UUID}
 
-import com.lambdaworks.redis.{RedisClient, RedisURI}
+import com.lambdaworks.redis.RedisURI
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.{PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.World.Revision
@@ -493,20 +493,17 @@ class WorldStateSharingSpecUsingWorldRedisBasedImplementation
     Gen.const(for {
       sharedGuid <- makeManagedResource(UUID.randomUUID().toString)(_ => {})(
         List.empty)
-      redisClientSet <- makeManagedResource(mutable.Set.empty[RedisClient])(
-        _.foreach(_.shutdown()))(List.empty)
       worldSet <- makeManagedResource(
         mutable.Set.empty[WorldRedisBasedImplementation])(_.foreach(_.close()))(
         List.empty)
       executionService <- makeManagedResource(Executors.newFixedThreadPool(20))(
         _.shutdown)(List.empty)
     } yield {
-      val redisClient = RedisClient.create(
-        RedisURI.Builder.redis("localhost", redisServerPort).build())
-      redisClientSet += redisClient
+      val redisUri =
+        RedisURI.Builder.redis("localhost", redisServerPort).build()
 
       def worldFactory() = {
-        val world = new WorldRedisBasedImplementation(redisClient,
+        val world = new WorldRedisBasedImplementation(redisUri,
                                                       sharedGuid,
                                                       executionService)
         worldSet += world

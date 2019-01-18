@@ -4,7 +4,7 @@ import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.Executors
 
-import com.lambdaworks.redis.{RedisClient, RedisURI}
+import com.lambdaworks.redis.RedisURI
 import com.sageserpent.americium
 import com.sageserpent.americium._
 import com.sageserpent.americium.randomEnrichment._
@@ -918,14 +918,11 @@ trait WorldRedisBasedImplementationResource
   val worldResourceGenerator: Gen[ManagedResource[World]] =
     Gen.const {
       for {
-        redisClient <- makeManagedResource(
-          RedisClient.create(
-            RedisURI.Builder.redis("localhost", redisServerPort).build()))(
-          _.shutdown())(List.empty)
         executionService <- makeManagedResource(
           Executors.newFixedThreadPool(20))(_.shutdown)(List.empty)
+        redisURI = RedisURI.Builder.redis("localhost", redisServerPort).build()
         worldResource <- makeManagedResource(
-          new WorldRedisBasedImplementation(redisClient,
+          new WorldRedisBasedImplementation(redisURI,
                                             UUID.randomUUID().toString,
                                             executionService)
           with WorldContracts)(_.close())(List.empty)
