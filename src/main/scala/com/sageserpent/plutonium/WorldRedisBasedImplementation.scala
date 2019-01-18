@@ -65,7 +65,7 @@ class WorldRedisBasedImplementation(redisClient: RedisClient,
       redisClient.connect(redisCodecDelegatingKeysToStandardCodec).reactive()
   }
 
-  private def teardownRedisApi(): Unit = {
+  override def close(): Unit = {
     redisApi.close()
   }
 
@@ -295,7 +295,7 @@ class WorldRedisBasedImplementation(redisClient: RedisClient,
   }
 
   private def recoverRedisApi: Observable[String] = {
-    teardownRedisApi()
+    close()
     setupRedisApi()
     redisApi.unwatch()
     redisApi.discard()

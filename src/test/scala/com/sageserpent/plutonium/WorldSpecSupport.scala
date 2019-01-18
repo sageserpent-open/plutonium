@@ -717,8 +717,8 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
   def recordEventsInWorld(bigShuffledHistoryOverLotsOfThings: Stream[
                             Traversable[(Option[(Unbounded[Instant], Event)],
                                          intersperseObsoleteEvents.EventId)]],
-      asOfs: List[Instant],
-      world: World) = {
+                          asOfs: List[Instant],
+                          world: World) = {
     revisionActions(bigShuffledHistoryOverLotsOfThings, asOfs, world) map (_.apply) force // Actually a piece of imperative code that looks functional - 'world' is being mutated as a side-effect; but the revisions are harvested functionally.
   }
 
@@ -751,8 +751,8 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
   def revisionActions(bigShuffledHistoryOverLotsOfThings: Stream[
                         Traversable[(Option[(Unbounded[Instant], Event)],
                                      intersperseObsoleteEvents.EventId)]],
-      asOfs: List[Instant],
-      world: World): Stream[() => Revision] = {
+                      asOfs: List[Instant],
+                      world: World): Stream[() => Revision] = {
     assert(bigShuffledHistoryOverLotsOfThings.length == asOfs.length)
     revisionActions(bigShuffledHistoryOverLotsOfThings, asOfs.iterator, world)
   }
@@ -760,8 +760,8 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
   def revisionActions(bigShuffledHistoryOverLotsOfThings: Stream[
                         Traversable[(Option[(Unbounded[Instant], Event)],
                                      intersperseObsoleteEvents.EventId)]],
-      asOfsIterator: Iterator[Instant],
-      world: World): Stream[() => Revision] = {
+                      asOfsIterator: Iterator[Instant],
+                      world: World): Stream[() => Revision] = {
     for {
       pieceOfHistory <- bigShuffledHistoryOverLotsOfThings
       _ = require(
@@ -903,7 +903,7 @@ trait WorldReferenceImplementationResource extends WorldResource {
   val worldResourceGenerator: Gen[ManagedResource[World]] =
     Gen.const(
       makeManagedResource(new WorldReferenceImplementation with WorldContracts)(
-        _ => {})(List.empty))
+        _.close())(List.empty))
 }
 
 trait WorldEfficientInMemoryImplementationResource extends WorldResource {
