@@ -11,6 +11,8 @@ class WorldEfficientInMemoryImplementation(
     extends WorldImplementationCodeFactoring {
   def this() = this(Array.empty[(Instant, Timeline)], World.initialRevision)
 
+  override def close(): Unit = {}
+
   override def revisionAsOfs: Array[Instant] =
     timelineStorage.slice(0, numberOfTimelines).map(_._1)
 

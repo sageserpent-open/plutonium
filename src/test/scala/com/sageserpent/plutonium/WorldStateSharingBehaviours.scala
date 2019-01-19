@@ -54,6 +54,8 @@ trait WorldStateSharingBehaviours
           }
         }
 
+        override def close(): Unit = world.close()
+
         override def nextRevision: Revision = world.nextRevision
 
         override def revise(events: Map[_ <: EventId, Option[Event]],
@@ -166,6 +168,8 @@ trait WorldStateSharingBehaviours
         ThreadLocal.withInitial[World](() => worldFactory())
 
       def world: World = worldThreadLocal.get
+
+      override def close(): Unit = world.close()
 
       override def nextRevision: Revision = world.nextRevision
 
@@ -469,11 +473,20 @@ class WorldStateSharingSpecUsingWorldReferenceImplementation
   val worldSharingCommonStateFactoryResourceGenerator
     : Gen[ManagedResource[() => World]] =
     Gen.const(
-      for (sharedMutableState <- makeManagedResource(new MutableState)(_ => {})(
-             List.empty))
-        yield
-          () =>
-            new WorldReferenceImplementation(mutableState = sharedMutableState))
+      for {
+        sharedMutableState <- makeManagedResource(new MutableState)(_ => {})(
+          List.empty)
+        worldSet <- makeManagedResource(
+          mutable.Set.empty[WorldReferenceImplementation])(
+          _.foreach(_.close()))(List.empty)
+      } yield
+        () => {
+          val world =
+            new WorldReferenceImplementation(mutableState = sharedMutableState)
+          worldSet += world
+          world
+        }
+    )
 
   "multiple world instances representing the same world (using the world reference implementation)" should behave like multipleInstancesRepresentingTheSameWorldBehaviour
 }
@@ -505,6 +518,7 @@ class WorldStateSharingSpecUsingWorldRedisBasedImplementation
         RedisURI.Builder.redis("localhost", redisServerPort).build())
       redisClientSet += redisClient
 
+      // Use a named function to workaround a bug in Scalafmt.
       def worldFactory() = {
         val world = new WorldRedisBasedImplementation(redisClient,
                                                       sharedGuid,

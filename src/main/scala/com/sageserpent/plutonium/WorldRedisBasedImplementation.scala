@@ -78,7 +78,7 @@ class WorldRedisBasedImplementation(redisClient: RedisClient,
       .connect(new RedisCodecDelegatingKeysToStandardCodec[Value]())
       .async()
 
-  def close(): Unit = {
+  override def close(): Unit = {
     generalRedisCommandsApi.getStatefulConnection.close()
     redisCommandsApiForEventId.getStatefulConnection.close()
     redisCommandsApiForEventData.getStatefulConnection.close()

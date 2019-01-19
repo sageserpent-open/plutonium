@@ -30,12 +30,12 @@ public class DeliveringPackages {
 
         RedisClient redisClient = RedisClient.create();
 
-        try {
-            World world = justADemo ?
-                    new WorldEfficientInMemoryImplementation() :
-                    new WorldRedisBasedImplementation(redisClient,
-                            "TheBigStoreOfDataOwnedByTheDispatchLineOfBusiness",
-                            executor);
+        try (World world = justADemo ?
+                new WorldEfficientInMemoryImplementation() :
+                new WorldRedisBasedImplementation(redisClient,
+                        "TheBigStoreOfDataOwnedByTheDispatchLineOfBusiness",
+                        executor)) {
+
 
             {
                 // Make a query at the end of time for any kind of thing that
@@ -377,6 +377,8 @@ public class DeliveringPackages {
                         "Payments received for items awaiting delivery is: " +
                                 uncoveredValue);
             }
+        } catch (Exception exception) {
+            exception.printStackTrace();
         } finally {
             redisClient.shutdown();
         }
