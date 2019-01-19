@@ -3779,7 +3779,7 @@ class WorldSpecUsingWorldRedisBasedImplementation
   val redisServerPort = 6454
 
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
-    PropertyCheckConfig(maxSize = 15, minSuccessful = 20)
+    PropertyCheckConfig(maxSize = 15, minSuccessful = 30)
 
   "A world with no history (using the world Redis-based implementation)" should behave like worldWithNoHistoryBehaviour
 
