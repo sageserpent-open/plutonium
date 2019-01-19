@@ -2,19 +2,20 @@ package com.sageserpent.plutonium
 
 import java.time.Instant
 import java.util
+import java.util.concurrent.Executors
 import java.util.{Optional, UUID}
 
-import com.lambdaworks.redis.{RedisClient, RedisURI}
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.{PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.World.Revision
+import io.lettuce.core.{RedisClient, RedisURI}
 import org.scalacheck.Prop.BooleanOperators
 import org.scalacheck.{Gen, Prop, Test}
 import org.scalatest.prop.Checkers
 import org.scalatest.{FlatSpec, Matchers}
 import resource._
 
-import scala.collection.mutable.Set
+import scala.collection.mutable
 import scala.util.Random
 
 trait WorldStateSharingBehaviours
@@ -35,7 +36,7 @@ trait WorldStateSharingBehaviours
           extends World {
         val random = new scala.util.Random(seed)
 
-        val worlds: Set[World] = Set.empty
+        val worlds: mutable.Set[World] = mutable.Set.empty
 
         def world: World = {
           worlds.synchronized {
@@ -52,6 +53,8 @@ trait WorldStateSharingBehaviours
             }
           }
         }
+
+        override def close(): Unit = world.close()
 
         override def nextRevision: Revision = world.nextRevision
 
@@ -166,6 +169,8 @@ trait WorldStateSharingBehaviours
 
       def world: World = worldThreadLocal.get
 
+      override def close(): Unit = world.close()
+
       override def nextRevision: Revision = world.nextRevision
 
       override def revise(events: Map[_ <: EventId, Option[Event]],
@@ -226,7 +231,7 @@ trait WorldStateSharingBehaviours
       check(
         Prop.forAllNoShrink(testCaseGenerator) {
           case (worldSharingCommonStateFactoryResource,
-                recordingsGroupedById,
+                _,
                 bigShuffledHistoryOverLotsOfThings,
                 asOfs) =>
             worldSharingCommonStateFactoryResource acquireAndGet {
@@ -339,7 +344,7 @@ trait WorldStateSharingBehaviours
                       universalSetOfIds map (id =>
                         id -> (if (idSet.contains(id))
                                  Some(Change.forOneItem[Item](id, {
-                                   (item: Item) =>
+                                   item: Item =>
                                      if (ascending)
                                        item.property = id
                                      else
@@ -377,9 +382,6 @@ trait WorldStateSharingBehaviours
 
       val idSequenceLength = 10
 
-      val universalSetOfIds = scala.collection.immutable
-        .Set(0 until (idSequenceLength * numberOfDistinctIdSequences): _*)
-
       val testCaseGenerator = for {
         worldSharingCommonStateFactoryResource <- worldSharingCommonStateFactoryResourceGenerator
         asOfs                                  <- Gen.nonEmptyListOf(instantGenerator) map (_.sorted)
@@ -402,9 +404,8 @@ trait WorldStateSharingBehaviours
                         0 until idSequenceLength map (index % numberOfDistinctIdSequences + numberOfDistinctIdSequences * _) map (
                             id =>
                               id ->
-                                Some(Change.forOneItem[Item](id, {
-                                  (item: Item) =>
-                                    item.property = index
+                                Some(Change.forOneItem[Item](id, { item: Item =>
+                                  item.property = index
                                 }))) toMap,
                         asOfsIterator.next()
                       )
@@ -472,11 +473,20 @@ class WorldStateSharingSpecUsingWorldReferenceImplementation
   val worldSharingCommonStateFactoryResourceGenerator
     : Gen[ManagedResource[() => World]] =
     Gen.const(
-      for (sharedMutableState <- makeManagedResource(new MutableState)(_ => {})(
-             List.empty))
-        yield
-          () =>
-            new WorldReferenceImplementation(mutableState = sharedMutableState))
+      for {
+        sharedMutableState <- makeManagedResource(new MutableState)(_ => {})(
+          List.empty)
+        worldSet <- makeManagedResource(
+          mutable.Set.empty[WorldReferenceImplementation])(
+          _.foreach(_.close()))(List.empty)
+      } yield
+        () => {
+          val world =
+            new WorldReferenceImplementation(mutableState = sharedMutableState)
+          worldSet += world
+          world
+        }
+    )
 
   "multiple world instances representing the same world (using the world reference implementation)" should behave like multipleInstancesRepresentingTheSameWorldBehaviour
 }
@@ -496,14 +506,27 @@ class WorldStateSharingSpecUsingWorldRedisBasedImplementation
     Gen.const(for {
       sharedGuid <- makeManagedResource(UUID.randomUUID().toString)(_ => {})(
         List.empty)
-      redisClientSet <- makeManagedResource(Set.empty[RedisClient])(
-        redisClientSet => redisClientSet.foreach(_.shutdown()))(List.empty)
+      executionService <- makeManagedResource(Executors.newFixedThreadPool(20))(
+        _.shutdown)(List.empty)
+      redisClientSet <- makeManagedResource(mutable.Set.empty[RedisClient])(
+        _.foreach(_.shutdown()))(List.empty)
+      worldSet <- makeManagedResource(
+        mutable.Set.empty[WorldRedisBasedImplementation])(_.foreach(_.close()))(
+        List.empty)
     } yield {
       val redisClient = RedisClient.create(
         RedisURI.Builder.redis("localhost", redisServerPort).build())
       redisClientSet += redisClient
-      () =>
-        new WorldRedisBasedImplementation(redisClient, sharedGuid)
+
+      // Use a named function to workaround a bug in Scalafmt.
+      def worldFactory() = {
+        val world = new WorldRedisBasedImplementation(redisClient,
+                                                      sharedGuid,
+                                                      executionService)
+        worldSet += world
+        world
+      }
+      worldFactory _
     })
 
   "multiple world instances representing the same world (using the world Redis-based implementation)" should behave like multipleInstancesRepresentingTheSameWorldBehaviour

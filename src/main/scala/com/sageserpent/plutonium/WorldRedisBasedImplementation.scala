@@ -2,20 +2,27 @@ package com.sageserpent.plutonium
 
 import java.nio.ByteBuffer
 import java.time.Instant
-import java.util.{NoSuchElementException, UUID}
+import java.util.UUID
+import java.util.concurrent.Executor
 
 import com.esotericsoftware.kryo.Kryo
-import com.lambdaworks.redis.RedisClient
-import com.lambdaworks.redis.api.rx.RedisReactiveCommands
-import com.lambdaworks.redis.codec.{ByteArrayCodec, RedisCodec, Utf8StringCodec}
 import com.sageserpent.americium.{PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.twitter.chill.{KryoPool, ScalaKryoInstantiator}
+import io.lettuce.core.api.async.RedisAsyncCommands
+import io.lettuce.core.codec.{ByteArrayCodec, RedisCodec, Utf8StringCodec}
+import io.lettuce.core.{
+  RedisClient,
+  Limit => LettuceLimit,
+  Range => LettuceRange
+}
 import io.netty.handler.codec.EncoderException
-import rx.lang.scala.JavaConversions._
-import rx.lang.scala.Observable
 
 import scala.Ordering.Implicits._
+import scala.collection.JavaConverters._
+import scala.compat.java8.FutureConverters._
+import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, ExecutionContext, Future}
 
 object WorldRedisBasedImplementation {
   import UniqueItemSpecificationSerializationSupport.SpecialSerializer
@@ -29,8 +36,8 @@ object WorldRedisBasedImplementation {
     }
   )
 
-  object redisCodecDelegatingKeysToStandardCodec
-      extends RedisCodec[String, Any] {
+  class RedisCodecDelegatingKeysToStandardCodec[Value]
+      extends RedisCodec[String, Value] {
     protected val stringKeyStringValueCodec = new Utf8StringCodec
 
     override def encodeKey(key: String): ByteBuffer =
@@ -39,16 +46,22 @@ object WorldRedisBasedImplementation {
     override def decodeKey(bytes: ByteBuffer): String =
       stringKeyStringValueCodec.decodeKey(bytes)
 
-    override def encodeValue(value: Any): ByteBuffer =
+    override def encodeValue(value: Value): ByteBuffer =
       ByteArrayCodec.INSTANCE.encodeValue(kryoPool.toBytesWithClass(value))
 
-    override def decodeValue(bytes: ByteBuffer): Any =
-      kryoPool.fromBytes(ByteArrayCodec.INSTANCE.decodeValue(bytes))
+    override def decodeValue(bytes: ByteBuffer): Value =
+      kryoPool
+        .fromBytes(ByteArrayCodec.INSTANCE.decodeValue(bytes))
+        .asInstanceOf[Value]
   }
 }
 
+// NOTE: this implementation moves too much data back and forth across the Redis connection to do
+// client side processing that should be done by a Redis script. It is tolerated as a demonstration,
+// and should not be considered fit for anything else.
 class WorldRedisBasedImplementation(redisClient: RedisClient,
-                                    identityGuid: String)
+                                    identityGuid: String,
+                                    executor: Executor)
     extends WorldInefficientImplementationCodeFactoring {
   parentWorld =>
 
@@ -56,18 +69,31 @@ class WorldRedisBasedImplementation(redisClient: RedisClient,
   import WorldImplementationCodeFactoring._
   import WorldRedisBasedImplementation._
 
-  var redisApi: RedisReactiveCommands[String, Any] = null
+  implicit val executionContext: ExecutionContext =
+    ExecutionContext.fromExecutor(executor)
 
-  setupRedisApi()
+  private def createRedisCommandsApi[Value]()
+    : RedisAsyncCommands[String, Value] =
+    redisClient
+      .connect(new RedisCodecDelegatingKeysToStandardCodec[Value]())
+      .async()
 
-  private def setupRedisApi() = {
-    redisApi =
-      redisClient.connect(redisCodecDelegatingKeysToStandardCodec).reactive()
+  override def close(): Unit = {
+    generalRedisCommandsApi.getStatefulConnection.close()
+    redisCommandsApiForEventId.getStatefulConnection.close()
+    redisCommandsApiForEventData.getStatefulConnection.close()
+    redisCommandsApiForInstant.getStatefulConnection.close()
   }
 
-  private def teardownRedisApi(): Unit = {
-    redisApi.close()
-  }
+  var generalRedisCommandsApi: RedisAsyncCommands[String, Any] =
+    createRedisCommandsApi()
+  var redisCommandsApiForEventId: RedisAsyncCommands[String, EventId] =
+    createRedisCommandsApi()
+  var redisCommandsApiForEventData
+    : RedisAsyncCommands[String, AbstractEventData] =
+    createRedisCommandsApi()
+  var redisCommandsApiForInstant: RedisAsyncCommands[String, Instant] =
+    createRedisCommandsApi()
 
   val asOfsKey = s"${identityGuid}${redisNamespaceComponentSeparator}asOfs"
 
@@ -77,108 +103,109 @@ class WorldRedisBasedImplementation(redisClient: RedisClient,
   val eventIdsKey =
     s"${identityGuid}${redisNamespaceComponentSeparator}eventIds"
 
-  def eventCorrectionsKeyFrom(eventId: EventId) =
+  def eventCorrectionsKeyFrom(eventId: EventId): String =
     s"${eventCorrectionsKeyPrefix}${eventId}"
 
-  override def nextRevision: Revision = nextRevisionObservable.toBlocking.first
+  override def nextRevision: Revision =
+    Await.result(nextRevisionFuture, Duration.Inf)
 
-  protected def nextRevisionObservable: Observable[Revision] =
-    toScalaObservable(redisApi.llen(asOfsKey)) map (_.toInt)
+  protected def nextRevisionFuture: Future[Revision] =
+    generalRedisCommandsApi.llen(asOfsKey).toScala map (_.toInt)
 
   override def forkExperimentalWorld(scope: javaApi.Scope): World =
     new WorldRedisBasedImplementation(
       redisClient = parentWorld.redisClient,
       identityGuid =
-        s"${parentWorld.identityGuid}-experimental-${UUID.randomUUID()}") {
+        s"${parentWorld.identityGuid}-experimental-${UUID.randomUUID()}",
+      executor) {
       val baseWorld                            = parentWorld
       val numberOfRevisionsInCommon            = scope.nextRevision
       val cutoffWhenAfterWhichHistoriesDiverge = scope.when
 
-      override protected def nextRevisionObservable: Observable[Revision] =
-        super.nextRevisionObservable map (numberOfRevisionsInCommon + _)
+      override protected def nextRevisionFuture: Future[Revision] =
+        super.nextRevisionFuture map (numberOfRevisionsInCommon + _)
 
-      override protected def revisionAsOfsObservable
-        : Observable[Array[Instant]] =
+      override protected def revisionAsOfsFuture: Future[Array[Instant]] =
         for {
-          revisionAsOfsFromBaseWorld <- baseWorld.revisionAsOfsObservable
-          revisionAsOfsFromSuper     <- super.revisionAsOfsObservable
+          revisionAsOfsFromBaseWorld <- baseWorld.revisionAsOfsFuture
+          revisionAsOfsFromSuper     <- super.revisionAsOfsFuture
         } yield
           (revisionAsOfsFromBaseWorld take numberOfRevisionsInCommon) ++ revisionAsOfsFromSuper
 
-      override protected def pertinentEventDatumsObservable(
+      override protected def pertinentEventDatumsFuture(
           cutoffRevision: Revision,
           cutoffWhen: Unbounded[Instant],
           eventIdInclusion: EventIdInclusion)
-        : Observable[(EventId, AbstractEventData)] = {
+        : Future[Seq[(EventId, AbstractEventData)]] = {
         val cutoffWhenForBaseWorld = cutoffWhen min cutoffWhenAfterWhichHistoriesDiverge
         if (cutoffRevision > numberOfRevisionsInCommon) for {
-          eventIdsAndTheirDatums <- eventIdsAndTheirDatumsObservable(
+          eventIdsAndTheirDatums <- eventIdsAndTheirDatumsFuture(
             cutoffRevision,
-            eventIdInclusion).toList
+            eventIdInclusion)
           eventIdsToBeExcluded = eventIdsAndTheirDatums.map(_._1).toSet
-          eventIdAndItsDatum <- Observable
-            .from(eventIdsAndTheirDatums filter {
-              case (_, eventDatum) =>
-                eventDatumComesWithinCutoff(eventDatum, cutoffWhen)
-            }) merge baseWorld.pertinentEventDatumsObservable(
-            numberOfRevisionsInCommon,
-            cutoffWhenForBaseWorld,
-            eventId =>
-              !eventIdsToBeExcluded.contains(eventId) && eventIdInclusion(
-                eventId))
-        } yield eventIdAndItsDatum
+          baseWorldEventIdsAndTheirDatums <- baseWorld
+            .pertinentEventDatumsFuture(
+              numberOfRevisionsInCommon,
+              cutoffWhenForBaseWorld,
+              eventId =>
+                !eventIdsToBeExcluded.contains(eventId) && eventIdInclusion(
+                  eventId))
+          workaroundForScalaFmt = eventIdsAndTheirDatums.filter {
+            case (_, eventDatum) =>
+              eventDatumComesWithinCutoff(eventDatum, cutoffWhen)
+          } ++ baseWorldEventIdsAndTheirDatums
+        } yield workaroundForScalaFmt
         else
-          baseWorld.pertinentEventDatumsObservable(cutoffRevision,
-                                                   cutoffWhenForBaseWorld,
-                                                   eventIdInclusion)
+          baseWorld.pertinentEventDatumsFuture(cutoffRevision,
+                                               cutoffWhenForBaseWorld,
+                                               eventIdInclusion)
       }
     }
 
   override def revisionAsOfs: Array[Instant] =
-    revisionAsOfsObservable.toBlocking.first
+    Await.result(revisionAsOfsFuture, Duration.Inf)
 
-  protected def revisionAsOfsObservable: Observable[Array[Instant]] =
-    toScalaObservable(redisApi.lrange(asOfsKey, 0, -1))
-      .asInstanceOf[Observable[Instant]]
-      .toArray
+  protected def revisionAsOfsFuture: Future[Array[Instant]] =
+    redisCommandsApiForInstant
+      .lrange(asOfsKey, 0, -1)
+      .toScala
+      .map(_.asScala.toArray)
 
   override protected def eventTimeline(
       cutoffRevision: Revision): Seq[(Event, EventId)] =
     try {
-      val eventDatumsObservable = for {
-        _           <- toScalaObservable(redisApi.watch(asOfsKey))
-        eventDatums <- pertinentEventDatumsObservable(cutoffRevision).toList
-        transactionStart = toScalaObservable(redisApi.multi())
-        // NASTY HACK: there needs to be at least one Redis command sent in a
-        // transaction for the result of the 'exec' command to yield a difference
-        // between an aborted transaction and a completed one. Yuk!
-        transactionBody = toScalaObservable(redisApi.llen(asOfsKey))
-        transactionEnd  = toScalaObservable(redisApi.exec())
-        ((_, _), _) <- transactionStart zip transactionBody zip transactionEnd
-      } yield eventDatums
+      val eventDatumsFuture = for {
+        _           <- generalRedisCommandsApi.watch(asOfsKey).toScala
+        eventDatums <- pertinentEventDatumsFuture(cutoffRevision)
+        (_, transactionCommands) <- generalRedisCommandsApi.multi().toScala zip
+          // NASTY HACK: there needs to be at least one Redis command sent in a
+          // transaction for the result of the 'exec' command to yield a difference
+          // between an aborted transaction and a completed one. Yuk!
+          generalRedisCommandsApi.llen(asOfsKey).toScala zip
+          generalRedisCommandsApi.exec().toScala
+      } yield
+        if (!transactionCommands.isEmpty) eventTimelineFrom(eventDatums)
+        else
+          throw new RuntimeException(
+            "Concurrent revision attempt detected in query.")
 
-      eventTimelineFrom(eventDatumsObservable.toBlocking.single)
+      Await.result(eventDatumsFuture, Duration.Inf)
     } catch {
       case exception: EncoderException =>
         recoverRedisApi
         throw exception.getCause
-
-      case _: NoSuchElementException =>
-        throw new RuntimeException(
-          "Concurrent revision attempt detected in query.")
     }
 
   type EventIdInclusion = EventId => Boolean
 
-  protected def pertinentEventDatumsObservable(
-      cutoffRevision: Revision,
-      cutoffWhen: Unbounded[Instant],
-      eventIdInclusion: EventIdInclusion)
-    : Observable[(EventId, AbstractEventData)] =
-    eventIdsAndTheirDatumsObservable(cutoffRevision, eventIdInclusion) filter {
+  protected def pertinentEventDatumsFuture(cutoffRevision: Revision,
+                                           cutoffWhen: Unbounded[Instant],
+                                           eventIdInclusion: EventIdInclusion)
+    : Future[Seq[(EventId, AbstractEventData)]] =
+    eventIdsAndTheirDatumsFuture(cutoffRevision, eventIdInclusion) map (_.filter {
       case (_, eventDatum) =>
         eventDatumComesWithinCutoff(eventDatum, cutoffWhen)
-    }
+    })
 
   private def eventDatumComesWithinCutoff(eventDatum: AbstractEventData,
                                           cutoffWhen: Unbounded[Instant]) =
@@ -188,37 +215,41 @@ class WorldRedisBasedImplementation(redisClient: RedisClient,
       case _ => true
     }
 
-  def eventIdsAndTheirDatumsObservable(cutoffRevision: Revision,
-                                       eventIdInclusion: EventIdInclusion)
-    : Observable[(EventId, AbstractEventData)] = {
+  def eventIdsAndTheirDatumsFuture(cutoffRevision: Revision,
+                                   eventIdInclusion: EventIdInclusion)
+    : Future[Seq[(EventId, AbstractEventData)]] = {
     for {
-      eventId <- toScalaObservable(redisApi.smembers(eventIdsKey))
-        .asInstanceOf[Observable[EventId]] filter eventIdInclusion
-      eventIdAndDataPair <- toScalaObservable(
-        redisApi.zrevrangebyscore(eventCorrectionsKeyFrom(eventId),
-                                  cutoffRevision - 1,
-                                  initialRevision,
-                                  0,
-                                  1))
-        .asInstanceOf[Observable[AbstractEventData]] map (eventId -> _)
-    } yield eventIdAndDataPair
+      eventIds <- redisCommandsApiForEventId
+        .smembers(eventIdsKey)
+        .toScala map (_.asScala.toSeq filter eventIdInclusion)
+      datums <- Future.sequence(
+        eventIds map (
+            eventId =>
+              redisCommandsApiForEventData
+                .zrevrangebyscore(
+                  eventCorrectionsKeyFrom(eventId),
+                  LettuceRange
+                    .create[Integer](initialRevision, cutoffRevision - 1),
+                  LettuceLimit.create(0, 1))
+                .toScala
+                .map(_.asScala
+                  .map(eventId -> _))))
+    } yield datums.flatten
   }
 
-  def pertinentEventDatumsObservable(cutoffRevision: Revision,
-                                     eventIdsForNewEvents: Iterable[EventId])
-    : Observable[(EventId, AbstractEventData)] = {
+  def pertinentEventDatumsFuture(cutoffRevision: Revision,
+                                 eventIdsForNewEvents: Iterable[EventId])
+    : Future[Seq[(EventId, AbstractEventData)]] = {
     val eventIdsToBeExcluded = eventIdsForNewEvents.toSet
-    pertinentEventDatumsObservable(
+    pertinentEventDatumsFuture(
       cutoffRevision,
       PositiveInfinity(),
       eventId => !eventIdsToBeExcluded.contains(eventId))
   }
 
-  def pertinentEventDatumsObservable(
-      cutoffRevision: Revision): Observable[(EventId, AbstractEventData)] =
-    pertinentEventDatumsObservable(cutoffRevision,
-                                   PositiveInfinity(),
-                                   _ => true)
+  def pertinentEventDatumsFuture(
+      cutoffRevision: Revision): Future[Seq[(EventId, AbstractEventData)]] =
+    pertinentEventDatumsFuture(cutoffRevision, PositiveInfinity(), _ => true)
 
   override protected def transactNewRevision(
       asOf: Instant,
@@ -227,77 +258,81 @@ class WorldRedisBasedImplementation(redisClient: RedisClient,
           Seq[(EventId, AbstractEventData)],
           Seq[(EventId, AbstractEventData)]) => Unit): Revision = {
     try {
-      val revisionObservable = for {
-        _                         <- toScalaObservable(redisApi.watch(asOfsKey))
-        nextRevisionPriorToUpdate <- nextRevisionObservable
+      val revisionFuture = for {
+        _                         <- generalRedisCommandsApi.watch(asOfsKey).toScala
+        nextRevisionPriorToUpdate <- nextRevisionFuture
         newEventDatums: Map[EventId, AbstractEventData] = newEventDatumsFor(
           nextRevisionPriorToUpdate)
         (pertinentEventDatumsExcludingTheNewRevision: Seq[(EventId,
          AbstractEventData)],
-         _) <- pertinentEventDatumsObservable(
-          nextRevisionPriorToUpdate,
-          newEventDatums.keys.toSeq).toList zip
-          (for (revisionAsOfs <- revisionAsOfsObservable)
+         _) <- pertinentEventDatumsFuture(nextRevisionPriorToUpdate,
+                                          newEventDatums.keys.toSeq) zip
+          (for (revisionAsOfs <- revisionAsOfsFuture)
             yield checkRevisionPrecondition(asOf, revisionAsOfs))
         _ = buildAndValidateEventTimelineForProposedNewRevision(
           newEventDatums.toSeq,
           pertinentEventDatumsExcludingTheNewRevision)
         transactionGuid = UUID.randomUUID()
-        foo <- Observable
-          .from(newEventDatums map {
-            case (eventId, eventDatum) =>
-              val eventCorrectionsKey          = eventCorrectionsKeyFrom(eventId)
-              val timeToExpireGarbageInSeconds = 5
-              redisApi.zadd(s"${eventCorrectionsKey}:${transactionGuid}",
-                            nextRevisionPriorToUpdate.toDouble,
-                            eventDatum) zip
-                redisApi
-                  .sadd(s"${eventIdsKey}:${transactionGuid}", eventId) zip
-                redisApi.expire(s"${eventCorrectionsKey}:${transactionGuid}",
-                                timeToExpireGarbageInSeconds) zip
-                redisApi.expire(s"${eventIdsKey}:${transactionGuid}",
-                                timeToExpireGarbageInSeconds)
-          })
-          .flatten
-          .toList
-        transactionStart = toScalaObservable(redisApi.multi())
-        transactionBody = Observable
-          .from(newEventDatums map {
-            case (eventId, eventDatum) =>
-              val eventCorrectionsKey = eventCorrectionsKeyFrom(eventId)
-              redisApi.zunionstore(
-                eventCorrectionsKey,
-                eventCorrectionsKey,
-                s"${eventCorrectionsKey}:${transactionGuid}") zip
-                redisApi.sunionstore(eventIdsKey,
-                                     eventIdsKey,
-                                     s"${eventIdsKey}:${transactionGuid}")
-          })
-          .flatten
-          .toList zip redisApi.rpush(asOfsKey, asOf)
-        transactionEnd = toScalaObservable(redisApi.exec())
-        // NASTY HACK: the order of evaluation of the subterms in the next double-zip is vital to ensure that Redis sees
-        // the 'multi', body commands and 'exec' verbs in the correct order, even though the processing of the results is
-        // handled by ReactiveX, which simply sees three streams of replies.
-        _ <- transactionStart zip transactionBody zip transactionEnd
-      } yield nextRevisionPriorToUpdate
+        _ <- Future.sequence(newEventDatums map {
+          case (eventId, eventDatum) =>
+            val eventCorrectionsKey          = eventCorrectionsKeyFrom(eventId)
+            val timeToExpireGarbageInSeconds = 5
 
-      revisionObservable.toBlocking.first
+            generalRedisCommandsApi
+              .zadd(s"${eventCorrectionsKey}:${transactionGuid}",
+                    nextRevisionPriorToUpdate.toDouble,
+                    eventDatum)
+              .toScala zip
+              generalRedisCommandsApi
+                .sadd(s"${eventIdsKey}:${transactionGuid}", eventId)
+                .toScala zip
+              generalRedisCommandsApi
+                .expire(s"${eventCorrectionsKey}:${transactionGuid}",
+                        timeToExpireGarbageInSeconds)
+                .toScala zip
+              generalRedisCommandsApi
+                .expire(s"${eventIdsKey}:${transactionGuid}",
+                        timeToExpireGarbageInSeconds)
+                .toScala
+        })
+        (_, transactionCommands) <- generalRedisCommandsApi.multi().toScala zip
+          Future.sequence(newEventDatums.keys map { eventId =>
+            val eventCorrectionsKey = eventCorrectionsKeyFrom(eventId)
+            generalRedisCommandsApi
+              .zunionstore(eventCorrectionsKey,
+                           eventCorrectionsKey,
+                           s"${eventCorrectionsKey}:${transactionGuid}")
+              .toScala zip
+              redisCommandsApiForEventId
+                .sunionstore(eventIdsKey,
+                             eventIdsKey,
+                             s"${eventIdsKey}:${transactionGuid}")
+                .toScala
+          }) zip generalRedisCommandsApi.rpush(asOfsKey, asOf).toScala zip
+          generalRedisCommandsApi.exec().toScala
+      } yield
+        if (!transactionCommands.isEmpty) nextRevisionPriorToUpdate
+        else
+          throw new RuntimeException(
+            "Concurrent revision attempt detected in revision.")
+
+      Await.result(revisionFuture, Duration.Inf)
     } catch {
       case exception: EncoderException =>
         recoverRedisApi
         throw exception.getCause
-
-      case _: NoSuchElementException =>
-        throw new RuntimeException(
-          "Concurrent revision attempt detected in revision.")
     }
   }
 
-  private def recoverRedisApi: Observable[String] = {
-    teardownRedisApi()
-    setupRedisApi()
-    redisApi.unwatch()
-    redisApi.discard()
+  private def recoverRedisApi = {
+    close()
+
+    generalRedisCommandsApi = createRedisCommandsApi()
+    redisCommandsApiForEventId = createRedisCommandsApi()
+    redisCommandsApiForEventData = createRedisCommandsApi()
+    redisCommandsApiForInstant = createRedisCommandsApi()
+
+    generalRedisCommandsApi.unwatch()
+    generalRedisCommandsApi.discard()
   }
 }
