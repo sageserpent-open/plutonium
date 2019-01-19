@@ -902,7 +902,7 @@ trait WorldReferenceImplementationResource extends WorldResource {
   val worldResourceGenerator: Gen[ManagedResource[World]] =
     Gen.const(
       makeManagedResource(new WorldReferenceImplementation with WorldContracts)(
-        _ => {})(List.empty))
+        _.close())(List.empty))
 }
 
 trait WorldEfficientInMemoryImplementationResource extends WorldResource {

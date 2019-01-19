@@ -117,6 +117,8 @@ class WorldReferenceImplementation(mutableState: MutableState)
 
   def this() = this(new MutableState)
 
+  override def close(): Unit = {}
+
   override def nextRevision: Revision = mutableState.nextRevision
 
   override def forkExperimentalWorld(scope: javaApi.Scope): World = {

@@ -2,8 +2,8 @@ package com.sageserpent.plutonium
 
 import java.nio.ByteBuffer
 import java.time.Instant
+import java.util.UUID
 import java.util.concurrent.Executor
-import java.util.{NoSuchElementException, UUID}
 
 import com.esotericsoftware.kryo.Kryo
 import com.lambdaworks.redis.api.async.RedisAsyncCommands
@@ -78,7 +78,7 @@ class WorldRedisBasedImplementation(redisClient: RedisClient,
       .connect(new RedisCodecDelegatingKeysToStandardCodec[Value]())
       .async()
 
-  def close(): Unit = {
+  override def close(): Unit = {
     generalRedisCommandsApi.getStatefulConnection.close()
     redisCommandsApiForEventId.getStatefulConnection.close()
     redisCommandsApiForEventData.getStatefulConnection.close()
