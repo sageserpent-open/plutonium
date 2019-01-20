@@ -5,7 +5,7 @@ import java.util.Optional
 import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.{Event, EventId, javaApi}
 
-trait World extends WorldConstants {
+trait World extends WorldConstants with AutoCloseable {
   def nextRevision
     : Int // NOTE: this is the number of *revisions* that have all been made via 'revise'.
 

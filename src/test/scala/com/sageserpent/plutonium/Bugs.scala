@@ -1196,3 +1196,10 @@ class WorldEfficientInMemoryImplementationBugs
     with WorldEfficientInMemoryImplementationResource {
   "a world (using the world efficient in-memory implementation)" should behave like suite
 }
+
+class WorldRedisBasedImplementationBugs
+    extends Bugs
+    with WorldRedisBasedImplementationResource {
+  "a world (using the world Redis-based implementation)" should behave like suite
+  override val redisServerPort: Int = 6456
+}

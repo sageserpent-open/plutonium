@@ -19,8 +19,8 @@ import scalaz.syntax.applicativePlus._
 
 import scala.collection.immutable
 import scala.collection.immutable.{::, TreeMap}
-import scala.util.Random
 import scala.reflect.runtime.universe.TypeTag
+import scala.util.Random
 
 trait WorldBehaviours
     extends FlatSpec
@@ -3779,7 +3779,7 @@ class WorldSpecUsingWorldRedisBasedImplementation
   val redisServerPort = 6454
 
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
-    PropertyCheckConfig(maxSize = 15)
+    PropertyCheckConfig(maxSize = 15, minSuccessful = 30)
 
   "A world with no history (using the world Redis-based implementation)" should behave like worldWithNoHistoryBehaviour
 
@@ -3877,7 +3877,6 @@ class WorldSpecUsingWorldRedisBasedImplementation
     })
   }
 }
-
 class AllTheWorlds
     extends FlatSpec
     with Matchers

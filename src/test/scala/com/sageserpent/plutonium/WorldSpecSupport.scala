@@ -2,25 +2,24 @@ package com.sageserpent.plutonium
 
 import java.time.Instant
 import java.util.UUID
+import java.util.concurrent.Executors
 
-import com.lambdaworks.redis.{RedisClient, RedisURI}
 import com.sageserpent.americium
 import com.sageserpent.americium._
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.seqEnrichment._
-import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.World._
+import io.lettuce.core.{RedisClient, RedisURI}
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.Assertions
 import resource._
+import scalaz.std.stream
 
 import scala.collection.JavaConversions._
 import scala.collection.Searching._
-import scala.collection.immutable
 import scala.collection.immutable.TreeMap
 import scala.reflect.runtime.universe._
 import scala.util.Random
-import scalaz.std.stream
 
 object WorldSpecSupport {
   val changeError = new RuntimeException("Error in making a change.")
@@ -717,8 +716,8 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
   def recordEventsInWorld(bigShuffledHistoryOverLotsOfThings: Stream[
                             Traversable[(Option[(Unbounded[Instant], Event)],
                                          intersperseObsoleteEvents.EventId)]],
-      asOfs: List[Instant],
-      world: World) = {
+                          asOfs: List[Instant],
+                          world: World) = {
     revisionActions(bigShuffledHistoryOverLotsOfThings, asOfs, world) map (_.apply) force // Actually a piece of imperative code that looks functional - 'world' is being mutated as a side-effect; but the revisions are harvested functionally.
   }
 
@@ -751,8 +750,8 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
   def revisionActions(bigShuffledHistoryOverLotsOfThings: Stream[
                         Traversable[(Option[(Unbounded[Instant], Event)],
                                      intersperseObsoleteEvents.EventId)]],
-      asOfs: List[Instant],
-      world: World): Stream[() => Revision] = {
+                      asOfs: List[Instant],
+                      world: World): Stream[() => Revision] = {
     assert(bigShuffledHistoryOverLotsOfThings.length == asOfs.length)
     revisionActions(bigShuffledHistoryOverLotsOfThings, asOfs.iterator, world)
   }
@@ -760,8 +759,8 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
   def revisionActions(bigShuffledHistoryOverLotsOfThings: Stream[
                         Traversable[(Option[(Unbounded[Instant], Event)],
                                      intersperseObsoleteEvents.EventId)]],
-      asOfsIterator: Iterator[Instant],
-      world: World): Stream[() => Revision] = {
+                      asOfsIterator: Iterator[Instant],
+                      world: World): Stream[() => Revision] = {
     for {
       pieceOfHistory <- bigShuffledHistoryOverLotsOfThings
       _ = require(
@@ -903,14 +902,14 @@ trait WorldReferenceImplementationResource extends WorldResource {
   val worldResourceGenerator: Gen[ManagedResource[World]] =
     Gen.const(
       makeManagedResource(new WorldReferenceImplementation with WorldContracts)(
-        _ => {})(List.empty))
+        _.close())(List.empty))
 }
 
 trait WorldEfficientInMemoryImplementationResource extends WorldResource {
   val worldResourceGenerator: Gen[ManagedResource[World]] =
     Gen.const(
       makeManagedResource(new WorldEfficientInMemoryImplementation
-      with WorldContracts)(_ => {})(List.empty))
+      with WorldContracts)(_.close())(List.empty))
 }
 
 trait WorldRedisBasedImplementationResource
@@ -919,14 +918,17 @@ trait WorldRedisBasedImplementationResource
   val worldResourceGenerator: Gen[ManagedResource[World]] =
     Gen.const {
       for {
+        executionService <- makeManagedResource(
+          Executors.newFixedThreadPool(20))(_.shutdown)(List.empty)
         redisClient <- makeManagedResource(
           RedisClient.create(
             RedisURI.Builder.redis("localhost", redisServerPort).build()))(
           _.shutdown())(List.empty)
         worldResource <- makeManagedResource(
           new WorldRedisBasedImplementation(redisClient,
-                                            UUID.randomUUID().toString)
-          with WorldContracts)(_ => {})(List.empty)
+                                            UUID.randomUUID().toString,
+                                            executionService)
+          with WorldContracts)(_.close())(List.empty)
       } yield worldResource
     }
 }
