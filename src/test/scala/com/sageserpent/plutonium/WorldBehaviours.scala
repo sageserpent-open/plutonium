@@ -3714,7 +3714,7 @@ class WorldSpecUsingWorldReferenceImplementation
     extends WorldBehaviours
     with WorldReferenceImplementationResource {
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
-    PropertyCheckConfig(maxSize = 20, minSuccessful = 50)
+    PropertyCheckConfig(maxSize = 22, minSuccessful = 50)
 
   "A world with no history (using the world reference implementation)" should behave like worldWithNoHistoryBehaviour
 
@@ -3729,7 +3729,7 @@ class WorldSpecUsingWorldEfficientInMemoryImplementation
     extends WorldBehaviours
     with WorldEfficientInMemoryImplementationResource {
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
-    PropertyCheckConfig(maxSize = 22, minSuccessful = 50)
+    PropertyCheckConfig(maxSize = 24, minSuccessful = 50)
 
   "A world with no history (using the world efficient in-memory implementation)" should behave like worldWithNoHistoryBehaviour
 
