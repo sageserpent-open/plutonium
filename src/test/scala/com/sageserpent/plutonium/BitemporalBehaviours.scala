@@ -1,5 +1,6 @@
 package com.sageserpent.plutonium
 
+import cats.{Applicative, Eq}
 import org.scalacheck.Prop.BooleanOperators
 import org.scalacheck.{Arbitrary, Gen, Prop, Properties}
 import org.scalatest.FlatSpec
@@ -7,9 +8,9 @@ import org.scalatest.prop.Checkers
 
 import scala.reflect.runtime.universe._
 import scala.util.Random
-import scalaz.scalacheck._
-import scalaz.syntax.applicativePlus._
-import scalaz.{ApplicativePlus, Equal}
+import cats.laws.discipline.ApplicativeTests
+import cats.kernel.laws.discipline.MonoidTests
+import cats.syntax.apply._
 
 trait BitemporalBehaviours
     extends FlatSpec
@@ -59,14 +60,11 @@ trait BitemporalBehaviours
               val ids = integerHistoryRecordingsGroupedById map (_.historyId
                 .asInstanceOf[IntegerHistory#Id])
 
-              val idsInExistence = integerHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(
-                queryWhen)) map (_.historyId.asInstanceOf[IntegerHistory#Id])
-
               implicit def arbitraryGenericBitemporal[Item](
                   implicit itemArbitrary: Arbitrary[Item])
                 : Arbitrary[Bitemporal[Item]] = Arbitrary {
                 Arbitrary
-                  .arbitrary[Item] map (ApplicativePlus[Bitemporal].point(_))
+                  .arbitrary[Item] map (Applicative[Bitemporal].point(_))
               }
 
               implicit def arbitraryBitemporalOfInt(
@@ -75,7 +73,7 @@ trait BitemporalBehaviours
                 def intFrom(item: IntegerHistory) = item.datums.hashCode()
                 val generatorsThatAlwaysWork = Seq(
                   5 -> (Arbitrary
-                    .arbitrary[Int] map (ApplicativePlus[Bitemporal].point(_))),
+                    .arbitrary[Int] map (Applicative[Bitemporal].point(_))),
                   10 -> (Gen.oneOf(ids) map (Bitemporal
                     .withId[IntegerHistory](_) map (_.integerProperty))),
                   10 -> (Gen.oneOf(ids) map (Bitemporal.withId[IntegerHistory](
@@ -93,19 +91,20 @@ trait BitemporalBehaviours
                 Arbitrary(Gen.frequency(generatorsThatAlwaysWork: _*))
               }
 
-              implicit def equal[Item]: Equal[Bitemporal[Item]] = {
-                (lhs: Bitemporal[Item], rhs: Bitemporal[Item]) =>
+              implicit def equalForBitemporal[X]: Eq[Bitemporal[X]] = {
+                (lhs: Bitemporal[X], rhs: Bitemporal[X]) =>
                   val areEqual = scope.render(lhs) == scope.render(rhs)
                   if (areEqual)
                     assert(scope.numberOf(lhs) == scope.numberOf(rhs))
                   areEqual
               }
 
-              val properties = new Properties("applicativePlusEmpty")
+              val properties = new Properties("applicativeMonoid")
 
-              properties.include(ScalazProperties.applicative.laws[Bitemporal])
+              properties.include(
+                ApplicativeTests[Bitemporal].applicative[Int, Int, Int].all)
 
-              properties.include(ScalazProperties.plusEmpty.laws[Bitemporal])
+              properties.include(MonoidTests[Bitemporal[Int]].monoid.all)
 
               Prop.all(properties.properties map (_._2): _*)
           }
@@ -494,7 +493,7 @@ trait BitemporalBehaviours
                     val bitemporalQueryTwo = Bitemporal.withId[AHistory](id)
                     val agglomeratedBitemporalQuery
                       : Bitemporal[(AHistory, AHistory)] =
-                      (bitemporalQueryOne |@| bitemporalQueryTwo)(
+                      (bitemporalQueryOne, bitemporalQueryTwo).mapN(
                         (_: AHistory, _: AHistory))
                     val numberOfItems =
                       scope.numberOf(Bitemporal.withId[AHistory](id))

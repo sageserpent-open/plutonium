@@ -3,6 +3,7 @@ package com.sageserpent.plutonium
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 
+import cats.syntax.apply._
 import com.esotericsoftware.kryo.io.{Input, Output}
 import com.esotericsoftware.kryo.{Kryo, KryoException, KryoSerializable}
 import com.sageserpent.americium
@@ -15,7 +16,6 @@ import org.scalatest.exceptions.TestFailedException
 import org.scalatest.prop.Checkers
 import org.scalatest.{FlatSpec, Matchers}
 import scalaz.std.stream
-import scalaz.syntax.applicativePlus._
 
 import scala.collection.immutable
 import scala.collection.immutable.{::, TreeMap}
@@ -1023,7 +1023,8 @@ trait WorldBehaviours
                       referencedHistoryId))
                     val agglomeratedBitemporalQuery
                       : Bitemporal[(History, History)] =
-                      (directAccessBitemporalQuery |@| indirectAccessBitemporalQuery)(
+                      (directAccessBitemporalQuery,
+                       indirectAccessBitemporalQuery).mapN(
                         (_: History, _: History))
                     val Seq((directlyAccessedReferencedHistory: History,
                              indirectlyAccessedReferencedHistory: History)) =

@@ -8,7 +8,7 @@ import org.scalacheck.Gen
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{FlatSpec, LoneElement, Matchers}
-import scalaz.syntax.applicativePlus._
+import cats.syntax.apply._
 
 import scala.collection.immutable.{SortedMap, TreeMap}
 import scala.util.Random
@@ -1173,8 +1173,9 @@ trait Bugs
 
               val Seq((referrer, referred)) = scope
                 .render(
-                  (Bitemporal.withId[Thing](referrerId) |@| Bitemporal
-                    .withId[Thing](referredId))((_, _)))
+                  (Bitemporal.withId[Thing](referrerId),
+                   Bitemporal
+                     .withId[Thing](referredId)).mapN((_, _)))
 
               referrer.property1 shouldBe step
               referrer.reference should contain(referred)
