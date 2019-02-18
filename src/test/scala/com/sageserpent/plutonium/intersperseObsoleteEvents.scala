@@ -3,7 +3,6 @@ package com.sageserpent.plutonium
 import com.sageserpent.americium.randomEnrichment._
 
 import scala.util.Random
-import scalaz.std.stream
 
 object intersperseObsoleteEvents {
   type EventId = Int
@@ -19,7 +18,8 @@ object intersperseObsoleteEvents {
                            eventsToBeCorrected: Set[EventId])
     val onePastMaximumEventId = finalEventRelatedThings.size
 
-    def yieldEitherARecordingOrAnObsoleteRecording(unfoldState: UnfoldState) =
+    def yieldEitherARecordingOrAnObsoleteRecording(unfoldState: UnfoldState)
+      : Stream[(Option[EventRelatedThing], EventId)] =
       unfoldState match {
         case unfoldState @ UnfoldState(finalEventRelatedThings,
                                        obsoleteEventRelatedThings,
@@ -29,10 +29,11 @@ object intersperseObsoleteEvents {
             if (eventsToBeCorrected.nonEmpty) {
               // Issue annulments correcting any outstanding obsolete events.
               val obsoleteEventId = random.chooseOneOf(eventsToBeCorrected)
-              Some(
-                (None, obsoleteEventId) -> unfoldState.copy(
+
+              (None, obsoleteEventId) #:: yieldEitherARecordingOrAnObsoleteRecording(
+                unfoldState.copy(
                   eventsToBeCorrected = eventsToBeCorrected - obsoleteEventId))
-            } else None // All done.
+            } else Stream.empty // All done.
           } else if (obsoleteEventRelatedThings.nonEmpty && random
                        .nextBoolean()) {
             val Seq(obsoleteEventRelatedThing,
@@ -40,45 +41,46 @@ object intersperseObsoleteEvents {
               obsoleteEventRelatedThings
             if (eventsToBeCorrected.nonEmpty && random.nextBoolean()) {
               // Correct an obsolete event with another obsolete event.
-              Some(
-                (Some(obsoleteEventRelatedThing),
-                 random.chooseOneOf(eventsToBeCorrected)) -> unfoldState.copy(
-                  obsoleteEventRelatedThings =
-                    remainingObsoleteEventRelatedThings))
+              (Some(obsoleteEventRelatedThing),
+               random
+                 .chooseOneOf(eventsToBeCorrected)) #:: yieldEitherARecordingOrAnObsoleteRecording(
+                unfoldState.copy(obsoleteEventRelatedThings =
+                  remainingObsoleteEventRelatedThings))
             } else {
               // Take some event id that denotes a subsequent non-obsolete event and make an obsolete revision of it.
               val anticipatedEventId = eventId + random
                 .chooseAnyNumberFromZeroToOneLessThan(
                   onePastMaximumEventId - eventId)
-              Some((Some(obsoleteEventRelatedThing), anticipatedEventId) -> unfoldState
-                .copy(
-                  obsoleteEventRelatedThings =
-                    remainingObsoleteEventRelatedThings,
-                  eventsToBeCorrected = eventsToBeCorrected + anticipatedEventId))
+              (Some(obsoleteEventRelatedThing), anticipatedEventId) #:: yieldEitherARecordingOrAnObsoleteRecording(
+                unfoldState
+                  .copy(
+                    obsoleteEventRelatedThings =
+                      remainingObsoleteEventRelatedThings,
+                    eventsToBeCorrected = eventsToBeCorrected + anticipatedEventId))
             }
           } else if (eventsToBeCorrected.nonEmpty && random.nextBoolean()) {
             // Just annul an obsolete event for the sake of it, even though the non-obsolete correction is still yet to follow.
             val obsoleteEventId = random.chooseOneOf(eventsToBeCorrected)
-            Some(
-              (None, obsoleteEventId) -> unfoldState.copy(
+            (None, obsoleteEventId) #:: yieldEitherARecordingOrAnObsoleteRecording(
+              unfoldState.copy(
                 eventsToBeCorrected = eventsToBeCorrected - obsoleteEventId))
           } else {
             // Issue the definitive non-obsolete event; this will not be subsequently corrected.
             val Seq(eventRelatedThing, remainingFinalEventRelatedThings @ _*) =
               finalEventRelatedThings
-            Some(
-              (Some(eventRelatedThing), eventId) -> unfoldState.copy(
+            (Some(eventRelatedThing), eventId) #:: yieldEitherARecordingOrAnObsoleteRecording(
+              unfoldState.copy(
                 finalEventRelatedThings = remainingFinalEventRelatedThings,
                 eventId = 1 + eventId,
                 eventsToBeCorrected = eventsToBeCorrected - eventId))
           }
       }
 
-    stream.unfold(
+    yieldEitherARecordingOrAnObsoleteRecording(
       UnfoldState(finalEventRelatedThings,
                   obsoleteEventRelatedThings,
                   0,
-                  Set.empty))(yieldEitherARecordingOrAnObsoleteRecording)
+                  Set.empty))
   }
 
   def chunkKeepingEventIdsUniquePerChunk[EventRelatedThing](
