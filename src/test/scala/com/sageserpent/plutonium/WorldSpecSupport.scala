@@ -587,6 +587,20 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
       sampleWhensGroupedForLifespans.last.last
   }
 
+  def chunksGenerator[Stuff: Ordering](chunkSizes: Seq[Int],
+                                       stuffGenerator: Gen[Stuff]) = {
+    val numberOfEventsOverall = chunkSizes.sum
+    for {
+      stuff <- Gen.listOfN(numberOfEventsOverall, stuffGenerator) map (_ sorted)
+    } yield
+      stream.unfold(chunkSizes -> stuff) {
+        case (chunkSize #:: remainingChunkSizes, stuff) =>
+          val (chunkOfStuff, remainingStuff) = stuff splitAt chunkSize
+          Some(chunkOfStuff, remainingChunkSizes -> remainingStuff)
+        case (Stream.Empty, _) => None
+      }
+  }
+
   def recordingsGroupedByIdGenerator_(
       dataSamplesForAnIdGenerator: Gen[
         (Any,
@@ -626,17 +640,9 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
         } else
           numberOfEventsForLimitedLifespans(dataSamplesGroupedForLifespans)
       }
-      numberOfEventsOverall = numberOfEventsForLifespans.sum
-      sampleWhens <- Gen.listOfN(numberOfEventsOverall, changeWhenGenerator) map (_ sorted)
-      sampleWhensGroupedForLifespans = stream.unfold(
-        numberOfEventsForLifespans -> sampleWhens) {
-        case (numberOfEvents #:: remainingNumberOfEventsForLifespans,
-              sampleWhens) =>
-          val (sampleWhenGroup, remainingSampleWhens) = sampleWhens splitAt numberOfEvents
-          Some(sampleWhenGroup,
-               remainingNumberOfEventsForLifespans -> remainingSampleWhens)
-        case (Stream.Empty, _) => None
-      }
+      sampleWhensGroupedForLifespans <- chunksGenerator(
+        numberOfEventsForLifespans,
+        changeWhenGenerator)
       noAnnihilationsToWorryAbout = finalLifespanIsOngoing && 1 == sampleWhensGroupedForLifespans.size
       firstAnnihilationHasBeenAlignedWithADefiniteWhen = noAnnihilationsToWorryAbout ||
         PartialFunction.cond(sampleWhensGroupedForLifespans.head.last) {

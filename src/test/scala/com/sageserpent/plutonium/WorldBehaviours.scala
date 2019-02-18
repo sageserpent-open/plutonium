@@ -3509,16 +3509,9 @@ trait WorldBehaviours
       val testCaseGenerator = for {
         worldResource       <- worldResourceGenerator
         testCaseSubsections <- Gen.listOfN(4, testCaseSubSectionGenerator)
-        asOfs <- Gen.listOfN(testCaseSubsections map (_._2.length) sum,
-                             instantGenerator) map (_.sorted)
-        asOfsForSubsections = stream.unfold(testCaseSubsections -> asOfs) {
-          case ((testCaseSubsection :: remainingTestCaseSubsections), asOfs) =>
-            val numberOfRevisions                    = testCaseSubsection._2.length
-            val (asOfsForSubsection, remainingAsOfs) = asOfs splitAt numberOfRevisions
-            Some(asOfsForSubsection,
-                 remainingTestCaseSubsections -> remainingAsOfs)
-          case _ => None
-        }
+        subsectionLengths = testCaseSubsections map (_._2.length)
+        asOfsForSubsections <- chunksGenerator(subsectionLengths,
+                                               instantGenerator)
         queryWhen <- unboundedInstantGenerator
       } yield
         (worldResource, testCaseSubsections, asOfsForSubsections, queryWhen)
