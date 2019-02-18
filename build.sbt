@@ -5,7 +5,7 @@ import sbt.Keys.libraryDependencies
 lazy val settings = Seq(
   organization := "com.sageserpent",
   name := "plutonium",
-  scalaVersion := "2.12.4",
+  scalaVersion := "2.12.8",
   scalacOptions ++= Seq("-Xexperimental",
                         "-target:jvm-1.8",
                         "-Ypartial-unification"),
