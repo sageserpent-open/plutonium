@@ -10,6 +10,7 @@ lazy val settings = Seq(
                         "-target:jvm-1.8",
                         "-Ypartial-unification"),
   libraryDependencies += "org.typelevel"              %% "cats-core"                    % "1.6.0",
+  libraryDependencies += "org.typelevel"              %% "alleycats-core"               % "1.6.0",
   libraryDependencies += "net.bytebuddy"              % "byte-buddy"                    % "1.9.7",
   libraryDependencies += "com.sageserpent"            %% "americium"                    % "0.1.5",
   libraryDependencies += "com.jsuereth"               %% "scala-arm"                    % "2.0",
