@@ -587,17 +587,17 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
       sampleWhensGroupedForLifespans.last.last
   }
 
-  def chunksGenerator[Stuff: Ordering](chunkSizes: Seq[Int],
+  def chunksGenerator[Stuff: Ordering](chunkSizes: List[Int],
                                        stuffGenerator: Gen[Stuff]) = {
     val numberOfEventsOverall = chunkSizes.sum
     for {
       stuff <- Gen.listOfN(numberOfEventsOverall, stuffGenerator) map (_ sorted)
     } yield
       stream.unfold(chunkSizes -> stuff) {
-        case (chunkSize #:: remainingChunkSizes, stuff) =>
+        case (chunkSize :: remainingChunkSizes, stuff) =>
           val (chunkOfStuff, remainingStuff) = stuff splitAt chunkSize
           Some(chunkOfStuff, remainingChunkSizes -> remainingStuff)
-        case (Stream.Empty, _) => None
+        case (Nil, _) => None
       }
   }
 
@@ -639,7 +639,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
             dataSamplesGroupedForLimitedLifespans) :+ dataSamplesGroupForEternalLife.size
         } else
           numberOfEventsForLimitedLifespans(dataSamplesGroupedForLifespans)
-      }
+      }.toList
       sampleWhensGroupedForLifespans <- chunksGenerator(
         numberOfEventsForLifespans,
         changeWhenGenerator)
