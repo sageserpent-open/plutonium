@@ -10,12 +10,12 @@ import com.sageserpent.americium
 import com.sageserpent.americium._
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.seqEnrichment._
+import com.sageserpent.plutonium.World.Revision
 import org.scalacheck.Prop.BooleanOperators
 import org.scalacheck.{Gen, Prop}
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.prop.Checkers
 import org.scalatest.{FlatSpec, Matchers}
-import scalaz.std.stream
 
 import scala.collection.immutable
 import scala.collection.immutable.{::, TreeMap}
@@ -3523,13 +3523,20 @@ trait WorldBehaviours
                 queryWhen) =>
             worldResource acquireAndGet {
               world =>
-                val listOfRevisionsToCheckAtAndRecordingsGroupedById =
-                  stream.unfold(
-                    (testCaseSubsections zip asOfsForSubsections) -> -1) {
-                    case ((((recordingsGroupedById,
-                             bigShuffledHistoryOverLotsOfThings),
-                            asOfs) :: remainingSubsections),
-                          maximumEventIdFromPreviousSubsection) =>
+                type ScalaFormatWorkaround =
+                  Stream[Stream[(Option[(Unbounded[Instant], Event)],
+                                 intersperseObsoleteEvents.EventId)]]
+
+                def listOfRevisionsToCheckAtAndRecordingsGroupedById(
+                    subsections: Seq[((List[RecordingsForAnId],
+                                       ScalaFormatWorkaround),
+                                      List[Instant])],
+                    maximumEventIdFromPreviousSubsection: intersperseObsoleteEvents.EventId)
+                  : Stream[(Revision, List[RecordingsForAnId])] =
+                  subsections match {
+                    case ((recordingsGroupedById,
+                           bigShuffledHistoryOverLotsOfThings),
+                          asOfs) :: remainingSubsections =>
                       val sortedEventIds =
                         (bigShuffledHistoryOverLotsOfThings flatMap (_ map (_._2))).sorted.distinct
                       assert(0 == sortedEventIds.head)
@@ -3580,14 +3587,16 @@ trait WorldBehaviours
                             world)
                       }
 
-                      Some(
-                        (world.nextRevision   -> recordingsGroupedById,
-                         remainingSubsections -> maximumEventIdFromThisSubsection))
-                    case _ => None
+                      (world.nextRevision -> recordingsGroupedById) #:: listOfRevisionsToCheckAtAndRecordingsGroupedById(
+                        remainingSubsections,
+                        maximumEventIdFromThisSubsection)
+                    case _ => Stream.empty
                   }
 
                 val checks = (for {
-                  (revision, recordingsGroupedById) <- listOfRevisionsToCheckAtAndRecordingsGroupedById
+                  (revision, recordingsGroupedById) <- listOfRevisionsToCheckAtAndRecordingsGroupedById(
+                    testCaseSubsections zip asOfsForSubsections,
+                    -1)
                 } yield {
                   val scope = world.scopeFor(queryWhen, revision)
 

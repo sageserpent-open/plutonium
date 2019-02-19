@@ -844,8 +844,9 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
     } yield leftHand ++ rightHand
   }
 
-  def recordingsGroupedByIdGenerator(forbidAnnihilations: Boolean,
-                                     forbidMeasurements: Boolean = false) =
+  def recordingsGroupedByIdGenerator(
+      forbidAnnihilations: Boolean,
+      forbidMeasurements: Boolean = false): Gen[List[RecordingsForAnId]] =
     mixedRecordingsGroupedByIdGenerator(forbidAnnihilations =
                                           forbidAnnihilations,
                                         forbidMeasurements = forbidMeasurements)
