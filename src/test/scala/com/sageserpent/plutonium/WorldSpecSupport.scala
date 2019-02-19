@@ -13,7 +13,6 @@ import io.lettuce.core.{RedisClient, RedisURI}
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.Assertions
 import resource._
-import scalaz.std.stream
 
 import scala.collection.JavaConversions._
 import scala.collection.Searching._
@@ -587,18 +586,23 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
       sampleWhensGroupedForLifespans.last.last
   }
 
-  def chunksGenerator[Stuff: Ordering](chunkSizes: List[Int],
-                                       stuffGenerator: Gen[Stuff]) = {
+  def chunksGenerator[Article: Ordering](chunkSizes: List[Int],
+                                         stuffGenerator: Gen[Article]) = {
     val numberOfEventsOverall = chunkSizes.sum
     for {
-      stuff <- Gen.listOfN(numberOfEventsOverall, stuffGenerator) map (_ sorted)
-    } yield
-      stream.unfold(chunkSizes -> stuff) {
-        case (chunkSize :: remainingChunkSizes, stuff) =>
-          val (chunkOfStuff, remainingStuff) = stuff splitAt chunkSize
-          Some(chunkOfStuff, remainingChunkSizes -> remainingStuff)
-        case (Nil, _) => None
-      }
+      articles <- Gen.listOfN(numberOfEventsOverall, stuffGenerator) map (_ sorted)
+    } yield {
+      def chunksOf(chunkSizes: List[Int],
+                   articles: List[Article]): Stream[List[Article]] =
+        chunkSizes match {
+          case chunkSize :: remainingChunkSizes =>
+            val (chunkOfStuff, remainingArticles) = articles splitAt chunkSize
+            chunkOfStuff #:: chunksOf(remainingChunkSizes, remainingArticles)
+          case Nil => Stream.empty
+        }
+
+      chunksOf(chunkSizes, articles)
+    }
   }
 
   def recordingsGroupedByIdGenerator_(
