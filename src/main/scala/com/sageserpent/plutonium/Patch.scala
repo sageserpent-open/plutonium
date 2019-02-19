@@ -6,18 +6,14 @@ import com.sageserpent.plutonium.AbstractPatch.TypeRefinement
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.Patch.MethodPieces
 
-import scala.reflect.runtime.universe
-import scala.reflect.runtime.universe._
-import scalaz.{-\/, \/, \/-}
-
 object Patch {
   type WrappedArgument =
-    \/[AnyRef, UniqueItemSpecification]
+    Either[AnyRef, UniqueItemSpecification]
 
   def wrap(argument: AnyRef): WrappedArgument = argument match {
     case argumentRecorder: Recorder =>
-      \/-(argumentRecorder.uniqueItemSpecification)
-    case _ => -\/(argument)
+      Right(argumentRecorder.uniqueItemSpecification)
+    case _ => Left(argument)
   }
 
   def apply(targetRecorder: Recorder,
@@ -69,7 +65,7 @@ case class Patch(methodPieces: MethodPieces,
 
   override val argumentItemSpecifications: Seq[UniqueItemSpecification] =
     wrappedArguments collect {
-      case \/-(uniqueItemSpecification) => uniqueItemSpecification
+      case Right(uniqueItemSpecification) => uniqueItemSpecification
     }
 
   def unwrap(identifiedItemAccess: IdentifiedItemAccess)(
