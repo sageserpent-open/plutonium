@@ -11,6 +11,7 @@ lazy val settings = Seq(
                         "-Ypartial-unification"),
   libraryDependencies += "org.typelevel"              %% "cats-core"                    % "1.6.0",
   libraryDependencies += "org.typelevel"              %% "alleycats-core"               % "1.6.0",
+  libraryDependencies += "org.typelevel"              %% "cats-effect"                  % "1.2.0",
   libraryDependencies += "net.bytebuddy"              % "byte-buddy"                    % "1.9.7",
   libraryDependencies += "com.sageserpent"            %% "americium"                    % "0.1.5",
   libraryDependencies += "com.jsuereth"               %% "scala-arm"                    % "2.0",
@@ -34,7 +35,7 @@ lazy val settings = Seq(
   libraryDependencies += "com.novocode"               % "junit-interface"               % "0.11" % "test",
   libraryDependencies += "org.typelevel"              %% "cats-laws"                    % "1.6.0" % "test",
   libraryDependencies += "org.typelevel"              %% "cats-testkit"                 % "1.6.0" % "test",
-  libraryDependencies += "com.github.alexarchambault" %% "scalacheck-shapeless_1.13"    % "1.1.6" % "test",
+  libraryDependencies += "com.github.alexarchambault" %% "scalacheck-shapeless_1.14"    % "1.2.0-1" % "test",
   libraryDependencies += "com.storm-enroute"          %% "scalameter"                   % "0.8.2" % "benchmark",
   testFrameworks in Benchmark += new TestFramework(
     "org.scalameter.ScalaMeterFramework"),
