@@ -5,10 +5,7 @@ import java.util.UUID
 
 import com.esotericsoftware.kryo.factories.ReflectionSerializerFactory
 import com.esotericsoftware.kryo.io.{Input, Output}
-import com.esotericsoftware.kryo.serializers.{
-  CollectionSerializer,
-  FieldSerializer
-}
+import com.esotericsoftware.kryo.serializers.FieldSerializer
 import com.esotericsoftware.kryo.util.ObjectMap
 import com.esotericsoftware.kryo.{Kryo, Serializer}
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
