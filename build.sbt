@@ -26,6 +26,7 @@ lazy val settings = Seq(
   libraryDependencies += "de.ummels"                  %% "scala-prioritymap"            % "1.0.0",
   libraryDependencies += "de.sciss"                   %% "fingertree"                   % "1.5.2",
   libraryDependencies += "com.google.guava"           % "guava"                         % "23.0",
+  libraryDependencies += "com.github.cb372"           %% "scalacache-caffeine"          % "0.27.0",
   libraryDependencies += "org.slf4j"                  % "slf4j-api"                     % "1.7.21" % "provided",
   libraryDependencies += "org.slf4j"                  % "slf4j-nop"                     % "1.7.21" % "test",
   libraryDependencies += "org.scalatest"              %% "scalatest"                    % "3.0.5" % "test",
