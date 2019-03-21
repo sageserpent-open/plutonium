@@ -2,10 +2,9 @@ package com.sageserpent.plutonium
 
 import java.lang.reflect.Method
 
-import com.sageserpent.plutonium.AbstractPatch.TypeRefinement
+import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 
 import scala.reflect.runtime.universe._
-import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 
 object AbstractPatch {
   def patchesAreRelated(lhs: AbstractPatch, rhs: AbstractPatch): Boolean = {
@@ -24,7 +23,8 @@ object AbstractPatch {
 
 // TODO: will need to be able to lower the typetags for the target and arguments somehow if we are going to build an update plan with these.
 abstract class AbstractPatch {
-  def rewriteItemTypeTags(typeRefinement: TypeRefinement): AbstractPatch
+  def rewriteItemTypeTags(
+      typeRefinement: AbstractPatch.TypeRefinement): AbstractPatch
 
   val method: Method
   val targetItemSpecification: UniqueItemSpecification

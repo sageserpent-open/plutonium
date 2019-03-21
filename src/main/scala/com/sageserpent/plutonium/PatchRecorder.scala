@@ -2,11 +2,7 @@ package com.sageserpent.plutonium
 
 import java.time.Instant
 
-import com.sageserpent.americium.{Finite, Unbounded}
-import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
-
-import scalaz.std.option.optionSyntax._
-import scala.reflect.runtime.universe._
+import com.sageserpent.americium.Unbounded
 
 trait BestPatchSelection {
   def apply[AssociatedData](
@@ -69,9 +65,7 @@ trait PatchRecorderContracts extends PatchRecorder {
   abstract override def recordPatchFromChange(eventId: EventId,
                                               when: Unbounded[Instant],
                                               patch: AbstractPatch): Unit = {
-    require(
-      whenEventPertainedToByLastRecordingTookPlace.cata(some = when >= _,
-                                                        none = true))
+    require(whenEventPertainedToByLastRecordingTookPlace.fold(true)(when >= _))
     require(!allRecordingsAreCaptured)
     val result = super.recordPatchFromChange(eventId, when, patch)
     require(whenEventPertainedToByLastRecordingTookPlace == Some(when))
@@ -82,9 +76,7 @@ trait PatchRecorderContracts extends PatchRecorder {
       eventId: EventId,
       when: Unbounded[Instant],
       patch: AbstractPatch): Unit = {
-    require(
-      whenEventPertainedToByLastRecordingTookPlace.cata(some = when >= _,
-                                                        none = true))
+    require(whenEventPertainedToByLastRecordingTookPlace.fold(true)(when >= _))
     require(!allRecordingsAreCaptured)
     val result = super.recordPatchFromMeasurement(eventId, when, patch)
     require(whenEventPertainedToByLastRecordingTookPlace == Some(when))
@@ -95,7 +87,7 @@ trait PatchRecorderContracts extends PatchRecorder {
                                            annihilation: Annihilation): Unit = {
     require(
       whenEventPertainedToByLastRecordingTookPlace
-        .cata(some = annihilation.when >= _, none = true))
+        .fold(true)(annihilation.when >= _))
     require(!allRecordingsAreCaptured)
     val result = super.recordAnnihilation(eventId, annihilation)
     require(

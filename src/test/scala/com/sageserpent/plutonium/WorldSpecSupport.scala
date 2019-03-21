@@ -13,7 +13,6 @@ import io.lettuce.core.{RedisClient, RedisURI}
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.Assertions
 import resource._
-import scalaz.std.stream
 
 import scala.collection.JavaConversions._
 import scala.collection.Searching._
@@ -587,6 +586,25 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
       sampleWhensGroupedForLifespans.last.last
   }
 
+  def chunksGenerator[Article: Ordering](chunkSizes: List[Int],
+                                         stuffGenerator: Gen[Article]) = {
+    val numberOfEventsOverall = chunkSizes.sum
+    for {
+      articles <- Gen.listOfN(numberOfEventsOverall, stuffGenerator) map (_ sorted)
+    } yield {
+      def chunksOf(chunkSizes: List[Int],
+                   articles: List[Article]): Stream[List[Article]] =
+        chunkSizes match {
+          case chunkSize :: remainingChunkSizes =>
+            val (chunkOfStuff, remainingArticles) = articles splitAt chunkSize
+            chunkOfStuff #:: chunksOf(remainingChunkSizes, remainingArticles)
+          case Nil => Stream.empty
+        }
+
+      chunksOf(chunkSizes, articles)
+    }
+  }
+
   def recordingsGroupedByIdGenerator_(
       dataSamplesForAnIdGenerator: Gen[
         (Any,
@@ -625,18 +643,10 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
             dataSamplesGroupedForLimitedLifespans) :+ dataSamplesGroupForEternalLife.size
         } else
           numberOfEventsForLimitedLifespans(dataSamplesGroupedForLifespans)
-      }
-      numberOfEventsOverall = numberOfEventsForLifespans.sum
-      sampleWhens <- Gen.listOfN(numberOfEventsOverall, changeWhenGenerator) map (_ sorted)
-      sampleWhensGroupedForLifespans = stream.unfold(
-        numberOfEventsForLifespans -> sampleWhens) {
-        case (numberOfEvents #:: remainingNumberOfEventsForLifespans,
-              sampleWhens) =>
-          val (sampleWhenGroup, remainingSampleWhens) = sampleWhens splitAt numberOfEvents
-          Some(sampleWhenGroup,
-               remainingNumberOfEventsForLifespans -> remainingSampleWhens)
-        case (Stream.Empty, _) => None
-      }
+      }.toList
+      sampleWhensGroupedForLifespans <- chunksGenerator(
+        numberOfEventsForLifespans,
+        changeWhenGenerator)
       noAnnihilationsToWorryAbout = finalLifespanIsOngoing && 1 == sampleWhensGroupedForLifespans.size
       firstAnnihilationHasBeenAlignedWithADefiniteWhen = noAnnihilationsToWorryAbout ||
         PartialFunction.cond(sampleWhensGroupedForLifespans.head.last) {
@@ -834,8 +844,9 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
     } yield leftHand ++ rightHand
   }
 
-  def recordingsGroupedByIdGenerator(forbidAnnihilations: Boolean,
-                                     forbidMeasurements: Boolean = false) =
+  def recordingsGroupedByIdGenerator(
+      forbidAnnihilations: Boolean,
+      forbidMeasurements: Boolean = false): Gen[List[RecordingsForAnId]] =
     mixedRecordingsGroupedByIdGenerator(forbidAnnihilations =
                                           forbidAnnihilations,
                                         forbidMeasurements = forbidMeasurements)

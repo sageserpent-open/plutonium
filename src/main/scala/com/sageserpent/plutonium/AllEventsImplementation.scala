@@ -3,6 +3,10 @@ package com.sageserpent.plutonium
 import java.lang.reflect.Method
 import java.time.Instant
 
+import cats.Foldable
+import cats.data.Writer
+import cats.implicits._
+import alleycats.std.iterable._
 import com.sageserpent.americium.{
   Finite,
   NegativeInfinity,
@@ -391,15 +395,6 @@ object AllEventsImplementation {
     def itemStateUpdates(lifecyclesById: LifecyclesById,
                          bestPatchSelection: BestPatchSelection)
       : Set[(ItemStateUpdateKey, ItemStateUpdate)] = {
-      // Welcome to hell...
-
-      import scalaz.std.iterable._
-      import scalaz.std.set._
-      import scalaz.syntax.foldable._
-      import scalaz.syntax.monad._
-      import scalaz.syntax.writer._
-      import scalaz.{Monad, Writer}
-
       type ResultsWriter[X] =
         Writer[Set[(ItemStateUpdateKey, ItemStateUpdate)], X]
 
@@ -438,7 +433,7 @@ object AllEventsImplementation {
           new PatchAccumulationState(
             accumulatedPatchesByExemplarMethod =
               updatedAccumulatedPatchesByExemplarMethod)
-            .pure(implicitly[Monad[ResultsWriter]])
+            .pure[ResultsWriter]
         }
 
         def recordAnnihilation(
@@ -494,7 +489,7 @@ object AllEventsImplementation {
 
           new PatchAccumulationState(
             accumulatedPatchesByExemplarMethod = accumulatedPatchesByExemplarMethod - exemplarMethod)
-            .set(
+            .writer(
               Set(
                 itemStateUpdateKeyForAnchorPatchRepresentingTheEvent -> ItemStatePatch(
                   bestPatch)))
@@ -502,11 +497,12 @@ object AllEventsImplementation {
 
         def writeBestPatches: Writer[Set[(ItemStateUpdateKey, ItemStateUpdate)],
                                      PatchAccumulationState] =
-          accumulatedPatchesByExemplarMethod.keys.foldLeftM(this) {
-            case (patchAccumulationState: PatchAccumulationState,
-                  method: Method) =>
-              patchAccumulationState.writeBestPatch(method)
-          }
+          Foldable[Iterable]
+            .foldLeftM(accumulatedPatchesByExemplarMethod.keys, this) {
+              case (patchAccumulationState: PatchAccumulationState,
+                    method: Method) =>
+                patchAccumulationState.writeBestPatch(method)
+            }
 
         private def exemplarMethodAndPatchesFor(method: Method)
           : Option[(Method, List[(AbstractPatch, ItemStateUpdateKey)])] =
@@ -524,36 +520,36 @@ object AllEventsImplementation {
       }
 
       val writtenState: ResultsWriter[PatchAccumulationState] =
-        (eventsArrangedInReverseTimeOrder: Iterable[(ItemStateUpdateKey,
-                                                     IndivisibleEvent)])
-          .foldLeftM(new PatchAccumulationState(): PatchAccumulationState) {
-            case (patchAccumulationState: PatchAccumulationState,
-                  (itemStateUpdateKey: ItemStateUpdateKey,
-                   indivisibleEvent: IndivisibleEvent)) =>
-              indivisibleEvent match {
-                case _: ArgumentReference =>
-                  patchAccumulationState.pure(implicitly[Monad[ResultsWriter]])
-                case IndivisibleChange(patch) =>
-                  patchAccumulationState.recordChangePatch(
-                    itemStateUpdateKey,
-                    patch.rewriteItemTypeTags(
-                      refineTypeFor(itemStateUpdateKey, _, lifecyclesById)))
-                case IndivisibleMeasurement(patch) =>
-                  patchAccumulationState.recordMeasurementPatch(
-                    itemStateUpdateKey,
-                    patch.rewriteItemTypeTags(
-                      refineTypeFor(itemStateUpdateKey, _, lifecyclesById)))
-                case EndOfLifecycle(annihilation) =>
-                  require(endTime == itemStateUpdateKey)
-                  patchAccumulationState.recordAnnihilation(itemStateUpdateKey,
-                                                            annihilation)
-              }
-          }
+        Foldable[Iterable].foldLeftM(
+          eventsArrangedInReverseTimeOrder,
+          new PatchAccumulationState(): PatchAccumulationState) {
+          case (patchAccumulationState: PatchAccumulationState,
+                (itemStateUpdateKey: ItemStateUpdateKey,
+                 indivisibleEvent: IndivisibleEvent)) =>
+            indivisibleEvent match {
+              case _: ArgumentReference =>
+                patchAccumulationState.pure[ResultsWriter]
+              case IndivisibleChange(patch) =>
+                patchAccumulationState.recordChangePatch(
+                  itemStateUpdateKey,
+                  patch.rewriteItemTypeTags(
+                    refineTypeFor(itemStateUpdateKey, _, lifecyclesById)))
+              case IndivisibleMeasurement(patch) =>
+                patchAccumulationState.recordMeasurementPatch(
+                  itemStateUpdateKey,
+                  patch.rewriteItemTypeTags(
+                    refineTypeFor(itemStateUpdateKey, _, lifecyclesById)))
+              case EndOfLifecycle(annihilation) =>
+                require(endTime == itemStateUpdateKey)
+                patchAccumulationState.recordAnnihilation(itemStateUpdateKey,
+                                                          annihilation)
+            }
+        }
 
       val writtenStateWithFinalBestPatchesWritten =
         writtenState.flatMap(_.writeBestPatches)
 
-      writtenStateWithFinalBestPatchesWritten.run._1 // ... hope you had a pleasant stay.
+      writtenStateWithFinalBestPatchesWritten.run._1
     }
 
     def referencingLifecycles(lifecyclesById: LifecyclesById): Set[Lifecycle] =

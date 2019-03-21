@@ -20,7 +20,7 @@ import scala.reflect.runtime.universe.{Super => _, This => _, _}
 
 object ProxyFactory {
   private[plutonium] trait StateAcquisition[AcquiredState] {
-    def acquire(acquiredState: AcquiredState)
+    def acquire(acquiredState: AcquiredState): Unit
   }
 
   val byteBuddy = new ByteBuddy()

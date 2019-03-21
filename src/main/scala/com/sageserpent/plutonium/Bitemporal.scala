@@ -1,11 +1,12 @@
 package com.sageserpent.plutonium
 
+import cats.Applicative
+
 import scala.reflect.runtime.universe._
-import scalaz.ApplicativePlus
 
 sealed trait Bitemporal[Item] {
   def map[Item2] =
-    implicitly[ApplicativePlus[Bitemporal]].map[Item, Item2](this) _
+    implicitly[Applicative[Bitemporal]].map[Item, Item2](this) _
 
   def ap[Item2](stage: Bitemporal[Item => Item2]): Bitemporal[Item2] =
     ApBitemporalResult(preceedingContext = this, stage = stage)
