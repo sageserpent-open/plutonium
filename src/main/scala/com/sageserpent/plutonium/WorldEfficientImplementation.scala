@@ -8,6 +8,8 @@ import com.sageserpent.plutonium.World.Revision
 
 abstract class WorldEfficientImplementation[F[_]: Monad]
     extends WorldImplementationCodeFactoring {
+  // TODO - one subclass prefers 'Array', other 'Vector'. Sort this out...
+
   protected def timelinePriorTo(nextRevision: Revision): F[Option[Timeline]]
 
   protected def allTimelinesPriorTo(

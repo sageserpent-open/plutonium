@@ -923,6 +923,14 @@ trait WorldEfficientInMemoryImplementationResource extends WorldResource {
       with WorldContracts)(_.close())(List.empty))
 }
 
+trait WorldEfficientQuestionableBackendImplementationResource
+    extends WorldResource {
+  val worldResourceGenerator: Gen[ManagedResource[World]] =
+    Gen.const(
+      makeManagedResource(new WorldEfficientQuestionableBackendImplementation
+      with WorldContracts)(_.close())(List.empty))
+}
+
 trait WorldRedisBasedImplementationResource
     extends WorldResource
     with RedisServerFixture {
