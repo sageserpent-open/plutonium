@@ -147,12 +147,13 @@ object capturePatches {
       mutable.MutableList.empty[AbstractPatch]
 
     class LocalRecorderFactory extends RecorderFactory {
-      override def apply[Item: TypeTag](id: Any): Item = {
+      override def apply[Item](
+          _uniqueItemSpecification: UniqueItemSpecification): Item = {
         import proxyFactory.AcquiredState
 
         val stateToBeAcquiredByProxy = new AcquiredState {
           val uniqueItemSpecification: UniqueItemSpecification =
-            UniqueItemSpecification(id, typeTag[Item])
+            _uniqueItemSpecification
 
           def capturePatch(patch: AbstractPatch) {
             capturedPatches += patch
@@ -175,11 +176,14 @@ case class Change(when: Unbounded[Instant], patches: Seq[AbstractPatch])
 object Change {
   def forOneItem[Item: TypeTag](
       when: Unbounded[Instant])(id: Any, update: Item => Unit): Change = {
-    val typeTag = implicitly[TypeTag[Item]]
-    Change(when, capturePatches((recorderFactory: RecorderFactory) => {
-      val recorder = recorderFactory(id)(typeTag)
-      update(recorder)
-    }))
+    Change(
+      when,
+      capturePatches((recorderFactory: RecorderFactory) => {
+        val recorder =
+          recorderFactory[Item](UniqueItemSpecification(id, typeTag[Item]))
+        update(recorder)
+      })
+    )
   }
 
   def forOneItem[Item: TypeTag](when: Instant)(id: Any,
@@ -193,13 +197,13 @@ object Change {
       id1: Any,
       id2: Any,
       update: (Item1, Item2) => Unit): Change = {
-    val typeTag1 = implicitly[TypeTag[Item1]]
-    val typeTag2 = implicitly[TypeTag[Item2]]
     Change(
       when,
       capturePatches((recorderFactory: RecorderFactory) => {
-        val recorder1 = recorderFactory(id1)(typeTag1)
-        val recorder2 = recorderFactory(id2)(typeTag2)
+        val recorder1 =
+          recorderFactory[Item1](UniqueItemSpecification(id1, typeTag[Item1]))
+        val recorder2 =
+          recorderFactory[Item2](UniqueItemSpecification(id2, typeTag[Item2]))
         update(recorder1, recorder2)
       })
     )
@@ -225,11 +229,14 @@ object Measurement {
   def forOneItem[Item: TypeTag](when: Unbounded[Instant])(
       id: Any,
       measurement: Item => Unit): Measurement = {
-    val typeTag = implicitly[TypeTag[Item]]
-    Measurement(when, capturePatches((recorderFactory: RecorderFactory) => {
-      val recorder = recorderFactory(id)(typeTag)
-      measurement(recorder)
-    }))
+    Measurement(
+      when,
+      capturePatches((recorderFactory: RecorderFactory) => {
+        val recorder =
+          recorderFactory[Item](UniqueItemSpecification(id, typeTag[Item]))
+        measurement(recorder)
+      })
+    )
   }
 
   def forOneItem[Item: TypeTag](
@@ -243,13 +250,13 @@ object Measurement {
       id1: Any,
       id2: Any,
       update: (Item1, Item2) => Unit): Measurement = {
-    val typeTag1 = implicitly[TypeTag[Item1]]
-    val typeTag2 = implicitly[TypeTag[Item2]]
     Measurement(
       when,
       capturePatches((recorderFactory: RecorderFactory) => {
-        val recorder1 = recorderFactory(id1)(typeTag1)
-        val recorder2 = recorderFactory(id2)(typeTag2)
+        val recorder1 =
+          recorderFactory[Item1](UniqueItemSpecification(id1, typeTag[Item1]))
+        val recorder2 =
+          recorderFactory[Item2](UniqueItemSpecification(id2, typeTag[Item2]))
         update(recorder1, recorder2)
       })
     )
