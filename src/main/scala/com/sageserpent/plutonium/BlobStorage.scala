@@ -1,7 +1,5 @@
 package com.sageserpent.plutonium
 
-import scala.reflect.runtime.universe.TypeTag
-
 object BlobStorage {
   trait SnapshotRetrievalApi[SnapshotBlob] {
     def snapshotBlobFor(
@@ -9,9 +7,11 @@ object BlobStorage {
   }
 
   trait Timeslice[SnapshotBlob] extends SnapshotRetrievalApi[SnapshotBlob] {
-    def uniqueItemQueriesFor[Item: TypeTag]: Stream[UniqueItemSpecification]
-    def uniqueItemQueriesFor[Item: TypeTag](
-        id: Any): Stream[UniqueItemSpecification]
+    def uniqueItemQueriesFor[Item](
+        clazz: Class[Item]): Stream[UniqueItemSpecification]
+    def uniqueItemQueriesFor[Item](
+        uniqueItemSpecification: UniqueItemSpecification)
+      : Stream[UniqueItemSpecification]
   }
 
   trait TimesliceContracts[SnapshotBlob] extends Timeslice[SnapshotBlob] {
@@ -19,7 +19,7 @@ object BlobStorage {
         uniqueItemSpecification: UniqueItemSpecification)
       : Option[SnapshotBlob] = {
       val uniqueItemSpecifications = uniqueItemQueriesFor(
-        uniqueItemSpecification.id)(uniqueItemSpecification.typeTag)
+        uniqueItemSpecification)
       require(
         1 >= uniqueItemSpecifications.size,
         s"The item specification: '$uniqueItemSpecification', should pick out a unique item, these match it: ${uniqueItemSpecifications.toList}."

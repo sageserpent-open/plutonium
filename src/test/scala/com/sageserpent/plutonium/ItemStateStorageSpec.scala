@@ -8,7 +8,6 @@ import org.scalacheck.{Gen, Prop}
 import org.scalatest.prop.Checkers
 import org.scalatest.{FlatSpec, Matchers}
 
-import scala.reflect.runtime.universe._
 import scala.util.Random
 
 object MarkSyntax {
@@ -110,9 +109,9 @@ class ItemStateStorageSpec
   import ItemStateStorage.SnapshotBlob
   import MarkSyntax._
 
-  val oddGraphNodeTypeTag = typeTag[OddGraphNode]
+  val oddGraphNodeClazz = classOf[OddGraphNode]
 
-  val evenGraphNodeTypeTag = typeTag[EvenGraphNode]
+  val evenGraphNodeClazz = classOf[EvenGraphNode]
 
   def markMapletGenerator(maximumMark: Int) =
     for {
@@ -152,9 +151,9 @@ class ItemStateStorageSpec
     override protected def uniqueItemSpecification(
         item: ItemSuperType): UniqueItemSpecification = item.id match {
       case oddId: String =>
-        UniqueItemSpecification(oddId, oddGraphNodeTypeTag)
+        UniqueItemSpecification(oddId, oddGraphNodeClazz)
       case eventId: Int =>
-        UniqueItemSpecification(eventId, evenGraphNodeTypeTag)
+        UniqueItemSpecification(eventId, evenGraphNodeClazz)
     }
 
     override protected def lifecycleUUID(item: ItemSuperType): UUID =
@@ -192,19 +191,21 @@ class ItemStateStorageSpec
         nodesThatAreToBeRoundtripped map (node =>
           (node.id match {
             case oddId: String =>
-              UniqueItemSpecification(oddId, oddGraphNodeTypeTag)
+              UniqueItemSpecification(oddId, oddGraphNodeClazz)
             case eventId: Int =>
-              UniqueItemSpecification(eventId, evenGraphNodeTypeTag)
+              UniqueItemSpecification(eventId, evenGraphNodeClazz)
           }) -> itemStateStorage
             .snapshotFor(node)) toMap
 
       val stubTimeslice = new BlobStorage.Timeslice[SnapshotBlob] {
-        override def uniqueItemQueriesFor[Item: TypeTag]
-          : Stream[UniqueItemSpecification] = snapshotBlobs.keys.toStream
+        override def uniqueItemQueriesFor[Item](
+            clazz: Class[Item]): Stream[UniqueItemSpecification] =
+          snapshotBlobs.keys.toStream
 
-        override def uniqueItemQueriesFor[Item: TypeTag](
-            id: Any): Stream[UniqueItemSpecification] =
-          snapshotBlobs.keys.filter(_.id == id).toStream
+        override def uniqueItemQueriesFor[Item](
+            uniqueItemSpecification: UniqueItemSpecification)
+          : Stream[UniqueItemSpecification] =
+          snapshotBlobs.keys.filter(_.id == uniqueItemSpecification.id).toStream
 
         override def snapshotBlobFor(
             uniqueItemSpecification: UniqueItemSpecification)
@@ -235,11 +236,11 @@ class ItemStateStorageSpec
               lifecycleUUID: UUID,
               itemStateUpdateKey: Option[ItemStateUpdateKey]): Item = {
             val item = uniqueItemSpecification match {
-              case UniqueItemSpecification(id: OddGraphNode#Id, itemTypeTag)
-                  if itemTypeTag == oddGraphNodeTypeTag =>
+              case UniqueItemSpecification(id: OddGraphNode#Id, itemClazz)
+                  if itemClazz == oddGraphNodeClazz =>
                 new OddGraphNode(id)
-              case UniqueItemSpecification(id: EvenGraphNode#Id, itemTypeTag)
-                  if itemTypeTag == evenGraphNodeTypeTag =>
+              case UniqueItemSpecification(id: EvenGraphNode#Id, itemClazz)
+                  if itemClazz == evenGraphNodeClazz =>
                 new EvenGraphNode(id)
             }
 
@@ -255,10 +256,10 @@ class ItemStateStorageSpec
         .map(_.id match {
           case oddId: String =>
             reconstitutionContext.itemFor[OddGraphNode](
-              UniqueItemSpecification(oddId, oddGraphNodeTypeTag))
+              UniqueItemSpecification(oddId, oddGraphNodeClazz))
           case evenId: Int =>
             reconstitutionContext.itemFor[EvenGraphNode](
-              UniqueItemSpecification(evenId, evenGraphNodeTypeTag))
+              UniqueItemSpecification(evenId, evenGraphNodeClazz))
         })
         .toList
 

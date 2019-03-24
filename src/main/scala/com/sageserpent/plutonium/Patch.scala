@@ -2,7 +2,7 @@ package com.sageserpent.plutonium
 
 import java.lang.reflect.{InvocationTargetException, Method}
 
-import com.sageserpent.plutonium.AbstractPatch.TypeRefinement
+import com.sageserpent.plutonium.AbstractPatch.ClazzRefinement
 import com.sageserpent.plutonium.Patch.MethodPieces
 
 object Patch {
@@ -44,8 +44,8 @@ case class Patch(methodPieces: MethodPieces,
   override def toString: String =
     s"Patch for: '$targetItemSpecification', method: '${method.getName}', arguments: '${wrappedArguments.toList}''"
 
-  override def rewriteItemTypeTags(
-      typeRefinement: TypeRefinement): AbstractPatch = {
+  override def rewriteItemClazzes(
+      typeRefinement: ClazzRefinement): AbstractPatch = {
     val rewrittenTargetItemSpecification: UniqueItemSpecification =
       UniqueItemSpecification(targetItemSpecification.id,
                               typeRefinement(targetItemSpecification))

@@ -105,22 +105,21 @@ trait ProxyFactory {
     // using the likes of 'TrieMap.getOrElseUpdate' due to the initialiser block being executed
     // more than once, even though the map is indeed thread safe. Let's keep it simple for now...
     {
-      if (typeOf[Nothing] == uniqueItemSpecification.typeTag.tpe)
+      if (classOf[Nothing] == uniqueItemSpecification.clazz)
         throw new RuntimeException(
           s"attempt to annihilate an item '$id' without an explicit type.")
 
       synchronized {
-        cachedProxyClasses.getOrElseUpdate(
-          uniqueItemSpecification.typeTag.tpe, {
-            createProxyClass(classFromType(uniqueItemSpecification.typeTag.tpe))
-          })
+        cachedProxyClasses.getOrElseUpdate(uniqueItemSpecification.clazz, {
+          createProxyClass(uniqueItemSpecification.clazz)
+        })
       }
     }
 
   protected def additionalInterfaces: Array[Class[_]]
   protected val cachedProxyClasses
-    : scala.collection.mutable.Map[Type, Class[_]] =
-    mutable.Map.empty[universe.Type, Class[_]]
+    : scala.collection.mutable.Map[Class[_], Class[_]] =
+    mutable.Map.empty
 
   val matchGetClass: ElementMatcher[MethodDescription] =
     ElementMatchers.is(classOf[AnyRef].getMethod("getClass"))

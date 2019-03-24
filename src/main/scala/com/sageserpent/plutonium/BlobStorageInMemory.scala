@@ -3,7 +3,6 @@ package com.sageserpent.plutonium
 import scala.collection.Searching._
 import scala.collection.mutable
 import scala.math.Ordered.orderingToOrdered
-import scala.reflect.runtime.universe._
 
 object BlobStorageInMemory {
   type Revision = Int
@@ -57,7 +56,7 @@ case class BlobStorageInMemory[Time, RecordingId, SnapshotBlob] private (
   import BlobStorageInMemory._
 
   case class PhoenixLifecycleSpanningAnnihilations(
-      itemTypeTag: TypeTag[_ <: Any],
+      itemClazz: Class[_],
       snapshotBlobs: Vector[(Split[Time],
                              (Option[SnapshotBlob], RecordingId, Revision))] =
         Vector.empty) {
@@ -152,8 +151,8 @@ case class BlobStorageInMemory[Time, RecordingId, SnapshotBlob] private (
                 case UniqueItemSpecification(id, itemTypeTag) =>
                   thisBlobStorage.lifecycles
                     .get(id)
-                    .flatMap(_.find(itemTypeTag == _.itemTypeTag)) getOrElse PhoenixLifecycleSpanningAnnihilations(
-                    itemTypeTag = itemTypeTag)
+                    .flatMap(_.find(itemTypeTag == _.itemClazz)) getOrElse PhoenixLifecycleSpanningAnnihilations(
+                    itemClazz = itemTypeTag)
               }
 
               val updatedExplodedLifecycles
@@ -187,7 +186,7 @@ case class BlobStorageInMemory[Time, RecordingId, SnapshotBlob] private (
                       Time,
                       RecordingId,
                       SnapshotBlob]#PhoenixLifecycleSpanningAnnihilations])(
-                    _.filterNot(itemTypeTag == _.itemTypeTag)) :+ lifecycle
+                    _.filterNot(itemTypeTag == _.itemClazz)) :+ lifecycle
               )
           }
 
@@ -206,29 +205,31 @@ case class BlobStorageInMemory[Time, RecordingId, SnapshotBlob] private (
       val splitWhen =
         if (inclusive) Split.alignedWith(when) else Split.lowerBoundOf(when)
 
-      override def uniqueItemQueriesFor[Item: TypeTag]
-        : Stream[UniqueItemSpecification] =
+      override def uniqueItemQueriesFor[Item](
+          clazz: Class[Item]): Stream[UniqueItemSpecification] =
         lifecycles.flatMap {
           case (id, lifecyclesForThatId) =>
             lifecyclesForThatId collect {
               case lifecycle
-                  if lifecycle.itemTypeTag.tpe <:< typeTag[Item].tpe && lifecycle
+                  if clazz.isAssignableFrom(lifecycle.itemClazz) && lifecycle
                     .isValid(splitWhen, recordingRevisions.apply) =>
-                UniqueItemSpecification(id, lifecycle.itemTypeTag)
+                UniqueItemSpecification(id, lifecycle.itemClazz)
             }
         }.toStream
 
-      override def uniqueItemQueriesFor[Item: TypeTag](
-          id: Any): Stream[UniqueItemSpecification] =
+      override def uniqueItemQueriesFor[Item](
+          uniqueItemSpecification: UniqueItemSpecification)
+        : Stream[UniqueItemSpecification] =
         lifecycles
-          .get(id)
+          .get(uniqueItemSpecification.id)
           .toSeq
           .flatMap { lifecyclesForThatId =>
             lifecyclesForThatId collect {
               case lifecycle
-                  if lifecycle.itemTypeTag.tpe <:< typeTag[Item].tpe && lifecycle
+                  if uniqueItemSpecification.clazz.isAssignableFrom(
+                    lifecycle.itemClazz) && lifecycle
                     .isValid(splitWhen, recordingRevisions.apply) =>
-                UniqueItemSpecification(id, lifecycle.itemTypeTag)
+                uniqueItemSpecification.copy(clazz = lifecycle.itemClazz)
             }
           }
           .toStream
@@ -239,7 +240,7 @@ case class BlobStorageInMemory[Time, RecordingId, SnapshotBlob] private (
         for {
           lifecycles <- lifecycles.get(uniqueItemSpecification.id)
           lifecycle <- lifecycles.find(
-            uniqueItemSpecification.typeTag == _.itemTypeTag)
+            uniqueItemSpecification.clazz == _.itemClazz)
           if lifecycle.isValid(splitWhen, recordingRevisions.apply)
         } yield lifecycle.snapshotBlobFor(splitWhen, recordingRevisions.apply)
 

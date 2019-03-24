@@ -21,8 +21,7 @@ object Measurement {
       when,
       capturePatches((recorderFactory: RecorderFactory) => {
         val recorder =
-          recorderFactory[Item](
-            UniqueItemSpecification(id, typeTagForClass(clazz)))
+          recorderFactory[Item](UniqueItemSpecification(id, clazz))
         update.accept(recorder)
       })
     )
@@ -49,11 +48,9 @@ object Measurement {
       when,
       capturePatches((recorderFactory: RecorderFactory) => {
         val recorder1 =
-          recorderFactory[Item1](
-            UniqueItemSpecification(id1, typeTagForClass(clazz1)))
+          recorderFactory[Item1](UniqueItemSpecification(id1, clazz1))
         val recorder2 =
-          recorderFactory[Item2](
-            UniqueItemSpecification(id2, typeTagForClass(clazz2)))
+          recorderFactory[Item2](UniqueItemSpecification(id2, clazz2))
         update.accept(recorder1, recorder2)
       })
     )

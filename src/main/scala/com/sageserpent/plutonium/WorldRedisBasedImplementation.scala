@@ -24,14 +24,14 @@ import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
 
 object WorldRedisBasedImplementation {
-  import UniqueItemSpecificationSerializationSupport.SpecialSerializer
+  import SpecialCaseSerializationSupport.ClazzSerializer
 
   val redisNamespaceComponentSeparator = ":"
 
   val kryoPool = KryoPool.withByteArrayOutputStream(
     40,
-    new ScalaKryoInstantiator().withRegistrar { (kryo: Kryo) =>
-      kryo.register(classOf[UniqueItemSpecification], new SpecialSerializer)
+    new ScalaKryoInstantiator().withRegistrar { kryo: Kryo =>
+      kryo.register(classOf[Class[_]], new ClazzSerializer)
     }
   )
 

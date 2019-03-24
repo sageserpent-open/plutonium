@@ -1,14 +1,16 @@
 package com.sageserpent.plutonium.javaApi
 
 import com.sageserpent.plutonium.{
-  typeTagForClass,
+  IdentifiedItemsBitemporalResult,
+  UniqueItemSpecification,
+  WildcardBitemporalResult,
   Bitemporal => ScalaBitemporal
 }
 
 object Bitemporal {
   def withId[Item](id: Any, clazz: Class[Item]): ScalaBitemporal[Item] =
-    ScalaBitemporal.withId(id)(typeTagForClass(clazz))
+    IdentifiedItemsBitemporalResult(UniqueItemSpecification(id, clazz))
 
   def wildcard[Item](clazz: Class[Item]): ScalaBitemporal[Item] =
-    ScalaBitemporal.wildcard()(typeTagForClass(clazz))
+    WildcardBitemporalResult[Item](clazz)
 }

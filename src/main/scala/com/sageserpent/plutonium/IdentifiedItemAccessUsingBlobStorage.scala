@@ -84,7 +84,7 @@ trait IdentifiedItemAccessUsingBlobStorage
       }
 
     implicit val typeTagForItem: TypeTag[Item] =
-      _uniqueItemSpecification.typeTag.asInstanceOf[TypeTag[Item]]
+      _uniqueItemSpecification.clazz.asInstanceOf[TypeTag[Item]]
 
     val item = IdentifiedItemAccessUsingBlobStorage.proxyFactory
       .constructFrom[Item](stateToBeAcquiredByProxy)

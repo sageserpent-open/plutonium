@@ -180,7 +180,8 @@ object Change {
       when,
       capturePatches((recorderFactory: RecorderFactory) => {
         val recorder =
-          recorderFactory[Item](UniqueItemSpecification(id, typeTag[Item]))
+          recorderFactory[Item](
+            UniqueItemSpecification(id, classFromType(typeOf[Item])))
         update(recorder)
       })
     )
@@ -200,9 +201,11 @@ object Change {
     when,
     capturePatches((recorderFactory: RecorderFactory) => {
       val recorder1 =
-        recorderFactory[Item1](UniqueItemSpecification(id1, typeTag[Item1]))
+        recorderFactory[Item1](
+          UniqueItemSpecification(id1, classFromType(typeOf[Item1])))
       val recorder2 =
-        recorderFactory[Item2](UniqueItemSpecification(id2, typeTag[Item2]))
+        recorderFactory[Item2](
+          UniqueItemSpecification(id2, classFromType(typeOf[Item2])))
       update(recorder1, recorder2)
     })
   )
@@ -231,7 +234,8 @@ object Measurement {
       when,
       capturePatches((recorderFactory: RecorderFactory) => {
         val recorder =
-          recorderFactory[Item](UniqueItemSpecification(id, typeTag[Item]))
+          recorderFactory[Item](
+            UniqueItemSpecification(id, classFromType(typeOf[Item])))
         measurement(recorder)
       })
     )
@@ -251,9 +255,11 @@ object Measurement {
     when,
     capturePatches((recorderFactory: RecorderFactory) => {
       val recorder1 =
-        recorderFactory[Item1](UniqueItemSpecification(id1, typeTag[Item1]))
+        recorderFactory[Item1](
+          UniqueItemSpecification(id1, classFromType(typeOf[Item1])))
       val recorder2 =
-        recorderFactory[Item2](UniqueItemSpecification(id2, typeTag[Item2]))
+        recorderFactory[Item2](
+          UniqueItemSpecification(id2, classFromType(typeOf[Item2])))
       update(recorder1, recorder2)
     })
   )
@@ -286,10 +292,8 @@ case class Annihilation(definiteWhen: Instant,
 
   val when = Finite(definiteWhen)
 
-  def rewriteItemTypeTag(itemTypeTag: TypeTag[_]) =
-    copy(
-      uniqueItemSpecification =
-        uniqueItemSpecification.copy(typeTag = itemTypeTag))
+  def rewriteItemClass(clazz: Class[_]): Annihilation =
+    copy(uniqueItemSpecification = uniqueItemSpecification.copy(clazz = clazz)) // TODO: lenses, I know.
 
   def apply(identifiedItemAccess: IdentifiedItemAccess): Unit = {
     identifiedItemAccess.noteAnnihilation(uniqueItemSpecification)
@@ -298,5 +302,6 @@ case class Annihilation(definiteWhen: Instant,
 
 object Annihilation {
   def apply[Item: TypeTag](definiteWhen: Instant, id: Any): Annihilation =
-    Annihilation(definiteWhen, UniqueItemSpecification(id, typeTag[Item]))
+    Annihilation(definiteWhen,
+                 UniqueItemSpecification(id, classFromType(typeOf[Item])))
 }
