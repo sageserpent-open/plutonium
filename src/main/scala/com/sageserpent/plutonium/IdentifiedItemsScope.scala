@@ -108,8 +108,8 @@ class IdentifiedItemsScope extends IdentifiedItemAccess {
           def recordReadOnlyAccess(item: ItemExtensionApi): Unit = {}
         }
 
-      val item = IdentifiedItemsScope.proxyFactory.constructFrom(
-        stateToBeAcquiredByProxy)
+      val item = IdentifiedItemsScope.proxyFactory
+        .constructFrom[Item](stateToBeAcquiredByProxy)
       idToItemsMultiMap.addBinding(id, item)
       item
     }
