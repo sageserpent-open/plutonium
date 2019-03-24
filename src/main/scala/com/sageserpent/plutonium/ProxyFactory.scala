@@ -2,7 +2,6 @@ package com.sageserpent.plutonium
 
 import java.lang.reflect.Modifier
 
-import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import net.bytebuddy.description.`type`.TypeDescription
 import net.bytebuddy.description.method.MethodDescription
 import net.bytebuddy.dynamic.DynamicType.Builder
@@ -73,15 +72,16 @@ trait ProxyFactory {
 
   protected def configureInterceptions(builder: Builder[_]): Builder[_]
 
-  def constructFrom[Item: TypeTag](stateToBeAcquiredByProxy: AcquiredState) = {
+  def constructFrom[Item](stateToBeAcquiredByProxy: AcquiredState): Item = {
     // NOTE: this returns items that are proxies to 'Item' rather than direct instances of 'Item' itself. Depending on the
     // context (using a scope created by a client from a world, as opposed to while building up that scope from patches),
     // the items may forbid certain operations on them - e.g. for rendering from a client's scope, the items should be
     // read-only.
 
-    val id = stateToBeAcquiredByProxy.uniqueItemSpecification.id
+    val uniqueItemSpecification =
+      stateToBeAcquiredByProxy.uniqueItemSpecification
 
-    val proxyClazz = proxyClassFor(typeOf[Item], id)
+    val proxyClazz = proxyClassFor[Item](uniqueItemSpecification)
 
     val clazz = proxyClazz.getSuperclass
 
@@ -89,7 +89,7 @@ trait ProxyFactory {
           // TODO - cleanup.
           "id" != method.getName && Modifier.isAbstract(method.getModifiers))) {
       throw new UnsupportedOperationException(
-        s"Attempt to create an instance of an abstract class '$clazz' for id: '${id}'.")
+        s"Attempt to create an instance of an abstract class '$clazz' for id: '${uniqueItemSpecification.id}'.")
     }
     val proxy = proxyClazz.newInstance().asInstanceOf[Item]
 
@@ -100,26 +100,26 @@ trait ProxyFactory {
     proxy
   }
 
-  def proxyClassFor(typeOfItem: universe.Type, id: Any)
+  def proxyClassFor[Item](uniqueItemSpecification: UniqueItemSpecification)
     : Class[_] = // NOTE: using 'synchronized' is rather hokey, but there are subtle issues with
     // using the likes of 'TrieMap.getOrElseUpdate' due to the initialiser block being executed
     // more than once, even though the map is indeed thread safe. Let's keep it simple for now...
     {
-      if (typeOf[Nothing] == typeOfItem)
+      if (classOf[Nothing] == uniqueItemSpecification.clazz)
         throw new RuntimeException(
           s"attempt to annihilate an item '$id' without an explicit type.")
 
       synchronized {
-        cachedProxyClasses.getOrElseUpdate(typeOfItem, {
-          createProxyClass(classFromType(typeOfItem))
+        cachedProxyClasses.getOrElseUpdate(uniqueItemSpecification.clazz, {
+          createProxyClass(uniqueItemSpecification.clazz)
         })
       }
     }
 
   protected def additionalInterfaces: Array[Class[_]]
   protected val cachedProxyClasses
-    : scala.collection.mutable.Map[Type, Class[_]] =
-    mutable.Map.empty[universe.Type, Class[_]]
+    : scala.collection.mutable.Map[Class[_], Class[_]] =
+    mutable.Map.empty
 
   val matchGetClass: ElementMatcher[MethodDescription] =
     ElementMatchers.is(classOf[AnyRef].getMethod("getClass"))

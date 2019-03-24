@@ -2,15 +2,13 @@ package com.sageserpent.plutonium
 
 import java.lang.reflect.Method
 
-import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
-
-import scala.reflect.runtime.universe._
-
 object AbstractPatch {
   def patchesAreRelated(lhs: AbstractPatch, rhs: AbstractPatch): Boolean = {
     val bothReferToTheSameItem =
-      lhs.targetItemSpecification.id == rhs.targetItemSpecification.id && (lhs.targetItemSpecification.typeTag.tpe <:< rhs.targetItemSpecification.typeTag.tpe
-        || rhs.targetItemSpecification.typeTag.tpe <:< lhs.targetItemSpecification.typeTag.tpe)
+      lhs.targetItemSpecification.id == rhs.targetItemSpecification.id && (rhs.targetItemSpecification.clazz
+        .isAssignableFrom(lhs.targetItemSpecification.clazz)
+        || lhs.targetItemSpecification.clazz
+          .isAssignableFrom(rhs.targetItemSpecification.clazz))
     val bothReferToTheSameMethod = WorldImplementationCodeFactoring
       .firstMethodIsOverrideCompatibleWithSecond(lhs.method, rhs.method) ||
       WorldImplementationCodeFactoring
@@ -18,13 +16,12 @@ object AbstractPatch {
     bothReferToTheSameItem && bothReferToTheSameMethod
   }
 
-  type TypeRefinement = UniqueItemSpecification => TypeTag[_]
+  type ClazzRefinement = UniqueItemSpecification => Class[_]
 }
 
-// TODO: will need to be able to lower the typetags for the target and arguments somehow if we are going to build an update plan with these.
 abstract class AbstractPatch {
-  def rewriteItemTypeTags(
-      typeRefinement: AbstractPatch.TypeRefinement): AbstractPatch
+  def rewriteItemClazzes(
+      typeRefinement: AbstractPatch.ClazzRefinement): AbstractPatch
 
   val method: Method
   val targetItemSpecification: UniqueItemSpecification
