@@ -196,18 +196,16 @@ object Change {
   def forTwoItems[Item1: TypeTag, Item2: TypeTag](when: Unbounded[Instant])(
       id1: Any,
       id2: Any,
-      update: (Item1, Item2) => Unit): Change = {
-    Change(
-      when,
-      capturePatches((recorderFactory: RecorderFactory) => {
-        val recorder1 =
-          recorderFactory[Item1](UniqueItemSpecification(id1, typeTag[Item1]))
-        val recorder2 =
-          recorderFactory[Item2](UniqueItemSpecification(id2, typeTag[Item2]))
-        update(recorder1, recorder2)
-      })
-    )
-  }
+      update: (Item1, Item2) => Unit): Change = Change(
+    when,
+    capturePatches((recorderFactory: RecorderFactory) => {
+      val recorder1 =
+        recorderFactory[Item1](UniqueItemSpecification(id1, typeTag[Item1]))
+      val recorder2 =
+        recorderFactory[Item2](UniqueItemSpecification(id2, typeTag[Item2]))
+      update(recorder1, recorder2)
+    })
+  )
 
   def forTwoItems[Item1: TypeTag, Item2: TypeTag](when: Instant)(
       id1: Any,
@@ -249,18 +247,16 @@ object Measurement {
   def forTwoItems[Item1: TypeTag, Item2: TypeTag](when: Unbounded[Instant])(
       id1: Any,
       id2: Any,
-      update: (Item1, Item2) => Unit): Measurement = {
-    Measurement(
-      when,
-      capturePatches((recorderFactory: RecorderFactory) => {
-        val recorder1 =
-          recorderFactory[Item1](UniqueItemSpecification(id1, typeTag[Item1]))
-        val recorder2 =
-          recorderFactory[Item2](UniqueItemSpecification(id2, typeTag[Item2]))
-        update(recorder1, recorder2)
-      })
-    )
-  }
+      update: (Item1, Item2) => Unit): Measurement = Measurement(
+    when,
+    capturePatches((recorderFactory: RecorderFactory) => {
+      val recorder1 =
+        recorderFactory[Item1](UniqueItemSpecification(id1, typeTag[Item1]))
+      val recorder2 =
+        recorderFactory[Item2](UniqueItemSpecification(id2, typeTag[Item2]))
+      update(recorder1, recorder2)
+    })
+  )
 
   def forTwoItems[Item1: TypeTag, Item2: TypeTag](when: Instant)(
       id1: Any,
