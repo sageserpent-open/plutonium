@@ -148,11 +148,11 @@ case class BlobStorageInMemory[Time, RecordingId, SnapshotBlob] private (
                    BlobStorageInMemory[Time, RecordingId, SnapshotBlob]#PhoenixLifecycleSpanningAnnihilations] /: recordings) {
             case (explodedLifecycles, (keys, when, snapshots)) =>
               val explodedLifecyclesWithDefault = explodedLifecycles withDefault {
-                case UniqueItemSpecification(id, itemTypeTag) =>
+                case UniqueItemSpecification(id, itemClazz) =>
                   thisBlobStorage.lifecycles
                     .get(id)
-                    .flatMap(_.find(itemTypeTag == _.itemClazz)) getOrElse PhoenixLifecycleSpanningAnnihilations(
-                    itemClazz = itemTypeTag)
+                    .flatMap(_.find(itemClazz == _.itemClazz)) getOrElse PhoenixLifecycleSpanningAnnihilations(
+                    itemClazz = itemClazz)
               }
 
               val updatedExplodedLifecycles
@@ -176,7 +176,7 @@ case class BlobStorageInMemory[Time, RecordingId, SnapshotBlob] private (
         val newLifecycles =
           (thisBlobStorage.lifecycles /: newAndModifiedExplodedLifecycles) {
             case (lifecycles,
-                  (UniqueItemSpecification(id, itemTypeTag), lifecycle)) =>
+                  (UniqueItemSpecification(id, itemClazz), lifecycle)) =>
               lifecycles.updated(
                 id,
                 lifecycles
@@ -186,7 +186,7 @@ case class BlobStorageInMemory[Time, RecordingId, SnapshotBlob] private (
                       Time,
                       RecordingId,
                       SnapshotBlob]#PhoenixLifecycleSpanningAnnihilations])(
-                    _.filterNot(itemTypeTag == _.itemClazz)) :+ lifecycle
+                    _.filterNot(itemClazz == _.itemClazz)) :+ lifecycle
               )
           }
 

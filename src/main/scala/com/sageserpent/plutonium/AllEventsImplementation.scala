@@ -153,7 +153,7 @@ object AllEventsImplementation {
     }
 
     def fuse(firstLifecycle: Lifecycle, secondLifecycle: Lifecycle) = {
-      val fusedTypeTags = firstLifecycle.clazzes ++ secondLifecycle.clazzes
+      val fusedClazzes = firstLifecycle.clazzes ++ secondLifecycle.clazzes
 
       val fusedEventsArrangedInReverseTimeOrder: SortedMap[
         ItemStateUpdateKey,
@@ -170,7 +170,7 @@ object AllEventsImplementation {
                     .getOrElse(eventId, Set.empty))) toMap
 
       new LifecycleImplementation(
-        clazzes = fusedTypeTags,
+        clazzes = fusedClazzes,
         eventsArrangedInReverseTimeOrder = fusedEventsArrangedInReverseTimeOrder,
         itemStateUpdateTimesByEventId = fusedItemStateUpdateTimesByEventId
       ) with LifecycleContracts
@@ -279,14 +279,14 @@ object AllEventsImplementation {
         (eventsArrangedInReverseTimeOrder /: itemStateUpdateTimes)(_ - _)
       if (preservedEvents.nonEmpty) {
         val annulledEvents = itemStateUpdateTimes map eventsArrangedInReverseTimeOrder.apply
-        val preservedTypeTags = (clazzes /: annulledEvents) {
-          case (typeTags, annulledEvent) =>
-            typeTags - annulledEvent.uniqueItemSpecification.clazz
+        val preservedClazzes = (clazzes /: annulledEvents) {
+          case (clazzes, annulledEvent) =>
+            clazzes - annulledEvent.uniqueItemSpecification.clazz
         }
         val preservedItemStateUpdateTimesByEventId = itemStateUpdateTimesByEventId - eventId
         Some(
           new LifecycleImplementation(
-            clazzes = preservedTypeTags,
+            clazzes = preservedClazzes,
             eventsArrangedInReverseTimeOrder = preservedEvents,
             itemStateUpdateTimesByEventId =
               preservedItemStateUpdateTimesByEventId) with LifecycleContracts)
@@ -1095,7 +1095,7 @@ class AllEventsImplementation(
   override def startOfFollowingLifecycleFor(
       uniqueItemSpecification: UniqueItemSpecification,
       itemStateUpdateTime: ItemStateUpdateTime): Option[ItemStateUpdateKey] = {
-    val UniqueItemSpecification(itemId, itemTypeTag) = uniqueItemSpecification
+    val UniqueItemSpecification(itemId, itemClazz) = uniqueItemSpecification
 
     val timespanGoingBeyondItemStateUpdateKey = Split.alignedWith(
       itemStateUpdateTime: ItemStateUpdateTime) -> Split.upperBoundOf(
@@ -1107,7 +1107,7 @@ class AllEventsImplementation(
         .filter(lifecycle =>
           Ordering[ItemStateUpdateTime].gt(lifecycle.startTime,
                                            itemStateUpdateTime))
-        .filter(itemTypeTag == _.lowerBoundClazz)
+        .filter(itemClazz == _.lowerBoundClazz)
 
       if (lifecycleIterator.hasNext) Some(lifecycleIterator.next().startTime)
       else None

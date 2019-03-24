@@ -8,7 +8,6 @@ import com.sageserpent.plutonium.{
   RecorderFactory,
   UniqueItemSpecification,
   capturePatches,
-  typeTagForClass,
   Measurement => ScalaMeasurement
 }
 

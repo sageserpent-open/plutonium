@@ -7,7 +7,6 @@ import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
 
 import scala.collection.immutable.Map
 import scala.collection.mutable
-import scala.reflect.runtime.universe.TypeTag
 import scala.util.DynamicVariable
 
 object IdentifiedItemAccessUsingBlobStorage {
@@ -82,9 +81,6 @@ trait IdentifiedItemAccessUsingBlobStorage
 
         }
       }
-
-    implicit val typeTagForItem: TypeTag[Item] =
-      _uniqueItemSpecification.clazz.asInstanceOf[TypeTag[Item]]
 
     val item = IdentifiedItemAccessUsingBlobStorage.proxyFactory
       .constructFrom[Item](stateToBeAcquiredByProxy)

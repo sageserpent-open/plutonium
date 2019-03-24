@@ -19,7 +19,6 @@ object AbstractPatch {
   type ClazzRefinement = UniqueItemSpecification => Class[_]
 }
 
-// TODO: will need to be able to lower the typetags for the target and arguments somehow if we are going to build an update plan with these.
 abstract class AbstractPatch {
   def rewriteItemClazzes(
       typeRefinement: AbstractPatch.ClazzRefinement): AbstractPatch

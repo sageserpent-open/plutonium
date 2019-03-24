@@ -4,7 +4,6 @@ import java.time.Instant
 
 import com.sageserpent.americium.{PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.World.Revision
-import scala.reflect.runtime.universe.TypeTag
 
 abstract class WorldInefficientImplementationCodeFactoring
     extends WorldImplementationCodeFactoring {
