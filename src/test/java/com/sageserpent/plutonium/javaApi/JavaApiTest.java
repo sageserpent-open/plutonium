@@ -6,9 +6,6 @@ import org.junit.Test;
 
 import java.time.Instant;
 
-/**
- * Created by Gerard on 09/05/2016.
- */
 public class JavaApiTest {
     @Test
     public void smokeTestTheApi() {
