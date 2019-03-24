@@ -12,7 +12,6 @@ import com.sageserpent.americium.{
   Unbounded
 }
 import com.sageserpent.plutonium.BlobStorage.Timeslice
-import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import org.scalacheck.{Gen, ShrinkLowPriority => NoShrinking}
 import org.scalatest.LoneElement._
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
@@ -246,7 +245,8 @@ class BlobStorageSpec
 
   def blobStorageFrom(revisions: Seq[ScalaFmtWorkaround]) =
     ((BlobStorageInMemory[Unbounded[Instant], RecordingId, SnapshotBlob](): BlobStorage[
-      Unbounded[Instant], RecordingId,
+      Unbounded[Instant],
+      RecordingId,
       SnapshotBlob]) /: revisions) {
       case (blobStorage, bookingsForRevision) =>
         val builder = blobStorage.openRevision()
@@ -340,7 +340,8 @@ class BlobStorageSpec
                                   finalBookings,
                                   obsoleteBookings)
 
-      val blobStorage: BlobStorage[Unbounded[Instant], RecordingId, SnapshotBlob] =
+      val blobStorage
+        : BlobStorage[Unbounded[Instant], RecordingId, SnapshotBlob] =
         blobStorageFrom(revisions)
 
       for (TimeSeries(uniqueItemSpecification, snapshots, queryTimes) <- lotsOfFinalTimeSeries) {
@@ -477,7 +478,8 @@ class BlobStorageSpec
                                   finalBookings,
                                   obsoleteBookings)
 
-      val blobStorage: BlobStorage[Unbounded[Instant], RecordingId, SnapshotBlob] =
+      val blobStorage
+        : BlobStorage[Unbounded[Instant], RecordingId, SnapshotBlob] =
         blobStorageFrom(revisions)
 
       for (TimeSeries(uniqueItemSpecification, snapshots, queryTimes) <- lotsOfFinalTimeSeries) {
@@ -524,7 +526,8 @@ class BlobStorageSpec
                                   finalBookings,
                                   obsoleteBookings)
 
-      val blobStorage: BlobStorage[Unbounded[Instant], RecordingId, SnapshotBlob] =
+      val blobStorage
+        : BlobStorage[Unbounded[Instant], RecordingId, SnapshotBlob] =
         blobStorageFrom(revisions)
 
       for (TimeSeries(uniqueItemSpecification, snapshots, queryTimes) <- lotsOfFinalTimeSeries) {

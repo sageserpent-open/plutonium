@@ -2,8 +2,6 @@ package com.sageserpent.plutonium
 
 import java.lang.reflect.Method
 
-import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
-
 import scala.reflect.runtime.universe._
 
 object AbstractPatch {

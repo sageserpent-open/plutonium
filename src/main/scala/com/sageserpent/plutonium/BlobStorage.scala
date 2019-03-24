@@ -1,7 +1,5 @@
 package com.sageserpent.plutonium
 
-import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
-
 import scala.reflect.runtime.universe.TypeTag
 
 object BlobStorage {

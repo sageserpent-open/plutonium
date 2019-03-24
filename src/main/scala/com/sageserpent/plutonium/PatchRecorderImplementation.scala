@@ -4,7 +4,6 @@ import java.lang.reflect.Method
 import java.time.Instant
 
 import com.sageserpent.americium.Unbounded
-import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 
 import scala.collection.mutable
 import scala.reflect.runtime.universe._

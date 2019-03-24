@@ -3,7 +3,6 @@ package com.sageserpent.plutonium
 import java.util.UUID
 
 import com.sageserpent.americium.randomEnrichment._
-import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import org.scalacheck.Prop.BooleanOperators
 import org.scalacheck.{Gen, Prop}
 import org.scalatest.prop.Checkers

@@ -2,8 +2,8 @@ package com.sageserpent.plutonium.javaApi
 
 import java.time.Instant
 
-import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.{
+  UniqueItemSpecification,
   typeTagForClass,
   Annihilation => ScalaAnnihilation
 }

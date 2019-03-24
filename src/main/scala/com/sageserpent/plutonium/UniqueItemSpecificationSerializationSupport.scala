@@ -3,7 +3,6 @@ package com.sageserpent.plutonium
 import com.esotericsoftware.kryo.io.{Input, Output}
 import com.esotericsoftware.kryo.serializers.JavaSerializer
 import com.esotericsoftware.kryo.{Kryo, Serializer}
-import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 
 import scala.reflect.runtime.universe._
 import scala.util.Try

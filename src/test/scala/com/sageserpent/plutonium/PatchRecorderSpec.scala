@@ -6,14 +6,12 @@ import java.time.Instant
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.{Finite, Unbounded}
 import com.sageserpent.plutonium
-import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.PatchRecorder.UpdateConsumer
 import org.scalacheck.Prop.BooleanOperators
 import org.scalacheck.{Gen, Prop, Test}
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.prop.Checkers
 import org.scalatest.{FlatSpec, Matchers}
-import resource.{ManagedResource, makeManagedResource}
 
 import scala.reflect.runtime.universe._
 import scala.util.Random

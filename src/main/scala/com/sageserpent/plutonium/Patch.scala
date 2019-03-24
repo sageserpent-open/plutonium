@@ -3,7 +3,6 @@ package com.sageserpent.plutonium
 import java.lang.reflect.{InvocationTargetException, Method}
 
 import com.sageserpent.plutonium.AbstractPatch.TypeRefinement
-import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.Patch.MethodPieces
 
 object Patch {

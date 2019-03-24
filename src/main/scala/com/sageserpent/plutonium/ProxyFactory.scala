@@ -2,7 +2,6 @@ package com.sageserpent.plutonium
 
 import java.lang.reflect.Modifier
 
-import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import net.bytebuddy.description.`type`.TypeDescription
 import net.bytebuddy.description.method.MethodDescription
 import net.bytebuddy.dynamic.DynamicType.Builder

@@ -3,10 +3,10 @@ package com.sageserpent.plutonium
 import java.lang.reflect.Method
 import java.time.Instant
 
+import alleycats.std.iterable._
 import cats.Foldable
 import cats.data.Writer
 import cats.implicits._
-import alleycats.std.iterable._
 import com.sageserpent.americium.{
   Finite,
   NegativeInfinity,
@@ -16,7 +16,6 @@ import com.sageserpent.americium.{
 import com.sageserpent.plutonium.AllEvents.ItemStateUpdatesDelta
 import com.sageserpent.plutonium.AllEventsImplementation.Lifecycle._
 import com.sageserpent.plutonium.AllEventsImplementation._
-import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.World.{Revision, initialRevision}
 import de.sciss.fingertree.RangedSeq
 import de.ummels.prioritymap.PriorityMap

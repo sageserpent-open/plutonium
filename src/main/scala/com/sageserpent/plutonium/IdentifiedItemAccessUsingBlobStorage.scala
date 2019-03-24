@@ -3,7 +3,6 @@ package com.sageserpent.plutonium
 import java.util.UUID
 
 import com.sageserpent.plutonium.BlobStorage.SnapshotRetrievalApi
-import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
 
 import scala.collection.immutable.Map

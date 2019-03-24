@@ -1,7 +1,5 @@
 package com.sageserpent.plutonium
 
-import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
-
 import scala.collection.Searching._
 import scala.collection.mutable
 import scala.math.Ordered.orderingToOrdered

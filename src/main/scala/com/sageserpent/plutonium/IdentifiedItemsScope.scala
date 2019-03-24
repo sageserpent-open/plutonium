@@ -3,7 +3,6 @@ package com.sageserpent.plutonium
 import java.time.Instant
 
 import com.sageserpent.americium.Unbounded
-import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.PatchRecorder.UpdateConsumer
 import resource.{ManagedResource, makeManagedResource}
 
