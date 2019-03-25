@@ -1204,3 +1204,9 @@ class WorldRedisBasedImplementationBugs
   "a world (using the world Redis-based implementation)" should behave like suite
   override val redisServerPort: Int = 6456
 }
+
+class WorldEfficientQuestionableBackendImplementationBugs
+    extends Bugs
+    with WorldEfficientQuestionableBackendImplementationResource {
+  "a world (using the world efficient questionable backend implementation)" should behave like suite
+}
