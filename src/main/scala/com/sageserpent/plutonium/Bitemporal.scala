@@ -41,8 +41,7 @@ object Bitemporal {
   def apply[Item](item: Item) = PointBitemporalResult(item)
 
   def withId[Item: TypeTag](id: Any): Bitemporal[Item] =
-    IdentifiedItemsBitemporalResult(
-      UniqueItemSpecification(id, classFromType(typeOf[Item])))
+    IdentifiedItemsBitemporalResult(UniqueItemSpecification(id, typeOf[Item]))
 
   def wildcard[Item: TypeTag](): Bitemporal[Item] =
     WildcardBitemporalResult[Item](classFromType(typeOf[Item]))
