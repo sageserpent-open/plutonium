@@ -572,7 +572,7 @@ trait Bugs
                          sharedAsOf)
           }
 
-          exception.getMessage should include regex ("attempt to annihilate an item.*without an explicit type")
+          exception.getMessage should include regex "attempt to annihilate an item.*without an explicit type"
         }
       }
     }

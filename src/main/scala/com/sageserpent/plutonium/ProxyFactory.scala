@@ -104,16 +104,10 @@ trait ProxyFactory {
     : Class[_] = // NOTE: using 'synchronized' is rather hokey, but there are subtle issues with
     // using the likes of 'TrieMap.getOrElseUpdate' due to the initialiser block being executed
     // more than once, even though the map is indeed thread safe. Let's keep it simple for now...
-    {
-      if (classOf[Nothing] == uniqueItemSpecification.clazz)
-        throw new RuntimeException(
-          s"attempt to annihilate an item '$id' without an explicit type.")
-
-      synchronized {
-        cachedProxyClasses.getOrElseUpdate(uniqueItemSpecification.clazz, {
-          createProxyClass(uniqueItemSpecification.clazz)
-        })
-      }
+    synchronized {
+      cachedProxyClasses.getOrElseUpdate(uniqueItemSpecification.clazz, {
+        createProxyClass(uniqueItemSpecification.clazz)
+      })
     }
 
   protected def additionalInterfaces: Array[Class[_]]
