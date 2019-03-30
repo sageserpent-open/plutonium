@@ -28,8 +28,7 @@ import net.bytebuddy.dynamic.scaffold.subclass.ConstructorStrategy
 import net.bytebuddy.implementation.bind.annotation.{
   FieldValue,
   Pipe,
-  RuntimeType,
-  This
+  RuntimeType
 }
 import net.bytebuddy.implementation.{FieldAccessor, MethodDelegation}
 import net.bytebuddy.matcher.ElementMatchers
@@ -159,43 +158,49 @@ object ImmutableObjectStorage {
 
   }
 
-  private val kryoInstantiator: KryoInstantiator =
-    new ScalaKryoInstantiator {
-      override def newKryo(): KryoBase = {
-        val result = super.newKryo()
-
-        result.setReferenceResolver(referenceResolver)
-
-        result.setAutoReset(true) // Kryo should reset its *own* state (but not the states of the reference resolvers) after a tranche has been stored or retrieved.
-
-        result
-      }
-    }.withRegistrar(
-      kryo =>
-        // TODO - check that this is really necessary...
-        kryo.register(
-          classOf[ClosureSerializer.Closure],
-          new CleaningSerializer(
-            (new ClosureSerializer).asInstanceOf[Serializer[_ <: AnyRef]])))
-
-  private val kryoPool: KryoPool =
-    KryoPool.withByteArrayOutputStream(40, kryoInstantiator)
-
   object proxySupport {
     private val byteBuddy = new ByteBuddy()
 
     private val proxySuffix = "delayedLoadProxy"
 
-    trait AcquiredState {
+    trait AcquiredState extends KryoSerializable {
       def underlying: AnyRef
     }
 
     private[curium] trait StateAcquisition {
       def acquire(acquiredState: AcquiredState): Unit
+
+      def state: AcquiredState
+    }
+
+    object proxySerializer extends Serializer[StateAcquisition] {
+      override def write(kryo: Kryo,
+                         output: Output,
+                         proxy: StateAcquisition): Unit = {
+        kryo.writeClassAndObject(output, proxy.getClass.getSuperclass)
+        kryo.writeClassAndObject(output, proxy.state)
+      }
+      override def read(kryo: Kryo,
+                        input: Input,
+                        clazz: Class[StateAcquisition]): StateAcquisition = {
+        val superClazz =
+          kryo.readClassAndObject(input).asInstanceOf[Class[_ <: AnyRef]]
+        val state = kryo.readClassAndObject(input).asInstanceOf[AcquiredState]
+        val proxy =
+          createProxy(superClazz, state).asInstanceOf[StateAcquisition]
+        kryo.reference(proxy)
+        proxy
+      }
     }
 
     val clazzesThatShouldNotBeProxied: Set[Class[_]] =
-      Set(classOf[StateAcquisition], classOf[String], classOf[Class[_]])
+      Set(classOf[StateAcquisition],
+          classOf[AcquiredState],
+          classOf[String],
+          classOf[Class[_]])
+
+    def isProxyClazz(clazz: Class[_]): Boolean =
+      classOf[AcquiredState].isAssignableFrom(clazz)
 
     def isNotToBeProxied(clazz: Class[_]): Boolean =
       try {
@@ -213,7 +218,7 @@ object ImmutableObjectStorage {
 
     private def createProxyClass[X <: AnyRef](clazz: Class[X]): Class[X] = {
       // We should never end up having to make chains of delegating proxies!
-      require(!clazz.getName.endsWith(proxySuffix))
+      require(!isProxyClazz(clazz))
 
       type PipeForwarding = Function[AnyRef, Nothing]
 
@@ -226,23 +231,6 @@ object ImmutableObjectStorage {
           val underlying: AnyRef = acquiredState.underlying
 
           pipeTo(underlying)
-        }
-      }
-
-      object proxySerialization {
-        @RuntimeType
-        def write(
-            kryo: Kryo,
-            output: Output,
-            @FieldValue("acquiredState") acquiredState: AcquiredState): Unit =
-          kryo.writeClassAndObject(output, acquiredState)
-
-        @RuntimeType
-        def read(kryo: Kryo,
-                 input: Input,
-                 @This thiz: StateAcquisition): Unit = {
-          thiz.acquire(
-            kryo.readClassAndObject(input).asInstanceOf[AcquiredState])
         }
       }
 
@@ -261,10 +249,8 @@ object ImmutableObjectStorage {
         .implement(classOf[StateAcquisition])
         .method(ElementMatchers.named("acquire"))
         .intercept(FieldAccessor.ofField("acquiredState"))
-        .implement(classOf[KryoSerializable])
-        .method(
-          ElementMatchers.named("write").or(ElementMatchers.named("read")))
-        .intercept(MethodDelegation.to(proxySerialization))
+        .method(ElementMatchers.named("state"))
+        .intercept(FieldAccessor.ofField("acquiredState"))
         .make
         .load(getClass.getClassLoader, ClassLoadingStrategy.Default.INJECTION)
         .getLoaded
@@ -295,6 +281,31 @@ object ImmutableObjectStorage {
       proxy
     }
   }
+
+  private val kryoInstantiator: KryoInstantiator =
+    new ScalaKryoInstantiator {
+      override def newKryo(): KryoBase = {
+        val result = super.newKryo()
+
+        result.addDefaultSerializer(classOf[proxySupport.StateAcquisition],
+                                    proxySupport.proxySerializer)
+
+        result.setReferenceResolver(referenceResolver)
+
+        result.setAutoReset(true) // Kryo should reset its *own* state (but not the states of the reference resolvers) after a tranche has been stored or retrieved.
+
+        result
+      }
+    }.withRegistrar(
+      kryo =>
+        // TODO - check that this is really necessary...
+        kryo.register(
+          classOf[ClosureSerializer.Closure],
+          new CleaningSerializer(
+            (new ClosureSerializer).asInstanceOf[Serializer[_ <: AnyRef]])))
+
+  private val kryoPool: KryoPool =
+    KryoPool.withByteArrayOutputStream(40, kryoInstantiator)
 
   def unsafeRun[Result](session: Session[Result])(
       tranches: Tranches): EitherThrowableOr[Result] = {
@@ -329,11 +340,8 @@ object ImmutableObjectStorage {
              parameters: IndexedSeq[IndexedSeq[Any]]) =>
               parameters.head.toString)))
 
-      val proxyToReferenceIdMap: BiMap[AnyRef, ObjectReferenceId] =
-        new BiMapUsingIdentityOnForwardMappingOnly
-
       val referenceIdToProxyMap: BiMap[ObjectReferenceId, AnyRef] =
-        proxyToReferenceIdMap.inverse()
+        new BiMapUsingIdentityOnForwardMappingOnly
 
       // NOTE: a class and *not* an object; we want a fresh instance each time, as the tranche-specific
       // reference resolver uses bidirectional maps - so each value can only be associated with *one* key.
@@ -362,6 +370,14 @@ object ImmutableObjectStorage {
           extends proxySupport.AcquiredState {
         @transient
         private var _underlying: Option[AnyRef] = None
+
+        override def write(kryo: Kryo, output: Output): Unit =
+          kryo.writeClassAndObject(output, _underlying)
+
+        override def read(kryo: Kryo, input: Input): Unit = {
+          _underlying =
+            kryo.readClassAndObject(input).asInstanceOf[Option[AnyRef]]
+        }
 
         override def underlying: AnyRef = _underlying match {
           case Some(result) => result
@@ -398,7 +414,6 @@ object ImmutableObjectStorage {
                 }
                 .find(-1 != _)
             resultFromExSessionReferenceResolver
-              .orElse(Option(proxyToReferenceIdMap.get(immutableObject))) // TODO - why isn't this consulted first?
               .getOrElse(getWrittenIdConsultingOnlyThisTranche(immutableObject))
           }(objectReferenceIdCache, mode, implicitly[Flags])
 
@@ -454,7 +469,8 @@ object ImmutableObjectStorage {
                 }
 
               resultFromExistingAssociation.getOrElse {
-                if (proxySupport.isNotToBeProxied(clazz))
+                if (proxySupport.isProxyClazz(clazz) || proxySupport
+                      .isNotToBeProxied(clazz))
                   retrieveUnderlying(trancheIdForExternalObjectReference,
                                      objectReferenceId)
                 else {
