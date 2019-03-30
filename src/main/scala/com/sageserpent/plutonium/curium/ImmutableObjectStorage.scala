@@ -341,7 +341,7 @@ object ImmutableObjectStorage {
               parameters.head.toString)))
 
       val referenceIdToProxyMap: BiMap[ObjectReferenceId, AnyRef] =
-        new BiMapUsingIdentityOnForwardMappingOnly
+        (new BiMapUsingIdentityOnForwardMappingOnly).inverse()
 
       // NOTE: a class and *not* an object; we want a fresh instance each time, as the tranche-specific
       // reference resolver uses bidirectional maps - so each value can only be associated with *one* key.
