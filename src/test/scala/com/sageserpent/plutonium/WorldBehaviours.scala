@@ -3751,11 +3751,11 @@ class WorldSpecUsingWorldEfficientQuestionableBackendImplementation
 
   "A world with no history (using the world efficient questionable backend implementation)" should behave like worldWithNoHistoryBehaviour
 
-  "A world with history added in order of increasing event time (sing the world efficient questionable backend implementation)" should behave like worldWithHistoryAddedInOrderOfIncreasingEventTimeBehaviour
+  "A world with history added in order of increasing event time (using the world efficient questionable backend implementation)" should behave like worldWithHistoryAddedInOrderOfIncreasingEventTimeBehaviour
 
-  "A world (sing the world efficient questionable backend implementation)" should behave like worldBehaviour
+  "A world (using the world efficient questionable backend implementation)" should behave like worldBehaviour
 
-  "A world with events that have since been corrected (sing the world efficient questionable backend implementation)" should behave like worldWithEventsThatHaveSinceBeenCorrectedBehaviour
+  "A world with events that have since been corrected (using the world efficient questionable backend implementation)" should behave like worldWithEventsThatHaveSinceBeenCorrectedBehaviour
 }
 
 abstract class HistoryWhoseIdWontSerialize extends History {
