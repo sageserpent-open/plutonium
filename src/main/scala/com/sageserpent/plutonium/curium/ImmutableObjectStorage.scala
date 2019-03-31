@@ -37,8 +37,8 @@ import org.objenesis.instantiator.ObjectInstantiator
 import org.objenesis.strategy.StdInstantiatorStrategy
 import scalacache.caffeine._
 import scalacache.modes.sync._
-import scalacache.sync.{caching, remove}
-import scalacache.{Cache, CacheConfig, Flags}
+import scalacache.sync.{caching, remove, get, put}
+import scalacache.{Cache, Flags}
 
 import scala.collection.immutable
 import scala.collection.mutable.{
@@ -172,13 +172,55 @@ object ImmutableObjectStorage {
     }
   }
 
+  trait SessionInterpreter extends FunctionK[Operation, EitherThrowableOr] {
+    def retrieveUnderlying(trancheIdForExternalObjectReference: TrancheId,
+                           objectReferenceId: ObjectReferenceId): AnyRef
+  }
+
+  type SessionInterpreterCacheKey = UUID
+
+  val sessionInterpreterCacheTimeToLive = Some(2 minutes)
+
+  val sessionInterpreterCache: Cache[SessionInterpreter] =
+    CaffeineCache[SessionInterpreter]
+
+  def sessionInterpreter(sessionInterpreterCacheKey: SessionInterpreterCacheKey)
+    : Option[SessionInterpreter] =
+    get(sessionInterpreterCacheKey)(sessionInterpreterCache,
+                                    mode,
+                                    implicitly[Flags])
+
   object proxySupport {
     private val byteBuddy = new ByteBuddy()
 
     private val proxySuffix = "delayedLoadProxy"
 
-    trait AcquiredState extends KryoSerializable {
-      def underlying: AnyRef
+    class AcquiredState(sessionInterpreterCacheKey: SessionInterpreterCacheKey,
+                        trancheIdForExternalObjectReference: TrancheId,
+                        objectReferenceId: ObjectReferenceId)
+        extends KryoSerializable {
+      @transient
+      private var _underlying: Option[AnyRef] = None
+
+      override def write(kryo: Kryo, output: Output): Unit =
+        kryo.writeClassAndObject(output, _underlying)
+
+      override def read(kryo: Kryo, input: Input): Unit = {
+        _underlying =
+          kryo.readClassAndObject(input).asInstanceOf[Option[AnyRef]]
+      }
+
+      def underlying: AnyRef = _underlying match {
+        case Some(result) => result
+        case None =>
+          val result = sessionInterpreter(sessionInterpreterCacheKey).get
+            .retrieveUnderlying(trancheIdForExternalObjectReference,
+                                objectReferenceId)
+
+          _underlying = Some(result)
+
+          result
+      }
     }
 
     private[curium] trait StateAcquisition {
@@ -323,7 +365,10 @@ object ImmutableObjectStorage {
 
   def unsafeRun[Result](session: Session[Result])(
       tranches: Tranches): EitherThrowableOr[Result] = {
-    object sessionInterpreter extends FunctionK[Operation, EitherThrowableOr] {
+    val sessionInterpreterCacheKey: SessionInterpreterCacheKey =
+      UUID.randomUUID()
+
+    val sessionInterpreter: SessionInterpreter = new SessionInterpreter {
       thisSessionInterpreter =>
 
       // TODO - cutover to using weak references, perhaps via 'WeakCache'?
@@ -331,7 +376,7 @@ object ImmutableObjectStorage {
         : MutableSortedMap[TrancheId, CompletedOperationData] =
         MutableSortedMap.empty
 
-      private val referenceResolverCacheTimeToLive = Some(10 minutes)
+      private val referenceResolverCacheTimeToLive = Some(20 seconds)
 
       private val objectReferenceIdCache: Cache[ObjectReferenceId] =
         CaffeineCache[ObjectReferenceId]
@@ -361,32 +406,6 @@ object ImmutableObjectStorage {
 
         completedOperationDataByTrancheId(trancheIdForExternalObjectReference).referenceResolver
           .getReadObjectConsultingOnlyThisTranche(objectReferenceId)
-      }
-
-      class AcquiredState(trancheIdForExternalObjectReference: TrancheId,
-                          objectReferenceId: ObjectReferenceId)
-          extends proxySupport.AcquiredState {
-        @transient
-        private var _underlying: Option[AnyRef] = None
-
-        override def write(kryo: Kryo, output: Output): Unit =
-          kryo.writeClassAndObject(output, _underlying)
-
-        override def read(kryo: Kryo, input: Input): Unit = {
-          _underlying =
-            kryo.readClassAndObject(input).asInstanceOf[Option[AnyRef]]
-        }
-
-        override def underlying: AnyRef = _underlying match {
-          case Some(result) => result
-          case None =>
-            val result = retrieveUnderlying(trancheIdForExternalObjectReference,
-                                            objectReferenceId)
-
-            _underlying = Some(result)
-
-            result
-        }
       }
 
       class TrancheSpecificReferenceResolver(
@@ -482,8 +501,10 @@ object ImmutableObjectStorage {
                   val proxy =
                     proxySupport.createProxy(
                       clazz.asInstanceOf[Class[_ <: AnyRef]],
-                      new AcquiredState(trancheIdForExternalObjectReference,
-                                        objectReferenceId))
+                      new proxySupport.AcquiredState(
+                        sessionInterpreterCacheKey,
+                        trancheIdForExternalObjectReference,
+                        objectReferenceId))
 
                   referenceIdToProxyMap.put(objectReferenceId, proxy)
 
@@ -568,6 +589,12 @@ object ImmutableObjectStorage {
 
         }
     }
+
+    put(sessionInterpreterCacheKey)(sessionInterpreter,
+                                    sessionInterpreterCacheTimeToLive)(
+      sessionInterpreterCache,
+      mode,
+      implicitly[Flags])
 
     session.foldMap(sessionInterpreter)
   }
