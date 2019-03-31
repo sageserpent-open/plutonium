@@ -39,7 +39,7 @@ import org.objenesis.strategy.StdInstantiatorStrategy
 import scalacache.caffeine._
 import scalacache.modes.sync._
 import scalacache.sync.{caching, remove}
-import scalacache.{Cache, CacheConfig, Flags}
+import scalacache.{Cache, Flags}
 
 import scala.collection.immutable
 import scala.collection.mutable.{
@@ -189,13 +189,7 @@ object ImmutableObjectStorage {
 
         result
       }
-    }.withRegistrar(
-      kryo =>
-        // TODO - check that this is really necessary...
-        kryo.register(
-          classOf[ClosureSerializer.Closure],
-          new CleaningSerializer(
-            (new ClosureSerializer).asInstanceOf[Serializer[_ <: AnyRef]])))
+    }
 
   private val kryoPool: KryoPool =
     KryoPool.withByteArrayOutputStream(40, kryoInstantiator)
@@ -391,20 +385,22 @@ object ImmutableObjectStorage {
           (0 until objectToReferenceIdMap.size) map (objectReferenceIdOffset + _)
 
         override def getWrittenId(immutableObject: AnyRef): ObjectReferenceId =
-          caching(System.identityHashCode(immutableObject))(
-            referenceResolverCacheTimeToLive) {
-            val resultFromExSessionReferenceResolver =
-              completedOperationDataByTrancheId.view
-                .map {
-                  case (_, CompletedOperationData(referenceResolver, _)) =>
-                    referenceResolver.getWrittenIdConsultingOnlyThisTranche(
-                      immutableObject)
-                }
-                .find(-1 != _)
-            resultFromExSessionReferenceResolver
-              .orElse(Option(proxyToReferenceIdMap.get(immutableObject))) // TODO - why isn't this consulted first?
-              .getOrElse(getWrittenIdConsultingOnlyThisTranche(immutableObject))
-          }(objectReferenceIdCache, mode, implicitly[Flags])
+          Option(proxyToReferenceIdMap.get(immutableObject)).getOrElse {
+            caching(System.identityHashCode(immutableObject))(
+              referenceResolverCacheTimeToLive) {
+              val resultFromExSessionReferenceResolver =
+                completedOperationDataByTrancheId.view
+                  .map {
+                    case (_, CompletedOperationData(referenceResolver, _)) =>
+                      referenceResolver.getWrittenIdConsultingOnlyThisTranche(
+                        immutableObject)
+                  }
+                  .find(-1 != _)
+              resultFromExSessionReferenceResolver
+                .getOrElse(
+                  getWrittenIdConsultingOnlyThisTranche(immutableObject))
+            }(objectReferenceIdCache, mode, implicitly[Flags])
+          }
 
         private def getWrittenIdConsultingOnlyThisTranche(
             immutableObject: AnyRef): ObjectReferenceId =
@@ -446,10 +442,10 @@ object ImmutableObjectStorage {
         override def getReadObject(
             clazz: Class[_],
             objectReferenceId: ObjectReferenceId): AnyRef =
-          caching(objectReferenceId)(referenceResolverCacheTimeToLive) {
-            if (objectReferenceId >= objectReferenceIdOffset)
-              getReadObjectConsultingOnlyThisTranche(objectReferenceId)
-            else {
+          if (objectReferenceId >= objectReferenceIdOffset)
+            getReadObjectConsultingOnlyThisTranche(objectReferenceId)
+          else
+            caching(objectReferenceId)(referenceResolverCacheTimeToLive) {
               val Right(trancheIdForExternalObjectReference) =
                 tranches
                   .retrieveTrancheId(objectReferenceId)
@@ -479,8 +475,7 @@ object ImmutableObjectStorage {
                   proxy
                 }
               }
-            }
-          }(objectCache, mode, implicitly[Flags])
+            }(objectCache, mode, implicitly[Flags])
 
         def getReadObjectConsultingOnlyThisTranche(
             objectReferenceId: ObjectReferenceId): AnyRef =
