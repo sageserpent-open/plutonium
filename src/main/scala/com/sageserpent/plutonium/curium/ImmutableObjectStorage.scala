@@ -37,14 +37,14 @@ import org.objenesis.instantiator.ObjectInstantiator
 import org.objenesis.strategy.StdInstantiatorStrategy
 import scalacache.caffeine._
 import scalacache.modes.sync._
-import scalacache.sync.{caching, remove, get, put}
+import scalacache.sync.{caching, remove}
 import scalacache.{Cache, Flags}
 
-import scala.collection.immutable
 import scala.collection.mutable.{
   Map => MutableMap,
   SortedMap => MutableSortedMap
 }
+import scala.collection.{immutable, mutable}
 import scala.concurrent.duration._
 import scala.reflect.runtime.universe.{TypeTag, typeOf}
 import scala.util.{DynamicVariable, Try}
@@ -177,35 +177,41 @@ object ImmutableObjectStorage {
                            objectReferenceId: ObjectReferenceId): AnyRef
   }
 
-  type SessionInterpreterCacheKey = UUID
+  type SessionInterpreterKey = UUID
 
-  val sessionInterpreterCacheTimeToLive = Some(2 minutes)
+  val sessionInterpretersByWeakKeys
+    : mutable.WeakHashMap[SessionInterpreterKey, SessionInterpreter] =
+    mutable.WeakHashMap.empty
 
-  val sessionInterpreterCache: Cache[SessionInterpreter] =
-    CaffeineCache[SessionInterpreter]
+  def sessionInterpreter(
+      sessionInterpreterKey: SessionInterpreterKey): SessionInterpreter =
+    sessionInterpretersByWeakKeys(sessionInterpreterKey)
 
-  def sessionInterpreter(sessionInterpreterCacheKey: SessionInterpreterCacheKey)
-    : Option[SessionInterpreter] =
-    get(sessionInterpreterCacheKey)(sessionInterpreterCache,
-                                    mode,
-                                    implicitly[Flags])
+  val sessionInterpreterKey: DynamicVariable[Option[SessionInterpreterKey]] =
+    new DynamicVariable(None)
 
   object proxySupport {
     private val byteBuddy = new ByteBuddy()
 
     private val proxySuffix = "delayedLoadProxy"
 
-    class AcquiredState(sessionInterpreterCacheKey: SessionInterpreterCacheKey,
-                        trancheIdForExternalObjectReference: TrancheId,
+    class AcquiredState(trancheIdForExternalObjectReference: TrancheId,
                         objectReferenceId: ObjectReferenceId)
         extends KryoSerializable {
       @transient
       private var _underlying: Option[AnyRef] = None
 
+      @transient
+      private var sessionInterpreterKey: Option[SessionInterpreterKey] =
+        ImmutableObjectStorage.sessionInterpreterKey.value
+
       override def write(kryo: Kryo, output: Output): Unit =
         kryo.writeClassAndObject(output, _underlying)
 
       override def read(kryo: Kryo, input: Input): Unit = {
+        sessionInterpreterKey =
+          ImmutableObjectStorage.sessionInterpreterKey.value
+
         _underlying =
           kryo.readClassAndObject(input).asInstanceOf[Option[AnyRef]]
       }
@@ -213,7 +219,7 @@ object ImmutableObjectStorage {
       def underlying: AnyRef = _underlying match {
         case Some(result) => result
         case None =>
-          val result = sessionInterpreter(sessionInterpreterCacheKey).get
+          val result = sessionInterpreter(sessionInterpreterKey.get)
             .retrieveUnderlying(trancheIdForExternalObjectReference,
                                 objectReferenceId)
 
@@ -365,7 +371,7 @@ object ImmutableObjectStorage {
 
   def unsafeRun[Result](session: Session[Result])(
       tranches: Tranches): EitherThrowableOr[Result] = {
-    val sessionInterpreterCacheKey: SessionInterpreterCacheKey =
+    val sessionInterpreterKey: SessionInterpreterKey =
       UUID.randomUUID()
 
     val sessionInterpreter: SessionInterpreter = new SessionInterpreter {
@@ -376,7 +382,7 @@ object ImmutableObjectStorage {
         : MutableSortedMap[TrancheId, CompletedOperationData] =
         MutableSortedMap.empty
 
-      private val referenceResolverCacheTimeToLive = Some(20 seconds)
+      private val referenceResolverCacheTimeToLive = Some(3 seconds)
 
       private val objectReferenceIdCache: Cache[ObjectReferenceId] =
         CaffeineCache[ObjectReferenceId]
@@ -502,7 +508,6 @@ object ImmutableObjectStorage {
                     proxySupport.createProxy(
                       clazz.asInstanceOf[Class[_ <: AnyRef]],
                       new proxySupport.AcquiredState(
-                        sessionInterpreterCacheKey,
                         trancheIdForExternalObjectReference,
                         objectReferenceId))
 
@@ -590,12 +595,9 @@ object ImmutableObjectStorage {
         }
     }
 
-    put(sessionInterpreterCacheKey)(sessionInterpreter,
-                                    sessionInterpreterCacheTimeToLive)(
-      sessionInterpreterCache,
-      mode,
-      implicitly[Flags])
+    sessionInterpretersByWeakKeys += (sessionInterpreterKey -> sessionInterpreter)
 
-    session.foldMap(sessionInterpreter)
+    ImmutableObjectStorage.sessionInterpreterKey.withValue(
+      Some(sessionInterpreterKey)) { session.foldMap(sessionInterpreter) }
   }
 }
