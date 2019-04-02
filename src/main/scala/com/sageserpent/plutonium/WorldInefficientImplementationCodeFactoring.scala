@@ -4,7 +4,6 @@ import java.time.Instant
 
 import com.sageserpent.americium.{PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.World.Revision
-import scala.reflect.runtime.universe.TypeTag
 
 abstract class WorldInefficientImplementationCodeFactoring
     extends WorldImplementationCodeFactoring {
@@ -16,11 +15,12 @@ abstract class WorldInefficientImplementationCodeFactoring
       with ItemCacheImplementation {
     val identifiedItemsScope = new IdentifiedItemsScope
 
-    override def itemsFor[Item: TypeTag](id: Any): Stream[Item] =
-      identifiedItemsScope.itemsFor(id)
+    override def itemsFor[Item](
+        uniqueItemSpecification: UniqueItemSpecification): Stream[Item] =
+      identifiedItemsScope.itemsFor(uniqueItemSpecification)
 
-    override def allItems[Item: TypeTag](): Stream[Item] =
-      identifiedItemsScope.allItems()
+    override def allItems[Item](clazz: Class[Item]): Stream[Item] =
+      identifiedItemsScope.allItems(clazz)
 
     identifiedItemsScope.populate(when, eventTimeline(nextRevision))
   }

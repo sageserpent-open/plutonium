@@ -6,16 +6,13 @@ import java.time.Instant
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.{Finite, Unbounded}
 import com.sageserpent.plutonium
-import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.PatchRecorder.UpdateConsumer
 import org.scalacheck.Prop.BooleanOperators
 import org.scalacheck.{Gen, Prop, Test}
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.prop.Checkers
 import org.scalatest.{FlatSpec, Matchers}
-import resource.{ManagedResource, makeManagedResource}
 
-import scala.reflect.runtime.universe._
 import scala.util.Random
 
 class PatchRecorderSpec
@@ -54,7 +51,7 @@ class PatchRecorderSpec
         override val method = expectedMethod
 
         override val targetItemSpecification: UniqueItemSpecification =
-          UniqueItemSpecification(id, typeTag[FooHistory])
+          UniqueItemSpecification(id, classOf[FooHistory])
 
         override val argumentItemSpecifications = Seq.empty
       }
@@ -142,9 +139,9 @@ class PatchRecorderSpec
                                sequenceIndexOfPatchStandIn,
                                whenForStandIn)) =>
                             if (patchStandInIsNotForbiddenByEventTimeCutoff && bestPatch == patch) {
-                              (patch.rewriteItemTypeTags _)
+                              (patch.rewriteItemClazzes _)
                                 .expects(*)
-                                .onCall { (_: UniqueItemSpecification => TypeTag[
+                                .onCall { (_: UniqueItemSpecification => Class[
                                   _]) =>
                                   patch
                                 }
@@ -161,7 +158,7 @@ class PatchRecorderSpec
                                 }
                                 .once
                             } else {
-                              (patch.rewriteItemTypeTags _).expects(*).never
+                              (patch.rewriteItemClazzes _).expects(*).never
                               (updateConsumer.capturePatch _)
                                 .expects(*, *, patch)
                                 .never
@@ -242,7 +239,7 @@ class PatchRecorderSpec
                   .expects(masterSequenceIndex,
                            Annihilation(
                              when,
-                             UniqueItemSpecification(id, typeTag[FooHistory])))
+                             UniqueItemSpecification(id, classOf[FooHistory])))
                   .onCall { (_: plutonium.EventId, _: Annihilation) =>
                     sequenceIndicesFromAppliedPatches += masterSequenceIndex: Unit
                   }
@@ -252,7 +249,7 @@ class PatchRecorderSpec
                   masterSequenceIndex,
                   Annihilation(when,
                                UniqueItemSpecification(id,
-                                                       typeTag[FooHistory])))
+                                                       classOf[FooHistory])))
             }
 
             recordingActionFactories :+ (recordingFinalAnnihilation _)

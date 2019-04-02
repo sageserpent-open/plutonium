@@ -3,12 +3,10 @@ package com.sageserpent.plutonium
 import java.util.UUID
 
 import com.sageserpent.plutonium.BlobStorage.SnapshotRetrievalApi
-import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
 
 import scala.collection.immutable.Map
 import scala.collection.mutable
-import scala.reflect.runtime.universe.TypeTag
 import scala.util.DynamicVariable
 
 object IdentifiedItemAccessUsingBlobStorage {
@@ -83,9 +81,6 @@ trait IdentifiedItemAccessUsingBlobStorage
 
         }
       }
-
-    implicit val typeTagForItem: TypeTag[Item] =
-      _uniqueItemSpecification.typeTag.asInstanceOf[TypeTag[Item]]
 
     val item = IdentifiedItemAccessUsingBlobStorage.proxyFactory
       .constructFrom[Item](stateToBeAcquiredByProxy)

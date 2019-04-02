@@ -143,7 +143,7 @@ trait StatefulItemProxyFactory extends ProxyFactory {
       if (acquiredState.isGhost) {
         val uniqueItemSpecification = acquiredState.uniqueItemSpecification
         throw new UnsupportedOperationException(
-          s"Attempt to write via: '$method' to a ghost item of id: '${uniqueItemSpecification.id}' and type '${uniqueItemSpecification.typeTag}'.")
+          s"Attempt to write via: '$method' to a ghost item of id: '${uniqueItemSpecification.id}' and type '${uniqueItemSpecification.clazz}'.")
       }
 
       superCall.call()
@@ -161,7 +161,7 @@ trait StatefulItemProxyFactory extends ProxyFactory {
       if (acquiredState.isGhost && !acquiredState.unlockFullReadAccess) {
         val uniqueItemSpecification = acquiredState.uniqueItemSpecification
         throw new UnsupportedOperationException(
-          s"Attempt to read via: '$method' from a ghost item of id: '${uniqueItemSpecification.id}' and type '${uniqueItemSpecification.typeTag}'.")
+          s"Attempt to read via: '$method' from a ghost item of id: '${uniqueItemSpecification.id}' and type '${uniqueItemSpecification.clazz}'.")
       }
 
       acquiredState.recordReadOnlyAccess(target)
