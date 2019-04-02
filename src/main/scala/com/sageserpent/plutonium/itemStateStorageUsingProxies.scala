@@ -2,8 +2,6 @@ package com.sageserpent.plutonium
 
 import java.util.UUID
 
-import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
-
 object itemStateStorageUsingProxies extends ItemStateStorage {
   override protected type ItemSuperType = ItemExtensionApi
   override protected val clazzOfItemSuperType = classOf[ItemSuperType]

@@ -3713,7 +3713,7 @@ trait WorldBehaviours
   }
 }
 
-class WorldSpecUsingWorldReferenceImplementation
+/*class WorldSpecUsingWorldReferenceImplementation
     extends WorldBehaviours
     with WorldReferenceImplementationResource {
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
@@ -3726,9 +3726,9 @@ class WorldSpecUsingWorldReferenceImplementation
   "A world (using the world reference implementation)" should behave like worldBehaviour
 
   "A world with events that have since been corrected (using the world reference implementation)" should behave like worldWithEventsThatHaveSinceBeenCorrectedBehaviour
-}
+}*/
 
-class WorldSpecUsingWorldEfficientInMemoryImplementation
+/*class WorldSpecUsingWorldEfficientInMemoryImplementation
     extends WorldBehaviours
     with WorldEfficientInMemoryImplementationResource {
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
@@ -3741,6 +3741,21 @@ class WorldSpecUsingWorldEfficientInMemoryImplementation
   "A world (using the world efficient in-memory implementation)" should behave like worldBehaviour
 
   "A world with events that have since been corrected (using the world efficient in-memory implementation)" should behave like worldWithEventsThatHaveSinceBeenCorrectedBehaviour
+}*/
+
+class WorldSpecUsingWorldEfficientQuestionableBackendImplementation
+    extends WorldBehaviours
+    with WorldEfficientQuestionableBackendImplementationResource {
+  implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
+    PropertyCheckConfig(maxSize = 24, minSuccessful = 50)
+
+  "A world with no history (using the world efficient questionable backend implementation)" should behave like worldWithNoHistoryBehaviour
+
+  "A world with history added in order of increasing event time (using the world efficient questionable backend implementation)" should behave like worldWithHistoryAddedInOrderOfIncreasingEventTimeBehaviour
+
+  "A world (using the world efficient questionable backend implementation)" should behave like worldBehaviour
+
+  "A world with events that have since been corrected (using the world efficient questionable backend implementation)" should behave like worldWithEventsThatHaveSinceBeenCorrectedBehaviour
 }
 
 abstract class HistoryWhoseIdWontSerialize extends History {
@@ -3776,7 +3791,7 @@ case class WontDeserializeId(var id: String) extends KryoSerializable {
     throw BadDeserializationException()
 }
 
-class WorldSpecUsingWorldRedisBasedImplementation
+/*class WorldSpecUsingWorldRedisBasedImplementation
     extends WorldBehaviours
     with WorldRedisBasedImplementationResource {
   val redisServerPort = 6454
@@ -3879,7 +3894,8 @@ class WorldSpecUsingWorldRedisBasedImplementation
         }
     })
   }
-}
+}*/
+
 class AllTheWorlds
     extends FlatSpec
     with Matchers
@@ -3894,11 +3910,15 @@ class AllTheWorlds
   object worldEfficientInMemoryImplementationResource
       extends WorldEfficientInMemoryImplementationResource
 
+  object worldEfficientQuestionableBackendImplementationResource
+      extends WorldEfficientQuestionableBackendImplementationResource
+
   "all the world implementations" should "agree" in {
     val testCaseGenerator = for {
-      worldReferenceImplementationResource         <- worldReferenceImplementationResource.worldResourceGenerator
-      worldEfficientInMemoryImplementationResource <- worldEfficientInMemoryImplementationResource.worldResourceGenerator
-      worldRedisBasedImplementationResource        <- worldResourceGenerator
+      worldReferenceImplementationResource                    <- worldReferenceImplementationResource.worldResourceGenerator
+      worldEfficientInMemoryImplementationResource            <- worldEfficientInMemoryImplementationResource.worldResourceGenerator
+      worldRedisBasedImplementationResource                   <- worldResourceGenerator
+      worldEfficientQuestionableBackendImplementationResource <- worldEfficientQuestionableBackendImplementationResource.worldResourceGenerator
       recordingsGroupedById <- recordingsGroupedByIdGenerator(
         forbidAnnihilations = false)
       obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
@@ -3921,6 +3941,7 @@ class AllTheWorlds
       (worldReferenceImplementationResource,
        worldEfficientInMemoryImplementationResource,
        worldRedisBasedImplementationResource,
+       worldEfficientQuestionableBackendImplementationResource,
        recordingsGroupedById,
        bigShuffledHistoryOverLotsOfThings,
        asOfs,
@@ -3929,6 +3950,7 @@ class AllTheWorlds
       case (worldReferenceImplementationResource,
             worldEfficientInMemoryImplementationResource,
             worldRedisBasedImplementationResource,
+            worldEfficientQuestionableBackendImplementationResource,
             recordingsGroupedById,
             bigShuffledHistoryOverLotsOfThings,
             asOfs,
@@ -3946,9 +3968,10 @@ class AllTheWorlds
         }
 
         val checks = for {
-          worldReferenceImplementation         <- worldReferenceImplementationResource
-          worldEfficientInMemoryImplementation <- worldEfficientInMemoryImplementationResource
-          worldRedisBasedImplementation        <- worldRedisBasedImplementationResource
+          worldReferenceImplementation                    <- worldReferenceImplementationResource
+          worldEfficientInMemoryImplementation            <- worldEfficientInMemoryImplementationResource
+          worldRedisBasedImplementation                   <- worldRedisBasedImplementationResource
+          worldEfficientQuestionableBackendImplementation <- worldEfficientQuestionableBackendImplementationResource
         } yield {
           val worldReferenceImplementationResults =
             resultsFrom(worldReferenceImplementation)
@@ -3956,10 +3979,13 @@ class AllTheWorlds
             resultsFrom(worldEfficientInMemoryImplementation)
           val redisBasedImplementationResults =
             resultsFrom(worldRedisBasedImplementation)
+          val worldEfficientQuestionableBackendImplementationResults =
+            resultsFrom(worldEfficientQuestionableBackendImplementation)
 
           ((worldReferenceImplementationResults == worldEfficientInMemoryImplementationResults) :| s"Should have agreement between reference implementation and efficient in-memory implementation.") &&
           ((worldEfficientInMemoryImplementationResults == redisBasedImplementationResults) :| s"Should have agreement between efficient in-memory implementation and Redis based implementation.") &&
-          ((redisBasedImplementationResults == worldReferenceImplementationResults) :| s"Should have agreement between Redis based implementation and reference implementation.")
+          ((redisBasedImplementationResults == worldEfficientQuestionableBackendImplementationResults) :| s"Should have agreement between Redis based implementation and questionable backend based implementation.") &&
+          ((worldEfficientQuestionableBackendImplementationResults == worldReferenceImplementationResults) :| s"Should have agreement between questionable backend based implementation and reference implementation.")
         }
 
         checks acquireAndGet identity

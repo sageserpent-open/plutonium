@@ -8,8 +8,6 @@ import com.esotericsoftware.kryo.io.{Input, Output}
 import com.esotericsoftware.kryo.serializers.FieldSerializer
 import com.esotericsoftware.kryo.util.ObjectMap
 import com.esotericsoftware.kryo.{Kryo, Serializer}
-import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
-import com.sageserpent.plutonium.UniqueItemSpecificationSerializationSupport.SpecialSerializer
 import com.twitter.chill.{
   AllScalaRegistrar,
   KryoBase,
@@ -162,8 +160,7 @@ trait ItemStateStorage { itemStateStorageObject =>
       kryo.setInstantiatorStrategy(instantiatorStrategy)
       kryo
     }
-  }.withRegistrar { (kryo: Kryo) =>
-    kryo.register(classOf[UniqueItemSpecification], new SpecialSerializer)
+  }.withRegistrar { kryo: Kryo =>
     kryo.register(classOf[util.HashSet[_]],
                   HashSetSerializer.asInstanceOf[Serializer[util.HashSet[_]]])
   }

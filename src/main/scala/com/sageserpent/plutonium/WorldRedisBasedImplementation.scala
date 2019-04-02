@@ -7,7 +7,6 @@ import java.util.concurrent.Executor
 
 import com.esotericsoftware.kryo.Kryo
 import com.sageserpent.americium.{PositiveInfinity, Unbounded}
-import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.twitter.chill.{KryoPool, ScalaKryoInstantiator}
 import io.lettuce.core.api.async.RedisAsyncCommands
 import io.lettuce.core.codec.{ByteArrayCodec, RedisCodec, Utf8StringCodec}
@@ -25,15 +24,12 @@ import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
 
 object WorldRedisBasedImplementation {
-  import UniqueItemSpecificationSerializationSupport.SpecialSerializer
 
   val redisNamespaceComponentSeparator = ":"
 
   val kryoPool = KryoPool.withByteArrayOutputStream(
     40,
-    new ScalaKryoInstantiator().withRegistrar { (kryo: Kryo) =>
-      kryo.register(classOf[UniqueItemSpecification], new SpecialSerializer)
-    }
+    new ScalaKryoInstantiator()
   )
 
   class RedisCodecDelegatingKeysToStandardCodec[Value]
