@@ -19,36 +19,31 @@ object WorldEfficientQuestionableBackendImplementation {
     val objectReferenceIdsToAssociatedTrancheIdMap
       : MutableSortedMap[ObjectReferenceId, TrancheId] = MutableSortedMap.empty
 
-    def purgeTranche(trancheId: TrancheId): Unit = {
-      val objectReferenceIdsToRemove =
-        objectReferenceIdsToAssociatedTrancheIdMap.collect {
-          case (objectReferenceId, keyTrancheId) if trancheId == keyTrancheId =>
-            objectReferenceId
-        }
-
-      objectReferenceIdsToAssociatedTrancheIdMap --= objectReferenceIdsToRemove
-
-      tranchesById -= trancheId
-    }
-
     override protected def storeTrancheAndAssociatedObjectReferenceIds(
         trancheId: TrancheId,
         tranche: TrancheOfData,
         objectReferenceIds: Seq[ObjectReferenceId]): EitherThrowableOr[Unit] = {
-      Try {
-        tranchesById(trancheId) = tranche
-        for (objectReferenceId <- objectReferenceIds) {
-          objectReferenceIdsToAssociatedTrancheIdMap(objectReferenceId) =
-            trancheId
-        }
-      }.toEither
+      for {
+        objectReferenceIdOffsetForNewTranche <- this.objectReferenceIdOffsetForNewTranche
+        _ <- Try {
+          tranchesById(trancheId) = tranche
+          for (objectReferenceId <- objectReferenceIds) {
+            require(objectReferenceIdOffsetForNewTranche <= objectReferenceId)
+            objectReferenceIdsToAssociatedTrancheIdMap(objectReferenceId) =
+              trancheId
+          }
+        }.toEither
+      } yield ()
     }
+
     override def retrieveTranche(
         trancheId: TrancheId): scala.Either[scala.Throwable, TrancheOfData] =
       Try { tranchesById(trancheId) }.toEither
+
     override def retrieveTrancheId(objectReferenceId: ObjectReferenceId)
       : scala.Either[scala.Throwable, TrancheId] =
       Try { objectReferenceIdsToAssociatedTrancheIdMap(objectReferenceId) }.toEither
+
     override def objectReferenceIdOffsetForNewTranche
       : EitherThrowableOr[ObjectReferenceId] =
       Try {
