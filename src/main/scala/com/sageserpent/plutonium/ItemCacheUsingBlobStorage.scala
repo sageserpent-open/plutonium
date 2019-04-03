@@ -2,10 +2,7 @@ package com.sageserpent.plutonium
 
 import java.util.UUID
 
-import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
-
-import scala.reflect.runtime.universe.{Super => _, This => _, _}
 
 object ItemCacheUsingBlobStorage {
   object proxyFactory extends PersistentItemProxyFactory {
@@ -22,15 +19,17 @@ class ItemCacheUsingBlobStorage[Time](
     when: Time)
     extends ItemCacheImplementation
     with itemStateStorageUsingProxies.ReconstitutionContext {
-  override def itemsFor[Item: TypeTag](id: Any): Stream[Item] =
+  override def itemsFor[Item](
+      uniqueItemSpecification: UniqueItemSpecification): Stream[Item] =
     for {
-      uniqueItemSpecification <- blobStorageTimeslice.uniqueItemQueriesFor(id)
+      uniqueItemSpecification <- blobStorageTimeslice.uniqueItemQueriesFor(
+        uniqueItemSpecification)
     } yield itemFor[Item](uniqueItemSpecification)
 
-  override def allItems[Item: TypeTag](): Stream[Item] =
+  override def allItems[Item](clazz: Class[Item]): Stream[Item] =
     for {
       uniqueItemSpecification <- blobStorageTimeslice
-        .uniqueItemQueriesFor[Item]
+        .uniqueItemQueriesFor[Item](clazz)
     } yield itemFor[Item](uniqueItemSpecification)
 
   override val blobStorageTimeslice: BlobStorage.Timeslice[SnapshotBlob] =
@@ -65,9 +64,6 @@ class ItemCacheUsingBlobStorage[Time](
         def recordMutation(item: ItemExtensionApi): Unit       = {}
         def recordReadOnlyAccess(item: ItemExtensionApi): Unit = {}
       }
-
-    implicit val typeTagForItem: TypeTag[Item] =
-      _uniqueItemSpecification.typeTag.asInstanceOf[TypeTag[Item]]
 
     val item = ItemCacheUsingBlobStorage.proxyFactory
       .constructFrom[Item](stateToBeAcquiredByProxy)

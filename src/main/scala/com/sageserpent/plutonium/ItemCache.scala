@@ -1,7 +1,5 @@
 package com.sageserpent.plutonium
 
-import scala.reflect.runtime.universe.{Super => _, This => _, _}
-
 trait ItemCache {
   // Why a stream for the result type? - two reasons that overlap - we may have no instance in force for the scope, or we might have several that share the same id, albeit with
   // different runtime subtypes of 'Item'. What's more, if 'bitemporal' was cooked using 'Bitemporal.wildcard', we'll have every single instance of a runtime subtype of 'Item'.
@@ -11,9 +9,10 @@ trait ItemCache {
 }
 
 trait ItemCacheImplementation extends ItemCache {
-  protected def itemsFor[Item: TypeTag](id: Any): Stream[Item]
+  protected def itemsFor[Item](
+      uniqueItemSpecification: UniqueItemSpecification): Stream[Item]
 
-  protected def allItems[Item: TypeTag](): Stream[Item]
+  protected def allItems[Item](clazz: Class[Item]): Stream[Item]
 
   def render[Item](bitemporal: Bitemporal[Item]): Stream[Item] = {
     bitemporal match {
@@ -26,12 +25,10 @@ trait ItemCacheImplementation extends ItemCache {
       case PlusBitemporalResult(lhs, rhs) => render(lhs) ++ render(rhs)
       case PointBitemporalResult(item)    => Stream(item)
       case NoneBitemporalResult()         => Stream.empty
-      case bitemporal @ IdentifiedItemsBitemporalResult(id) =>
-        implicit val typeTag = bitemporal.capturedTypeTag
-        itemsFor(id)
-      case bitemporal @ WildcardBitemporalResult() =>
-        implicit val typeTag = bitemporal.capturedTypeTag
-        allItems()
+      case IdentifiedItemsBitemporalResult(uniqueItemSpecification) =>
+        itemsFor(uniqueItemSpecification)
+      case WildcardBitemporalResult(clazz) =>
+        allItems(clazz)
     }
   }
 
@@ -43,19 +40,19 @@ trait ItemCacheImplementation extends ItemCache {
       case PlusBitemporalResult(lhs, rhs) => numberOf(lhs) + numberOf(rhs)
       case PointBitemporalResult(item)    => 1
       case NoneBitemporalResult()         => 0
-      case bitemporal @ IdentifiedItemsBitemporalResult(id) =>
-        implicit val typeTag = bitemporal.capturedTypeTag
-        itemsFor(id).size
-      case bitemporal @ WildcardBitemporalResult() =>
-        implicit val typeTag = bitemporal.capturedTypeTag
-        allItems().size
+      case IdentifiedItemsBitemporalResult(uniqueItemSpecification) =>
+        itemsFor(uniqueItemSpecification).size
+      case WildcardBitemporalResult(clazz) =>
+        allItems(clazz).size
     }
   }
 }
 
 object emptyItemCache extends ItemCacheImplementation {
-  override def itemsFor[Item: TypeTag](id: Any): Stream[Item] = Stream.empty
+  override def itemsFor[Item](
+      uniqueItemSpecification: UniqueItemSpecification): Stream[Item] =
+    Stream.empty
 
-  override def allItems[Item: TypeTag](): Stream[Item] =
+  override def allItems[Item](clazz: Class[Item]): Stream[Item] =
     Stream.empty
 }

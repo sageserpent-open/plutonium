@@ -572,7 +572,7 @@ trait Bugs
                          sharedAsOf)
           }
 
-          exception.getMessage should include regex ("attempt to annihilate an item.*without an explicit type")
+          exception.getMessage should include regex "attempt to annihilate an item.*without an explicit type"
         }
       }
     }
@@ -1203,4 +1203,10 @@ class WorldRedisBasedImplementationBugs
     with WorldRedisBasedImplementationResource {
   "a world (using the world Redis-based implementation)" should behave like suite
   override val redisServerPort: Int = 6456
+}
+
+class WorldEfficientQuestionableBackendImplementationBugs
+    extends Bugs
+    with WorldEfficientQuestionableBackendImplementationResource {
+  "a world (using the world efficient questionable backend implementation)" should behave like suite
 }

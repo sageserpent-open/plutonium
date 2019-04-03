@@ -6,7 +6,6 @@ import java.util.concurrent.Callable
 
 import com.sageserpent.americium
 import com.sageserpent.americium.{Finite, PositiveInfinity, Unbounded}
-import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import net.bytebuddy.description.method.MethodDescription
 import net.bytebuddy.dynamic.DynamicType.Builder
 import net.bytebuddy.implementation.MethodDelegation
@@ -148,12 +147,13 @@ object capturePatches {
       mutable.MutableList.empty[AbstractPatch]
 
     class LocalRecorderFactory extends RecorderFactory {
-      override def apply[Item: TypeTag](id: Any): Item = {
+      override def apply[Item](
+          _uniqueItemSpecification: UniqueItemSpecification): Item = {
         import proxyFactory.AcquiredState
 
         val stateToBeAcquiredByProxy = new AcquiredState {
           val uniqueItemSpecification: UniqueItemSpecification =
-            UniqueItemSpecification(id, typeTag[Item])
+            _uniqueItemSpecification
 
           def capturePatch(patch: AbstractPatch) {
             capturedPatches += patch
@@ -176,11 +176,14 @@ case class Change(when: Unbounded[Instant], patches: Seq[AbstractPatch])
 object Change {
   def forOneItem[Item: TypeTag](
       when: Unbounded[Instant])(id: Any, update: Item => Unit): Change = {
-    val typeTag = implicitly[TypeTag[Item]]
-    Change(when, capturePatches((recorderFactory: RecorderFactory) => {
-      val recorder = recorderFactory(id)(typeTag)
-      update(recorder)
-    }))
+    Change(
+      when,
+      capturePatches((recorderFactory: RecorderFactory) => {
+        val recorder =
+          recorderFactory[Item](UniqueItemSpecification(id, typeOf[Item]))
+        update(recorder)
+      })
+    )
   }
 
   def forOneItem[Item: TypeTag](when: Instant)(id: Any,
@@ -193,18 +196,16 @@ object Change {
   def forTwoItems[Item1: TypeTag, Item2: TypeTag](when: Unbounded[Instant])(
       id1: Any,
       id2: Any,
-      update: (Item1, Item2) => Unit): Change = {
-    val typeTag1 = implicitly[TypeTag[Item1]]
-    val typeTag2 = implicitly[TypeTag[Item2]]
-    Change(
-      when,
-      capturePatches((recorderFactory: RecorderFactory) => {
-        val recorder1 = recorderFactory(id1)(typeTag1)
-        val recorder2 = recorderFactory(id2)(typeTag2)
-        update(recorder1, recorder2)
-      })
-    )
-  }
+      update: (Item1, Item2) => Unit): Change = Change(
+    when,
+    capturePatches((recorderFactory: RecorderFactory) => {
+      val recorder1 =
+        recorderFactory[Item1](UniqueItemSpecification(id1, typeOf[Item1]))
+      val recorder2 =
+        recorderFactory[Item2](UniqueItemSpecification(id2, typeOf[Item2]))
+      update(recorder1, recorder2)
+    })
+  )
 
   def forTwoItems[Item1: TypeTag, Item2: TypeTag](when: Instant)(
       id1: Any,
@@ -226,11 +227,14 @@ object Measurement {
   def forOneItem[Item: TypeTag](when: Unbounded[Instant])(
       id: Any,
       measurement: Item => Unit): Measurement = {
-    val typeTag = implicitly[TypeTag[Item]]
-    Measurement(when, capturePatches((recorderFactory: RecorderFactory) => {
-      val recorder = recorderFactory(id)(typeTag)
-      measurement(recorder)
-    }))
+    Measurement(
+      when,
+      capturePatches((recorderFactory: RecorderFactory) => {
+        val recorder =
+          recorderFactory[Item](UniqueItemSpecification(id, typeOf[Item]))
+        measurement(recorder)
+      })
+    )
   }
 
   def forOneItem[Item: TypeTag](
@@ -243,18 +247,16 @@ object Measurement {
   def forTwoItems[Item1: TypeTag, Item2: TypeTag](when: Unbounded[Instant])(
       id1: Any,
       id2: Any,
-      update: (Item1, Item2) => Unit): Measurement = {
-    val typeTag1 = implicitly[TypeTag[Item1]]
-    val typeTag2 = implicitly[TypeTag[Item2]]
-    Measurement(
-      when,
-      capturePatches((recorderFactory: RecorderFactory) => {
-        val recorder1 = recorderFactory(id1)(typeTag1)
-        val recorder2 = recorderFactory(id2)(typeTag2)
-        update(recorder1, recorder2)
-      })
-    )
-  }
+      update: (Item1, Item2) => Unit): Measurement = Measurement(
+    when,
+    capturePatches((recorderFactory: RecorderFactory) => {
+      val recorder1 =
+        recorderFactory[Item1](UniqueItemSpecification(id1, typeOf[Item1]))
+      val recorder2 =
+        recorderFactory[Item2](UniqueItemSpecification(id2, typeOf[Item2]))
+      update(recorder1, recorder2)
+    })
+  )
 
   def forTwoItems[Item1: TypeTag, Item2: TypeTag](when: Instant)(
       id1: Any,
@@ -284,10 +286,8 @@ case class Annihilation(definiteWhen: Instant,
 
   val when = Finite(definiteWhen)
 
-  def rewriteItemTypeTag(itemTypeTag: TypeTag[_]) =
-    copy(
-      uniqueItemSpecification =
-        uniqueItemSpecification.copy(typeTag = itemTypeTag))
+  def rewriteItemClass(clazz: Class[_]): Annihilation =
+    copy(uniqueItemSpecification = uniqueItemSpecification.copy(clazz = clazz)) // TODO: lenses, I know.
 
   def apply(identifiedItemAccess: IdentifiedItemAccess): Unit = {
     identifiedItemAccess.noteAnnihilation(uniqueItemSpecification)
@@ -295,6 +295,13 @@ case class Annihilation(definiteWhen: Instant,
 }
 
 object Annihilation {
-  def apply[Item: TypeTag](definiteWhen: Instant, id: Any): Annihilation =
-    Annihilation(definiteWhen, UniqueItemSpecification(id, typeTag[Item]))
+  def apply[Item: TypeTag](definiteWhen: Instant, id: Any): Annihilation = {
+    val itemType = typeOf[Item]
+
+    if (typeOf[Nothing] =:= itemType)
+      throw new RuntimeException(
+        s"attempt to annihilate an item '$id' without an explicit type.")
+
+    Annihilation(definiteWhen, UniqueItemSpecification(id, itemType))
+  }
 }
