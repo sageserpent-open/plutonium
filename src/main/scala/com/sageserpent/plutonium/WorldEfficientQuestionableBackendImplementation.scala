@@ -5,6 +5,7 @@ import java.time.Instant
 import com.sageserpent.plutonium.curium.ImmutableObjectStorage._
 import cats.implicits._
 import com.sageserpent.plutonium.World.Revision
+import com.sageserpent.plutonium.WorldEfficientQuestionableBackendImplementation.immutableObjectStorage
 import com.sageserpent.plutonium.curium.ImmutableObjectStorage
 
 import scala.util.Try
@@ -14,6 +15,8 @@ import scala.collection.mutable.{
 }
 
 object WorldEfficientQuestionableBackendImplementation {
+  object immutableObjectStorage extends ImmutableObjectStorage
+
   class QuestionableTranches extends Tranches {
     val tranchesById: MutableMap[TrancheId, TrancheOfData] = MutableMap.empty
     val objectReferenceIdsToAssociatedTrancheIdMap
@@ -90,7 +93,7 @@ class WorldEfficientQuestionableBackendImplementation(
 
   override protected def consumeNewTimeline(newTimeline: Session[Timeline],
                                             asOf: Instant): Unit = {
-    val Right(trancheId) = ImmutableObjectStorage.runToYieldTrancheId(
+    val Right(trancheId) = immutableObjectStorage.runToYieldTrancheId(
       newTimeline.flatMap(ImmutableObjectStorage.store[Timeline]))(tranches)
 
     if (nextRevision == timelineTrancheIdStorage.length) {
@@ -108,7 +111,7 @@ class WorldEfficientQuestionableBackendImplementation(
   override protected def forkWorld(
       timelines: Session[Array[(Instant, Timeline)]],
       numberOfTimelines: Int): World = {
-    val Right(timelineTrancheIds) = ImmutableObjectStorage.unsafeRun(
+    val Right(timelineTrancheIds) = immutableObjectStorage.unsafeRun(
       timelines
         .flatMap(_.toVector.traverse {
           case (asOf, timeline) =>
@@ -125,7 +128,7 @@ class WorldEfficientQuestionableBackendImplementation(
   }
 
   override protected def itemCacheOf(itemCache: Session[ItemCache]): ItemCache =
-    ImmutableObjectStorage.unsafeRun(itemCache)(tranches).right.get
+    immutableObjectStorage.unsafeRun(itemCache)(tranches).right.get
 
   override def nextRevision: Revision =
     numberOfTimelines
