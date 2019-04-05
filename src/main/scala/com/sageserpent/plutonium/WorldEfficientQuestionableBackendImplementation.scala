@@ -25,19 +25,14 @@ object WorldEfficientQuestionableBackendImplementation {
     override protected def storeTrancheAndAssociatedObjectReferenceIds(
         trancheId: TrancheId,
         tranche: TrancheOfData,
-        objectReferenceIds: Seq[ObjectReferenceId]): EitherThrowableOr[Unit] = {
-      for {
-        objectReferenceIdOffsetForNewTranche <- this.objectReferenceIdOffsetForNewTranche
-        _ <- Try {
-          tranchesById(trancheId) = tranche
-          for (objectReferenceId <- objectReferenceIds) {
-            require(objectReferenceIdOffsetForNewTranche <= objectReferenceId)
-            objectReferenceIdsToAssociatedTrancheIdMap(objectReferenceId) =
-              trancheId
-          }
-        }.toEither
-      } yield ()
-    }
+        objectReferenceIds: Seq[ObjectReferenceId]): EitherThrowableOr[Unit] =
+      Try {
+        tranchesById(trancheId) = tranche
+        for (objectReferenceId <- objectReferenceIds) {
+          objectReferenceIdsToAssociatedTrancheIdMap(objectReferenceId) =
+            trancheId
+        }
+      }.toEither
 
     override def retrieveTranche(
         trancheId: TrancheId): scala.Either[scala.Throwable, TrancheOfData] =
@@ -68,7 +63,8 @@ class WorldEfficientQuestionableBackendImplementation(
     extends WorldEfficientImplementation[Session] {
   def this() =
     this(
-      new WorldEfficientQuestionableBackendImplementation.QuestionableTranches,
+      new WorldEfficientQuestionableBackendImplementation.QuestionableTranches
+      with TranchesContracts,
       Array.empty[(Instant, TrancheId)],
       World.initialRevision)
 
