@@ -3748,7 +3748,7 @@ class WorldSpecUsingWorldEfficientQuestionableBackendImplementation
     extends WorldBehaviours
     with WorldEfficientQuestionableBackendImplementationResource {
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
-    PropertyCheckConfig(maxSize = 24, minSuccessful = 15)
+    PropertyCheckConfig(maxSize = 15, minSuccessful = 15)
 
   "A world with no history (using the world efficient questionable backend implementation)" should behave like worldWithNoHistoryBehaviour
 
