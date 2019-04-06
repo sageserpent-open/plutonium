@@ -800,6 +800,7 @@ trait BitemporalBehaviours
   }
 }
 
+/*
 class BitemporalSpecUsingWorldReferenceImplementation
     extends BitemporalBehaviours
     with WorldReferenceImplementationResource {
@@ -857,4 +858,24 @@ class BitemporalSpecUsingWorldRedisBasedImplementation
   "The bitemporal 'none' (using the world Redis-based implementation)" should behave like bitemporalNoneBehaviour
 
   "A bitemporal query (using the world Redis-based implementation)" should behave like bitemporalQueryBehaviour
+}
+ */
+
+class BitemporalSpecUsingWorldEfficientQuestionableBackendImplementation
+    extends BitemporalBehaviours
+    with WorldEfficientQuestionableBackendImplementationResource {
+  implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
+    PropertyCheckConfig(maxSize = 30, minSuccessful = 30)
+
+  "The class Bitemporal (using the world efficient in-memory implementation)" should behave like bitemporalBehaviour
+
+  "A bitemporal wildcard (using the world efficient in-memory implementation)" should behave like bitemporalWildcardBehaviour
+
+  "A bitemporal query using an id (using the world efficient in-memory implementation)" should behave like bitemporalQueryUsingAnIdBehaviour
+
+  "The bitemporal 'numberOf' (using the world efficient in-memory implementation)" should behave like bitemporalNumberOfBehaviour
+
+  "The bitemporal 'none' (using the world efficient in-memory implementation)" should behave like bitemporalNoneBehaviour
+
+  "A bitemporal query (using the world efficient in-memory implementation)" should behave like bitemporalQueryBehaviour
 }

@@ -659,6 +659,7 @@ trait ExperimentalWorldBehaviours
   }
 }
 
+/*
 class ExperimentalWorldSpecUsingWorldReferenceImplementation
     extends ExperimentalWorldBehaviours
     with WorldReferenceImplementationResource {
@@ -686,4 +687,14 @@ class ExperimentalWorldSpecUsingWorldRedisBasedImplementation
     PropertyCheckConfig(maxSize = 10, minSuccessful = 25)
 
   "An experimental world (using the world Redis-based implementation)" should behave like experimentalWorldBehaviour
+}
+ */
+
+class ExperimentalWorldSpecUsingWorldEfficientQuestionableBackendImplementation
+    extends ExperimentalWorldBehaviours
+    with WorldEfficientQuestionableBackendImplementationResource {
+  implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
+    PropertyCheckConfig(maxSize = 20)
+
+  "An experimental world (using the world efficient in-memory implementation)" should behave like experimentalWorldBehaviour
 }
