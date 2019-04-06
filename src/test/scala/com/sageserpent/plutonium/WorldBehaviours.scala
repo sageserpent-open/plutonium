@@ -227,8 +227,7 @@ trait WorldBehaviours
                   }: _*)
                 else Prop.undecided
             }
-        },
-        MinSuccessful(300)
+        }
       )
     }
 
@@ -3179,8 +3178,7 @@ trait WorldBehaviours
 
                 (steps == fredTheItem.head.datums) :| s"Expecting: ${steps}, but got: ${fredTheItem.head.datums}"
             }
-        },
-        MinSuccessful(400)
+        }
       )
     }
 
@@ -3240,8 +3238,7 @@ trait WorldBehaviours
 
                 (steps.toSet == fredTheItem.head.datums.toSet) :| s"Expecting: ${steps}, but got: ${fredTheItem.head.datums}"
             }
-        },
-        MinSuccessful(700)
+        }
       )
     }
 
@@ -3747,7 +3744,7 @@ class WorldSpecUsingWorldEfficientQuestionableBackendImplementation
     extends WorldBehaviours
     with WorldEfficientQuestionableBackendImplementationResource {
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
-    PropertyCheckConfig(maxSize = 10, minSuccessful = 30)
+    PropertyCheckConfig(maxSize = 10, minSuccessful = 20)
 
   "A world with no history (using the world efficient questionable backend implementation)" should behave like worldWithNoHistoryBehaviour
 
