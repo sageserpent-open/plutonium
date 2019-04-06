@@ -659,14 +659,15 @@ trait ExperimentalWorldBehaviours
   }
 }
 
-/*
 class ExperimentalWorldSpecUsingWorldReferenceImplementation
     extends ExperimentalWorldBehaviours
     with WorldReferenceImplementationResource {
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
     PropertyCheckConfig(maxSize = 20)
 
-  "An experimental world (using the world reference implementation)" should behave like experimentalWorldBehaviour
+  if ("true" != System.getenv("TRAVIS")) {
+    "An experimental world (using the world reference implementation)" should behave like experimentalWorldBehaviour
+  }
 }
 
 class ExperimentalWorldSpecUsingWorldEfficientInMemoryImplementation
@@ -675,7 +676,9 @@ class ExperimentalWorldSpecUsingWorldEfficientInMemoryImplementation
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
     PropertyCheckConfig(maxSize = 20)
 
-  "An experimental world (using the world efficient in-memory implementation)" should behave like experimentalWorldBehaviour
+  if ("true" != System.getenv("TRAVIS")) {
+    "An experimental world (using the world efficient in-memory implementation)" should behave like experimentalWorldBehaviour
+  }
 }
 
 class ExperimentalWorldSpecUsingWorldRedisBasedImplementation
@@ -686,9 +689,10 @@ class ExperimentalWorldSpecUsingWorldRedisBasedImplementation
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
     PropertyCheckConfig(maxSize = 10, minSuccessful = 25)
 
-  "An experimental world (using the world Redis-based implementation)" should behave like experimentalWorldBehaviour
+  if ("true" != System.getenv("TRAVIS")) {
+    "An experimental world (using the world Redis-based implementation)" should behave like experimentalWorldBehaviour
+  }
 }
- */
 
 class ExperimentalWorldSpecUsingWorldEfficientQuestionableBackendImplementation
     extends ExperimentalWorldBehaviours

@@ -3710,41 +3710,45 @@ trait WorldBehaviours
   }
 }
 
-/*class WorldSpecUsingWorldReferenceImplementation
+class WorldSpecUsingWorldReferenceImplementation
     extends WorldBehaviours
     with WorldReferenceImplementationResource {
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
     PropertyCheckConfig(maxSize = 22, minSuccessful = 50)
 
-  "A world with no history (using the world reference implementation)" should behave like worldWithNoHistoryBehaviour
+  if ("true" != System.getenv("TRAVIS")) {
+    "A world with no history (using the world reference implementation)" should behave like worldWithNoHistoryBehaviour
 
-  "A world with history added in order of increasing event time (using the world reference implementation)" should behave like worldWithHistoryAddedInOrderOfIncreasingEventTimeBehaviour
+    "A world with history added in order of increasing event time (using the world reference implementation)" should behave like worldWithHistoryAddedInOrderOfIncreasingEventTimeBehaviour
 
-  "A world (using the world reference implementation)" should behave like worldBehaviour
+    "A world (using the world reference implementation)" should behave like worldBehaviour
 
-  "A world with events that have since been corrected (using the world reference implementation)" should behave like worldWithEventsThatHaveSinceBeenCorrectedBehaviour
-}*/
+    "A world with events that have since been corrected (using the world reference implementation)" should behave like worldWithEventsThatHaveSinceBeenCorrectedBehaviour
+  }
+}
 
-/*class WorldSpecUsingWorldEfficientInMemoryImplementation
+class WorldSpecUsingWorldEfficientInMemoryImplementation
     extends WorldBehaviours
     with WorldEfficientInMemoryImplementationResource {
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
     PropertyCheckConfig(maxSize = 24, minSuccessful = 50)
 
-  "A world with no history (using the world efficient in-memory implementation)" should behave like worldWithNoHistoryBehaviour
+  if ("true" != System.getenv("TRAVIS")) {
+    "A world with no history (using the world efficient in-memory implementation)" should behave like worldWithNoHistoryBehaviour
 
-  "A world with history added in order of increasing event time (using the world efficient in-memory implementation)" should behave like worldWithHistoryAddedInOrderOfIncreasingEventTimeBehaviour
+    "A world with history added in order of increasing event time (using the world efficient in-memory implementation)" should behave like worldWithHistoryAddedInOrderOfIncreasingEventTimeBehaviour
 
-  "A world (using the world efficient in-memory implementation)" should behave like worldBehaviour
+    "A world (using the world efficient in-memory implementation)" should behave like worldBehaviour
 
-  "A world with events that have since been corrected (using the world efficient in-memory implementation)" should behave like worldWithEventsThatHaveSinceBeenCorrectedBehaviour
-}*/
+    "A world with events that have since been corrected (using the world efficient in-memory implementation)" should behave like worldWithEventsThatHaveSinceBeenCorrectedBehaviour
+  }
+}
 
 class WorldSpecUsingWorldEfficientQuestionableBackendImplementation
     extends WorldBehaviours
     with WorldEfficientQuestionableBackendImplementationResource {
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
-    PropertyCheckConfig(maxSize = 10, minSuccessful = 20)
+    PropertyCheckConfig(maxSize = 24, minSuccessful = 50)
 
   "A world with no history (using the world efficient questionable backend implementation)" should behave like worldWithNoHistoryBehaviour
 
@@ -3788,7 +3792,7 @@ case class WontDeserializeId(var id: String) extends KryoSerializable {
     throw BadDeserializationException()
 }
 
-/*class WorldSpecUsingWorldRedisBasedImplementation
+class WorldSpecUsingWorldRedisBasedImplementation
     extends WorldBehaviours
     with WorldRedisBasedImplementationResource {
   val redisServerPort = 6454
@@ -3796,13 +3800,15 @@ case class WontDeserializeId(var id: String) extends KryoSerializable {
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
     PropertyCheckConfig(maxSize = 15, minSuccessful = 30)
 
-  "A world with no history (using the world Redis-based implementation)" should behave like worldWithNoHistoryBehaviour
+  if ("true" != System.getenv("TRAVIS")) {
+    "A world with no history (using the world Redis-based implementation)" should behave like worldWithNoHistoryBehaviour
 
-  "A world with history added in order of increasing event time (using the world Redis-based implementation)" should behave like worldWithHistoryAddedInOrderOfIncreasingEventTimeBehaviour
+    "A world with history added in order of increasing event time (using the world Redis-based implementation)" should behave like worldWithHistoryAddedInOrderOfIncreasingEventTimeBehaviour
 
-  "A world (using the world Redis-based implementation)" should behave like worldBehaviour
+    "A world (using the world Redis-based implementation)" should behave like worldBehaviour
 
-  "A world with events that have since been corrected (using the world Redis-based implementation)" should behave like worldWithEventsThatHaveSinceBeenCorrectedBehaviour
+    "A world with events that have since been corrected (using the world Redis-based implementation)" should behave like worldWithEventsThatHaveSinceBeenCorrectedBehaviour
+  }
 
   implicit class ThrowableEnhancement(throwable: Throwable) {
     def rootCause = rootCauseOf(throwable)
@@ -3891,7 +3897,7 @@ case class WontDeserializeId(var id: String) extends KryoSerializable {
         }
     })
   }
-}*/
+}
 
 class AllTheWorlds
     extends FlatSpec
