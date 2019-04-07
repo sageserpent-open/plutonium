@@ -5,7 +5,11 @@ import java.util.UUID
 
 import cats.implicits._
 import com.sageserpent.plutonium.World.Revision
-import com.sageserpent.plutonium.WorldEfficientQuestionableBackendImplementation.immutableObjectStorage
+import com.sageserpent.plutonium.WorldEfficientQuestionableBackendImplementation.{
+  QuestionableTranches,
+  TrancheId,
+  immutableObjectStorage
+}
 import com.sageserpent.plutonium.curium.ImmutableObjectStorage
 import com.sageserpent.plutonium.curium.ImmutableObjectStorage._
 
@@ -16,9 +20,7 @@ import scala.collection.mutable.{
 import scala.util.Try
 
 object WorldEfficientQuestionableBackendImplementation {
-  object immutableObjectStorage extends ImmutableObjectStorage
-
-  class QuestionableTranches extends Tranches {
+  class QuestionableTranches extends Tranches[UUID] {
     val tranchesById: MutableMap[TrancheId, TrancheOfData] = MutableMap.empty
     val objectReferenceIdsToAssociatedTrancheIdMap
       : MutableSortedMap[ObjectReferenceId, TrancheId] = MutableSortedMap.empty
@@ -60,25 +62,27 @@ object WorldEfficientQuestionableBackendImplementation {
           1 + _ / alignmentMultipleForObjectReferenceIdsInSeparateTranches) * alignmentMultipleForObjectReferenceIdsInSeparateTranches
       }.toEither
   }
+
+  type TrancheId = QuestionableTranches#TrancheId
+
+  object immutableObjectStorage extends ImmutableObjectStorage[TrancheId]
 }
 
 class WorldEfficientQuestionableBackendImplementation(
-    val tranches: Tranches,
+    val tranches: QuestionableTranches,
     var timelineTrancheIdStorage: Array[(Instant, TrancheId)],
     var numberOfTimelines: Int)
     extends WorldEfficientImplementation[Session] {
   def this() =
-    this(
-      new WorldEfficientQuestionableBackendImplementation.QuestionableTranches
-      with TranchesContracts,
-      Array.empty[(Instant, TrancheId)],
-      World.initialRevision)
+    this(new QuestionableTranches with TranchesContracts[TrancheId],
+         Array.empty[(Instant, TrancheId)],
+         World.initialRevision)
 
   override protected def timelinePriorTo(
       nextRevision: Revision): Session[Option[Timeline]] =
     if (World.initialRevision < nextRevision) {
       val trancheId = timelineTrancheIdStorage(nextRevision - 1)._2
-      for (timeline <- ImmutableObjectStorage.retrieve[Timeline](trancheId))
+      for (timeline <- immutableObjectStorage.retrieve[Timeline](trancheId))
         yield Some(timeline)
     } else none[Timeline].pure[Session]
 
@@ -89,14 +93,14 @@ class WorldEfficientQuestionableBackendImplementation(
       .toVector
       .traverse {
         case (asOf, tranchedId) =>
-          ImmutableObjectStorage.retrieve[Timeline](tranchedId) map (asOf -> _)
+          immutableObjectStorage.retrieve[Timeline](tranchedId) map (asOf -> _)
       }
       .map(_.toArray)
 
   override protected def consumeNewTimeline(newTimeline: Session[Timeline],
                                             asOf: Instant): Unit = {
     val Right(trancheId) = immutableObjectStorage.runToYieldTrancheId(
-      newTimeline.flatMap(ImmutableObjectStorage.store[Timeline]))(tranches)
+      newTimeline.flatMap(immutableObjectStorage.store[Timeline]))(tranches)
 
     if (nextRevision == timelineTrancheIdStorage.length) {
       val sourceOfCopy = timelineTrancheIdStorage
@@ -117,7 +121,7 @@ class WorldEfficientQuestionableBackendImplementation(
       timelines
         .flatMap(_.toVector.traverse {
           case (asOf, timeline) =>
-            ImmutableObjectStorage
+            immutableObjectStorage
               .store[Timeline](timeline)
               .map(trancheId => asOf -> trancheId)
         })
