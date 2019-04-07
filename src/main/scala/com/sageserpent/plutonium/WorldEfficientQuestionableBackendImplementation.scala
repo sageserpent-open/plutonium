@@ -1,18 +1,19 @@
 package com.sageserpent.plutonium
 
 import java.time.Instant
+import java.util.UUID
 
-import com.sageserpent.plutonium.curium.ImmutableObjectStorage._
 import cats.implicits._
 import com.sageserpent.plutonium.World.Revision
 import com.sageserpent.plutonium.WorldEfficientQuestionableBackendImplementation.immutableObjectStorage
 import com.sageserpent.plutonium.curium.ImmutableObjectStorage
+import com.sageserpent.plutonium.curium.ImmutableObjectStorage._
 
-import scala.util.Try
 import scala.collection.mutable.{
   Map => MutableMap,
   SortedMap => MutableSortedMap
 }
+import scala.util.Try
 
 object WorldEfficientQuestionableBackendImplementation {
   object immutableObjectStorage extends ImmutableObjectStorage
@@ -23,15 +24,20 @@ object WorldEfficientQuestionableBackendImplementation {
       : MutableSortedMap[ObjectReferenceId, TrancheId] = MutableSortedMap.empty
 
     override protected def storeTrancheAndAssociatedObjectReferenceIds(
-        trancheId: TrancheId,
         tranche: TrancheOfData,
-        objectReferenceIds: Seq[ObjectReferenceId]): EitherThrowableOr[Unit] =
+        objectReferenceIds: Seq[ObjectReferenceId])
+      : EitherThrowableOr[TrancheId] =
       Try {
+        val trancheId = UUID.randomUUID()
+
         tranchesById(trancheId) = tranche
+
         for (objectReferenceId <- objectReferenceIds) {
           objectReferenceIdsToAssociatedTrancheIdMap(objectReferenceId) =
             trancheId
         }
+
+        trancheId
       }.toEither
 
     override def retrieveTranche(
