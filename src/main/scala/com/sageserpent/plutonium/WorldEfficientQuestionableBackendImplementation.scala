@@ -65,7 +65,10 @@ object WorldEfficientQuestionableBackendImplementation {
 
   type TrancheId = QuestionableTranches#TrancheId
 
-  object immutableObjectStorage extends ImmutableObjectStorage[TrancheId]
+  object immutableObjectStorage extends ImmutableObjectStorage[TrancheId] {
+    override protected val tranchesImplementationName: String =
+      classOf[QuestionableTranches].getSimpleName
+  }
 }
 
 class WorldEfficientQuestionableBackendImplementation(
