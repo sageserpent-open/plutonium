@@ -700,5 +700,5 @@ class ExperimentalWorldSpecUsingWorldEfficientQuestionableBackendImplementation
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
     PropertyCheckConfig(maxSize = 20)
 
-  "An experimental world (using the world efficient in-memory implementation)" should behave like experimentalWorldBehaviour
+  "An experimental world (using the world efficient questionable backend implementation)" should behave like experimentalWorldBehaviour
 }
