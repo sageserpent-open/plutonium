@@ -20,19 +20,22 @@ import scala.collection.mutable.{
 import scala.util.Try
 
 object WorldEfficientQuestionableBackendImplementation {
-  class QuestionableTranches extends Tranches[UUID] {
-    val tranchesById: MutableMap[TrancheId, TrancheOfData] = MutableMap.empty
+  class QuestionableTranches[Payload] extends Tranches[UUID, Payload] {
+    val tranchesById: MutableMap[TrancheId, TrancheOfData[Payload]] =
+      MutableMap.empty
     val objectReferenceIdsToAssociatedTrancheIdMap
       : MutableSortedMap[ObjectReferenceId, TrancheId] = MutableSortedMap.empty
 
-    override protected def storeTrancheAndAssociatedObjectReferenceIds(
-        tranche: TrancheOfData,
+    override def createTrancheInStorage(
+        payload: Payload,
+        objectReferenceIdOffset: ObjectReferenceId,
         objectReferenceIds: Seq[ObjectReferenceId])
       : EitherThrowableOr[TrancheId] =
       Try {
         val trancheId = UUID.randomUUID()
 
-        tranchesById(trancheId) = tranche
+        tranchesById(trancheId) =
+          TrancheOfData(payload, objectReferenceIdOffset)
 
         for (objectReferenceId <- objectReferenceIds) {
           objectReferenceIdsToAssociatedTrancheIdMap(objectReferenceId) =
@@ -42,8 +45,8 @@ object WorldEfficientQuestionableBackendImplementation {
         trancheId
       }.toEither
 
-    override def retrieveTranche(
-        trancheId: TrancheId): scala.Either[scala.Throwable, TrancheOfData] =
+    override def retrieveTranche(trancheId: TrancheId)
+      : scala.Either[scala.Throwable, TrancheOfData[Payload]] =
       Try { tranchesById(trancheId) }.toEither
 
     override def retrieveTrancheId(objectReferenceId: ObjectReferenceId)
@@ -63,21 +66,22 @@ object WorldEfficientQuestionableBackendImplementation {
       }.toEither
   }
 
-  type TrancheId = QuestionableTranches#TrancheId
+  type TrancheId = QuestionableTranches[Array[Byte]]#TrancheId
 
   object immutableObjectStorage extends ImmutableObjectStorage[TrancheId] {
     override protected val tranchesImplementationName: String =
-      classOf[QuestionableTranches].getSimpleName
+      classOf[QuestionableTranches[_]].getSimpleName
   }
 }
 
 class WorldEfficientQuestionableBackendImplementation(
-    val tranches: QuestionableTranches,
+    val tranches: QuestionableTranches[Array[Byte]],
     var timelineTrancheIdStorage: Array[(Instant, TrancheId)],
     var numberOfTimelines: Int)
     extends WorldEfficientImplementation[Session] {
   def this() =
-    this(new QuestionableTranches with TranchesContracts[TrancheId],
+    this(new QuestionableTranches[Array[Byte]]
+         with TranchesContracts[TrancheId, Array[Byte]],
          Array.empty[(Instant, TrancheId)],
          World.initialRevision)
 
