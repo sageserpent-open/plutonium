@@ -40,6 +40,7 @@ lazy val settings = Seq(
   libraryDependencies += "org.typelevel"              %% "cats-laws"                    % "1.6.0" % "test",
   libraryDependencies += "org.typelevel"              %% "cats-testkit"                 % "1.6.0" % "test",
   libraryDependencies += "com.github.alexarchambault" %% "scalacheck-shapeless_1.14"    % "1.2.0-1" % "test",
+  libraryDependencies += "com.h2database"             % "h2"                            % "1.4.199" % "test",
   libraryDependencies += "com.storm-enroute"          %% "scalameter"                   % "0.8.2" % "benchmark",
   testFrameworks in Benchmark += new TestFramework(
     "org.scalameter.ScalaMeterFramework"),
