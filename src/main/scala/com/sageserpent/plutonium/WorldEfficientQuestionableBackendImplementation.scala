@@ -23,7 +23,8 @@ object WorldEfficientQuestionableBackendImplementation {
   class QuestionableTranches extends Tranches[UUID] {
     val tranchesById: MutableMap[TrancheId, TrancheOfData] = MutableMap.empty
     val objectReferenceIdsToAssociatedTrancheIdMap
-      : MutableSortedMap[ObjectReferenceId, TrancheId] = MutableSortedMap.empty
+      : MutableSortedMap[ObjectReferenceId, TrancheId]           = MutableSortedMap.empty
+    var _objectReferenceIdOffsetForNewTranche: ObjectReferenceId = 0
 
     override protected def storeTrancheAndAssociatedObjectReferenceIds(
         tranche: TrancheOfData,
@@ -39,6 +40,15 @@ object WorldEfficientQuestionableBackendImplementation {
             trancheId
         }
 
+        val alignmentMultipleForObjectReferenceIdsInSeparateTranches = 100
+
+        objectReferenceIds.reduceOption(_ max _).foreach {
+          maximumObjectReferenceId =>
+            _objectReferenceIdOffsetForNewTranche =
+              (1 + maximumObjectReferenceId / alignmentMultipleForObjectReferenceIdsInSeparateTranches) *
+                alignmentMultipleForObjectReferenceIdsInSeparateTranches
+        }
+
         trancheId
       }.toEither
 
@@ -52,15 +62,7 @@ object WorldEfficientQuestionableBackendImplementation {
 
     override def objectReferenceIdOffsetForNewTranche
       : EitherThrowableOr[ObjectReferenceId] =
-      Try {
-        val maximumObjectReferenceId =
-          objectReferenceIdsToAssociatedTrancheIdMap.keys
-            .reduceOption((leftObjectReferenceId, rightObjectReferenceId) =>
-              leftObjectReferenceId max rightObjectReferenceId)
-        val alignmentMultipleForObjectReferenceIdsInSeparateTranches = 100
-        maximumObjectReferenceId.fold(0)(
-          1 + _ / alignmentMultipleForObjectReferenceIdsInSeparateTranches) * alignmentMultipleForObjectReferenceIdsInSeparateTranches
-      }.toEither
+      _objectReferenceIdOffsetForNewTranche.pure[EitherThrowableOr]
   }
 
   type TrancheId = QuestionableTranches#TrancheId
