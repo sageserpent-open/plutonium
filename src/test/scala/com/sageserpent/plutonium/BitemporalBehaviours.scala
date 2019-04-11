@@ -19,7 +19,6 @@ trait BitemporalBehaviours
   def bitemporalBehaviour = {
     it should "be an applicative plus instance" in {
       val testCaseGenerator = for {
-        worldResource                       <- worldResourceGenerator
         integerHistoryRecordingsGroupedById <- integerHistoryRecordingsGroupedByIdGenerator
         obsoleteRecordingsGroupedById       <- nonConflictingRecordingsGroupedByIdGenerator
         seed                                <- seedGenerator
@@ -38,14 +37,12 @@ trait BitemporalBehaviours
                              instantGenerator) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
       } yield
-        (worldResource,
-         integerHistoryRecordingsGroupedById,
+        (integerHistoryRecordingsGroupedById,
          bigShuffledHistoryOverLotsOfThings,
          asOfs,
          queryWhen)
       check(Prop.forAllNoShrink(testCaseGenerator) {
-        case (worldResource,
-              integerHistoryRecordingsGroupedById,
+        case (integerHistoryRecordingsGroupedById,
               bigShuffledHistoryOverLotsOfThings,
               asOfs,
               queryWhen) =>
@@ -115,7 +112,6 @@ trait BitemporalBehaviours
   def bitemporalWildcardBehaviour = {
     it should "match all items of compatible type relevant to a scope" in {
       val testCaseGenerator = for {
-        worldResource <- worldResourceGenerator
         recordingsGroupedById <- recordingsGroupedByIdGenerator(
           forbidAnnihilations = false)
         obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
@@ -135,15 +131,13 @@ trait BitemporalBehaviours
                              instantGenerator) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
       } yield
-        (worldResource,
-         recordingsGroupedById,
+        (recordingsGroupedById,
          bigShuffledHistoryOverLotsOfThings,
          asOfs,
          queryWhen)
       check(
         Prop.forAllNoShrink(testCaseGenerator) {
-          case (worldResource,
-                recordingsGroupedById,
+          case (recordingsGroupedById,
                 bigShuffledHistoryOverLotsOfThings,
                 asOfs,
                 queryWhen) =>
@@ -176,7 +170,6 @@ trait BitemporalBehaviours
 
     it should "yield unique items" in {
       val testCaseGenerator = for {
-        worldResource <- worldResourceGenerator
         recordingsGroupedById <- recordingsGroupedByIdGenerator(
           forbidAnnihilations = false)
         obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
@@ -195,13 +188,9 @@ trait BitemporalBehaviours
         asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
                              instantGenerator) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
-      } yield
-        (worldResource, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
+      } yield (bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
       check(Prop.forAllNoShrink(testCaseGenerator) {
-        case (worldResource,
-              bigShuffledHistoryOverLotsOfThings,
-              asOfs,
-              queryWhen) =>
+        case (bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
           worldResource acquireAndGet {
             world =>
               recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
@@ -228,7 +217,6 @@ trait BitemporalBehaviours
   def bitemporalQueryUsingAnIdBehaviour = {
     it should "match a subset of the corresponding wildcard query." in {
       val testCaseGenerator = for {
-        worldResource <- worldResourceGenerator
         recordingsGroupedById <- recordingsGroupedByIdGenerator(
           forbidAnnihilations = false)
         obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
@@ -248,15 +236,13 @@ trait BitemporalBehaviours
                              instantGenerator) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
       } yield
-        (worldResource,
-         recordingsGroupedById,
+        (recordingsGroupedById,
          bigShuffledHistoryOverLotsOfThings,
          asOfs,
          queryWhen)
 
       check(Prop.forAllNoShrink(testCaseGenerator) {
-        case (worldResource,
-              recordingsGroupedById,
+        case (recordingsGroupedById,
               bigShuffledHistoryOverLotsOfThings,
               asOfs,
               queryWhen) =>
@@ -300,7 +286,6 @@ trait BitemporalBehaviours
 
     it should "yield items whose id matches the query" in {
       val testCaseGenerator = for {
-        worldResource <- worldResourceGenerator
         recordingsGroupedById <- recordingsGroupedByIdGenerator(
           forbidAnnihilations = false)
         obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
@@ -320,15 +305,13 @@ trait BitemporalBehaviours
                              instantGenerator) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
       } yield
-        (worldResource,
-         recordingsGroupedById,
+        (recordingsGroupedById,
          bigShuffledHistoryOverLotsOfThings,
          asOfs,
          queryWhen)
 
       check(Prop.forAllNoShrink(testCaseGenerator) {
-        case (worldResource,
-              recordingsGroupedById,
+        case (recordingsGroupedById,
               bigShuffledHistoryOverLotsOfThings,
               asOfs,
               queryWhen) =>
@@ -368,7 +351,7 @@ trait BitemporalBehaviours
 
     it should "yield unique items" in {
       val testCaseGenerator = for {
-        worldResource <- worldResourceGenerator
+
         recordingsGroupedById <- recordingsGroupedByIdGenerator(
           forbidAnnihilations = false)
         obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
@@ -388,15 +371,13 @@ trait BitemporalBehaviours
                              instantGenerator) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
       } yield
-        (worldResource,
-         recordingsGroupedById,
+        (recordingsGroupedById,
          bigShuffledHistoryOverLotsOfThings,
          asOfs,
          queryWhen)
 
       check(Prop.forAllNoShrink(testCaseGenerator) {
-        case (worldResource,
-              recordingsGroupedById,
+        case (recordingsGroupedById,
               bigShuffledHistoryOverLotsOfThings,
               asOfs,
               queryWhen) =>
@@ -438,7 +419,7 @@ trait BitemporalBehaviours
 
     it should "yield the same identity of item for a given id replicated in a query" in {
       val testCaseGenerator = for {
-        worldResource <- worldResourceGenerator
+
         recordingsGroupedById <- recordingsGroupedByIdGenerator(
           forbidAnnihilations = false)
         obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
@@ -458,15 +439,13 @@ trait BitemporalBehaviours
                              instantGenerator) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
       } yield
-        (worldResource,
-         recordingsGroupedById,
+        (recordingsGroupedById,
          bigShuffledHistoryOverLotsOfThings,
          asOfs,
          queryWhen)
 
       check(Prop.forAllNoShrink(testCaseGenerator) {
-        case (worldResource,
-              recordingsGroupedById,
+        case (recordingsGroupedById,
               bigShuffledHistoryOverLotsOfThings,
               asOfs,
               queryWhen) =>
@@ -518,7 +497,7 @@ trait BitemporalBehaviours
   def bitemporalNumberOfBehaviour = {
     it should "should count the number of items that would be yielded by the query 'withId'" in {
       val testCaseGenerator = for {
-        worldResource <- worldResourceGenerator
+
         recordingsGroupedById <- recordingsGroupedByIdGenerator(
           forbidAnnihilations = false)
         obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
@@ -538,14 +517,12 @@ trait BitemporalBehaviours
                              instantGenerator) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
       } yield
-        (worldResource,
-         recordingsGroupedById,
+        (recordingsGroupedById,
          bigShuffledHistoryOverLotsOfThings,
          asOfs,
          queryWhen)
       check(Prop.forAllNoShrink(testCaseGenerator) {
-        case (worldResource,
-              recordingsGroupedById,
+        case (recordingsGroupedById,
               bigShuffledHistoryOverLotsOfThings,
               asOfs,
               queryWhen) =>
@@ -586,7 +563,6 @@ trait BitemporalBehaviours
   def bitemporalNoneBehaviour = {
     it should "not match anything" in {
       val testCaseGenerator = for {
-        worldResource <- worldResourceGenerator
         recordingsGroupedById <- recordingsGroupedByIdGenerator(
           forbidAnnihilations = false)
         obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
@@ -606,14 +582,12 @@ trait BitemporalBehaviours
                              instantGenerator) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
       } yield
-        (worldResource,
-         recordingsGroupedById,
+        (recordingsGroupedById,
          bigShuffledHistoryOverLotsOfThings,
          asOfs,
          queryWhen)
       check(Prop.forAllNoShrink(testCaseGenerator) {
-        case (worldResource,
-              recordingsGroupedById,
+        case (recordingsGroupedById,
               bigShuffledHistoryOverLotsOfThings,
               asOfs,
               queryWhen) =>
@@ -635,7 +609,6 @@ trait BitemporalBehaviours
   def bitemporalQueryBehaviour = {
     it should "include instances of subtypes" in {
       val testCaseGenerator = for {
-        worldResource <- worldResourceGenerator
         recordingsGroupedById <- recordingsGroupedByIdGenerator(
           forbidAnnihilations = false)
         obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
@@ -655,14 +628,12 @@ trait BitemporalBehaviours
                              instantGenerator) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
       } yield
-        (worldResource,
-         recordingsGroupedById,
+        (recordingsGroupedById,
          bigShuffledHistoryOverLotsOfThings,
          asOfs,
          queryWhen)
       check(Prop.forAllNoShrink(testCaseGenerator) {
-        case (worldResource,
-              recordingsGroupedById,
+        case (recordingsGroupedById,
               bigShuffledHistoryOverLotsOfThings,
               asOfs,
               queryWhen) =>
@@ -723,7 +694,7 @@ trait BitemporalBehaviours
 
     it should "result in read-only items" in {
       val testCaseGenerator = for {
-        worldResource <- worldResourceGenerator
+
         recordingsGroupedById <- recordingsGroupedByIdGenerator(
           forbidAnnihilations = false)
         obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
@@ -743,14 +714,12 @@ trait BitemporalBehaviours
                              instantGenerator) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
       } yield
-        (worldResource,
-         recordingsGroupedById,
+        (recordingsGroupedById,
          bigShuffledHistoryOverLotsOfThings,
          asOfs,
          queryWhen)
       check(Prop.forAllNoShrink(testCaseGenerator) {
-        case (worldResource,
-              recordingsGroupedById,
+        case (recordingsGroupedById,
               bigShuffledHistoryOverLotsOfThings,
               asOfs,
               queryWhen) =>
