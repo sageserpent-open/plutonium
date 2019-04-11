@@ -9,6 +9,7 @@ import com.sageserpent.americium._
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.seqEnrichment._
 import com.sageserpent.plutonium.World._
+import com.sageserpent.plutonium.curium.H2Resource
 import io.lettuce.core.{RedisClient, RedisURI}
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.Assertions
@@ -925,9 +926,11 @@ trait WorldEfficientInMemoryImplementationResource extends WorldResource {
 trait WorldEfficientQuestionableBackendImplementationResource
     extends WorldResource {
   val worldResource: ManagedResource[World] =
-    makeManagedResource(
-      new WorldEfficientQuestionableBackendImplementation
-      with WorldContracts)(_.close())(List.empty)
+    H2Resource.transactorResource.flatMap(
+      transactor =>
+        makeManagedResource(
+          new WorldEfficientQuestionableBackendImplementation(transactor)
+          with WorldContracts)(_.close())(List.empty))
 }
 
 trait WorldRedisBasedImplementationResource

@@ -1,88 +1,33 @@
 package com.sageserpent.plutonium
 
 import java.time.Instant
-import java.util.UUID
 
 import cats.implicits._
 import com.sageserpent.plutonium.World.Revision
 import com.sageserpent.plutonium.WorldEfficientQuestionableBackendImplementation.{
-  QuestionableTranches,
   TrancheId,
   immutableObjectStorage
 }
 import com.sageserpent.plutonium.curium.ImmutableObjectStorage
 import com.sageserpent.plutonium.curium.ImmutableObjectStorage._
 
-import scala.collection.mutable.{
-  Map => MutableMap,
-  SortedMap => MutableSortedMap
-}
-import scala.util.Try
-
 object WorldEfficientQuestionableBackendImplementation {
-  class QuestionableTranches[Payload] extends Tranches[UUID, Payload] {
-    val tranchesById: MutableMap[TrancheId, TrancheOfData[Payload]] =
-      MutableMap.empty
-    val objectReferenceIdsToAssociatedTrancheIdMap
-      : MutableSortedMap[ObjectReferenceId, TrancheId]           = MutableSortedMap.empty
-    var _objectReferenceIdOffsetForNewTranche: ObjectReferenceId = 0
 
-    override def createTrancheInStorage(
-        payload: Payload,
-        objectReferenceIdOffset: ObjectReferenceId,
-        objectReferenceIds: Set[ObjectReferenceId])
-      : EitherThrowableOr[TrancheId] =
-      Try {
-        val trancheId = UUID.randomUUID()
-
-        tranchesById(trancheId) =
-          TrancheOfData(payload, objectReferenceIdOffset)
-
-        for (objectReferenceId <- objectReferenceIds) {
-          objectReferenceIdsToAssociatedTrancheIdMap(objectReferenceId) =
-            trancheId
-        }
-
-        val alignmentMultipleForObjectReferenceIdsInSeparateTranches = 100
-
-        objectReferenceIds.reduceOption(_ max _).foreach {
-          maximumObjectReferenceId =>
-            _objectReferenceIdOffsetForNewTranche =
-              (1 + maximumObjectReferenceId / alignmentMultipleForObjectReferenceIdsInSeparateTranches) *
-                alignmentMultipleForObjectReferenceIdsInSeparateTranches
-        }
-
-        trancheId
-      }.toEither
-
-    override def retrieveTranche(trancheId: TrancheId)
-      : scala.Either[scala.Throwable, TrancheOfData[Payload]] =
-      Try { tranchesById(trancheId) }.toEither
-
-    override def retrieveTrancheId(objectReferenceId: ObjectReferenceId)
-      : scala.Either[scala.Throwable, TrancheId] =
-      Try { objectReferenceIdsToAssociatedTrancheIdMap(objectReferenceId) }.toEither
-
-    override def objectReferenceIdOffsetForNewTranche
-      : EitherThrowableOr[ObjectReferenceId] =
-      _objectReferenceIdOffsetForNewTranche.pure[EitherThrowableOr]
-  }
-
-  type TrancheId = QuestionableTranches[Array[Byte]]#TrancheId
+  type TrancheId = H2Tranches[Array[Byte]]#TrancheId
 
   object immutableObjectStorage extends ImmutableObjectStorage[TrancheId] {
     override protected val tranchesImplementationName: String =
-      classOf[QuestionableTranches[_]].getSimpleName
+      classOf[H2Tranches[_]].getSimpleName
   }
 }
 
 class WorldEfficientQuestionableBackendImplementation(
-    val tranches: QuestionableTranches[Array[Byte]],
+    val tranches: H2Tranches[Array[Byte]],
     var timelineTrancheIdStorage: Array[(Instant, TrancheId)],
     var numberOfTimelines: Int)
     extends WorldEfficientImplementation[Session] {
-  def this() =
-    this(new QuestionableTranches[Array[Byte]]
+  def this(transactor: H2Tranches.Transactor) =
+    this(new H2Tranches[Array[Byte]](transactor)
          with TranchesContracts[TrancheId, Array[Byte]],
          Array.empty[(Instant, TrancheId)],
          World.initialRevision)
