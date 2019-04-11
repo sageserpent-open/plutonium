@@ -8,8 +8,8 @@ import com.sageserpent.plutonium.WorldEfficientQuestionableBackendImplementation
   TrancheId,
   immutableObjectStorage
 }
-import com.sageserpent.plutonium.curium.ImmutableObjectStorage
 import com.sageserpent.plutonium.curium.ImmutableObjectStorage._
+import com.sageserpent.plutonium.curium.{H2Tranches, ImmutableObjectStorage}
 
 object WorldEfficientQuestionableBackendImplementation {
 
