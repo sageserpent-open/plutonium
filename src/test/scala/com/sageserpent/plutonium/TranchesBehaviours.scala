@@ -1,10 +1,13 @@
 package com.sageserpent.plutonium
 
+import com.sageserpent.plutonium.TranchesBehaviours.FakePayload
 import com.sageserpent.plutonium.curium.ImmutableObjectStorage.{
   ObjectReferenceId,
   TrancheOfData,
-  Tranches
+  Tranches,
+  TranchesContracts
 }
+import com.sageserpent.plutonium.curium.ImmutableObjectStorageSpec.FakeTranches
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{FlatSpec, Matchers}
@@ -13,10 +16,12 @@ import resource._
 import scala.collection.mutable.{Map => MutableMap, Set => MutableSet}
 
 trait TranchesResource[TrancheId] {
-  type FakePayload = Int
+  val tranchesResourceGenerator: ManagedResource[
+    Tranches[TrancheId, TranchesBehaviours.FakePayload]]
+}
 
-  val tranchesResourceGenerator: Gen[
-    ManagedResource[Tranches[TrancheId, FakePayload]]]
+object TranchesBehaviours {
+  type FakePayload = Int
 
   val fakePayloadGenerator: Gen[FakePayload] = Arbitrary.arbInt.arbitrary
 
@@ -33,7 +38,10 @@ trait TranchesBehaviours[TrancheId]
     with Matchers
     with GeneratorDrivenPropertyChecks {
   this: TranchesResource[TrancheId] =>
-  def tranchesBehaviour = {
+
+  import TranchesBehaviours._
+
+  def tranchesBehaviour: Unit = {
 
     "creating a tranche" should "yield a unique tranche id" in forAll(
       tranchesResourceGenerator,
@@ -69,8 +77,6 @@ trait TranchesBehaviours[TrancheId]
         .nonEmptyListOf(fakePayloadAndObjectReferenceIdOffsetsPairsGenerator)) {
       (tranchesResource, payloadAndOffsetsPairs) =>
         tranchesResource.acquireAndGet { tranches =>
-          val numberOfPayloads = payloadAndOffsetsPairs.size
-
           val objectReferenceIdsByTrancheId =
             MutableMap.empty[TrancheId, Set[ObjectReferenceId]]
 
@@ -105,8 +111,6 @@ trait TranchesBehaviours[TrancheId]
         .nonEmptyListOf(fakePayloadAndObjectReferenceIdOffsetsPairsGenerator)) {
       (tranchesResource, payloadAndOffsetsPairs) =>
         tranchesResource.acquireAndGet { tranches =>
-          val numberOfPayloads = payloadAndOffsetsPairs.size
-
           val trancheIdToExpectedTrancheMapping =
             MutableMap.empty[TrancheId, TrancheOfData[FakePayload]]
 
@@ -134,4 +138,26 @@ trait TranchesBehaviours[TrancheId]
         }
     }
   }
+}
+
+object FakeTranchesResource {
+  type TrancheId = FakeTranches[FakePayload]#TrancheId
+}
+
+trait FakeTranchesResource
+    extends TranchesResource[FakeTranchesResource.TrancheId] {
+
+  override val tranchesResourceGenerator
+    : ManagedResource[Tranches[FakeTranchesResource.TrancheId, FakePayload]] =
+    makeManagedResource(
+      new FakeTranches[FakePayload]
+      with TranchesContracts[FakeTranchesResource.TrancheId, FakePayload]) {
+      _ =>
+      }(List.empty)
+}
+
+class FakeTranchesSpec
+    extends TranchesBehaviours[FakeTranchesResource.TrancheId]
+    with FakeTranchesResource {
+  "Fake tranches" should behave like tranchesBehaviour
 }
