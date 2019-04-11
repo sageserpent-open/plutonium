@@ -1,13 +1,13 @@
-package com.sageserpent.plutonium
+package com.sageserpent.plutonium.curium
 
-import com.sageserpent.plutonium.TranchesBehaviours.FakePayload
-import com.sageserpent.plutonium.curium.ImmutableObjectStorage.{
+import ImmutableObjectStorage.{
   ObjectReferenceId,
   TrancheOfData,
   Tranches,
   TranchesContracts
 }
 import com.sageserpent.plutonium.curium.ImmutableObjectStorageSpec.FakeTranches
+import com.sageserpent.plutonium.curium.TranchesBehaviours.FakePayload
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{FlatSpec, Matchers}
