@@ -906,40 +906,37 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
 }
 
 trait WorldResource {
-  val worldResourceGenerator: Gen[ManagedResource[World]]
+  val worldResource: ManagedResource[World]
 }
 
 trait WorldReferenceImplementationResource extends WorldResource {
-  val worldResourceGenerator: Gen[ManagedResource[World]] =
-    Gen.const(
-      makeManagedResource(new WorldReferenceImplementation with WorldContracts)(
-        _.close())(List.empty))
+  val worldResource: ManagedResource[World] =
+    makeManagedResource(new WorldReferenceImplementation with WorldContracts)(
+      _.close())(List.empty)
 }
 
 trait WorldEfficientInMemoryImplementationResource extends WorldResource {
-  val worldResourceGenerator: Gen[ManagedResource[World]] =
-    Gen.const(
-      makeManagedResource(new WorldEfficientInMemoryImplementation
-      with WorldContracts)(_.close())(List.empty))
+  val worldResource: ManagedResource[World] =
+    makeManagedResource(
+      new WorldEfficientInMemoryImplementation
+      with WorldContracts)(_.close())(List.empty)
 }
 
 trait WorldRedisBasedImplementationResource
     extends WorldResource
     with RedisServerFixture {
-  val worldResourceGenerator: Gen[ManagedResource[World]] =
-    Gen.const {
-      for {
-        executionService <- makeManagedResource(
-          Executors.newFixedThreadPool(20))(_.shutdown)(List.empty)
-        redisClient <- makeManagedResource(
-          RedisClient.create(
-            RedisURI.Builder.redis("localhost", redisServerPort).build()))(
-          _.shutdown())(List.empty)
-        worldResource <- makeManagedResource(
-          new WorldRedisBasedImplementation(redisClient,
-                                            UUID.randomUUID().toString,
-                                            executionService)
-          with WorldContracts)(_.close())(List.empty)
-      } yield worldResource
-    }
+  val worldResource: ManagedResource[World] =
+    for {
+      executionService <- makeManagedResource(Executors.newFixedThreadPool(20))(
+        _.shutdown)(List.empty)
+      redisClient <- makeManagedResource(
+        RedisClient.create(
+          RedisURI.Builder.redis("localhost", redisServerPort).build()))(
+        _.shutdown())(List.empty)
+      worldResource <- makeManagedResource(
+        new WorldRedisBasedImplementation(redisClient,
+                                          UUID.randomUUID().toString,
+                                          executionService)
+        with WorldContracts)(_.close())(List.empty)
+    } yield worldResource
 }
