@@ -2,7 +2,7 @@ package com.sageserpent.plutonium
 
 import java.time.Instant
 
-import cats.effect.{Resource, SyncIO}
+import cats.effect.{Resource, IO}
 import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.PatchRecorder.UpdateConsumer
 
@@ -49,22 +49,22 @@ class IdentifiedItemsScope extends IdentifiedItemAccess {
     idToItemsMultiMap.clear()
 
     Resource
-      .make(SyncIO {
+      .make(IO {
         allItemsAreLocked = false
       })(_ =>
-        SyncIO {
+        IO {
           allItemsAreLocked = true
       })
       .use(_ =>
-        SyncIO {
+        IO {
           val patchRecorder = new PatchRecorderImplementation(_when)
           with PatchRecorderContracts with BestPatchSelectionImplementation
           with BestPatchSelectionContracts {
             val itemsAreLockedResource =
-              Resource.make(SyncIO {
+              Resource.make(IO {
                 allItemsAreLocked = true
               })(_ =>
-                SyncIO {
+                IO {
                   allItemsAreLocked = false
               })
             override val updateConsumer: UpdateConsumer =
@@ -81,7 +81,7 @@ class IdentifiedItemsScope extends IdentifiedItemAccess {
                   patch(identifiedItemsScopeThis)
                   itemsAreLockedResource
                     .use(_ =>
-                      SyncIO {
+                      IO {
                         patch.checkInvariants(identifiedItemsScopeThis)
                     })
                     .unsafeRunSync()

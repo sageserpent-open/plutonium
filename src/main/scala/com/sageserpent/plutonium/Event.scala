@@ -4,7 +4,7 @@ import java.lang.reflect.Method
 import java.time.Instant
 import java.util.concurrent.Callable
 
-import cats.effect.{Resource, SyncIO}
+import cats.effect.{Resource, IO}
 import com.sageserpent.americium
 import com.sageserpent.americium.{Finite, PositiveInfinity, Unbounded}
 import net.bytebuddy.description.method.MethodDescription
@@ -133,13 +133,13 @@ object capturePatches {
           @FieldValue("acquiredState") acquiredState: RecordingProxyAcquiredState) =
         if (!acquiredState.unlockFullReadAccess)
           Resource
-            .make(SyncIO {
+            .make(IO {
               acquiredState.unlockFullReadAccess = true
             })(_ =>
-              SyncIO {
+              IO {
                 acquiredState.unlockFullReadAccess = false
             })
-            .use(_ => SyncIO { superCall.call() })
+            .use(_ => IO { superCall.call() })
             .unsafeRunSync()
         else superCall.call()
     }

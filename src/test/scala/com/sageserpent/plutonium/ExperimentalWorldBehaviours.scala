@@ -2,7 +2,7 @@ package com.sageserpent.plutonium
 
 import java.time.Instant
 
-import cats.effect.{Resource, SyncIO}
+import cats.effect.{Resource, IO}
 import com.sageserpent.americium.{Finite, PositiveInfinity, Unbounded}
 import org.scalacheck.{Gen, Prop}
 import org.scalatest.prop.Checkers
@@ -22,14 +22,14 @@ trait ExperimentalWorldBehaviours
         baseWorld: World,
         forkWhen: Unbounded[Instant],
         forkAsOf: Instant,
-        seed: Long): Resource[SyncIO, (Scope, World)] = {
+        seed: Long): Resource[IO, (Scope, World)] = {
       val random = new Random(seed)
 
       if (random.nextBoolean()) {
         val scopeToDefineFork = baseWorld.scopeFor(forkWhen, forkAsOf)
-        Resource.make(SyncIO {
+        Resource.make(IO {
           baseWorld.forkExperimentalWorld(scopeToDefineFork)
-        })(world => SyncIO { world.close() }) map (scopeToDefineFork -> _)
+        })(world => IO { world.close() }) map (scopeToDefineFork -> _)
       } else {
         val scopeToDefineIntermediateFork = baseWorld.scopeFor(
           forkWhen match {
@@ -44,15 +44,15 @@ trait ExperimentalWorldBehaviours
         )
 
         for {
-          intermediateExperimentalWorld <- Resource.make(SyncIO {
+          intermediateExperimentalWorld <- Resource.make(IO {
             baseWorld.forkExperimentalWorld(scopeToDefineIntermediateFork)
-          })(world => SyncIO { world.close() })
+          })(world => IO { world.close() })
           scopeToDefineFork = intermediateExperimentalWorld.scopeFor(forkWhen,
                                                                      forkAsOf)
-          experimentalWorld <- Resource.make(SyncIO {
+          experimentalWorld <- Resource.make(IO {
             intermediateExperimentalWorld
               .forkExperimentalWorld(scopeToDefineFork)
-          })(world => SyncIO { world.close() })
+          })(world => IO { world.close() })
         } yield scopeToDefineFork -> experimentalWorld
       }
     }
@@ -83,7 +83,7 @@ trait ExperimentalWorldBehaviours
               seed) =>
           (for {
             baseWorld <- worldResource
-            _ <- Resource.liftF(SyncIO {
+            _ <- Resource.liftF(IO {
               recordEventsInWorld(
                 liftRecordings(bigShuffledHistoryOverLotsOfThings),
                 asOfs,
@@ -95,7 +95,7 @@ trait ExperimentalWorldBehaviours
                                                           seed)
           } yield (baseWorld, scopeAndWorld._1, scopeAndWorld._2)).use {
             case (baseWorld, scopeToDefineFork, experimentalWorld) =>
-              SyncIO {
+              IO {
                 val filteredRevisionsFromBaseWorld =
                   baseWorld.revisionAsOfs.takeWhile(revisionAsOf =>
                     !forkAsOf.isBefore(revisionAsOf))
@@ -152,7 +152,7 @@ trait ExperimentalWorldBehaviours
               seed) =>
           (for {
             baseWorld <- worldResource
-            _ <- Resource.liftF(SyncIO {
+            _ <- Resource.liftF(IO {
               recordEventsInWorld(
                 liftRecordings(bigShuffledHistoryOverLotsOfThings),
                 asOfs,
@@ -164,7 +164,7 @@ trait ExperimentalWorldBehaviours
                                                           seed)
           } yield (baseWorld, scopeAndWorld._2)).use {
             case (baseWorld, experimentalWorld) =>
-              SyncIO {
+              IO {
                 val scopeFromBaseWorld =
                   baseWorld.scopeFor(queryWhenNoLaterThanFork,
                                      queryAsOfNoLaterThanFork)
@@ -225,7 +225,7 @@ trait ExperimentalWorldBehaviours
               seed) =>
           (for {
             baseWorld <- worldResource
-            _ <- Resource.liftF(SyncIO {
+            _ <- Resource.liftF(IO {
               recordEventsInWorld(
                 liftRecordings(bigShuffledHistoryOverLotsOfThings),
                 asOfs,
@@ -238,7 +238,7 @@ trait ExperimentalWorldBehaviours
               seed)
           } yield (baseWorld, scopeAndWorld._2)).use {
             case (baseWorld, experimentalWorld) =>
-              SyncIO {
+              IO {
                 val scopeFromBaseWorld =
                   baseWorld.scopeFor(queryWhen, queryAsOfNoLaterThanFork)
                 val scopeFromExperimentalWorld =
@@ -325,7 +325,7 @@ trait ExperimentalWorldBehaviours
               seed) =>
           (for {
             baseWorld <- worldResource
-            _ <- Resource.liftF(SyncIO {
+            _ <- Resource.liftF(IO {
               recordEventsInWorld(
                 liftRecordings(bigShuffledHistoryOverLotsOfThings),
                 baseAsOfs,
@@ -337,7 +337,7 @@ trait ExperimentalWorldBehaviours
                                                           seed)
           } yield (baseWorld, scopeAndWorld._2)).use {
             case (baseWorld, experimentalWorld) =>
-              SyncIO {
+              IO {
                 val scopeFromExperimentalWorld =
                   experimentalWorld.scopeFor(queryWhen, queryAsOf)
 
@@ -414,7 +414,7 @@ trait ExperimentalWorldBehaviours
               seed) =>
           (for {
             baseWorld <- worldResource
-            _ <- Resource.liftF(SyncIO {
+            _ <- Resource.liftF(IO {
               recordEventsInWorld(
                 liftRecordings(bigShuffledHistoryOverLotsOfThings),
                 asOfs,
@@ -426,7 +426,7 @@ trait ExperimentalWorldBehaviours
                                                           seed)
           } yield scopeAndWorld._2).use {
             case experimentalWorld =>
-              SyncIO {
+              IO {
                 val scopeFromExperimentalWorld =
                   experimentalWorld.scopeFor(forkWhen, queryAsOfNoLaterThanFork)
 
@@ -514,7 +514,7 @@ trait ExperimentalWorldBehaviours
               seed) =>
           (for {
             baseWorld <- worldResource
-            _ <- Resource.liftF(SyncIO {
+            _ <- Resource.liftF(IO {
               recordEventsInWorld(
                 liftRecordings(bigShuffledHistoryOverLotsOfThings),
                 baseAsOfs,
@@ -526,7 +526,7 @@ trait ExperimentalWorldBehaviours
                                                           seed)
           } yield scopeAndWorld._2).use {
             case experimentalWorld =>
-              SyncIO {
+              IO {
                 recordEventsInWorld(annulmentsGalore,
                                     annulmentAsOfs,
                                     experimentalWorld)
@@ -614,7 +614,7 @@ trait ExperimentalWorldBehaviours
               seed) =>
           (for {
             baseWorld <- worldResource
-            _ <- Resource.liftF(SyncIO {
+            _ <- Resource.liftF(IO {
               recordEventsInWorld(
                 liftRecordings(bigShuffledHistoryOverLotsOfThings),
                 baseAsOfs,
@@ -626,7 +626,7 @@ trait ExperimentalWorldBehaviours
                                                           seed)
           } yield (baseWorld, scopeAndWorld._2)).use {
             case (baseWorld, experimentalWorld) =>
-              SyncIO {
+              IO {
                 recordEventsInWorld(annulmentsGalore,
                                     followingAsOfs,
                                     experimentalWorld)

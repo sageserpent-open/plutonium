@@ -2,7 +2,7 @@ package com.sageserpent.plutonium
 
 import java.time.Instant
 
-import cats.effect.SyncIO
+import cats.effect.IO
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.{NegativeInfinity, PositiveInfinity}
 import org.scalacheck.Gen
@@ -38,7 +38,7 @@ trait Bugs
 
       worldResource
         .use(world =>
-          SyncIO {
+          IO {
             world.revise(
               Map(
                 eventBeingRevised -> Some(
@@ -98,7 +98,7 @@ trait Bugs
 
       worldResource
         .use(world =>
-          SyncIO {
+          IO {
             world.revise(
               Map(
                 firstFinalEventForFirstItem -> Some(
@@ -148,7 +148,7 @@ trait Bugs
 
       worldResource
         .use(world =>
-          SyncIO {
+          IO {
             {
               world.revise(0,
                            Change.forOneItem[FooHistory](
@@ -233,7 +233,7 @@ trait Bugs
 
       worldResource
         .use(world =>
-          SyncIO {
+          IO {
             world.revise(
               1,
               Change.forTwoItems[ReferringHistory, FooHistory](
@@ -288,7 +288,7 @@ trait Bugs
 
       worldResource
         .use(world =>
-          SyncIO {
+          IO {
             world.revise(
               1,
               Change.forTwoItems[ReferringHistory, FooHistory](
@@ -337,7 +337,7 @@ trait Bugs
 
       worldResource
         .use(world =>
-          SyncIO {
+          IO {
             world.revise(
               0,
               Measurement.forOneItem(Instant.ofEpochSecond(2L))(itemId, {
@@ -380,7 +380,7 @@ trait Bugs
 
       worldResource
         .use(world =>
-          SyncIO {
+          IO {
             world.revise(
               0,
               Measurement.forOneItem(Instant.ofEpochSecond(2L))(itemId, {
@@ -428,7 +428,7 @@ trait Bugs
 
       worldResource
         .use(world =>
-          SyncIO {
+          IO {
             world.revise(
               Map(
                 0 -> Some(Change.forOneItem(barChangeWhen)(barId, {
@@ -469,7 +469,7 @@ trait Bugs
 
       worldResource
         .use(world =>
-          SyncIO {
+          IO {
             world.revise(0,
                          Change.forOneItem(Instant.ofEpochSecond(0L))(itemId, {
                            item: FooHistory =>
@@ -512,7 +512,7 @@ trait Bugs
 
       worldResource
         .use(world =>
-          SyncIO {
+          IO {
             world.revise(0,
                          Change.forOneItem(Instant.ofEpochSecond(1L))(itemId, {
                            item: FooHistory =>
@@ -548,7 +548,7 @@ trait Bugs
 
       worldResource
         .use(world =>
-          SyncIO {
+          IO {
             world.revise(0,
                          Change.forOneItem(Instant.ofEpochSecond(0L))(itemId, {
                            item: IntegerHistory =>
@@ -593,7 +593,7 @@ trait Bugs
 
       worldResource
         .use(world =>
-          SyncIO {
+          IO {
             world.revise(0,
                          Change.forOneItem(Instant.ofEpochSecond(0L))(itemId, {
                            item: IntegerHistory =>
@@ -652,7 +652,7 @@ trait Bugs
       )
 
       /*
-        worldResource.use(world => SyncIO{
+        worldResource.use(world => IO{
           world.revise(Map(
                          0 -> Some(
                            changeFor(secondReferringId,
@@ -715,7 +715,7 @@ trait Bugs
 
         worldResource
           .use(world =>
-            SyncIO {
+            IO {
               for (eventChunk <- eventsInChunks) {
                 world.revise(SortedMap(eventChunk.map {
                   case (event, eventId) => eventId -> Some(event)
@@ -752,7 +752,7 @@ trait Bugs
 
       worldResource
         .use(world =>
-          SyncIO {
+          IO {
             world.revise(0,
                          Change.forOneItem(Instant.ofEpochSecond(-3L))(itemId, {
                            item: IntegerHistory =>
@@ -809,7 +809,7 @@ trait Bugs
 
       worldResource
         .use(world =>
-          SyncIO {
+          IO {
             world.revise(0,
                          Change.forOneItem(Instant.ofEpochSecond(0L))(itemId, {
                            item: IntegerHistory =>
@@ -851,7 +851,7 @@ trait Bugs
 
       worldResource
         .use(world =>
-          SyncIO {
+          IO {
             world.revise(0,
                          Change.forOneItem(Instant.ofEpochSecond(1L))(itemId, {
                            item: IntegerHistory =>
@@ -934,7 +934,7 @@ trait Bugs
 
         worldResource
           .use(world =>
-            SyncIO {
+            IO {
               intercept[RuntimeException] {
                 val permutedActions = random.shuffle(actions)
 
@@ -958,7 +958,7 @@ trait Bugs
 
       worldResource
         .use(world =>
-          SyncIO {
+          IO {
             world.revise(
               TreeMap(
                 10 -> Some(
@@ -1010,7 +1010,7 @@ trait Bugs
 
       worldResource
         .use(world =>
-          SyncIO {
+          IO {
             world.revise(
               0,
               Change.forOneItem(NegativeInfinity[Instant]())(itemId, {
@@ -1079,7 +1079,7 @@ trait Bugs
 
       worldResource
         .use(world =>
-          SyncIO {
+          IO {
             for (revisionAction <- revisionActions) {
               revisionAction(world)
             }
@@ -1112,7 +1112,7 @@ trait Bugs
 
       worldResource
         .use(world =>
-          SyncIO {
+          IO {
             world.revise(
               eventToBeAnnulled,
               Change
@@ -1164,7 +1164,7 @@ trait Bugs
 
       worldResource
         .use(world =>
-          SyncIO {
+          IO {
             world.revise(
               eventToBeCorrected,
               Change
@@ -1218,7 +1218,7 @@ trait Bugs
 
         worldResource
           .use(world =>
-            SyncIO {
+            IO {
               for ((Booking(eventId, referrerId, referredId), step) <- events.zipWithIndex) {
                 world.revise(
                   eventId,

@@ -3,7 +3,7 @@ package com.sageserpent.plutonium
 import java.lang.reflect.Method
 import java.util.concurrent.Callable
 
-import cats.effect.{Resource, SyncIO}
+import cats.effect.{Resource, IO}
 
 import net.bytebuddy.description.method.MethodDescription
 import net.bytebuddy.dynamic.DynamicType.Builder
@@ -179,14 +179,14 @@ trait StatefulItemProxyFactory extends ProxyFactory {
               @FieldValue("acquiredState") acquiredState: AcquiredState) = {
       if (!acquiredState.unlockFullReadAccess)
         Resource
-          .make(SyncIO {
+          .make(IO {
             acquiredState.unlockFullReadAccess = true
           })(_ =>
-            SyncIO {
+            IO {
               acquiredState.unlockFullReadAccess = false
           })
           .use(_ =>
-            SyncIO {
+            IO {
               acquiredState.recordReadOnlyAccess(target)
 
               superCall.call()
@@ -214,14 +214,14 @@ trait StatefulItemProxyFactory extends ProxyFactory {
       apply(acquiredState)
       if (!acquiredState.invariantCheckInProgress) {
         Resource
-          .make(SyncIO {
+          .make(IO {
             acquiredState.invariantCheckInProgress = true
           })(_ =>
-            SyncIO {
+            IO {
               acquiredState.invariantCheckInProgress = false
           })
           .use(_ =>
-            SyncIO {
+            IO {
               superCall.call()
           })
           .unsafeRunSync()

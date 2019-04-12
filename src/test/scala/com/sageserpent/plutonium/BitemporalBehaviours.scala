@@ -1,6 +1,6 @@
 package com.sageserpent.plutonium
 
-import cats.effect.SyncIO
+import cats.effect.IO
 import cats.{Applicative, Eq}
 import org.scalacheck.Prop.BooleanOperators
 import org.scalacheck.{Arbitrary, Gen, Prop, Properties}
@@ -49,7 +49,7 @@ trait BitemporalBehaviours
               queryWhen) =>
           worldResource
             .use(world =>
-              SyncIO {
+              IO {
                 recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
                                     asOfs,
                                     world)
@@ -145,7 +145,7 @@ trait BitemporalBehaviours
               queryWhen) =>
           worldResource
             .use(world =>
-              SyncIO {
+              IO {
                 recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
                                     asOfs,
                                     world)
@@ -197,7 +197,7 @@ trait BitemporalBehaviours
         case (bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
           worldResource
             .use(world =>
-              SyncIO {
+              IO {
                 recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
                                     asOfs,
                                     world)
@@ -254,7 +254,7 @@ trait BitemporalBehaviours
               queryWhen) =>
           worldResource
             .use(world =>
-              SyncIO {
+              IO {
                 recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
                                     asOfs,
                                     world)
@@ -325,7 +325,7 @@ trait BitemporalBehaviours
               queryWhen) =>
           worldResource
             .use(world =>
-              SyncIO {
+              IO {
                 recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
                                     asOfs,
                                     world)
@@ -393,7 +393,7 @@ trait BitemporalBehaviours
               queryWhen) =>
           worldResource
             .use(world =>
-              SyncIO {
+              IO {
                 recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
                                     asOfs,
                                     world)
@@ -463,7 +463,7 @@ trait BitemporalBehaviours
               queryWhen) =>
           worldResource
             .use(world =>
-              SyncIO {
+              IO {
                 recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
                                     asOfs,
                                     world)
@@ -542,7 +542,7 @@ trait BitemporalBehaviours
               queryWhen) =>
           worldResource
             .use(world =>
-              SyncIO {
+              IO {
                 recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
                                     asOfs,
                                     world)
@@ -609,7 +609,7 @@ trait BitemporalBehaviours
               queryWhen) =>
           worldResource
             .use(world =>
-              SyncIO {
+              IO {
                 recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
                                     asOfs,
                                     world)
@@ -658,7 +658,7 @@ trait BitemporalBehaviours
               queryWhen) =>
           worldResource
             .use(world =>
-              SyncIO {
+              IO {
                 recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
                                     asOfs,
                                     world)
@@ -746,7 +746,7 @@ trait BitemporalBehaviours
               queryWhen) =>
           worldResource
             .use(world =>
-              SyncIO {
+              IO {
                 recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
                                     asOfs,
                                     world)

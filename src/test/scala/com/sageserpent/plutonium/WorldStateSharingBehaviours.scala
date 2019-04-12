@@ -5,7 +5,7 @@ import java.util
 import java.util.concurrent.Executors
 import java.util.{Optional, UUID}
 
-import cats.effect.{Resource, SyncIO}
+import cats.effect.{Resource, IO}
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.{PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.World.Revision
@@ -23,7 +23,7 @@ trait WorldStateSharingBehaviours
     with Matchers
     with Checkers
     with WorldSpecSupport {
-  val worldSharingCommonStateFactoryResource: Resource[SyncIO, () => World]
+  val worldSharingCommonStateFactoryResource: Resource[IO, () => World]
 
   val testParameters: Test.Parameters
 
@@ -120,7 +120,7 @@ trait WorldStateSharingBehaviours
                 seed) =>
             worldSharingCommonStateFactoryResource
               .use(worldFactory =>
-                SyncIO {
+                IO {
                   val demultiplexingWorld =
                     new DemultiplexingWorld(worldFactory, seed)
 
@@ -226,7 +226,7 @@ trait WorldStateSharingBehaviours
           case (_, bigShuffledHistoryOverLotsOfThings, asOfs) =>
             worldSharingCommonStateFactoryResource
               .use(worldFactory =>
-                SyncIO {
+                IO {
                   val demultiplexingWorld =
                     new DemultiplexingWorld(worldFactory)
 
@@ -290,7 +290,7 @@ trait WorldStateSharingBehaviours
                 idSetsForEachRevision) =>
             worldSharingCommonStateFactoryResource
               .use(worldFactory =>
-                SyncIO {
+                IO {
                   val demultiplexingWorld =
                     new DemultiplexingWorld(worldFactory)
 
@@ -385,7 +385,7 @@ trait WorldStateSharingBehaviours
           case (worldSharingCommonStateFactoryResource, asOfs) =>
             worldSharingCommonStateFactoryResource
               .use(worldFactory =>
-                SyncIO {
+                IO {
                   val demultiplexingWorld =
                     new DemultiplexingWorld(worldFactory)
 
@@ -469,13 +469,13 @@ class WorldStateSharingSpecUsingWorldReferenceImplementation
 
   val numberOfConcurrentQueriesPerRevision: Revision = 100
 
-  val worldSharingCommonStateFactoryResource: Resource[SyncIO, () => World] =
+  val worldSharingCommonStateFactoryResource: Resource[IO, () => World] =
     for {
-      sharedMutableState <- Resource.liftF(SyncIO { new MutableState })
-      worldSet <- Resource.make(SyncIO {
+      sharedMutableState <- Resource.liftF(IO { new MutableState })
+      worldSet <- Resource.make(IO {
         mutable.Set.empty[WorldReferenceImplementation]
       })(worlds =>
-        SyncIO {
+        IO {
           worlds.foreach(_.close())
       })
     } yield
@@ -499,24 +499,24 @@ class WorldStateSharingSpecUsingWorldRedisBasedImplementation
 
   val numberOfConcurrentQueriesPerRevision: Revision = 20
 
-  val worldSharingCommonStateFactoryResource: Resource[SyncIO, () => World] =
+  val worldSharingCommonStateFactoryResource: Resource[IO, () => World] =
     for {
-      sharedGuid <- Resource.liftF(SyncIO { UUID.randomUUID().toString })
-      executionService <- Resource.make(SyncIO {
+      sharedGuid <- Resource.liftF(IO { UUID.randomUUID().toString })
+      executionService <- Resource.make(IO {
         Executors.newFixedThreadPool(20)
       })(executionService =>
-        SyncIO {
+        IO {
           executionService.shutdown
       })
-      redisClientSet <- Resource.make(
-        SyncIO { mutable.Set.empty[RedisClient] })(redisClientSet =>
-        SyncIO {
-          redisClientSet.foreach(_.shutdown())
-      })
-      worldSet <- Resource.make(SyncIO {
+      redisClientSet <- Resource.make(IO { mutable.Set.empty[RedisClient] })(
+        redisClientSet =>
+          IO {
+            redisClientSet.foreach(_.shutdown())
+        })
+      worldSet <- Resource.make(IO {
         mutable.Set.empty[WorldRedisBasedImplementation]
       })(worlds =>
-        SyncIO {
+        IO {
           worlds.foreach(_.close())
       })
     } yield {

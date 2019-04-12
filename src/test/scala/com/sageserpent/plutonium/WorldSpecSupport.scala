@@ -5,7 +5,7 @@ import java.util.UUID
 import java.util.concurrent.Executors
 
 import cats.implicits._
-import cats.effect.{Resource, SyncIO}
+import cats.effect.{Resource, IO}
 
 import com.sageserpent.americium
 import com.sageserpent.americium._
@@ -909,28 +909,28 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
 }
 
 trait WorldResource {
-  val worldResource: Resource[SyncIO, World]
+  val worldResource: Resource[IO, World]
 }
 
 trait WorldReferenceImplementationResource extends WorldResource {
-  val worldResource: Resource[SyncIO, World] =
-    Resource.fromAutoCloseable(SyncIO {
+  val worldResource: Resource[IO, World] =
+    Resource.fromAutoCloseable(IO {
       new WorldReferenceImplementation with WorldContracts
     })
 }
 
 trait WorldEfficientInMemoryImplementationResource extends WorldResource {
-  val worldResource: Resource[SyncIO, World] =
-    Resource.fromAutoCloseable(SyncIO {
+  val worldResource: Resource[IO, World] =
+    Resource.fromAutoCloseable(IO {
       new WorldEfficientInMemoryImplementation with WorldContracts
     })
 }
 
 trait WorldEfficientQuestionableBackendImplementationResource
     extends WorldResource {
-  val worldResource: Resource[SyncIO, World] =
+  val worldResource: Resource[IO, World] =
     H2Resource.transactorResource.flatMap(transactor =>
-      Resource.fromAutoCloseable(SyncIO {
+      Resource.fromAutoCloseable(IO {
         new WorldEfficientQuestionableBackendImplementation(transactor)
         with WorldContracts
       }))
@@ -939,22 +939,22 @@ trait WorldEfficientQuestionableBackendImplementationResource
 trait WorldRedisBasedImplementationResource
     extends WorldResource
     with RedisServerFixture {
-  val worldResource: Resource[SyncIO, World] =
+  val worldResource: Resource[IO, World] =
     for {
-      executionService <- Resource.make(SyncIO {
+      executionService <- Resource.make(IO {
         Executors.newFixedThreadPool(20)
       })(executionService =>
-        SyncIO {
+        IO {
           executionService.shutdown
       })
-      redisClient <- Resource.make(SyncIO {
+      redisClient <- Resource.make(IO {
         RedisClient.create(
           RedisURI.Builder.redis("localhost", redisServerPort).build())
       })(redisClient =>
-        SyncIO {
+        IO {
           redisClient.shutdown()
       })
-      worldResource <- Resource.fromAutoCloseable(SyncIO {
+      worldResource <- Resource.fromAutoCloseable(IO {
         new WorldRedisBasedImplementation(redisClient,
                                           UUID.randomUUID().toString,
                                           executionService) with WorldContracts

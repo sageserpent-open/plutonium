@@ -3,7 +3,7 @@ package com.sageserpent.plutonium
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 
-import cats.effect.SyncIO
+import cats.effect.IO
 import cats.syntax.apply._
 import com.esotericsoftware.kryo.io.{Input, Output}
 import com.esotericsoftware.kryo.{Kryo, KryoException, KryoSerializable}
@@ -46,7 +46,7 @@ trait WorldBehaviours
       } yield
         worldResource
           .use(world =>
-            SyncIO {
+            IO {
               world.scopeFor(when = when, asOf = asOf)
           })
           .unsafeRunSync
@@ -60,7 +60,7 @@ trait WorldBehaviours
     it should "have no current revision" in {
       check(worldResource
         .use(world =>
-          SyncIO {
+          IO {
             (World.initialRevision == world.nextRevision) :| s"Initial revision of a world ${world.nextRevision} should be: ${World.initialRevision}."
         })
         .unsafeRunSync)
@@ -137,7 +137,7 @@ trait WorldBehaviours
               asOfsIncludingAllEventsNoLaterThanTheQueryWhen) =>
           worldResource
             .use(world =>
-              SyncIO {
+              IO {
                 recordEventsInWorld(
                   liftRecordings(
                     bigHistoryOverLotsOfThingsSortedInEventWhenOrder),
@@ -209,7 +209,7 @@ trait WorldBehaviours
                 queryWhen) =>
             worldResource
               .use(world =>
-                SyncIO {
+                IO {
                   recordEventsInWorld(
                     liftRecordings(bigShuffledHistoryOverLotsOfThings),
                     asOfs,
@@ -256,7 +256,7 @@ trait WorldBehaviours
           val sharedAsOf = Instant.ofEpochSecond(0L)
           worldResource
             .use(world =>
-              SyncIO {
+              IO {
                 val linearizationIndices =
                   fooHistoryIds zip Stream.continually {
                     random.chooseAnyNumberFromZeroToOneLessThan(3)
@@ -350,7 +350,7 @@ trait WorldBehaviours
               random) =>
           worldResource
             .use(world =>
-              SyncIO {
+              IO {
                 val revisions = recordEventsInWorld(
                   liftRecordings(bigShuffledHistoryOverLotsOfThings),
                   asOfs,
@@ -445,7 +445,7 @@ trait WorldBehaviours
               random) =>
           worldResource
             .use(world =>
-              SyncIO {
+              IO {
                 val revisions = recordEventsInWorld(
                   liftRecordings(bigShuffledHistoryOverLotsOfThings),
                   asOfs,
@@ -527,7 +527,7 @@ trait WorldBehaviours
         case (bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen, random) =>
           worldResource
             .use(world =>
-              SyncIO {
+              IO {
                 val revisions = recordEventsInWorld(
                   liftRecordings(bigShuffledHistoryOverLotsOfThings),
                   asOfs,
@@ -611,7 +611,7 @@ trait WorldBehaviours
               queryWhen) =>
           worldResource
             .use(world =>
-              SyncIO {
+              IO {
                 (try {
                   recordEventsInWorld(
                     liftRecordings(bigShuffledFaultyHistoryOverLotsOfThings),
@@ -652,7 +652,7 @@ trait WorldBehaviours
               queryWhen) =>
           worldResource
             .use(world =>
-              SyncIO {
+              IO {
                 recordEventsInWorld(
                   liftRecordings(bigShuffledHistoryOverLotsOfThings),
                   asOfs,
@@ -716,7 +716,7 @@ trait WorldBehaviours
         case (bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen, sequence) =>
           worldResource
             .use(world =>
-              SyncIO {
+              IO {
                 recordEventsInWorld(
                   liftRecordings(bigShuffledHistoryOverLotsOfThings),
                   asOfs,
@@ -760,7 +760,7 @@ trait WorldBehaviours
               queryWhen) =>
           worldResource
             .use(world =>
-              SyncIO {
+              IO {
                 recordEventsInWorld(
                   liftRecordings(bigShuffledHistoryOverLotsOfThings),
                   asOfs,
@@ -812,7 +812,7 @@ trait WorldBehaviours
               queryWhen) =>
           worldResource
             .use(world =>
-              SyncIO {
+              IO {
                 recordEventsInWorld(
                   liftRecordings(bigShuffledHistoryOverLotsOfThings),
                   asOfs,
@@ -880,7 +880,7 @@ trait WorldBehaviours
                 queryWhen) =>
             worldResource
               .use(world =>
-                SyncIO {
+                IO {
                   recordEventsInWorld(
                     liftRecordings(bigShuffledHistoryOverLotsOfThings),
                     asOfs,
@@ -967,7 +967,7 @@ trait WorldBehaviours
                 queryWhen) =>
             worldResource
               .use(world =>
-                SyncIO {
+                IO {
                   recordEventsInWorld(
                     liftRecordings(bigShuffledHistoryOverLotsOfThings),
                     asOfs,
@@ -1055,7 +1055,7 @@ trait WorldBehaviours
               queryWhen) =>
           worldResource
             .use(world =>
-              SyncIO {
+              IO {
                 recordEventsInWorld(
                   liftRecordings(bigShuffledHistoryOverLotsOfThings),
                   asOfs,
@@ -1106,7 +1106,7 @@ trait WorldBehaviours
                 queryWhen) =>
             worldResource
               .use(world =>
-                SyncIO {
+                IO {
                   recordEventsInWorld(
                     liftRecordings(bigShuffledHistoryOverLotsOfThings),
                     asOfs,
@@ -1176,7 +1176,7 @@ trait WorldBehaviours
                 queryWhen) =>
             worldResource
               .use(world =>
-                SyncIO {
+                IO {
                   recordEventsInWorld(
                     liftRecordings(bigShuffledHistoryOverLotsOfThings),
                     asOfs,
@@ -1246,7 +1246,7 @@ trait WorldBehaviours
               referencingEventWhen) =>
           worldResource
             .use(world =>
-              SyncIO {
+              IO {
                 recordEventsInWorld(
                   liftRecordings(bigShuffledHistoryOverLotsOfThings),
                   asOfs,
@@ -1335,7 +1335,7 @@ trait WorldBehaviours
               probeWhen) =>
           worldResource
             .use(world =>
-              SyncIO {
+              IO {
                 val checks = for {
                   RecordingsNoLaterThan(
                     referencedHistoryId: History#Id,
@@ -1434,7 +1434,7 @@ trait WorldBehaviours
               referencingEventWhen) =>
           worldResource
             .use(world =>
-              SyncIO {
+              IO {
                 recordEventsInWorld(
                   liftRecordings(bigShuffledHistoryOverLotsOfThings),
                   asOfs,
@@ -1525,7 +1525,7 @@ trait WorldBehaviours
               referencingEventWhen) =>
           worldResource
             .use(world =>
-              SyncIO {
+              IO {
                 recordEventsInWorld(
                   liftRecordings(bigShuffledHistoryOverLotsOfThings),
                   asOfs,
@@ -1644,7 +1644,7 @@ trait WorldBehaviours
               definiteQueryWhen) =>
           worldResource
             .use(world =>
-              SyncIO {
+              IO {
                 recordEventsInWorld(
                   liftRecordings(bigShuffledHistoryOverLotsOfThings),
                   asOfs,
@@ -1690,7 +1690,7 @@ trait WorldBehaviours
         case (bigShuffledHistoryOverLotsOfThings, asOfs) =>
           worldResource
             .use(world =>
-              SyncIO {
+              IO {
                 val revisions = recordEventsInWorld(
                   liftRecordings(bigShuffledHistoryOverLotsOfThings),
                   asOfs,
@@ -1719,7 +1719,7 @@ trait WorldBehaviours
         case (bigShuffledHistoryOverLotsOfThings, asOfs) =>
           worldResource
             .use(world =>
-              SyncIO {
+              IO {
                 recordEventsInWorld(
                   liftRecordings(bigShuffledHistoryOverLotsOfThings),
                   asOfs,
@@ -1751,7 +1751,7 @@ trait WorldBehaviours
         case (bigShuffledHistoryOverLotsOfThings, asOfs) =>
           worldResource
             .use(world =>
-              SyncIO {
+              IO {
                 recordEventsInWorld(
                   liftRecordings(bigShuffledHistoryOverLotsOfThings),
                   asOfs,
@@ -1783,7 +1783,7 @@ trait WorldBehaviours
         case (bigShuffledHistoryOverLotsOfThings, asOfs) =>
           worldResource
             .use(world =>
-              SyncIO {
+              IO {
                 val revisions = recordEventsInWorld(
                   liftRecordings(bigShuffledHistoryOverLotsOfThings),
                   asOfs,
@@ -1815,7 +1815,7 @@ trait WorldBehaviours
         case (bigShuffledHistoryOverLotsOfThings, asOfs) =>
           worldResource
             .use(world =>
-              SyncIO {
+              IO {
                 recordEventsInWorld(
                   liftRecordings(bigShuffledHistoryOverLotsOfThings),
                   asOfs,
@@ -1845,7 +1845,7 @@ trait WorldBehaviours
         case (bigShuffledHistoryOverLotsOfThings, asOfs, random) =>
           worldResource
             .use(world =>
-              SyncIO {
+              IO {
                 val numberOfRevisions = asOfs.length
 
                 val candidateIndicesToStartATranspose =
@@ -1894,7 +1894,7 @@ trait WorldBehaviours
         case (bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
           worldResource
             .use(world =>
-              SyncIO {
+              IO {
                 recordEventsInWorld(
                   liftRecordings(bigShuffledHistoryOverLotsOfThings),
                   asOfs,
@@ -1962,7 +1962,7 @@ trait WorldBehaviours
         case (bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen, random) =>
           worldResource
             .use(world =>
-              SyncIO {
+              IO {
                 val revisions = recordEventsInWorld(
                   liftRecordings(bigShuffledHistoryOverLotsOfThings),
                   asOfs,
@@ -2058,7 +2058,7 @@ trait WorldBehaviours
               queryWhen) =>
           worldResource
             .use(world =>
-              SyncIO {
+              IO {
                 // What's being tested is the imperative behaviour of 'World' wrt its scopes - so use imperative code.
                 val scopeViaRevisionToHistoryMap =
                   scala.collection.mutable.Map.empty[Scope, List[(Any, Any)]]
@@ -2148,7 +2148,7 @@ trait WorldBehaviours
             .mapN(Tuple2.apply)
             .use {
               case (utopia, distopia) =>
-                SyncIO {
+                IO {
                   // NOTE: we add some 'good' changes within the faulty revisions to make things more realistic prior to merging the faulty history with the good history...
                   val (mergedShuffledHistoryOverLotsOfThings, mergedAsOfs) =
                     ((bigShuffledHistoryOverLotsOfThings zip asOfs) ++ (bigShuffledFaultyHistoryOverLotsOfThings zip bigShuffledHistoryOverLotsOfThings map {
@@ -2230,7 +2230,7 @@ trait WorldBehaviours
             .mapN(Tuple2.apply)
             .use {
               case (worldOneWay, worldAnotherWay) =>
-                SyncIO {
+                IO {
                   recordEventsInWorld(
                     liftRecordings(bigShuffledHistoryOverLotsOfThingsOneWay),
                     asOfsOneWay,
@@ -2301,7 +2301,7 @@ trait WorldBehaviours
                 asOfs) =>
             worldResource
               .use(world =>
-                SyncIO {
+                IO {
                   recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
                                       asOfs,
                                       world)
@@ -2371,7 +2371,7 @@ trait WorldBehaviours
                 whenAnInconsistentEventOccurs) =>
             worldResource
               .use(world =>
-                SyncIO {
+                IO {
                   var numberOfEvents = bigShuffledHistoryOverLotsOfThings.size
 
                   val sizeOfPartOne = 1 min (numberOfEvents / 2)
@@ -2565,7 +2565,7 @@ trait WorldBehaviours
           case (bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
             worldResource
               .use(world =>
-                SyncIO {
+                IO {
                   recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
                                       asOfs,
                                       world)
@@ -2624,7 +2624,7 @@ trait WorldBehaviours
           case (bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
             worldResource
               .use(world =>
-                SyncIO {
+                IO {
                   recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
                                       asOfs,
                                       world)
@@ -2683,7 +2683,7 @@ trait WorldBehaviours
                 seed) =>
             worldResource
               .use(world =>
-                SyncIO {
+                IO {
                   try {
                     recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
                                         asOfs,
@@ -2763,7 +2763,7 @@ trait WorldBehaviours
                 queryWhen) =>
             worldResource
               .use(world =>
-                SyncIO {
+                IO {
                   intercept[UnsupportedOperationException] {
                     recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
                                         asOfs,
@@ -2816,7 +2816,7 @@ trait WorldBehaviours
                   queryWhen) =>
               worldResource
                 .use(world =>
-                  SyncIO {
+                  IO {
                     try {
                       recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
                                           asOfs,
@@ -2931,7 +2931,7 @@ trait WorldBehaviours
               idsThatEachReferToMoreThanOneItem) =>
           worldResource
             .use(world =>
-              SyncIO {
+              IO {
                 recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
                                     asOfs,
                                     world)
@@ -3002,7 +3002,7 @@ trait WorldBehaviours
               annihilationWhen) =>
           worldResource
             .use(world =>
-              SyncIO {
+              IO {
                 val initialEventId = -2
 
                 world.revise(
@@ -3085,7 +3085,7 @@ trait WorldBehaviours
         case (bigShuffledHistoryOverLotsOfThings, asOfs, steps) =>
           worldResource
             .use(world =>
-              SyncIO {
+              IO {
                 recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
                                     asOfs,
                                     world)
@@ -3149,7 +3149,7 @@ trait WorldBehaviours
           case (bigShuffledHistoryOverLotsOfThings, asOfs, steps) =>
             worldResource
               .use(world =>
-                SyncIO {
+                IO {
                   recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
                                       asOfs,
                                       world)
@@ -3210,7 +3210,7 @@ trait WorldBehaviours
           case (historyOverLotsOfThings, asOfs, steps) =>
             worldResource
               .use(world =>
-                SyncIO {
+                IO {
                   recordEventsInWorld(liftRecordings(historyOverLotsOfThings),
                                       asOfs,
                                       world)
@@ -3262,7 +3262,7 @@ trait WorldBehaviours
               queryWhen) =>
           worldResource
             .use(world =>
-              SyncIO {
+              IO {
                 recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
                                     asOfs,
                                     world)
@@ -3347,7 +3347,7 @@ trait WorldBehaviours
               queryWhen) =>
           worldResource
             .use(world =>
-              SyncIO {
+              IO {
                 // Define a history the first time around...
 
                 recordEventsInWorld(
@@ -3437,7 +3437,7 @@ trait WorldBehaviours
               revisionOffsetToCheckAt) =>
           worldResource
             .use(world =>
-              SyncIO {
+              IO {
                 recordEventsInWorld(bigOverallShuffledHistoryOverLotsOfThings,
                                     asOfs,
                                     world)
@@ -3506,7 +3506,7 @@ trait WorldBehaviours
           case (testCaseSubsections, asOfsForSubsections, queryWhen) =>
             worldResource
               .use(world =>
-                SyncIO {
+                IO {
                   type ScalaFormatWorkaround =
                     Stream[Stream[(Option[(Unbounded[Instant], Event)],
                                    intersperseObsoleteEvents.EventId)]]
@@ -3648,7 +3648,7 @@ trait WorldBehaviours
               queryWhen) =>
           worldResource
             .use(world =>
-              SyncIO {
+              IO {
                 // Define a history the first time around...
 
                 recordEventsInWorld(
@@ -3819,7 +3819,7 @@ class WorldSpecUsingWorldRedisBasedImplementation
       case (asOf, queryWhen) =>
         worldResource
           .use(world =>
-            SyncIO {
+            IO {
               val itemOneId = WontSerializeId(1)
 
               val exceptionDueToFailedSerialization = intercept[KryoException] {
@@ -3969,7 +3969,7 @@ class AllTheWorlds
           ((worldEfficientQuestionableBackendImplementationResults == worldReferenceImplementationResults) :| s"Should have agreement between questionable backend based implementation and reference implementation.")
         }
 
-        checks.use(result => SyncIO { result }).unsafeRunSync
+        checks.use(result => IO { result }).unsafeRunSync
     })
   }
 }
