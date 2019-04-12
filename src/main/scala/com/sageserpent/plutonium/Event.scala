@@ -4,6 +4,7 @@ import java.lang.reflect.Method
 import java.time.Instant
 import java.util.concurrent.Callable
 
+import cats.effect.{Resource, SyncIO}
 import com.sageserpent.americium
 import com.sageserpent.americium.{Finite, PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
@@ -12,7 +13,6 @@ import net.bytebuddy.dynamic.DynamicType.Builder
 import net.bytebuddy.implementation.MethodDelegation
 import net.bytebuddy.implementation.bind.annotation._
 import net.bytebuddy.matcher.ElementMatcher
-import resource._
 
 import scala.collection.mutable
 import scala.reflect.runtime.universe.{This => _, _}
@@ -132,13 +132,16 @@ object capturePatches {
       def apply(
           @SuperCall superCall: Callable[_],
           @FieldValue("acquiredState") acquiredState: RecordingProxyAcquiredState) =
-        if (!acquiredState.unlockFullReadAccess) (for {
-          _ <- makeManagedResource {
-            acquiredState.unlockFullReadAccess = true
-          } { _ =>
-            acquiredState.unlockFullReadAccess = false
-          }(List.empty)
-        } yield superCall.call()) acquireAndGet identity
+        if (!acquiredState.unlockFullReadAccess)
+          Resource
+            .make(SyncIO {
+              acquiredState.unlockFullReadAccess = true
+            })(_ =>
+              SyncIO {
+                acquiredState.unlockFullReadAccess = false
+            })
+            .use(_ => SyncIO { superCall.call() })
+            .unsafeRunSync()
         else superCall.call()
     }
   }

@@ -2,10 +2,10 @@ package com.sageserpent.plutonium
 
 import java.time.Instant
 
+import cats.effect.{Resource, SyncIO}
 import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.PatchRecorder.UpdateConsumer
-import resource.{ManagedResource, makeManagedResource}
 
 import scala.reflect.runtime.universe.{Super => _, This => _, _}
 
@@ -49,42 +49,51 @@ class IdentifiedItemsScope extends IdentifiedItemAccess {
                eventTimeline: Seq[(Event, EventId)]) = {
     idToItemsMultiMap.clear()
 
-    for (_ <- makeManagedResource {
-           allItemsAreLocked = false
-         } { _ =>
-           allItemsAreLocked = true
-         }(List.empty)) {
-      val patchRecorder = new PatchRecorderImplementation(_when)
-      with PatchRecorderContracts with BestPatchSelectionImplementation
-      with BestPatchSelectionContracts {
-        val itemsAreLockedResource: ManagedResource[Unit] =
-          makeManagedResource {
-            allItemsAreLocked = true
-          } { _ =>
-            allItemsAreLocked = false
-          }(List.empty)
-        override val updateConsumer: UpdateConsumer =
-          new UpdateConsumer {
-            override def captureAnnihilation(
-                eventId: EventId,
-                annihilation: Annihilation): Unit = {
-              annihilation(identifiedItemsScopeThis)
-            }
+    Resource
+      .make(SyncIO {
+        allItemsAreLocked = false
+      })(_ =>
+        SyncIO {
+          allItemsAreLocked = true
+      })
+      .use(_ =>
+        SyncIO {
+          val patchRecorder = new PatchRecorderImplementation(_when)
+          with PatchRecorderContracts with BestPatchSelectionImplementation
+          with BestPatchSelectionContracts {
+            val itemsAreLockedResource =
+              Resource.make(SyncIO {
+                allItemsAreLocked = true
+              })(_ =>
+                SyncIO {
+                  allItemsAreLocked = false
+              })
+            override val updateConsumer: UpdateConsumer =
+              new UpdateConsumer {
+                override def captureAnnihilation(
+                    eventId: EventId,
+                    annihilation: Annihilation): Unit = {
+                  annihilation(identifiedItemsScopeThis)
+                }
 
-            override def capturePatch(when: Unbounded[Instant],
-                                      eventId: EventId,
-                                      patch: AbstractPatch): Unit = {
-              patch(identifiedItemsScopeThis)
-              for (_ <- itemsAreLockedResource) {
-                patch.checkInvariants(identifiedItemsScopeThis)
+                override def capturePatch(when: Unbounded[Instant],
+                                          eventId: EventId,
+                                          patch: AbstractPatch): Unit = {
+                  patch(identifiedItemsScopeThis)
+                  itemsAreLockedResource
+                    .use(_ =>
+                      SyncIO {
+                        patch.checkInvariants(identifiedItemsScopeThis)
+                    })
+                    .unsafeRunSync()
+                }
               }
-            }
           }
-      }
 
-      WorldImplementationCodeFactoring.recordPatches(eventTimeline,
-                                                     patchRecorder)
-    }
+          WorldImplementationCodeFactoring.recordPatches(eventTimeline,
+                                                         patchRecorder)
+      })
+      .unsafeRunSync()
   }
 
   class MultiMap

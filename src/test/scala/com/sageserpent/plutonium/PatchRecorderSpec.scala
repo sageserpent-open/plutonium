@@ -13,7 +13,6 @@ import org.scalacheck.{Gen, Prop, Test}
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.prop.Checkers
 import org.scalatest.{FlatSpec, Matchers}
-import resource.{ManagedResource, makeManagedResource}
 
 import scala.reflect.runtime.universe._
 import scala.util.Random

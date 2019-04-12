@@ -4,6 +4,9 @@ import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.Executors
 
+import cats.implicits._
+import cats.effect.{Resource, SyncIO}
+
 import com.sageserpent.americium
 import com.sageserpent.americium._
 import com.sageserpent.americium.randomEnrichment._
@@ -12,7 +15,6 @@ import com.sageserpent.plutonium.World._
 import io.lettuce.core.{RedisClient, RedisURI}
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.Assertions
-import resource._
 
 import scala.collection.JavaConversions._
 import scala.collection.Searching._
@@ -906,37 +908,45 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
 }
 
 trait WorldResource {
-  val worldResource: ManagedResource[World]
+  val worldResource: Resource[SyncIO, World]
 }
 
 trait WorldReferenceImplementationResource extends WorldResource {
-  val worldResource: ManagedResource[World] =
-    makeManagedResource(new WorldReferenceImplementation with WorldContracts)(
-      _.close())(List.empty)
+  val worldResource: Resource[SyncIO, World] =
+    Resource.liftF(SyncIO {
+      new WorldReferenceImplementation with WorldContracts
+    })
 }
 
 trait WorldEfficientInMemoryImplementationResource extends WorldResource {
-  val worldResource: ManagedResource[World] =
-    makeManagedResource(
-      new WorldEfficientInMemoryImplementation
-      with WorldContracts)(_.close())(List.empty)
+  val worldResource: Resource[SyncIO, World] =
+    Resource.liftF(SyncIO {
+      new WorldEfficientInMemoryImplementation with WorldContracts
+    })
 }
 
 trait WorldRedisBasedImplementationResource
     extends WorldResource
     with RedisServerFixture {
-  val worldResource: ManagedResource[World] =
+  val worldResource: Resource[SyncIO, World] =
     for {
-      executionService <- makeManagedResource(Executors.newFixedThreadPool(20))(
-        _.shutdown)(List.empty)
-      redisClient <- makeManagedResource(
+      executionService <- Resource.make(SyncIO {
+        Executors.newFixedThreadPool(20)
+      })(executionService =>
+        SyncIO {
+          executionService.shutdown
+      })
+      redisClient <- Resource.make(SyncIO {
         RedisClient.create(
-          RedisURI.Builder.redis("localhost", redisServerPort).build()))(
-        _.shutdown())(List.empty)
-      worldResource <- makeManagedResource(
+          RedisURI.Builder.redis("localhost", redisServerPort).build())
+      })(redisClient =>
+        SyncIO {
+          redisClient.shutdown()
+      })
+      worldResource <- Resource.fromAutoCloseable(SyncIO {
         new WorldRedisBasedImplementation(redisClient,
                                           UUID.randomUUID().toString,
-                                          executionService)
-        with WorldContracts)(_.close())(List.empty)
+                                          executionService) with WorldContracts
+      })
     } yield worldResource
 }
