@@ -14,7 +14,6 @@ lazy val settings = Seq(
   libraryDependencies += "org.typelevel"              %% "cats-effect"                  % "1.2.0",
   libraryDependencies += "net.bytebuddy"              % "byte-buddy"                    % "1.9.12",
   libraryDependencies += "com.sageserpent"            %% "americium"                    % "0.1.5",
-  libraryDependencies += "com.jsuereth"               %% "scala-arm"                    % "2.0",
   libraryDependencies += "org.scala-lang"             % "scala-reflect"                 % "2.12.8",
   libraryDependencies += "io.lettuce"                 % "lettuce-core"                  % "5.1.3.RELEASE",
   libraryDependencies += "io.netty"                   % "netty-transport-native-epoll"  % "4.1.32.Final" classifier "linux-x86_64",
