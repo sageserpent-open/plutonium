@@ -3739,7 +3739,7 @@ class WorldSpecUsingWorldH2StorageImplementation
     extends WorldBehaviours
     with WorldH2StorageImplementationResource {
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
-    PropertyCheckConfig(maxSize = 15, minSuccessful = 7)
+    PropertyCheckConfig(maxSize = 10, minSuccessful = 7)
 
   "A world with no history (using the world H2 storage implementation)" should behave like worldWithNoHistoryBehaviour
 
