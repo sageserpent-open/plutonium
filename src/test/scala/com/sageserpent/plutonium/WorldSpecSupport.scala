@@ -926,13 +926,11 @@ trait WorldEfficientInMemoryImplementationResource extends WorldResource {
     })
 }
 
-trait WorldEfficientQuestionableBackendImplementationResource
-    extends WorldResource {
+trait WorldH2StorageImplementationResource extends WorldResource {
   val worldResource: Resource[IO, World] =
     H2Resource.transactorResource.flatMap(transactor =>
       Resource.fromAutoCloseable(IO {
-        new WorldEfficientQuestionableBackendImplementation(transactor)
-        with WorldContracts
+        new WorldH2StorageImplementation(transactor) with WorldContracts
       }))
 }
 

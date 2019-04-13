@@ -1276,8 +1276,8 @@ class WorldRedisBasedImplementationBugs
   override val redisServerPort: Int = 6456
 }
 
-class WorldEfficientQuestionableBackendImplementationBugs
+class WorldH2StorageImplementationBugs
     extends Bugs
-    with WorldEfficientQuestionableBackendImplementationResource {
-  "a world (using the world efficient questionable backend implementation)" should behave like suite
+    with WorldH2StorageImplementationResource {
+  "a world (using the world H2 storage implementation)" should behave like suite
 }

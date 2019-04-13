@@ -864,21 +864,21 @@ class BitemporalSpecUsingWorldRedisBasedImplementation
   }
 }
 
-class BitemporalSpecUsingWorldEfficientQuestionableBackendImplementation
+class BitemporalSpecUsingWorldH2StorageImplementation
     extends BitemporalBehaviours
-    with WorldEfficientQuestionableBackendImplementationResource {
+    with WorldH2StorageImplementationResource {
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
     PropertyCheckConfig(maxSize = 30, minSuccessful = 5)
 
-  "The class Bitemporal (using the world efficient questionable backend implementation)" should behave like bitemporalBehaviour
+  "The class Bitemporal (using the world H2 storage implementation)" should behave like bitemporalBehaviour
 
-  "A bitemporal wildcard (using the world efficient questionable backend implementation)" should behave like bitemporalWildcardBehaviour
+  "A bitemporal wildcard (using the world H2 storage implementation)" should behave like bitemporalWildcardBehaviour
 
-  "A bitemporal query using an id (using the world efficient questionable backend implementation)" should behave like bitemporalQueryUsingAnIdBehaviour
+  "A bitemporal query using an id (using the world H2 storage implementation)" should behave like bitemporalQueryUsingAnIdBehaviour
 
-  "The bitemporal 'numberOf' (using the world efficient questionable backend implementation)" should behave like bitemporalNumberOfBehaviour
+  "The bitemporal 'numberOf' (using the world H2 storage implementation)" should behave like bitemporalNumberOfBehaviour
 
-  "The bitemporal 'none' (using the world efficient questionable backend implementation)" should behave like bitemporalNoneBehaviour
+  "The bitemporal 'none' (using the world H2 storage implementation)" should behave like bitemporalNoneBehaviour
 
-  "A bitemporal query (using the world efficient questionable backend implementation)" should behave like bitemporalQueryBehaviour
+  "A bitemporal query (using the world H2 storage implementation)" should behave like bitemporalQueryBehaviour
 }

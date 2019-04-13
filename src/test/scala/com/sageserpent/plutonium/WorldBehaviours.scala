@@ -3735,19 +3735,19 @@ class WorldSpecUsingWorldEfficientInMemoryImplementation
   }
 }
 
-class WorldSpecUsingWorldEfficientQuestionableBackendImplementation
+class WorldSpecUsingWorldH2StorageImplementation
     extends WorldBehaviours
-    with WorldEfficientQuestionableBackendImplementationResource {
+    with WorldH2StorageImplementationResource {
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
     PropertyCheckConfig(maxSize = 15, minSuccessful = 7)
 
-  "A world with no history (using the world efficient questionable backend implementation)" should behave like worldWithNoHistoryBehaviour
+  "A world with no history (using the world H2 storage implementation)" should behave like worldWithNoHistoryBehaviour
 
-  "A world with history added in order of increasing event time (using the world efficient questionable backend implementation)" should behave like worldWithHistoryAddedInOrderOfIncreasingEventTimeBehaviour
+  "A world with history added in order of increasing event time (using the world H2 storage implementation)" should behave like worldWithHistoryAddedInOrderOfIncreasingEventTimeBehaviour
 
-  "A world (using the world efficient questionable backend implementation)" should behave like worldBehaviour
+  "A world (using the world H2 storage implementation)" should behave like worldBehaviour
 
-  "A world with events that have since been corrected (using the world efficient questionable backend implementation)" should behave like worldWithEventsThatHaveSinceBeenCorrectedBehaviour
+  "A world with events that have since been corrected (using the world H2 storage implementation)" should behave like worldWithEventsThatHaveSinceBeenCorrectedBehaviour
 }
 
 abstract class HistoryWhoseIdWontSerialize extends History {
@@ -3903,8 +3903,8 @@ class AllTheWorlds
   object worldEfficientInMemoryImplementationResource
       extends WorldEfficientInMemoryImplementationResource
 
-  object worldEfficientQuestionableBackendImplementationResource
-      extends WorldEfficientQuestionableBackendImplementationResource
+  object worldH2StorageImplementationResource
+      extends WorldH2StorageImplementationResource
 
   "all the world implementations" should "agree" in {
     val testCaseGenerator = for {
@@ -3949,10 +3949,10 @@ class AllTheWorlds
         }
 
         val checks = for {
-          worldReferenceImplementation                    <- worldReferenceImplementationResource.worldResource
-          worldEfficientInMemoryImplementation            <- worldEfficientInMemoryImplementationResource.worldResource
-          worldRedisBasedImplementation                   <- worldResource
-          worldEfficientQuestionableBackendImplementation <- worldEfficientQuestionableBackendImplementationResource.worldResource
+          worldReferenceImplementation         <- worldReferenceImplementationResource.worldResource
+          worldEfficientInMemoryImplementation <- worldEfficientInMemoryImplementationResource.worldResource
+          worldRedisBasedImplementation        <- worldResource
+          worldH2StorageImplementation         <- worldH2StorageImplementationResource.worldResource
         } yield {
           val worldReferenceImplementationResults =
             resultsFrom(worldReferenceImplementation)
@@ -3960,13 +3960,13 @@ class AllTheWorlds
             resultsFrom(worldEfficientInMemoryImplementation)
           val redisBasedImplementationResults =
             resultsFrom(worldRedisBasedImplementation)
-          val worldEfficientQuestionableBackendImplementationResults =
-            resultsFrom(worldEfficientQuestionableBackendImplementation)
+          val worldH2StorageImplementationResults =
+            resultsFrom(worldH2StorageImplementation)
 
           ((worldReferenceImplementationResults == worldEfficientInMemoryImplementationResults) :| s"Should have agreement between reference implementation and efficient in-memory implementation.") &&
           ((worldEfficientInMemoryImplementationResults == redisBasedImplementationResults) :| s"Should have agreement between efficient in-memory implementation and Redis based implementation.") &&
-          ((redisBasedImplementationResults == worldEfficientQuestionableBackendImplementationResults) :| s"Should have agreement between Redis based implementation and questionable backend based implementation.") &&
-          ((worldEfficientQuestionableBackendImplementationResults == worldReferenceImplementationResults) :| s"Should have agreement between questionable backend based implementation and reference implementation.")
+          ((redisBasedImplementationResults == worldH2StorageImplementationResults) :| s"Should have agreement between Redis based implementation and questionable backend based implementation.") &&
+          ((worldH2StorageImplementationResults == worldReferenceImplementationResults) :| s"Should have agreement between questionable backend based implementation and reference implementation.")
         }
 
         checks.use(result => IO { result }).unsafeRunSync

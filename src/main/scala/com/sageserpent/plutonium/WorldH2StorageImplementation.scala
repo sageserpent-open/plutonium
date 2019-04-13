@@ -4,14 +4,14 @@ import java.time.Instant
 
 import cats.implicits._
 import com.sageserpent.plutonium.World.Revision
-import com.sageserpent.plutonium.WorldEfficientQuestionableBackendImplementation.{
+import com.sageserpent.plutonium.WorldH2StorageImplementation.{
   TrancheId,
   immutableObjectStorage
 }
 import com.sageserpent.plutonium.curium.ImmutableObjectStorage._
 import com.sageserpent.plutonium.curium.{H2Tranches, ImmutableObjectStorage}
 
-object WorldEfficientQuestionableBackendImplementation {
+object WorldH2StorageImplementation {
 
   type TrancheId = H2Tranches#TrancheId
 
@@ -21,7 +21,7 @@ object WorldEfficientQuestionableBackendImplementation {
   }
 }
 
-class WorldEfficientQuestionableBackendImplementation(
+class WorldH2StorageImplementation(
     val tranches: H2Tranches,
     var timelineTrancheIdStorage: Array[(Instant, TrancheId)],
     var numberOfTimelines: Int)
@@ -80,10 +80,9 @@ class WorldEfficientQuestionableBackendImplementation(
         })
     )(tranches)
 
-    new WorldEfficientQuestionableBackendImplementation(
-      tranches,
-      timelineTrancheIds.toArray,
-      numberOfTimelines)
+    new WorldH2StorageImplementation(tranches,
+                                     timelineTrancheIds.toArray,
+                                     numberOfTimelines)
   }
 
   override protected def itemCacheOf(itemCache: Session[ItemCache]): ItemCache =
