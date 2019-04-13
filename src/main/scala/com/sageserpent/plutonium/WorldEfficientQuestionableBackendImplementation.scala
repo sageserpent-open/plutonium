@@ -13,22 +13,21 @@ import com.sageserpent.plutonium.curium.{H2Tranches, ImmutableObjectStorage}
 
 object WorldEfficientQuestionableBackendImplementation {
 
-  type TrancheId = H2Tranches[Array[Byte]]#TrancheId
+  type TrancheId = H2Tranches#TrancheId
 
   object immutableObjectStorage extends ImmutableObjectStorage[TrancheId] {
     override protected val tranchesImplementationName: String =
-      classOf[H2Tranches[_]].getSimpleName
+      classOf[H2Tranches].getSimpleName
   }
 }
 
 class WorldEfficientQuestionableBackendImplementation(
-    val tranches: H2Tranches[Array[Byte]],
+    val tranches: H2Tranches,
     var timelineTrancheIdStorage: Array[(Instant, TrancheId)],
     var numberOfTimelines: Int)
     extends WorldEfficientImplementation[Session] {
   def this(transactor: H2Tranches.Transactor) =
-    this(new H2Tranches[Array[Byte]](transactor)
-         with TranchesContracts[TrancheId, Array[Byte]],
+    this(new H2Tranches(transactor) with TranchesContracts[TrancheId],
          Array.empty[(Instant, TrancheId)],
          World.initialRevision)
 
