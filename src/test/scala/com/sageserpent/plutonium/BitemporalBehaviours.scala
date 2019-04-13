@@ -868,7 +868,7 @@ class BitemporalSpecUsingWorldEfficientQuestionableBackendImplementation
     extends BitemporalBehaviours
     with WorldEfficientQuestionableBackendImplementationResource {
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
-    PropertyCheckConfig(maxSize = 30, minSuccessful = 30)
+    PropertyCheckConfig(maxSize = 30, minSuccessful = 5)
 
   "The class Bitemporal (using the world efficient questionable backend implementation)" should behave like bitemporalBehaviour
 

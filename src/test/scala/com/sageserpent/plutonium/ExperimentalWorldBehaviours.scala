@@ -703,7 +703,7 @@ class ExperimentalWorldSpecUsingWorldEfficientQuestionableBackendImplementation
     extends ExperimentalWorldBehaviours
     with WorldEfficientQuestionableBackendImplementationResource {
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
-    PropertyCheckConfig(maxSize = 20)
+    PropertyCheckConfig(maxSize = 20, minSuccessful = 10)
 
   "An experimental world (using the world efficient questionable backend implementation)" should behave like experimentalWorldBehaviour
 }
