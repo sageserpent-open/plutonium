@@ -18,6 +18,10 @@ object WorldH2StorageImplementation {
   object immutableObjectStorage extends ImmutableObjectStorage[TrancheId] {
     override protected val tranchesImplementationName: String =
       classOf[H2Tranches].getSimpleName
+
+    override protected def configurableProxyExclusion(
+        clazz: Class[_]): Boolean =
+      classOf[Tuple2[_, _]].isAssignableFrom(clazz)
   }
 }
 
