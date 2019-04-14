@@ -18,7 +18,8 @@ object classFromType {
         (fullClassName: String,
          constructorParameters: IndexedSeq[IndexedSeq[Any]],
          methodName: String,
-         parameters: IndexedSeq[IndexedSeq[Any]]) => parameters.head.toString)))
+         parameters: IndexedSeq[IndexedSeq[Any]]) =>
+          parameters.head.head.toString)))
 
   def apply[Item](reflectedType: universe.Type): Class[Item] =
     memoizeSync(cacheTimeToLive) {
