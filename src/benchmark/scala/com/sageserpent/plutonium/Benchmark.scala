@@ -81,3 +81,9 @@ trait Benchmark {
     world.unsafeRunSync()
   }
 }
+
+object benchmarkApplication extends Benchmark {
+  def main(args: Array[String]): Unit = {
+    activity(10000)
+  }
+}
