@@ -3,6 +3,10 @@ package com.sageserpent.plutonium
 import java.lang.reflect.Method
 import java.time.Instant
 
+import alleycats.std.iterable._
+import cats.Foldable
+import cats.data.Writer
+import cats.implicits._
 import com.sageserpent.americium.{
   Finite,
   NegativeInfinity,
@@ -12,7 +16,6 @@ import com.sageserpent.americium.{
 import com.sageserpent.plutonium.AllEvents.ItemStateUpdatesDelta
 import com.sageserpent.plutonium.AllEventsImplementation.Lifecycle._
 import com.sageserpent.plutonium.AllEventsImplementation._
-import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.World.{Revision, initialRevision}
 import de.sciss.fingertree.RangedSeq
 import de.ummels.prioritymap.PriorityMap
@@ -26,7 +29,6 @@ import scala.collection.immutable.{
   Set,
   SortedMap
 }
-import scala.reflect.runtime.universe.TypeTag
 
 object AllEventsImplementation {
   val maxNumberOfIdsToSample = 100
@@ -43,13 +45,13 @@ object AllEventsImplementation {
       .upperBoundOf(lifecycle.endTime)
 
   object Lifecycle {
-    implicit val bagConfiguration = HashedBagConfiguration.compact[TypeTag[_]]
+    implicit val bagConfiguration = HashedBagConfiguration.compact[Class[_]]
 
     def apply(eventId: EventId,
               itemStateUpdateKey: ItemStateUpdateKey,
               indivisibleEvent: IndivisibleEvent): Lifecycle =
       new LifecycleImplementation(
-        typeTags = Bag(indivisibleEvent.uniqueItemSpecification.typeTag),
+        clazzes = Bag(indivisibleEvent.uniqueItemSpecification.clazz),
         eventsArrangedInReverseTimeOrder =
           SortedMap(itemStateUpdateKey -> indivisibleEvent)(
             Ordering[ItemStateUpdateKey].reverse),
@@ -129,10 +131,10 @@ object AllEventsImplementation {
         annihilation.uniqueItemSpecification
     }
 
-    def refineTypeFor(itemStateUpdateTime: ItemStateUpdateTime,
-                      uniqueItemSpecification: UniqueItemSpecification,
-                      lifecyclesById: LifecyclesById): TypeTag[_] = {
-      lifecycleFor(itemStateUpdateTime, uniqueItemSpecification, lifecyclesById).lowerBoundTypeTag
+    def refineClazzFor(itemStateUpdateTime: ItemStateUpdateTime,
+                       uniqueItemSpecification: UniqueItemSpecification,
+                       lifecyclesById: LifecyclesById): Class[_] = {
+      lifecycleFor(itemStateUpdateTime, uniqueItemSpecification, lifecyclesById).lowerBoundClazz
     }
 
     def lifecycleFor(itemStateUpdateTime: ItemStateUpdateTime,
@@ -144,13 +146,14 @@ object AllEventsImplementation {
             Split.alignedWith(itemStateUpdateTime) -> Split.alignedWith(
               itemStateUpdateTime))
           .filter(lifecycle =>
-            lifecycle.lowerBoundTypeTag.tpe <:< uniqueItemSpecification.typeTag.tpe)
+            uniqueItemSpecification.clazz.isAssignableFrom(
+              lifecycle.lowerBoundClazz))
           .toList
       relevantLifecycle
     }
 
     def fuse(firstLifecycle: Lifecycle, secondLifecycle: Lifecycle) = {
-      val fusedTypeTags = firstLifecycle.typeTags ++ secondLifecycle.typeTags
+      val fusedClazzes = firstLifecycle.clazzes ++ secondLifecycle.clazzes
 
       val fusedEventsArrangedInReverseTimeOrder: SortedMap[
         ItemStateUpdateKey,
@@ -167,7 +170,7 @@ object AllEventsImplementation {
                     .getOrElse(eventId, Set.empty))) toMap
 
       new LifecycleImplementation(
-        typeTags = fusedTypeTags,
+        clazzes = fusedClazzes,
         eventsArrangedInReverseTimeOrder = fusedEventsArrangedInReverseTimeOrder,
         itemStateUpdateTimesByEventId = fusedItemStateUpdateTimesByEventId
       ) with LifecycleContracts
@@ -176,16 +179,16 @@ object AllEventsImplementation {
     def apply(
         retainedEvents: SortedMap[ItemStateUpdateKey, IndivisibleEvent],
         trimmedEvents: SortedMap[ItemStateUpdateKey, IndivisibleEvent],
-        typeTags: Bag[TypeTag[_]],
+        clazzes: Bag[Class[_]],
         itemStateUpdateTimesByEventId: Map[EventId, Set[ItemStateUpdateKey]])
       : Lifecycle = {
-      val retainedTypeTags = (typeTags /: trimmedEvents) {
-        case (typeTags, (_, trimmedEvent)) =>
-          typeTags - trimmedEvent.uniqueItemSpecification.typeTag
+      val retainedClazzes = (clazzes /: trimmedEvents) {
+        case (clazzes, (_, trimmedEvent)) =>
+          clazzes - trimmedEvent.uniqueItemSpecification.clazz
       }
 
       new LifecycleImplementation(
-        typeTags = retainedTypeTags,
+        clazzes = retainedClazzes,
         eventsArrangedInReverseTimeOrder = retainedEvents,
         itemStateUpdateTimesByEventId = itemStateUpdateTimesByEventId)
       with LifecycleContracts
@@ -201,9 +204,9 @@ object AllEventsImplementation {
 
     def id: Any
 
-    def lowerBoundTypeTag: TypeTag[_]
+    def lowerBoundClazz: Class[_]
 
-    def upperBoundTypeTag: TypeTag[_]
+    def upperBoundClazz: Class[_]
 
     def annul(eventId: EventId): Option[Lifecycle]
 
@@ -227,7 +230,7 @@ object AllEventsImplementation {
 
     def referencingLifecycles(lifecyclesById: LifecyclesById): Set[Lifecycle]
 
-    val typeTags: Bag[TypeTag[_]]
+    val clazzes: Bag[Class[_]]
 
     val eventsArrangedInReverseTimeOrder: SortedMap[ItemStateUpdateKey,
                                                     IndivisibleEvent]
@@ -237,7 +240,7 @@ object AllEventsImplementation {
   }
 
   case class LifecycleImplementation(
-      typeTags: Bag[TypeTag[_]],
+      clazzes: Bag[Class[_]],
       eventsArrangedInReverseTimeOrder: SortedMap[ItemStateUpdateKey,
                                                   IndivisibleEvent],
       itemStateUpdateTimesByEventId: Map[EventId, Set[ItemStateUpdateKey]])
@@ -254,17 +257,19 @@ object AllEventsImplementation {
       }
 
     val uniqueItemSpecification: UniqueItemSpecification =
-      UniqueItemSpecification(id, lowerBoundTypeTag)
+      UniqueItemSpecification(id, lowerBoundClazz)
 
     def id: Any =
       eventsArrangedInReverseTimeOrder.head._2.uniqueItemSpecification.id
 
-    def lowerBoundTypeTag: TypeTag[_] = typeTags.reduce[TypeTag[_]] {
-      case (first, second) => if (first.tpe <:< second.tpe) first else second
+    def lowerBoundClazz: Class[_] = clazzes.reduce[Class[_]] {
+      case (first, second) =>
+        if (second.isAssignableFrom(first)) first else second
     }
 
-    def upperBoundTypeTag: TypeTag[_] = typeTags.reduce[TypeTag[_]] {
-      case (first, second) => if (first.tpe <:< second.tpe) second else first
+    def upperBoundClazz: Class[_] = clazzes.reduce[Class[_]] {
+      case (first, second) =>
+        if (second.isAssignableFrom(first)) second else first
     }
 
     def annul(eventId: EventId): Option[Lifecycle] = {
@@ -274,14 +279,14 @@ object AllEventsImplementation {
         (eventsArrangedInReverseTimeOrder /: itemStateUpdateTimes)(_ - _)
       if (preservedEvents.nonEmpty) {
         val annulledEvents = itemStateUpdateTimes map eventsArrangedInReverseTimeOrder.apply
-        val preservedTypeTags = (typeTags /: annulledEvents) {
-          case (typeTags, annulledEvent) =>
-            typeTags - annulledEvent.uniqueItemSpecification.typeTag
+        val preservedClazzes = (clazzes /: annulledEvents) {
+          case (clazzes, annulledEvent) =>
+            clazzes - annulledEvent.uniqueItemSpecification.clazz
         }
         val preservedItemStateUpdateTimesByEventId = itemStateUpdateTimesByEventId - eventId
         Some(
           new LifecycleImplementation(
-            typeTags = preservedTypeTags,
+            clazzes = preservedClazzes,
             eventsArrangedInReverseTimeOrder = preservedEvents,
             itemStateUpdateTimesByEventId =
               preservedItemStateUpdateTimesByEventId) with LifecycleContracts)
@@ -306,13 +311,13 @@ object AllEventsImplementation {
               this,
               Lifecycle(eventsFromTheOtherForEarlierLifecycle,
                         eventsFromTheOtherForLaterLifecycle,
-                        another.typeTags,
+                        another.clazzes,
                         another.itemStateUpdateTimesByEventId)
             ),
             Lifecycle(
               eventsFromTheOtherForLaterLifecycle,
               eventsFromTheOtherForEarlierLifecycle,
-              another.typeTags,
+              another.clazzes,
               another.itemStateUpdateTimesByEventId
             )
           )
@@ -333,13 +338,13 @@ object AllEventsImplementation {
               another,
               Lifecycle(eventsFromThisForEarlierLifecycle,
                         eventsFromThisForLaterLifecycle,
-                        another.typeTags,
+                        another.clazzes,
                         another.itemStateUpdateTimesByEventId)
             ),
             Lifecycle(
               eventsFromThisForLaterLifecycle,
               eventsFromThisForEarlierLifecycle,
-              another.typeTags,
+              another.clazzes,
               another.itemStateUpdateTimesByEventId
             )
           )
@@ -363,14 +368,14 @@ object AllEventsImplementation {
         Some(
           Lifecycle(retainedEvents,
                     trimmedEvents,
-                    typeTags,
+                    clazzes,
                     itemStateUpdateTimesByEventId))
       } else None
     }
 
     def isFusibleWith(another: Lifecycle): Boolean =
-      this.lowerTypeIsConsistentWith(another) && this.upperTypeIsConsistentWith(
-        another) && this.overlapsWith(another)
+      this.lowerClazzIsConsistentWith(another) && this
+        .upperClazzIsConsistentWith(another) && this.overlapsWith(another)
 
     def isIsolatedAnnihilation: Boolean =
       // Don't use sequence pattern matching here, it is too much overhead due to needing to build a sequence.
@@ -385,21 +390,12 @@ object AllEventsImplementation {
         .fold(false)(_.exists(eventsArrangedInReverseTimeOrder.contains))
 
     def typeBoundsAreInconsistentWith(another: Lifecycle): Boolean =
-      this.upperTypeIsConsistentWith(another) ^ this
-        .lowerTypeIsConsistentWith(another)
+      this.upperClazzIsConsistentWith(another) ^ this
+        .lowerClazzIsConsistentWith(another)
 
     def itemStateUpdates(lifecyclesById: LifecyclesById,
                          bestPatchSelection: BestPatchSelection)
       : Set[(ItemStateUpdateKey, ItemStateUpdate)] = {
-      // Welcome to hell...
-
-      import scalaz.std.iterable._
-      import scalaz.std.set._
-      import scalaz.syntax.foldable._
-      import scalaz.syntax.monad._
-      import scalaz.syntax.writer._
-      import scalaz.{Monad, Writer}
-
       type ResultsWriter[X] =
         Writer[Set[(ItemStateUpdateKey, ItemStateUpdate)], X]
 
@@ -438,7 +434,7 @@ object AllEventsImplementation {
           new PatchAccumulationState(
             accumulatedPatchesByExemplarMethod =
               updatedAccumulatedPatchesByExemplarMethod)
-            .pure(implicitly[Monad[ResultsWriter]])
+            .pure[ResultsWriter]
         }
 
         def recordAnnihilation(
@@ -447,7 +443,7 @@ object AllEventsImplementation {
           for {
             _ <- Set(
               itemStateUpdateKey -> (ItemStateAnnihilation(annihilation
-                .rewriteItemTypeTag(lowerBoundTypeTag)): ItemStateUpdate)).tell
+                .rewriteItemClass(lowerBoundClazz)): ItemStateUpdate)).tell
           } yield
             this // We can get away with this (ha-ha) because an annihilation must be the latest event, so comes *first*, so there will be no patches to select from.
 
@@ -494,7 +490,7 @@ object AllEventsImplementation {
 
           new PatchAccumulationState(
             accumulatedPatchesByExemplarMethod = accumulatedPatchesByExemplarMethod - exemplarMethod)
-            .set(
+            .writer(
               Set(
                 itemStateUpdateKeyForAnchorPatchRepresentingTheEvent -> ItemStatePatch(
                   bestPatch)))
@@ -502,11 +498,12 @@ object AllEventsImplementation {
 
         def writeBestPatches: Writer[Set[(ItemStateUpdateKey, ItemStateUpdate)],
                                      PatchAccumulationState] =
-          accumulatedPatchesByExemplarMethod.keys.foldLeftM(this) {
-            case (patchAccumulationState: PatchAccumulationState,
-                  method: Method) =>
-              patchAccumulationState.writeBestPatch(method)
-          }
+          Foldable[Iterable]
+            .foldLeftM(accumulatedPatchesByExemplarMethod.keys, this) {
+              case (patchAccumulationState: PatchAccumulationState,
+                    method: Method) =>
+                patchAccumulationState.writeBestPatch(method)
+            }
 
         private def exemplarMethodAndPatchesFor(method: Method)
           : Option[(Method, List[(AbstractPatch, ItemStateUpdateKey)])] =
@@ -524,36 +521,36 @@ object AllEventsImplementation {
       }
 
       val writtenState: ResultsWriter[PatchAccumulationState] =
-        (eventsArrangedInReverseTimeOrder: Iterable[(ItemStateUpdateKey,
-                                                     IndivisibleEvent)])
-          .foldLeftM(new PatchAccumulationState(): PatchAccumulationState) {
-            case (patchAccumulationState: PatchAccumulationState,
-                  (itemStateUpdateKey: ItemStateUpdateKey,
-                   indivisibleEvent: IndivisibleEvent)) =>
-              indivisibleEvent match {
-                case _: ArgumentReference =>
-                  patchAccumulationState.pure(implicitly[Monad[ResultsWriter]])
-                case IndivisibleChange(patch) =>
-                  patchAccumulationState.recordChangePatch(
-                    itemStateUpdateKey,
-                    patch.rewriteItemTypeTags(
-                      refineTypeFor(itemStateUpdateKey, _, lifecyclesById)))
-                case IndivisibleMeasurement(patch) =>
-                  patchAccumulationState.recordMeasurementPatch(
-                    itemStateUpdateKey,
-                    patch.rewriteItemTypeTags(
-                      refineTypeFor(itemStateUpdateKey, _, lifecyclesById)))
-                case EndOfLifecycle(annihilation) =>
-                  require(endTime == itemStateUpdateKey)
-                  patchAccumulationState.recordAnnihilation(itemStateUpdateKey,
-                                                            annihilation)
-              }
-          }
+        Foldable[Iterable].foldLeftM(
+          eventsArrangedInReverseTimeOrder,
+          new PatchAccumulationState(): PatchAccumulationState) {
+          case (patchAccumulationState: PatchAccumulationState,
+                (itemStateUpdateKey: ItemStateUpdateKey,
+                 indivisibleEvent: IndivisibleEvent)) =>
+            indivisibleEvent match {
+              case _: ArgumentReference =>
+                patchAccumulationState.pure[ResultsWriter]
+              case IndivisibleChange(patch) =>
+                patchAccumulationState.recordChangePatch(
+                  itemStateUpdateKey,
+                  patch.rewriteItemClazzes(
+                    refineClazzFor(itemStateUpdateKey, _, lifecyclesById)))
+              case IndivisibleMeasurement(patch) =>
+                patchAccumulationState.recordMeasurementPatch(
+                  itemStateUpdateKey,
+                  patch.rewriteItemClazzes(
+                    refineClazzFor(itemStateUpdateKey, _, lifecyclesById)))
+              case EndOfLifecycle(annihilation) =>
+                require(endTime == itemStateUpdateKey)
+                patchAccumulationState.recordAnnihilation(itemStateUpdateKey,
+                                                          annihilation)
+            }
+        }
 
       val writtenStateWithFinalBestPatchesWritten =
         writtenState.flatMap(_.writeBestPatches)
 
-      writtenStateWithFinalBestPatchesWritten.run._1 // ... hope you had a pleasant stay.
+      writtenStateWithFinalBestPatchesWritten.run._1
     }
 
     def referencingLifecycles(lifecyclesById: LifecyclesById): Set[Lifecycle] =
@@ -571,15 +568,18 @@ object AllEventsImplementation {
         .lteq(this.startTime, another.endTime) && Ordering[ItemStateUpdateTime]
         .lteq(another.startTime, this.endTime)
 
-    private def lowerTypeIsConsistentWith(another: Lifecycle): Boolean =
-      this.lowerBoundTypeTag.tpe <:< another.lowerBoundTypeTag.tpe || another.lowerBoundTypeTag.tpe <:< this.lowerBoundTypeTag.tpe
+    private def lowerClazzIsConsistentWith(another: Lifecycle): Boolean =
+      another.lowerBoundClazz.isAssignableFrom(this.lowerBoundClazz) || this.lowerBoundClazz
+        .isAssignableFrom(another.lowerBoundClazz)
 
-    private def upperTypeIsConsistentWith(another: Lifecycle): Boolean =
-      another.upperBoundTypeTag.tpe <:< this.upperBoundTypeTag.tpe || this.upperBoundTypeTag.tpe <:< another.upperBoundTypeTag.tpe
+    private def upperClazzIsConsistentWith(another: Lifecycle): Boolean =
+      this.upperBoundClazz
+        .isAssignableFrom(another.upperBoundClazz) || another.upperBoundClazz
+        .isAssignableFrom(this.upperBoundClazz)
   }
 
   trait LifecycleContracts extends Lifecycle {
-    require(typeTags.nonEmpty)
+    require(clazzes.nonEmpty)
 
     require(eventsArrangedInReverseTimeOrder.nonEmpty)
 
@@ -598,7 +598,7 @@ object AllEventsImplementation {
           itemStateUpdateTimes.contains(itemStateUpdateKey)
     }))
 
-    require(lowerBoundTypeTag.tpe <:< upperBoundTypeTag.tpe)
+    require(upperBoundClazz.isAssignableFrom(lowerBoundClazz))
 
     require(Ordering[ItemStateUpdateTime].lteq(startTime, endTime))
 
@@ -698,7 +698,7 @@ object AllEventsImplementation {
 
         if (conflictingLifecycles.nonEmpty) {
           throw new RuntimeException(
-            s"There is at least one item of id: '${itemId}' that would be inconsistent with type '${candidateForFusion.lowerBoundTypeTag.tpe}', these have types: '${conflictingLifecycles map (_.lowerBoundTypeTag.tpe)}'.")
+            s"There is at least one item of id: '${itemId}' that would be inconsistent with type: '${candidateForFusion.lowerBoundClazz}', these have types: '${conflictingLifecycles map (_.lowerBoundClazz)}'.")
         }
 
         val fusibleLifecycles =
@@ -774,7 +774,7 @@ object AllEventsImplementation {
                         intraEventIndex = intraEventIndex),
                       indivisibleEvent = endOfLifecycle.copy(
                         annihilation = endOfLifecycle.annihilation
-                          .rewriteItemTypeTag(matchForFusion.lowerBoundTypeTag))
+                          .rewriteItemClass(matchForFusion.lowerBoundClazz))
                     )
                 }.toSet
               val nextState = this.flatMap(
@@ -794,7 +794,7 @@ object AllEventsImplementation {
                     lifecycle => lifecycle -> lifecycle.startTime)))
             } else
               throw new scala.RuntimeException(
-                s"There is more than one item of id: '${itemId}' compatible with type '${candidateForFusion.lowerBoundTypeTag.tpe}', these have types: '${fusibleLifecycles map (_.lowerBoundTypeTag.tpe)}'.")
+                s"There is more than one item of id: '${itemId}' compatible with type: '${candidateForFusion.lowerBoundClazz}', these have types: '${fusibleLifecycles map (_.lowerBoundClazz)}'.")
         }
       } else this
     }
@@ -1095,7 +1095,7 @@ class AllEventsImplementation(
   override def startOfFollowingLifecycleFor(
       uniqueItemSpecification: UniqueItemSpecification,
       itemStateUpdateTime: ItemStateUpdateTime): Option[ItemStateUpdateKey] = {
-    val UniqueItemSpecification(itemId, itemTypeTag) = uniqueItemSpecification
+    val UniqueItemSpecification(itemId, itemClazz) = uniqueItemSpecification
 
     val timespanGoingBeyondItemStateUpdateKey = Split.alignedWith(
       itemStateUpdateTime: ItemStateUpdateTime) -> Split.upperBoundOf(
@@ -1107,7 +1107,7 @@ class AllEventsImplementation(
         .filter(lifecycle =>
           Ordering[ItemStateUpdateTime].gt(lifecycle.startTime,
                                            itemStateUpdateTime))
-        .filter(itemTypeTag.tpe =:= _.lowerBoundTypeTag.tpe)
+        .filter(itemClazz == _.lowerBoundClazz)
 
       if (lifecycleIterator.hasNext) Some(lifecycleIterator.next().startTime)
       else None

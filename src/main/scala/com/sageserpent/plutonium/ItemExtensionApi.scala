@@ -1,16 +1,6 @@
 package com.sageserpent.plutonium
 
-import java.util.UUID
-
-import scala.reflect.runtime.universe.TypeTag
-
-object ItemExtensionApi {
-  case class UniqueItemSpecification(id: Any, typeTag: TypeTag[_ <: Any])
-}
-
 trait ItemExtensionApi {
-  import ItemExtensionApi._
-
   val id: Any
 
   val uniqueItemSpecification: UniqueItemSpecification

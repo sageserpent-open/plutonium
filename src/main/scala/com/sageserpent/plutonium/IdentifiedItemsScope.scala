@@ -2,10 +2,9 @@ package com.sageserpent.plutonium
 
 import java.time.Instant
 
+import cats.effect.{Resource, IO}
 import com.sageserpent.americium.Unbounded
-import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
 import com.sageserpent.plutonium.PatchRecorder.UpdateConsumer
-import resource.{ManagedResource, makeManagedResource}
 
 import scala.reflect.runtime.universe.{Super => _, This => _, _}
 
@@ -15,7 +14,7 @@ class IdentifiedItemsScope extends IdentifiedItemAccess {
 
   override def reconstitute(
       uniqueItemSpecification: UniqueItemSpecification): Any =
-    itemFor(uniqueItemSpecification.id)(uniqueItemSpecification.typeTag)
+    itemFor(uniqueItemSpecification)
 
   override def noteAnnihilation(
       uniqueItemSpecification: UniqueItemSpecification): Unit = {
@@ -28,7 +27,7 @@ class IdentifiedItemsScope extends IdentifiedItemAccess {
     // what you get when you go back to imperative programming after too much referential transparency.
     val itemsSelectedForAnnihilation: Stream[Any] =
       IdentifiedItemsScope
-        .yieldOnlyItemsOfType(items)(uniqueItemSpecification.typeTag)
+        .yieldOnlyItemsOfType(items, uniqueItemSpecification.clazz)
         .force
     assert(1 == itemsSelectedForAnnihilation.size)
 
@@ -49,42 +48,51 @@ class IdentifiedItemsScope extends IdentifiedItemAccess {
                eventTimeline: Seq[(Event, EventId)]) = {
     idToItemsMultiMap.clear()
 
-    for (_ <- makeManagedResource {
-           allItemsAreLocked = false
-         } { _ =>
-           allItemsAreLocked = true
-         }(List.empty)) {
-      val patchRecorder = new PatchRecorderImplementation(_when)
-      with PatchRecorderContracts with BestPatchSelectionImplementation
-      with BestPatchSelectionContracts {
-        val itemsAreLockedResource: ManagedResource[Unit] =
-          makeManagedResource {
-            allItemsAreLocked = true
-          } { _ =>
-            allItemsAreLocked = false
-          }(List.empty)
-        override val updateConsumer: UpdateConsumer =
-          new UpdateConsumer {
-            override def captureAnnihilation(
-                eventId: EventId,
-                annihilation: Annihilation): Unit = {
-              annihilation(identifiedItemsScopeThis)
-            }
+    Resource
+      .make(IO {
+        allItemsAreLocked = false
+      })(_ =>
+        IO {
+          allItemsAreLocked = true
+      })
+      .use(_ =>
+        IO {
+          val patchRecorder = new PatchRecorderImplementation(_when)
+          with PatchRecorderContracts with BestPatchSelectionImplementation
+          with BestPatchSelectionContracts {
+            val itemsAreLockedResource =
+              Resource.make(IO {
+                allItemsAreLocked = true
+              })(_ =>
+                IO {
+                  allItemsAreLocked = false
+              })
+            override val updateConsumer: UpdateConsumer =
+              new UpdateConsumer {
+                override def captureAnnihilation(
+                    eventId: EventId,
+                    annihilation: Annihilation): Unit = {
+                  annihilation(identifiedItemsScopeThis)
+                }
 
-            override def capturePatch(when: Unbounded[Instant],
-                                      eventId: EventId,
-                                      patch: AbstractPatch): Unit = {
-              patch(identifiedItemsScopeThis)
-              for (_ <- itemsAreLockedResource) {
-                patch.checkInvariants(identifiedItemsScopeThis)
+                override def capturePatch(when: Unbounded[Instant],
+                                          eventId: EventId,
+                                          patch: AbstractPatch): Unit = {
+                  patch(identifiedItemsScopeThis)
+                  itemsAreLockedResource
+                    .use(_ =>
+                      IO {
+                        patch.checkInvariants(identifiedItemsScopeThis)
+                    })
+                    .unsafeRunSync()
+                }
               }
-            }
           }
-      }
 
-      WorldImplementationCodeFactoring.recordPatches(eventTimeline,
-                                                     patchRecorder)
-    }
+          WorldImplementationCodeFactoring.recordPatches(eventTimeline,
+                                                         patchRecorder)
+      })
+      .unsafeRunSync()
   }
 
   class MultiMap
@@ -95,77 +103,86 @@ class IdentifiedItemsScope extends IdentifiedItemAccess {
 
   val idToItemsMultiMap = new MultiMap
 
-  def itemFor[Item: TypeTag](id: Any): Item = {
+  def itemFor[Item](_uniqueItemSpecification: UniqueItemSpecification): Item = {
     def constructAndCacheItem(): Item = {
       import IdentifiedItemsScope.proxyFactory.AcquiredState
 
       val stateToBeAcquiredByProxy: AcquiredState =
         new AcquiredState {
           val uniqueItemSpecification: UniqueItemSpecification =
-            UniqueItemSpecification(id, typeTag[Item])
+            _uniqueItemSpecification
           def itemIsLocked: Boolean =
             identifiedItemsScopeThis.allItemsAreLocked
           def recordMutation(item: ItemExtensionApi): Unit       = {}
           def recordReadOnlyAccess(item: ItemExtensionApi): Unit = {}
         }
 
-      val item = IdentifiedItemsScope.proxyFactory.constructFrom(
-        stateToBeAcquiredByProxy)
-      idToItemsMultiMap.addBinding(id, item)
+      val item = IdentifiedItemsScope.proxyFactory
+        .constructFrom[Item](stateToBeAcquiredByProxy)
+      idToItemsMultiMap.addBinding(_uniqueItemSpecification.id, item)
       item
     }
 
-    idToItemsMultiMap.get(id) match {
+    idToItemsMultiMap.get(_uniqueItemSpecification.id) match {
       case None =>
         constructAndCacheItem()
-      case Some(items) => {
+      case Some(items) =>
         assert(items.nonEmpty)
         val conflictingItems =
-          IdentifiedItemsScope.yieldOnlyItemsOfSupertypeOf[Item](items)
+          IdentifiedItemsScope.yieldOnlyItemsOfSupertypeOf[Item](
+            items,
+            _uniqueItemSpecification.clazz
+              .asInstanceOf[Class[Item]]) // TODO: remove horrible typecast.
         assert(
           conflictingItems.isEmpty,
-          s"Found conflicting items for id: '$id' with type tag: '${typeTag[
-            Item].tpe}', these are: '${conflictingItems.toList}'.")
+          s"Found conflicting items for id: '${_uniqueItemSpecification.id}' with class: '${_uniqueItemSpecification.clazz}', these are: '${conflictingItems.toList}'."
+        )
         val itemsOfDesiredType =
-          IdentifiedItemsScope.yieldOnlyItemsOfType[Item](items).force
+          IdentifiedItemsScope
+            .yieldOnlyItemsOfType[Item](
+              items,
+              _uniqueItemSpecification.clazz
+                .asInstanceOf[Class[Item]]) // TODO: remove horrible typecast.
+            .force
         if (itemsOfDesiredType.isEmpty)
           constructAndCacheItem()
         else {
           assert(1 == itemsOfDesiredType.size)
           itemsOfDesiredType.head
         }
-      }
     }
   }
 
-  def itemsFor[Item: TypeTag](id: Any): Stream[Item] = {
-    val items = idToItemsMultiMap.getOrElse(id, Set.empty[Item])
+  def itemsFor[Item](
+      uniqueItemSpecification: UniqueItemSpecification): Stream[Item] = {
+    val items =
+      idToItemsMultiMap.getOrElse(uniqueItemSpecification.id, Set.empty[Item])
 
-    IdentifiedItemsScope.yieldOnlyItemsOfType(items)
+    IdentifiedItemsScope
+      .yieldOnlyItemsOfType[Item](
+        items,
+        uniqueItemSpecification.clazz
+          .asInstanceOf[Class[Item]]) // TODO: remove horrible typecast.
   }
 
-  def allItems[Item: TypeTag](): Stream[Item] =
-    IdentifiedItemsScope.yieldOnlyItemsOfType(idToItemsMultiMap.values.flatten)
+  def allItems[Item](clazz: Class[Item]): Stream[Item] =
+    IdentifiedItemsScope
+      .yieldOnlyItemsOfType[Item](idToItemsMultiMap.values.flatten, clazz)
 }
 
 object IdentifiedItemsScope {
-  def yieldOnlyItemsOfSupertypeOf[Item: TypeTag](items: Traversable[Any]) = {
-    val reflectedType = typeTag[Item].tpe
-    val clazzOfItem =
-      classFromType(reflectedType)
-
+  def yieldOnlyItemsOfSupertypeOf[Item](
+      items: Traversable[Any],
+      clazz: Class[Item]): Traversable[Any] = {
     items filter { item =>
       val itemClazz = item.getClass
-      itemClazz != clazzOfItem && itemClazz.isAssignableFrom(clazzOfItem)
+      itemClazz != clazz && itemClazz.isAssignableFrom(clazz)
     }
   }
 
-  def yieldOnlyItemsOfType[Item: TypeTag](items: Traversable[Any]) = {
-    val reflectedType = typeTag[Item].tpe
-    val clazzOfItem =
-      classFromType[Item](reflectedType)
-
-    items.toStream filter (clazzOfItem.isInstance(_)) map (clazzOfItem.cast(_))
+  def yieldOnlyItemsOfType[Item](items: Traversable[Any],
+                                 clazz: Class[Item]): Stream[Item] = {
+    items.toStream filter (clazz.isInstance(_)) map (clazz.cast(_))
   }
 
   object proxyFactory extends StatefulItemProxyFactory {

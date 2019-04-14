@@ -2,22 +2,17 @@ package com.sageserpent.plutonium
 
 import java.lang.reflect.{InvocationTargetException, Method}
 
-import com.sageserpent.plutonium.AbstractPatch.TypeRefinement
-import com.sageserpent.plutonium.ItemExtensionApi.UniqueItemSpecification
+import com.sageserpent.plutonium.AbstractPatch.ClazzRefinement
 import com.sageserpent.plutonium.Patch.MethodPieces
-
-import scala.reflect.runtime.universe
-import scala.reflect.runtime.universe._
-import scalaz.{-\/, \/, \/-}
 
 object Patch {
   type WrappedArgument =
-    \/[AnyRef, UniqueItemSpecification]
+    Either[AnyRef, UniqueItemSpecification]
 
   def wrap(argument: AnyRef): WrappedArgument = argument match {
     case argumentRecorder: Recorder =>
-      \/-(argumentRecorder.uniqueItemSpecification)
-    case _ => -\/(argument)
+      Right(argumentRecorder.uniqueItemSpecification)
+    case _ => Left(argument)
   }
 
   def apply(targetRecorder: Recorder,
@@ -49,8 +44,8 @@ case class Patch(methodPieces: MethodPieces,
   override def toString: String =
     s"Patch for: '$targetItemSpecification', method: '${method.getName}', arguments: '${wrappedArguments.toList}''"
 
-  override def rewriteItemTypeTags(
-      typeRefinement: TypeRefinement): AbstractPatch = {
+  override def rewriteItemClazzes(
+      typeRefinement: ClazzRefinement): AbstractPatch = {
     val rewrittenTargetItemSpecification: UniqueItemSpecification =
       UniqueItemSpecification(targetItemSpecification.id,
                               typeRefinement(targetItemSpecification))
@@ -69,7 +64,7 @@ case class Patch(methodPieces: MethodPieces,
 
   override val argumentItemSpecifications: Seq[UniqueItemSpecification] =
     wrappedArguments collect {
-      case \/-(uniqueItemSpecification) => uniqueItemSpecification
+      case Right(uniqueItemSpecification) => uniqueItemSpecification
     }
 
   def unwrap(identifiedItemAccess: IdentifiedItemAccess)(

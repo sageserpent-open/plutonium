@@ -3,6 +3,8 @@ package com.sageserpent.plutonium
 import java.lang.reflect.Method
 import java.util.concurrent.Callable
 
+import cats.effect.{Resource, IO}
+
 import net.bytebuddy.description.method.MethodDescription
 import net.bytebuddy.dynamic.DynamicType.Builder
 import net.bytebuddy.implementation.MethodDelegation
@@ -15,7 +17,6 @@ import net.bytebuddy.implementation.bind.{
   ParameterLengthResolver
 }
 import net.bytebuddy.matcher.{ElementMatcher, ElementMatchers}
-import resource.makeManagedResource
 
 import scala.reflect.runtime.universe.{Super => _, This => _}
 
@@ -143,7 +144,7 @@ trait StatefulItemProxyFactory extends ProxyFactory {
       if (acquiredState.isGhost) {
         val uniqueItemSpecification = acquiredState.uniqueItemSpecification
         throw new UnsupportedOperationException(
-          s"Attempt to write via: '$method' to a ghost item of id: '${uniqueItemSpecification.id}' and type '${uniqueItemSpecification.typeTag}'.")
+          s"Attempt to write via: '$method' to a ghost item of id: '${uniqueItemSpecification.id}' and type '${uniqueItemSpecification.clazz}'.")
       }
 
       superCall.call()
@@ -161,7 +162,7 @@ trait StatefulItemProxyFactory extends ProxyFactory {
       if (acquiredState.isGhost && !acquiredState.unlockFullReadAccess) {
         val uniqueItemSpecification = acquiredState.uniqueItemSpecification
         throw new UnsupportedOperationException(
-          s"Attempt to read via: '$method' from a ghost item of id: '${uniqueItemSpecification.id}' and type '${uniqueItemSpecification.typeTag}'.")
+          s"Attempt to read via: '$method' from a ghost item of id: '${uniqueItemSpecification.id}' and type '${uniqueItemSpecification.clazz}'.")
       }
 
       acquiredState.recordReadOnlyAccess(target)
@@ -176,17 +177,21 @@ trait StatefulItemProxyFactory extends ProxyFactory {
               @This target: ItemExtensionApi,
               @SuperCall superCall: Callable[_],
               @FieldValue("acquiredState") acquiredState: AcquiredState) = {
-      if (!acquiredState.unlockFullReadAccess) (for {
-        _ <- makeManagedResource {
-          acquiredState.unlockFullReadAccess = true
-        } { _ =>
-          acquiredState.unlockFullReadAccess = false
-        }(List.empty)
-      } yield {
-        acquiredState.recordReadOnlyAccess(target)
+      if (!acquiredState.unlockFullReadAccess)
+        Resource
+          .make(IO {
+            acquiredState.unlockFullReadAccess = true
+          })(_ =>
+            IO {
+              acquiredState.unlockFullReadAccess = false
+          })
+          .use(_ =>
+            IO {
+              acquiredState.recordReadOnlyAccess(target)
 
-        superCall.call()
-      }) acquireAndGet identity
+              superCall.call()
+          })
+          .unsafeRunSync()
       else {
         acquiredState.recordReadOnlyAccess(target)
 
@@ -208,15 +213,18 @@ trait StatefulItemProxyFactory extends ProxyFactory {
               @SuperCall superCall: Callable[Unit]): Unit = {
       apply(acquiredState)
       if (!acquiredState.invariantCheckInProgress) {
-        for {
-          _ <- makeManagedResource {
+        Resource
+          .make(IO {
             acquiredState.invariantCheckInProgress = true
-          } { _ =>
-            acquiredState.invariantCheckInProgress = false
-          }(List.empty)
-        } {
-          superCall.call()
-        }
+          })(_ =>
+            IO {
+              acquiredState.invariantCheckInProgress = false
+          })
+          .use(_ =>
+            IO {
+              superCall.call()
+          })
+          .unsafeRunSync()
       } else superCall.call()
     }
   }

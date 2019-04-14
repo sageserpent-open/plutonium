@@ -1,20 +1,22 @@
 package com.sageserpent
-
-import scalaz.ApplicativePlus
+import cats.{Applicative, Monoid}
 
 package object plutonium {
   type EventId = Any
 
-  implicit val applicativePlus: ApplicativePlus[Bitemporal] =
-    new ApplicativePlus[Bitemporal] {
-      override def point[A](a: => A): Bitemporal[A] = Bitemporal(a)
+  implicit val applicativeMonoid: Applicative[Bitemporal] =
+    new Applicative[Bitemporal] {
+      override def pure[A](a: A): Bitemporal[A] =
+        Bitemporal(a)
 
-      override def empty[A]: Bitemporal[A] = Bitemporal.none
+      override def ap[A, B](ff: Bitemporal[A => B])(
+          fa: Bitemporal[A]): Bitemporal[B] = fa ap ff
+    }
 
-      override def plus[A](a: Bitemporal[A],
-                           b: => Bitemporal[A]): Bitemporal[A] = a plus b
-
-      override def ap[A, B](fa: => Bitemporal[A])(
-          f: => Bitemporal[(A) => B]): Bitemporal[B] = fa ap f
+  implicit def plus[Item]: Monoid[Bitemporal[Item]] =
+    new Monoid[Bitemporal[Item]] {
+      override def empty: Bitemporal[Item] = Bitemporal.none
+      override def combine(x: Bitemporal[Item],
+                           y: Bitemporal[Item]): Bitemporal[Item] = x plus y
     }
 }

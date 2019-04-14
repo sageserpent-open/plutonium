@@ -4,16 +4,18 @@ import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.Executors
 
+import cats.implicits._
+import cats.effect.{Resource, IO}
+
 import com.sageserpent.americium
 import com.sageserpent.americium._
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.seqEnrichment._
 import com.sageserpent.plutonium.World._
+import com.sageserpent.plutonium.curium.H2Resource
 import io.lettuce.core.{RedisClient, RedisURI}
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.Assertions
-import resource._
-import scalaz.std.stream
 
 import scala.collection.JavaConversions._
 import scala.collection.Searching._
@@ -587,6 +589,25 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
       sampleWhensGroupedForLifespans.last.last
   }
 
+  def chunksGenerator[Article: Ordering](chunkSizes: List[Int],
+                                         stuffGenerator: Gen[Article]) = {
+    val numberOfEventsOverall = chunkSizes.sum
+    for {
+      articles <- Gen.listOfN(numberOfEventsOverall, stuffGenerator) map (_ sorted)
+    } yield {
+      def chunksOf(chunkSizes: List[Int],
+                   articles: List[Article]): Stream[List[Article]] =
+        chunkSizes match {
+          case chunkSize :: remainingChunkSizes =>
+            val (chunkOfStuff, remainingArticles) = articles splitAt chunkSize
+            chunkOfStuff #:: chunksOf(remainingChunkSizes, remainingArticles)
+          case Nil => Stream.empty
+        }
+
+      chunksOf(chunkSizes, articles)
+    }
+  }
+
   def recordingsGroupedByIdGenerator_(
       dataSamplesForAnIdGenerator: Gen[
         (Any,
@@ -625,18 +646,10 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
             dataSamplesGroupedForLimitedLifespans) :+ dataSamplesGroupForEternalLife.size
         } else
           numberOfEventsForLimitedLifespans(dataSamplesGroupedForLifespans)
-      }
-      numberOfEventsOverall = numberOfEventsForLifespans.sum
-      sampleWhens <- Gen.listOfN(numberOfEventsOverall, changeWhenGenerator) map (_ sorted)
-      sampleWhensGroupedForLifespans = stream.unfold(
-        numberOfEventsForLifespans -> sampleWhens) {
-        case (numberOfEvents #:: remainingNumberOfEventsForLifespans,
-              sampleWhens) =>
-          val (sampleWhenGroup, remainingSampleWhens) = sampleWhens splitAt numberOfEvents
-          Some(sampleWhenGroup,
-               remainingNumberOfEventsForLifespans -> remainingSampleWhens)
-        case (Stream.Empty, _) => None
-      }
+      }.toList
+      sampleWhensGroupedForLifespans <- chunksGenerator(
+        numberOfEventsForLifespans,
+        changeWhenGenerator)
       noAnnihilationsToWorryAbout = finalLifespanIsOngoing && 1 == sampleWhensGroupedForLifespans.size
       firstAnnihilationHasBeenAlignedWithADefiniteWhen = noAnnihilationsToWorryAbout ||
         PartialFunction.cond(sampleWhensGroupedForLifespans.head.last) {
@@ -834,8 +847,9 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
     } yield leftHand ++ rightHand
   }
 
-  def recordingsGroupedByIdGenerator(forbidAnnihilations: Boolean,
-                                     forbidMeasurements: Boolean = false) =
+  def recordingsGroupedByIdGenerator(
+      forbidAnnihilations: Boolean,
+      forbidMeasurements: Boolean = false): Gen[List[RecordingsForAnId]] =
     mixedRecordingsGroupedByIdGenerator(forbidAnnihilations =
                                           forbidAnnihilations,
                                         forbidMeasurements = forbidMeasurements)
@@ -895,40 +909,53 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
 }
 
 trait WorldResource {
-  val worldResourceGenerator: Gen[ManagedResource[World]]
+  val worldResource: Resource[IO, World]
 }
 
 trait WorldReferenceImplementationResource extends WorldResource {
-  val worldResourceGenerator: Gen[ManagedResource[World]] =
-    Gen.const(
-      makeManagedResource(new WorldReferenceImplementation with WorldContracts)(
-        _.close())(List.empty))
+  val worldResource: Resource[IO, World] =
+    Resource.fromAutoCloseable(IO {
+      new WorldReferenceImplementation with WorldContracts
+    })
 }
 
 trait WorldEfficientInMemoryImplementationResource extends WorldResource {
-  val worldResourceGenerator: Gen[ManagedResource[World]] =
-    Gen.const(
-      makeManagedResource(new WorldEfficientInMemoryImplementation
-      with WorldContracts)(_.close())(List.empty))
+  val worldResource: Resource[IO, World] =
+    Resource.fromAutoCloseable(IO {
+      new WorldEfficientInMemoryImplementation with WorldContracts
+    })
+}
+
+trait WorldH2StorageImplementationResource extends WorldResource {
+  val worldResource: Resource[IO, World] =
+    H2Resource.transactorResource.flatMap(transactor =>
+      Resource.fromAutoCloseable(IO {
+        new WorldH2StorageImplementation(transactor) with WorldContracts
+      }))
 }
 
 trait WorldRedisBasedImplementationResource
     extends WorldResource
     with RedisServerFixture {
-  val worldResourceGenerator: Gen[ManagedResource[World]] =
-    Gen.const {
-      for {
-        executionService <- makeManagedResource(
-          Executors.newFixedThreadPool(20))(_.shutdown)(List.empty)
-        redisClient <- makeManagedResource(
-          RedisClient.create(
-            RedisURI.Builder.redis("localhost", redisServerPort).build()))(
-          _.shutdown())(List.empty)
-        worldResource <- makeManagedResource(
-          new WorldRedisBasedImplementation(redisClient,
-                                            UUID.randomUUID().toString,
-                                            executionService)
-          with WorldContracts)(_.close())(List.empty)
-      } yield worldResource
-    }
+  val worldResource: Resource[IO, World] =
+    for {
+      executionService <- Resource.make(IO {
+        Executors.newFixedThreadPool(20)
+      })(executionService =>
+        IO {
+          executionService.shutdown
+      })
+      redisClient <- Resource.make(IO {
+        RedisClient.create(
+          RedisURI.Builder.redis("localhost", redisServerPort).build())
+      })(redisClient =>
+        IO {
+          redisClient.shutdown()
+      })
+      worldResource <- Resource.fromAutoCloseable(IO {
+        new WorldRedisBasedImplementation(redisClient,
+                                          UUID.randomUUID().toString,
+                                          executionService) with WorldContracts
+      })
+    } yield worldResource
 }
