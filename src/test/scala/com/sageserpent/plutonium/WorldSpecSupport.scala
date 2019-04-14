@@ -4,15 +4,18 @@ import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.Executors
 
+import cats.implicits._
+import cats.effect.{Resource, IO}
+
 import com.sageserpent.americium
 import com.sageserpent.americium._
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.seqEnrichment._
 import com.sageserpent.plutonium.World._
+import com.sageserpent.plutonium.curium.H2Resource
 import io.lettuce.core.{RedisClient, RedisURI}
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.Assertions
-import resource._
 
 import scala.collection.JavaConversions._
 import scala.collection.Searching._
@@ -906,48 +909,53 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
 }
 
 trait WorldResource {
-  val worldResourceGenerator: Gen[ManagedResource[World]]
+  val worldResource: Resource[IO, World]
 }
 
 trait WorldReferenceImplementationResource extends WorldResource {
-  val worldResourceGenerator: Gen[ManagedResource[World]] =
-    Gen.const(
-      makeManagedResource(new WorldReferenceImplementation with WorldContracts)(
-        _.close())(List.empty))
+  val worldResource: Resource[IO, World] =
+    Resource.fromAutoCloseable(IO {
+      new WorldReferenceImplementation with WorldContracts
+    })
 }
 
 trait WorldEfficientInMemoryImplementationResource extends WorldResource {
-  val worldResourceGenerator: Gen[ManagedResource[World]] =
-    Gen.const(
-      makeManagedResource(new WorldEfficientInMemoryImplementation
-      with WorldContracts)(_.close())(List.empty))
+  val worldResource: Resource[IO, World] =
+    Resource.fromAutoCloseable(IO {
+      new WorldEfficientInMemoryImplementation with WorldContracts
+    })
 }
 
-trait WorldEfficientQuestionableBackendImplementationResource
-    extends WorldResource {
-  val worldResourceGenerator: Gen[ManagedResource[World]] =
-    Gen.const(
-      makeManagedResource(new WorldEfficientQuestionableBackendImplementation
-      with WorldContracts)(_.close())(List.empty))
+trait WorldH2StorageImplementationResource extends WorldResource {
+  val worldResource: Resource[IO, World] =
+    H2Resource.transactorResource.flatMap(transactor =>
+      Resource.fromAutoCloseable(IO {
+        new WorldH2StorageImplementation(transactor) with WorldContracts
+      }))
 }
 
 trait WorldRedisBasedImplementationResource
     extends WorldResource
     with RedisServerFixture {
-  val worldResourceGenerator: Gen[ManagedResource[World]] =
-    Gen.const {
-      for {
-        executionService <- makeManagedResource(
-          Executors.newFixedThreadPool(20))(_.shutdown)(List.empty)
-        redisClient <- makeManagedResource(
-          RedisClient.create(
-            RedisURI.Builder.redis("localhost", redisServerPort).build()))(
-          _.shutdown())(List.empty)
-        worldResource <- makeManagedResource(
-          new WorldRedisBasedImplementation(redisClient,
-                                            UUID.randomUUID().toString,
-                                            executionService)
-          with WorldContracts)(_.close())(List.empty)
-      } yield worldResource
-    }
+  val worldResource: Resource[IO, World] =
+    for {
+      executionService <- Resource.make(IO {
+        Executors.newFixedThreadPool(20)
+      })(executionService =>
+        IO {
+          executionService.shutdown
+      })
+      redisClient <- Resource.make(IO {
+        RedisClient.create(
+          RedisURI.Builder.redis("localhost", redisServerPort).build())
+      })(redisClient =>
+        IO {
+          redisClient.shutdown()
+      })
+      worldResource <- Resource.fromAutoCloseable(IO {
+        new WorldRedisBasedImplementation(redisClient,
+                                          UUID.randomUUID().toString,
+                                          executionService) with WorldContracts
+      })
+    } yield worldResource
 }

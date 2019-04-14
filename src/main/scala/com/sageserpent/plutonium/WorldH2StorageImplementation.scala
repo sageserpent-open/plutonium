@@ -1,87 +1,33 @@
 package com.sageserpent.plutonium
 
 import java.time.Instant
-import java.util.UUID
 
 import cats.implicits._
 import com.sageserpent.plutonium.World.Revision
-import com.sageserpent.plutonium.WorldEfficientQuestionableBackendImplementation.{
-  QuestionableTranches,
+import com.sageserpent.plutonium.WorldH2StorageImplementation.{
   TrancheId,
   immutableObjectStorage
 }
-import com.sageserpent.plutonium.curium.ImmutableObjectStorage
 import com.sageserpent.plutonium.curium.ImmutableObjectStorage._
+import com.sageserpent.plutonium.curium.{H2Tranches, ImmutableObjectStorage}
 
-import scala.collection.mutable.{
-  Map => MutableMap,
-  SortedMap => MutableSortedMap
-}
-import scala.util.Try
+object WorldH2StorageImplementation {
 
-object WorldEfficientQuestionableBackendImplementation {
-  class QuestionableTranches[Payload] extends Tranches[UUID, Payload] {
-    val tranchesById: MutableMap[TrancheId, TrancheOfData[Payload]] =
-      MutableMap.empty
-    val objectReferenceIdsToAssociatedTrancheIdMap
-      : MutableSortedMap[ObjectReferenceId, TrancheId] = MutableSortedMap.empty
-
-    override def createTrancheInStorage(
-        payload: Payload,
-        objectReferenceIdOffset: ObjectReferenceId,
-        objectReferenceIds: Seq[ObjectReferenceId])
-      : EitherThrowableOr[TrancheId] =
-      Try {
-        val trancheId = UUID.randomUUID()
-
-        tranchesById(trancheId) =
-          TrancheOfData(payload, objectReferenceIdOffset)
-
-        for (objectReferenceId <- objectReferenceIds) {
-          objectReferenceIdsToAssociatedTrancheIdMap(objectReferenceId) =
-            trancheId
-        }
-
-        trancheId
-      }.toEither
-
-    override def retrieveTranche(trancheId: TrancheId)
-      : scala.Either[scala.Throwable, TrancheOfData[Payload]] =
-      Try { tranchesById(trancheId) }.toEither
-
-    override def retrieveTrancheId(objectReferenceId: ObjectReferenceId)
-      : scala.Either[scala.Throwable, TrancheId] =
-      Try { objectReferenceIdsToAssociatedTrancheIdMap(objectReferenceId) }.toEither
-
-    override def objectReferenceIdOffsetForNewTranche
-      : EitherThrowableOr[ObjectReferenceId] =
-      Try {
-        val maximumObjectReferenceId =
-          objectReferenceIdsToAssociatedTrancheIdMap.keys
-            .reduceOption((leftObjectReferenceId, rightObjectReferenceId) =>
-              leftObjectReferenceId max rightObjectReferenceId)
-        val alignmentMultipleForObjectReferenceIdsInSeparateTranches = 100
-        maximumObjectReferenceId.fold(0)(
-          1 + _ / alignmentMultipleForObjectReferenceIdsInSeparateTranches) * alignmentMultipleForObjectReferenceIdsInSeparateTranches
-      }.toEither
-  }
-
-  type TrancheId = QuestionableTranches[Array[Byte]]#TrancheId
+  type TrancheId = H2Tranches#TrancheId
 
   object immutableObjectStorage extends ImmutableObjectStorage[TrancheId] {
     override protected val tranchesImplementationName: String =
-      classOf[QuestionableTranches[_]].getSimpleName
+      classOf[H2Tranches].getSimpleName
   }
 }
 
-class WorldEfficientQuestionableBackendImplementation(
-    val tranches: QuestionableTranches[Array[Byte]],
+class WorldH2StorageImplementation(
+    val tranches: H2Tranches,
     var timelineTrancheIdStorage: Array[(Instant, TrancheId)],
     var numberOfTimelines: Int)
     extends WorldEfficientImplementation[Session] {
-  def this() =
-    this(new QuestionableTranches[Array[Byte]]
-         with TranchesContracts[TrancheId, Array[Byte]],
+  def this(transactor: H2Tranches.Transactor) =
+    this(new H2Tranches(transactor) with TranchesContracts[TrancheId],
          Array.empty[(Instant, TrancheId)],
          World.initialRevision)
 
@@ -134,10 +80,9 @@ class WorldEfficientQuestionableBackendImplementation(
         })
     )(tranches)
 
-    new WorldEfficientQuestionableBackendImplementation(
-      tranches,
-      timelineTrancheIds.toArray,
-      numberOfTimelines)
+    new WorldH2StorageImplementation(tranches,
+                                     timelineTrancheIds.toArray,
+                                     numberOfTimelines)
   }
 
   override protected def itemCacheOf(itemCache: Session[ItemCache]): ItemCache =
