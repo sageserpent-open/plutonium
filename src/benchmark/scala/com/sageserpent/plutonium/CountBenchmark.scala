@@ -7,7 +7,7 @@ import org.scalameter.picklers.noPickler._
 import scala.collection.immutable.SortedMap
 
 object CountBenchmark extends Bench.Forked[Map[String, Long]] with Benchmark {
-  val sizes = Gen.range("Number of bookings")(0, 150, 5)
+  val sizes = Gen.range("Number of bookings")(150, 250, 5)
 
   lazy val classRegex =
     ".*(World|Scope|Timeline|ItemState|BlobStorage|ItemCache|AllEvents|Lifecycle|Immutable|Tranches|esoteric|[Pp]roxy|ReferenceResolver|sessionInterpreter).*".r
