@@ -16,7 +16,7 @@ import de.ummels.prioritymap.PriorityMap
 import quiver._
 
 import scala.annotation.tailrec
-import scala.collection.immutable.Map
+import scala.collection.immutable.{Map, TreeMap}
 
 object TimelineImplementation {
   type ItemStateUpdatesDag =
@@ -27,7 +27,8 @@ object TimelineImplementation {
 }
 
 class TimelineImplementation(allEvents: AllEvents = noEvents,
-                             itemStateUpdatesDag: ItemStateUpdatesDag = empty,
+                             itemStateUpdatesDag: ItemStateUpdatesDag = Graph(
+                               TreeMap.empty),
                              blobStorage: BlobStorage[ItemStateUpdateTime,
                                                       ItemStateUpdateKey,
                                                       SnapshotBlob] =
