@@ -31,7 +31,7 @@ import scala.collection.immutable.{
 }
 
 object AllEventsImplementation {
-  val maxNumberOfIdsToSample = 100
+  val maxNumberOfIdsToSample = 5 // TODO - reinstate old value of 100?
 
   // TODO - can we get rid of this? As long as the support for a closed-open interval exists, maybe we don't need an explicit end time?
   val sentinelForEndTimeOfLifecycleWithoutAnnihilation = UpperBoundOfTimeslice(
