@@ -13,6 +13,8 @@ import com.sageserpent.plutonium.WorldH2StorageImplementation.{
 }
 import com.sageserpent.plutonium.curium.ImmutableObjectStorage._
 import com.sageserpent.plutonium.curium.{H2Tranches, ImmutableObjectStorage}
+import de.sciss.fingertree.RangedSeq
+import scalaz.FingerTree
 
 import scala.collection.mutable.{
   Map => MutableMap,
@@ -39,7 +41,9 @@ object WorldH2StorageImplementation {
       classOf[Patch],
       classOf[Annihilation],
       classOf[WrappedArgument],
-      classOf[SnapshotBlob]
+      classOf[SnapshotBlob],
+      classOf[RangedSeq[_, _]],
+      classOf[FingerTree[_, _]]
     )
 
     override protected def configurableReferenceCountingExclusion(
