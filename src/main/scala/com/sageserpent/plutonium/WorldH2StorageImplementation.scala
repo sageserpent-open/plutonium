@@ -30,7 +30,7 @@ object WorldH2StorageImplementation {
     override protected val tranchesImplementationName: String =
       classOf[FakeTranches].getSimpleName
 
-    val clazzesNotToBeReferenceCounted = Set(
+    val clazzesNotToBeHaveInterTrancheReferences = Set(
       classOf[Option[_]],
       classOf[Tuple2[_, _]],
       classOf[Tuple3[_, _, _]],
@@ -43,12 +43,13 @@ object WorldH2StorageImplementation {
       classOf[WrappedArgument],
       classOf[SnapshotBlob],
       classOf[RangedSeq[_, _]],
-      classOf[FingerTree[_, _]]
+      classOf[FingerTree[_, _]],
+      classOf[UUID]
     )
 
-    override protected def configurableReferenceCountingExclusion(
+    override protected def configurableInterTrancheReferenceExclusion(
         clazz: Class[_]): Boolean =
-      clazzesNotToBeReferenceCounted.exists(_.isAssignableFrom(clazz))
+      clazzesNotToBeHaveInterTrancheReferences.exists(_.isAssignableFrom(clazz))
   }
 
   class FakeTranches extends Tranches[UUID] {
