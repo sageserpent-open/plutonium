@@ -25,18 +25,6 @@ object WorldH2StorageImplementation {
   object immutableObjectStorage extends ImmutableObjectStorage[TrancheId] {
     override protected val tranchesImplementationName: String =
       classOf[FakeTranches].getSimpleName
-
-    val clazzesNotToBeProxied = Set(
-      classOf[Tuple2[_, _]],
-      classOf[Tuple3[_, _, _]],
-      classOf[Tuple4[_, _, _, _]],
-      classOf[UniqueItemSpecification],
-      classOf[ItemStateUpdate],
-      classOf[ItemStateUpdateTime]
-    )
-
-    override def configurableProxyExclusion(clazz: Class[_]): Boolean =
-      clazzesNotToBeProxied.exists(_.isAssignableFrom(clazz))
   }
 
   class FakeTranches extends Tranches[UUID] {
