@@ -4,6 +4,8 @@ import java.time.Instant
 import java.util.UUID
 
 import cats.implicits._
+import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
+import com.sageserpent.plutonium.Patch.WrappedArgument
 import com.sageserpent.plutonium.World.Revision
 import com.sageserpent.plutonium.WorldH2StorageImplementation.{
   TrancheId,
@@ -25,6 +27,24 @@ object WorldH2StorageImplementation {
   object immutableObjectStorage extends ImmutableObjectStorage[TrancheId] {
     override protected val tranchesImplementationName: String =
       classOf[FakeTranches].getSimpleName
+
+    val clazzesNotToBeReferenceCounted = Set(
+      classOf[Option[_]],
+      classOf[Tuple2[_, _]],
+      classOf[Tuple3[_, _, _]],
+      classOf[Tuple4[_, _, _, _]],
+      classOf[UniqueItemSpecification],
+      classOf[ItemStateUpdate],
+      classOf[ItemStateUpdateTime],
+      classOf[Patch],
+      classOf[Annihilation],
+      classOf[WrappedArgument],
+      classOf[SnapshotBlob]
+    )
+
+    override protected def configurableReferenceCountingExclusion(
+        clazz: Class[_]): Boolean =
+      clazzesNotToBeReferenceCounted.exists(_.isAssignableFrom(clazz))
   }
 
   class FakeTranches extends Tranches[UUID] {

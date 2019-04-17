@@ -301,6 +301,9 @@ trait ImmutableObjectStorage[TrancheId] {
 
   protected def configurableProxyExclusion(clazz: Class[_]): Boolean = false
 
+  protected def configurableReferenceCountingExclusion(
+      clazz: Class[_]): Boolean = false
+
   protected val tranchesImplementationName: String
 
   object proxySupport extends ProxySupport {
@@ -403,7 +406,9 @@ trait ImmutableObjectStorage[TrancheId] {
           extends AnyRef
 
       private def useReferences(clazz: Class[_]): Boolean =
-        !Util.isWrapperClass(clazz) && clazz != classOf[String]
+        !Util.isWrapperClass(clazz) &&
+          clazz != classOf[String] &&
+          !configurableReferenceCountingExclusion(clazz)
 
       def retrieveObjectThatIsNotAProxy(
           objectReferenceId: ObjectReferenceId): Option[AnyRef] =
