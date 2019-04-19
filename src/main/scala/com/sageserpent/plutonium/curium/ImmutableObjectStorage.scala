@@ -37,8 +37,13 @@ import net.bytebuddy.matcher.ElementMatchers
 import net.bytebuddy.{ByteBuddy, NamingStrategy}
 import org.objenesis.instantiator.ObjectInstantiator
 import org.objenesis.strategy.StdInstantiatorStrategy
+import scalacache._
+import scalacache.caffeine._
+import scalacache.memoization._
+import scalacache.modes.sync._
 
 import scala.collection.mutable.{Map => MutableMap}
+import scala.concurrent.duration._
 import scala.reflect.runtime.universe.{TypeTag, typeOf}
 import scala.util.hashing.MurmurHash3
 import scala.util.{DynamicVariable, Try}
@@ -339,21 +344,34 @@ trait ImmutableObjectStorage[TrancheId] {
     private val proxySuffix =
       s"delayedLoadProxyFor${tranchesImplementationName}"
 
-    def isExcludedFromInterTrancheReferences(clazz: Class[_]): Boolean = {
-      require(!isProxyClazz(clazz))
+    private val cacheTimeToLive = Some(10 minutes)
 
-      kryoClosureMarkerClazz.isAssignableFrom(clazz) ||
-      clazz.isSynthetic || (try {
-        clazz.isAnonymousClass ||
-        clazz.isLocalClass
-      } catch {
-        case _: InternalError =>
-          // Workaround: https://github.com/scala/bug/issues/2034 - if it throws,
-          // it's probably an inner class of some kind.
-          true
-      }) ||
-      configurableInterTrancheReferenceExclusion(clazz)
-    }
+    private implicit val isExcludedFromInterTrancheReferencesCache
+      : Cache[Boolean] = CaffeineCache[Boolean](
+      CacheConfig.defaultCacheConfig.copy(
+        memoization = MemoizationConfig(
+          (fullClassName: String,
+           constructorParameters: IndexedSeq[IndexedSeq[Any]],
+           methodName: String,
+           parameters: IndexedSeq[IndexedSeq[Any]]) =>
+            parameters.head.head.toString)))
+
+    def isExcludedFromInterTrancheReferences(clazz: Class[_]): Boolean =
+      memoizeSync(cacheTimeToLive) {
+        require(!isProxyClazz(clazz))
+
+        kryoClosureMarkerClazz.isAssignableFrom(clazz) ||
+        clazz.isSynthetic || (try {
+          clazz.isAnonymousClass ||
+          clazz.isLocalClass
+        } catch {
+          case _: InternalError =>
+            // Workaround: https://github.com/scala/bug/issues/2034 - if it throws,
+            // it's probably an inner class of some kind.
+            true
+        }) ||
+        configurableInterTrancheReferenceExclusion(clazz)
+      }
 
     def isNotToBeProxied(clazz: Class[_]): Boolean = {
       require(!isProxyClazz(clazz))
