@@ -135,6 +135,11 @@ object ImmutableObjectStorage {
       def acquire(acquiredState: AcquiredState): Unit
     }
 
+    /*
+      This is tracked to workaround Kryo leaking its internal fudge
+      as to how it registers closure serializers into calls on the
+      tranche specific reference resolver class' methods.
+     */
     val kryoClosureMarkerClazz = classOf[Closure]
 
     val clazzesThatShouldNotBeProxied: Set[Class[_]] =
@@ -337,12 +342,6 @@ trait ImmutableObjectStorage[TrancheId] {
     def isExcludedFromInterTrancheReferences(clazz: Class[_]): Boolean = {
       require(!isProxyClazz(clazz))
 
-      /*
-        The first one is to workaround Kryo leaking its internal
-        fudge as to how it registers closure serializers into the
-        tranche specific reference resolver class, which in turn
-        creates proxies. We don't want to proxy a closure anyway.
-       */
       kryoClosureMarkerClazz.isAssignableFrom(clazz) ||
       clazz.isSynthetic || (try {
         clazz.isAnonymousClass ||
@@ -449,9 +448,8 @@ trait ImmutableObjectStorage[TrancheId] {
         !Util.isWrapperClass(clazz) &&
           clazz != classOf[String]
 
-      def retrieveObjectThatIsNotAProxy(
-          objectReferenceId: ObjectReferenceId): Option[AnyRef] =
-        Option(referenceIdToObjectMap.get(objectReferenceId)).map {
+      def decodePlaceholder(placeholderOrActualObject: AnyRef): AnyRef =
+        placeholderOrActualObject match {
           case AssociatedValueForAlias(immutableObject) => immutableObject
           case immutableObject @ _                      => immutableObject
         }
@@ -467,7 +465,9 @@ trait ImmutableObjectStorage[TrancheId] {
               placeholderClazzForTopLevelTrancheObject)
         }
 
-        retrieveObjectThatIsNotAProxy(objectReferenceId).get
+        Option(referenceIdToObjectMap.get(objectReferenceId))
+          .map(decodePlaceholder)
+          .get
       }
 
       class AcquiredState(trancheIdForExternalObjectReference: TrancheId,
@@ -491,16 +491,26 @@ trait ImmutableObjectStorage[TrancheId] {
       class TrancheSpecificReferenceResolver(
           objectReferenceIdOffset: ObjectReferenceId)
           extends ReferenceResolver {
-        var numberOfAssociationsForTheRelevantTrancheOnly: ObjectReferenceId = 0
+        private var numberOfAssociationsForTheRelevantTrancheOnly
+          : ObjectReferenceId = 0
 
-        val objectToLocalReferenceIdMap: BiMap[AnyRef, ObjectReferenceId] =
+        private val objectToLocalReferenceIdMap
+          : BiMap[AnyRef, ObjectReferenceId] =
           new BiMapUsingIdentityOnForwardMappingOnly
 
-        val localReferenceIdToObjectMap: BiMap[ObjectReferenceId, AnyRef] =
+        private val localReferenceIdToObjectMap
+          : BiMap[ObjectReferenceId, AnyRef] =
           objectToLocalReferenceIdMap.inverse()
 
         def writtenObjectReferenceIds: Set[ObjectReferenceId] =
           (0 until numberOfAssociationsForTheRelevantTrancheOnly) map (objectReferenceIdOffset + _) toSet
+
+        private def objectToReferenceIdMapFor(
+            clazz: Class[_]): BiMap[AnyRef, ObjectReferenceId] =
+          if (proxySupport
+                .isExcludedFromInterTrancheReferences(clazz))
+            objectToLocalReferenceIdMap
+          else objectToReferenceIdMap
 
         override def getWrittenId(immutableObject: AnyRef): ObjectReferenceId =
           // PLAN: if 'immutableObject' is a proxy, it *must* be found in 'proxyToReferenceIdMap'.
@@ -509,12 +519,8 @@ trait ImmutableObjectStorage[TrancheId] {
           // We assume that any proxy instance must have already been stored in 'proxyToReferenceIdMap',
           // and check accordingly.
           Option(proxyToReferenceIdMap.get(immutableObject))
-            .orElse(
-              if (proxySupport
-                    .isExcludedFromInterTrancheReferences(
-                      immutableObject.getClass))
-                Option(objectToLocalReferenceIdMap.get(immutableObject))
-              else Option(objectToReferenceIdMap.get(immutableObject)))
+            .orElse(Option(objectToReferenceIdMapFor(immutableObject.getClass)
+              .get(immutableObject)))
             .getOrElse(-1)
 
         override def addWrittenObject(
@@ -523,13 +529,8 @@ trait ImmutableObjectStorage[TrancheId] {
           assert(nextObjectReferenceIdToAllocate >= objectReferenceIdOffset) // No wrapping around.
 
           val _ @None = Option(
-            if (proxySupport.isExcludedFromInterTrancheReferences(
-                  immutableObject.getClass))
-              objectToLocalReferenceIdMap.put(immutableObject,
-                                              nextObjectReferenceIdToAllocate)
-            else
-              objectToReferenceIdMap.put(immutableObject,
-                                         nextObjectReferenceIdToAllocate))
+            objectToReferenceIdMapFor(immutableObject.getClass)
+              .put(immutableObject, nextObjectReferenceIdToAllocate))
 
           numberOfAssociationsForTheRelevantTrancheOnly += 1
 
@@ -538,18 +539,19 @@ trait ImmutableObjectStorage[TrancheId] {
           nextObjectReferenceIdToAllocate
         }
 
+        private def referenceIdToObjectMapFor(
+            clazz: Class[_]): BiMap[ObjectReferenceId, AnyRef] =
+          if (proxySupport.isExcludedFromInterTrancheReferences(clazz))
+            localReferenceIdToObjectMap
+          else referenceIdToObjectMap
+
         override def nextReadId(clazz: Class[_]): ObjectReferenceId = {
           val nextObjectReferenceIdToAllocate = numberOfAssociationsForTheRelevantTrancheOnly + objectReferenceIdOffset
           assert(nextObjectReferenceIdToAllocate >= objectReferenceIdOffset) // No wrapping around.
 
           val _ @None = Option(
-            if (proxySupport.isExcludedFromInterTrancheReferences(clazz))
-              localReferenceIdToObjectMap.put(nextObjectReferenceIdToAllocate,
-                                              PlaceholderAssociation())
-            else
-              referenceIdToObjectMap.put(nextObjectReferenceIdToAllocate,
-                                         PlaceholderAssociation()))
-
+            referenceIdToObjectMapFor(clazz)
+              .put(nextObjectReferenceIdToAllocate, PlaceholderAssociation()))
           numberOfAssociationsForTheRelevantTrancheOnly += 1
 
           assert(0 <= numberOfAssociationsForTheRelevantTrancheOnly) // No wrapping around.
@@ -561,36 +563,20 @@ trait ImmutableObjectStorage[TrancheId] {
                                    immutableObject: AnyRef): Unit = {
           require(objectReferenceIdOffset <= objectReferenceId)
 
-          if (proxySupport.isExcludedFromInterTrancheReferences(
-                immutableObject.getClass))
-            Option(
-              localReferenceIdToObjectMap.inverse
-                .forcePut(immutableObject, objectReferenceId)) match {
-              case Some(aliasObjectReferenceId) =>
-                val _ @None = Option(
-                  localReferenceIdToObjectMap.put(
-                    aliasObjectReferenceId,
-                    AssociatedValueForAlias(immutableObject)))
-              case None =>
-            } else
-            Option(
-              referenceIdToObjectMap.inverse
-                .forcePut(immutableObject, objectReferenceId)) match {
-              case Some(aliasObjectReferenceId) =>
-                val _ @None = Option(
-                  referenceIdToObjectMap.put(
-                    aliasObjectReferenceId,
-                    AssociatedValueForAlias(immutableObject)))
-              case None =>
-            }
-        }
+          val relevantReferenceIdToObjectMap = referenceIdToObjectMapFor(
+            immutableObject.getClass)
 
-        def retrieveObjectForLocalReference(
-            localObjectReferenceId: ObjectReferenceId): AnyRef =
-          Option(localReferenceIdToObjectMap.get(localObjectReferenceId)).map {
-            case AssociatedValueForAlias(immutableObject) => immutableObject
-            case immutableObject @ _                      => immutableObject
-          }.get
+          Option(
+            relevantReferenceIdToObjectMap.inverse
+              .forcePut(immutableObject, objectReferenceId)) match {
+            case Some(aliasObjectReferenceId) =>
+              val _ @None = Option(
+                relevantReferenceIdToObjectMap.put(
+                  aliasObjectReferenceId,
+                  AssociatedValueForAlias(immutableObject)))
+            case None =>
+          }
+        }
 
         override def getReadObject(
             clazz: Class[_],
@@ -609,15 +595,16 @@ trait ImmutableObjectStorage[TrancheId] {
           // if one has not already been introduced to the reference resolver), or look up an existing object
           // belonging to another tranche, loading that tranche if necessary.
           if (objectReferenceId >= objectReferenceIdOffset)
-            if (proxySupport.isExcludedFromInterTrancheReferences(
-                  nonProxyClazz))
-              retrieveObjectForLocalReference(objectReferenceId)
-            else retrieveObjectThatIsNotAProxy(objectReferenceId).get
+            Option(
+              referenceIdToObjectMapFor(nonProxyClazz).get(objectReferenceId))
+              .map(decodePlaceholder)
+              .get
           else {
             assert(
               !proxySupport.isExcludedFromInterTrancheReferences(nonProxyClazz))
 
-            retrieveObjectThatIsNotAProxy(objectReferenceId)
+            Option(referenceIdToObjectMap.get(objectReferenceId))
+              .map(decodePlaceholder)
               .orElse(Option {
                 referenceIdToProxyMap.get(objectReferenceId)
               })
