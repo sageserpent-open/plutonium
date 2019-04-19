@@ -33,7 +33,7 @@ object WorldH2StorageImplementation {
     override protected val tranchesImplementationName: String =
       classOf[FakeTranches].getSimpleName
 
-    val clazzesNotToBeHaveInterTrancheReferences = Set(
+    val clazzesNotToBeProxied = Set(
       classOf[Class[_]],
       classOf[Option[_]],
       classOf[Tuple2[_, _]],
@@ -60,9 +60,9 @@ object WorldH2StorageImplementation {
       classOf[UUID]
     )
 
-    override protected def configurableInterTrancheReferenceExclusion(
+    override protected def configurableProxyExclusion(
         clazz: Class[_]): Boolean =
-      clazzesNotToBeHaveInterTrancheReferences.exists(_.isAssignableFrom(clazz)) || clazz.isArray || clazz.getSimpleName
+      clazzesNotToBeProxied.exists(_.isAssignableFrom(clazz)) || clazz.isArray || clazz.getSimpleName
         .contains("BlackTree") || clazz.getSimpleName.contains("RedTree")
   }
 

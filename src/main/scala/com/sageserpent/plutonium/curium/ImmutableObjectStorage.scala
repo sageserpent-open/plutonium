@@ -335,9 +335,6 @@ trait ImmutableObjectStorage[TrancheId] {
 
   protected def configurableProxyExclusion(clazz: Class[_]): Boolean = false
 
-  protected def configurableInterTrancheReferenceExclusion(
-      clazz: Class[_]): Boolean = false
-
   protected val tranchesImplementationName: String
 
   object proxySupport extends ProxySupport {
@@ -356,30 +353,22 @@ trait ImmutableObjectStorage[TrancheId] {
            parameters: IndexedSeq[IndexedSeq[Any]]) =>
             parameters.head.head.toString)))
 
-    def isExcludedFromInterTrancheReferences(clazz: Class[_]): Boolean =
-      memoizeSync(cacheTimeToLive) {
-        require(!isProxyClazz(clazz))
-
-        kryoClosureMarkerClazz.isAssignableFrom(clazz) ||
-        clazz.isSynthetic || (try {
-          clazz.isAnonymousClass ||
-          clazz.isLocalClass
-        } catch {
-          case _: InternalError =>
-            // Workaround: https://github.com/scala/bug/issues/2034 - if it throws,
-            // it's probably an inner class of some kind.
-            true
-        }) ||
-        configurableInterTrancheReferenceExclusion(clazz)
-      }
-
     def isNotToBeProxied(clazz: Class[_]): Boolean = {
       require(!isProxyClazz(clazz))
 
-      isExcludedFromInterTrancheReferences(clazz) ||
+      kryoClosureMarkerClazz.isAssignableFrom(clazz) ||
+      clazz.isSynthetic || (try {
+        clazz.isAnonymousClass ||
+        clazz.isLocalClass
+      } catch {
+        case _: InternalError =>
+          // Workaround: https://github.com/scala/bug/issues/2034 - if it throws,
+          // it's probably an inner class of some kind.
+          true
+      }) ||
+      configurableProxyExclusion(clazz) ||
       Modifier.isFinal(clazz.getModifiers) ||
-      clazzesThatShouldNotBeProxied.exists(_.isAssignableFrom(clazz)) ||
-      configurableProxyExclusion(clazz)
+      clazzesThatShouldNotBeProxied.exists(_.isAssignableFrom(clazz))
     }
 
     private def createProxyClass[X <: AnyRef](clazz: Class[X]): Class[X] = {
@@ -526,7 +515,7 @@ trait ImmutableObjectStorage[TrancheId] {
         private def objectToReferenceIdMapFor(
             clazz: Class[_]): BiMap[AnyRef, ObjectReferenceId] =
           if (proxySupport
-                .isExcludedFromInterTrancheReferences(clazz))
+                .isNotToBeProxied(clazz))
             objectToLocalReferenceIdMap
           else objectToReferenceIdMap
 
@@ -559,7 +548,7 @@ trait ImmutableObjectStorage[TrancheId] {
 
         private def referenceIdToObjectMapFor(
             clazz: Class[_]): BiMap[ObjectReferenceId, AnyRef] =
-          if (proxySupport.isExcludedFromInterTrancheReferences(clazz))
+          if (proxySupport.isNotToBeProxied(clazz))
             localReferenceIdToObjectMap
           else referenceIdToObjectMap
 
@@ -618,8 +607,7 @@ trait ImmutableObjectStorage[TrancheId] {
               .map(decodePlaceholder)
               .get
           else {
-            assert(
-              !proxySupport.isExcludedFromInterTrancheReferences(nonProxyClazz))
+            assert(!proxySupport.isNotToBeProxied(nonProxyClazz))
 
             Option(referenceIdToObjectMap.get(objectReferenceId))
               .map(decodePlaceholder)
@@ -631,20 +619,15 @@ trait ImmutableObjectStorage[TrancheId] {
                   tranches
                     .retrieveTrancheId(objectReferenceId)
 
-                if (proxySupport.isNotToBeProxied(nonProxyClazz))
-                  retrieveUnderlying(trancheIdForExternalObjectReference,
-                                     objectReferenceId)
-                else {
-                  val proxy =
-                    proxySupport.createProxy(
-                      nonProxyClazz.asInstanceOf[Class[_ <: AnyRef]],
-                      new AcquiredState(trancheIdForExternalObjectReference,
-                                        objectReferenceId))
+                val proxy =
+                  proxySupport.createProxy(
+                    nonProxyClazz.asInstanceOf[Class[_ <: AnyRef]],
+                    new AcquiredState(trancheIdForExternalObjectReference,
+                                      objectReferenceId))
 
-                  referenceIdToProxyMap.put(objectReferenceId, proxy)
+                referenceIdToProxyMap.put(objectReferenceId, proxy)
 
-                  proxy
-                }
+                proxy
               }
           }
         }
