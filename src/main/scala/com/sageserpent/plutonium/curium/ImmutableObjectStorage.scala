@@ -338,38 +338,40 @@ trait ImmutableObjectStorage[TrancheId] {
   protected val tranchesImplementationName: String
 
   object proxySupport extends ProxySupport {
-    private val proxySuffix =
-      s"delayedLoadProxyFor${tranchesImplementationName}"
-
     private val cacheTimeToLive = Some(10 minutes)
 
-    private implicit val isExcludedFromInterTrancheReferencesCache
-      : Cache[Boolean] = CaffeineCache[Boolean](
-      CacheConfig.defaultCacheConfig.copy(
-        memoization = MemoizationConfig(
-          (fullClassName: String,
-           constructorParameters: IndexedSeq[IndexedSeq[Any]],
-           methodName: String,
-           parameters: IndexedSeq[IndexedSeq[Any]]) =>
-            parameters.head.head.toString)))
+    private val memoizationConfig = MemoizationConfig(
+      (fullClassName: String,
+       constructorParameters: IndexedSeq[IndexedSeq[Any]],
+       methodName: String,
+       parameters: IndexedSeq[IndexedSeq[Any]]) =>
+        parameters.head.head.toString)
 
-    def isNotToBeProxied(clazz: Class[_]): Boolean = {
-      require(!isProxyClazz(clazz))
+    private implicit val isNotToBeProxiedCache: Cache[Boolean] =
+      CaffeineCache[Boolean](
+        CacheConfig.defaultCacheConfig.copy(memoization = memoizationConfig))
 
-      kryoClosureMarkerClazz.isAssignableFrom(clazz) ||
-      clazz.isSynthetic || (try {
-        clazz.isAnonymousClass ||
-        clazz.isLocalClass
-      } catch {
-        case _: InternalError =>
-          // Workaround: https://github.com/scala/bug/issues/2034 - if it throws,
-          // it's probably an inner class of some kind.
-          true
-      }) ||
-      configurableProxyExclusion(clazz) ||
-      Modifier.isFinal(clazz.getModifiers) ||
-      clazzesThatShouldNotBeProxied.exists(_.isAssignableFrom(clazz))
-    }
+    def isNotToBeProxied(clazz: Class[_]): Boolean =
+      memoizeSync(cacheTimeToLive) {
+        require(!isProxyClazz(clazz))
+
+        kryoClosureMarkerClazz.isAssignableFrom(clazz) ||
+        clazz.isSynthetic || (try {
+          clazz.isAnonymousClass ||
+          clazz.isLocalClass
+        } catch {
+          case _: InternalError =>
+            // Workaround: https://github.com/scala/bug/issues/2034 - if it throws,
+            // it's probably an inner class of some kind.
+            true
+        }) ||
+        configurableProxyExclusion(clazz) ||
+        Modifier.isFinal(clazz.getModifiers) ||
+        clazzesThatShouldNotBeProxied.exists(_.isAssignableFrom(clazz))
+      }
+
+    private val proxySuffix =
+      s"delayedLoadProxyFor${tranchesImplementationName}"
 
     private def createProxyClass[X <: AnyRef](clazz: Class[X]): Class[X] = {
       // We should never end up having to make chains of delegating proxies!

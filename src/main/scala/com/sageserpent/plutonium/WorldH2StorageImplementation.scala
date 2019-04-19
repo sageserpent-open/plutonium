@@ -35,10 +35,6 @@ object WorldH2StorageImplementation {
 
     val clazzesNotToBeProxied = Set(
       classOf[Class[_]],
-      classOf[Option[_]],
-      classOf[Tuple2[_, _]],
-      classOf[Tuple3[_, _, _]],
-      classOf[Tuple4[_, _, _, _]],
       classOf[UniqueItemSpecification],
       classOf[Instant],
       classOf[ItemStateUpdate],
@@ -53,10 +49,6 @@ object WorldH2StorageImplementation {
       classOf[Annihilation],
       classOf[WrappedArgument],
       classOf[SnapshotBlob],
-      classOf[RangedSeq[_, _]],
-      classOf[FingerTree[_, _]],
-      classOf[TreeMap[_, _]],
-      classOf[List[_]],
       classOf[UUID]
     )
 
