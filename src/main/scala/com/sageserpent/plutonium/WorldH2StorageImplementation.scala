@@ -4,6 +4,7 @@ import java.time.Instant
 import java.util.UUID
 
 import cats.implicits._
+import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
 import com.sageserpent.plutonium.Patch.WrappedArgument
 import com.sageserpent.plutonium.World.Revision
@@ -16,7 +17,9 @@ import com.sageserpent.plutonium.curium.{H2Tranches, ImmutableObjectStorage}
 import de.sciss.fingertree.{FingerTree, RangedSeq}
 
 import scala.collection.immutable.TreeMap
+import scala.collection.mutable
 import scala.collection.mutable.{
+  ArrayBuffer,
   Map => MutableMap,
   SortedMap => MutableSortedMap
 }
@@ -31,14 +34,22 @@ object WorldH2StorageImplementation {
       classOf[FakeTranches].getSimpleName
 
     val clazzesNotToBeHaveInterTrancheReferences = Set(
+      classOf[Class[_]],
       classOf[Option[_]],
       classOf[Tuple2[_, _]],
       classOf[Tuple3[_, _, _]],
       classOf[Tuple4[_, _, _, _]],
       classOf[UniqueItemSpecification],
+      classOf[Instant],
       classOf[ItemStateUpdate],
       classOf[ItemStateUpdateTime],
+      classOf[Unbounded[_]],
+      classOf[Split[_]],
+      classOf[SplitLevel],
+      classOf[ArrayBuffer[_]],
+      classOf[mutable.WrappedArray[_]],
       classOf[Patch],
+      classOf[Patch.MethodPieces],
       classOf[Annihilation],
       classOf[WrappedArgument],
       classOf[SnapshotBlob],
