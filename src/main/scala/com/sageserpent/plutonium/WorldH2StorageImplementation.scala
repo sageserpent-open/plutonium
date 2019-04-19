@@ -13,9 +13,9 @@ import com.sageserpent.plutonium.WorldH2StorageImplementation.{
 }
 import com.sageserpent.plutonium.curium.ImmutableObjectStorage._
 import com.sageserpent.plutonium.curium.{H2Tranches, ImmutableObjectStorage}
-import de.sciss.fingertree.RangedSeq
-import scalaz.FingerTree
+import de.sciss.fingertree.{FingerTree, RangedSeq}
 
+import scala.collection.immutable.TreeMap
 import scala.collection.mutable.{
   Map => MutableMap,
   SortedMap => MutableSortedMap
@@ -44,12 +44,15 @@ object WorldH2StorageImplementation {
       classOf[SnapshotBlob],
       classOf[RangedSeq[_, _]],
       classOf[FingerTree[_, _]],
+      classOf[TreeMap[_, _]],
+      classOf[List[_]],
       classOf[UUID]
     )
 
     override protected def configurableInterTrancheReferenceExclusion(
         clazz: Class[_]): Boolean =
-      clazzesNotToBeHaveInterTrancheReferences.exists(_.isAssignableFrom(clazz))
+      clazzesNotToBeHaveInterTrancheReferences.exists(_.isAssignableFrom(clazz)) || clazz.isArray || clazz.getSimpleName
+        .contains("BlackTree") || clazz.getSimpleName.contains("RedTree")
   }
 
   class FakeTranches extends Tranches[UUID] {
