@@ -84,6 +84,6 @@ trait Benchmark {
 
 object benchmarkApplication extends Benchmark {
   def main(args: Array[String]): Unit = {
-    activity(10000)
+    activity(1500)
   }
 }

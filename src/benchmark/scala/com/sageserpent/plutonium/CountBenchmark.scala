@@ -7,10 +7,10 @@ import org.scalameter.picklers.noPickler._
 import scala.collection.immutable.SortedMap
 
 object CountBenchmark extends Bench.Forked[Map[String, Long]] with Benchmark {
-  val sizes = Gen.range("Number of bookings")(300, 500, 10)
+  val sizes = Gen.range("Number of bookings")(500, 1200, 50)
 
   lazy val classRegex =
-    ".*(World|Scope|Timeline|ItemState|BlobStorage|ItemCache|AllEvents|Lifecycle|[Ii]mmutable|[Tt]ranche|esoteric|[Pp]roxy|ReferenceResolver|sessionInterpreter|java\\.|scala\\.|cats\\.).*".r
+    ".*(World|Scope|Timeline|ItemState|BlobStorage|ItemCache|AllEvents|Lifecycle|[Ii]mmutable|[Tt]ranche|[Pp]roxy|ReferenceResolver|sessionInterpreter|esotericsoftware\\.|scalacache\\.|java\\.|scala\\.|cats\\.|mvstore\\.|command\\.|table\\.|result\\.).*".r
   lazy val methodRegex = ".*".r
 
   override def measurer: Measurer[Map[String, Long]] =
@@ -26,7 +26,7 @@ object CountBenchmark extends Bench.Forked[Map[String, Long]] with Benchmark {
   override def defaultConfig: Context = Context(exec.independentSamples -> 1)
 
   performance of "Bookings" in {
-    using(sizes) config (exec.benchRuns -> 1, exec.minWarmupRuns -> 1, exec.maxWarmupRuns -> 2, exec.jvmflags -> List(
+    using(sizes) config (exec.benchRuns -> 1, exec.minWarmupRuns -> 1, exec.maxWarmupRuns -> 1, exec.jvmflags -> List(
       "-Xmx3G")) in activity
   }
 }
