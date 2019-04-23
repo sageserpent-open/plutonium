@@ -7,10 +7,10 @@ import org.scalameter.picklers.noPickler._
 import scala.collection.immutable.SortedMap
 
 object CountBenchmark extends Bench.Forked[Map[String, Long]] with Benchmark {
-  val sizes = Gen.range("Number of bookings")(500, 1000, 50)
+  val sizes = Gen.range("Number of bookings")(500, 1200, 50)
 
   lazy val classRegex =
-    ".*(World|Scope|Timeline|ItemState|BlobStorage|ItemCache|AllEvents|Lifecycle|[Ii]mmutable|[Tt]ranche|[Pp]roxy|ReferenceResolver|sessionInterpreter|esotericsoftware\\.|scalacache\\.|java\\.|scala\\.|cats\\.|mvstore\\.|command\\.|table\\.|result\\.).*".r
+    ".*(World|Scope|Timeline|ItemState|BlobStorage|ItemCache|AllEvents|Lifecycle|[Ii]mmutable|[Tt]ranche|[Pp]roxy|ReferenceResolver|sessionInterpreter|esotericsoftware\\.|scalacache\\.|java\\.|scala\\.|mvstore\\.|command\\.|table\\.|result\\.).*".r
   lazy val methodRegex = ".*".r
 
   override def measurer: Measurer[Map[String, Long]] =
@@ -18,7 +18,7 @@ object CountBenchmark extends Bench.Forked[Map[String, Long]] with Benchmark {
       InvocationCountMatcher.forRegex(classRegex, methodRegex)) map {
       quantity =>
         val pairsWithHighestCounts =
-          quantity.value.toSeq.sortBy(-_._2).take(10)
+          quantity.value.toSeq.sortBy(-_._2).take(15)
         quantity.copy(value = SortedMap(pairsWithHighestCounts: _*))
     }
   override def aggregator: Aggregator[Map[String, Long]] =
