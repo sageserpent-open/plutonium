@@ -7,10 +7,10 @@ import org.scalameter.picklers.noPickler._
 import scala.collection.immutable.SortedMap
 
 object CountBenchmark extends Bench.Forked[Map[String, Long]] with Benchmark {
-  val sizes = Gen.range("Number of bookings")(700, 1400, 50)
+  val sizes = Gen.range("Number of bookings")(700, 1600, 50)
 
   lazy val classRegex =
-    ".*([Pp]roxy|plutonium\\.|curium\\.|esotericsoftware\\.|scalacache\\.|mvstore\\.|command\\.|table\\.|result\\.|doobie\\.|jdbc\\.|scala\\.|java\\.).*".r
+    ".*([Pp]roxy|plutonium\\.|curium\\.|cats\\.|esotericsoftware\\.|scalacache\\.|mvstore\\.|command\\.|table\\.|result\\.|doobie\\.|jdbc\\.|scala\\.|java\\.).*".r
   lazy val methodRegex = ".*".r
 
   override def measurer: Measurer[Map[String, Long]] =
