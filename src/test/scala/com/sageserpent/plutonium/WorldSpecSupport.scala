@@ -5,14 +5,13 @@ import java.util.UUID
 import java.util.concurrent.Executors
 
 import cats.implicits._
-import cats.effect.{Resource, IO}
-
+import cats.effect.{IO, Resource}
 import com.sageserpent.americium
 import com.sageserpent.americium._
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.seqEnrichment._
 import com.sageserpent.plutonium.World._
-import com.sageserpent.plutonium.curium.H2Resource
+import com.sageserpent.plutonium.curium.{H2AlternativeResource, H2Resource}
 import io.lettuce.core.{RedisClient, RedisURI}
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.Assertions
@@ -928,9 +927,9 @@ trait WorldEfficientInMemoryImplementationResource extends WorldResource {
 
 trait WorldH2StorageImplementationResource extends WorldResource {
   val worldResource: Resource[IO, World] =
-    H2Resource.transactorResource.flatMap(transactor =>
+    H2AlternativeResource.connectionPoolResource.flatMap(connectionPool =>
       Resource.fromAutoCloseable(IO {
-        new WorldH2StorageImplementation(transactor) with WorldContracts
+        new WorldH2StorageImplementation(connectionPool) with WorldContracts
       }))
 }
 
