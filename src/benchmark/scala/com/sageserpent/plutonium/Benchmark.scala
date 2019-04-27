@@ -4,7 +4,7 @@ import java.time.Instant
 
 import cats.effect.IO
 import com.sageserpent.americium.randomEnrichment._
-import com.sageserpent.plutonium.curium.H2AlternativeResource
+import com.sageserpent.plutonium.curium.H2ViaScalikeJdbcResource
 
 import scala.util.Random
 
@@ -27,7 +27,7 @@ trait Benchmark {
     val startTime = Deadline.now
 
     val world: IO[World] =
-      H2AlternativeResource.connectionPoolResource.use(connectionPool =>
+      H2ViaScalikeJdbcResource.connectionPoolResource.use(connectionPool =>
         IO {
           val world = new WorldH2StorageImplementation(connectionPool)
 

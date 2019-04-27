@@ -10,28 +10,28 @@ import com.sageserpent.plutonium.WorldH2StorageImplementation.{
 }
 import com.sageserpent.plutonium.curium.ImmutableObjectStorage._
 import com.sageserpent.plutonium.curium.{
-  H2AlternativeTranches,
+  H2ViaScalikeJdbcTranches,
   ImmutableObjectStorage
 }
 import scalikejdbc.ConnectionPool
 
 object WorldH2StorageImplementation {
 
-  type TrancheId = H2AlternativeTranches#TrancheId
+  type TrancheId = H2ViaScalikeJdbcTranches#TrancheId
 
   object immutableObjectStorage extends ImmutableObjectStorage[TrancheId] {
     override protected val tranchesImplementationName: String =
-      classOf[H2AlternativeTranches].getSimpleName
+      classOf[H2ViaScalikeJdbcTranches].getSimpleName
   }
 }
 
 class WorldH2StorageImplementation(
-    val tranches: H2AlternativeTranches,
+    val tranches: H2ViaScalikeJdbcTranches,
     var timelineTrancheIdStorage: Array[(Instant, TrancheId)],
     var numberOfTimelines: Int)
     extends WorldEfficientImplementation[Session] {
   def this(connectionPool: ConnectionPool) =
-    this(new H2AlternativeTranches(connectionPool)
+    this(new H2ViaScalikeJdbcTranches(connectionPool)
          with TranchesContracts[TrancheId],
          Array.empty[(Instant, TrancheId)],
          World.initialRevision)
