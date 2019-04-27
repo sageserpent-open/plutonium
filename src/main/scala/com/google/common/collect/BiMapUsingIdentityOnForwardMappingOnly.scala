@@ -1,6 +1,13 @@
 package com.google.common.collect
 import java.util
 
-class BiMapUsingIdentityOnForwardMappingOnly[Key, Value]
+object BiMapUsingIdentityOnForwardMappingOnly {
+  def fromReverseMap[Key, Value](reverseMap: util.Map[Value, Key])
+    : BiMapUsingIdentityOnForwardMappingOnly[Key, Value] =
+    new BiMapUsingIdentityOnForwardMappingOnly[Key, Value](reverseMap)
+}
+
+class BiMapUsingIdentityOnForwardMappingOnly[Key, Value](
+    reverseMap: util.Map[Value, Key])
     extends AbstractBiMap[Key, Value](new util.IdentityHashMap[Key, Value],
-                                      new util.HashMap[Value, Key])
+                                      reverseMap)
