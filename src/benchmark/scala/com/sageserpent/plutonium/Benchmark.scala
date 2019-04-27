@@ -4,9 +4,11 @@ import java.time.Instant
 
 import cats.effect.IO
 import com.sageserpent.americium.randomEnrichment._
-import com.sageserpent.plutonium.curium.{H2AlternativeResource, H2Resource}
+import com.sageserpent.plutonium.curium.H2AlternativeResource
 
 import scala.util.Random
+
+import scala.concurrent.duration._
 
 trait Benchmark {
   implicit class Enhancement(randomBehaviour: Random) {
@@ -21,6 +23,8 @@ trait Benchmark {
     val eventIds: Range = 0 until 1 + (size / 10)
 
     val idSet: Range = 0 until 1 + (size / 5)
+
+    val startTime = Deadline.now
 
     val world: IO[World] =
       H2AlternativeResource.connectionPoolResource.use(connectionPool =>
@@ -74,6 +78,15 @@ trait Benchmark {
             val queryId = randomBehaviour.chooseOneOfRange(idSet)
 
             scope.render(Bitemporal.withId[Thing](queryId)).force
+
+            if (step % 50 == 0) {
+              val currentTime = Deadline.now
+
+              val duration = currentTime - startTime
+
+              println(
+                s"Step: $step, duration: ${duration.toMillis} milliseconds")
+            }
           }
 
           world // NASTY HACK - allow the world to escape the resource scope, so that memory footprints can be taken.
@@ -85,6 +98,6 @@ trait Benchmark {
 
 object benchmarkApplication extends Benchmark {
   def main(args: Array[String]): Unit = {
-    activity(1500)
+    activity(10000)
   }
 }

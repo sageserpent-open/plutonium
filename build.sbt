@@ -50,7 +50,9 @@ lazy val settings = Seq(
   bintrayVcsUrl := Some("git@github.com:sageserpent-open/plutonium.git"),
   parallelExecution in Test := false,
   Compile / doc / sources := Seq.empty,
-  Compile / packageDoc / publishArtifact := false
+  Compile / packageDoc / publishArtifact := false,
+  fork in run := true,
+  javaOptions in run += "-Xmx10G"
 )
 
 lazy val Benchmark = config("benchmark") extend Test
