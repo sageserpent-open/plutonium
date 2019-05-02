@@ -77,7 +77,7 @@ trait Benchmark {
 
             val queryId = randomBehaviour.chooseOneOfRange(idSet)
 
-            //scope.render(Bitemporal.withId[Thing](queryId)).force
+            scope.render(Bitemporal.withId[Thing](queryId)).force
 
             if (step % 50 == 0) {
               val currentTime = Deadline.now
