@@ -25,12 +25,12 @@ abstract class WorldEfficientImplementation[F[_]: Monad]
 
   override def close(): Unit = {}
 
-  override def revise(events: Map[_ <: EventId, Option[Event]],
-                      asOf: Instant): Revision = {
+  def revise(events: Map[_ <: EventId, Option[Event]],
+             asOf: Instant): Revision = {
     val resultCapturedBeforeMutation = nextRevision
 
     val computation: F[Timeline] = timelinePriorTo(nextRevision)
-      .map(_.getOrElse(emptyTimeline()))
+      .map(_.getOrElse(Timeline.emptyTimeline))
       .map(_.revise(events))
 
     consumeNewTimeline(computation, asOf)
@@ -51,7 +51,7 @@ abstract class WorldEfficientImplementation[F[_]: Monad]
   trait ScopeUsingStorage extends com.sageserpent.plutonium.Scope {
     lazy val itemCache: ItemCache = {
       val computation: F[ItemCache] = timelinePriorTo(nextRevision)
-        .map(_.getOrElse(emptyTimeline()))
+        .map(_.getOrElse(Timeline.emptyTimeline))
         .map(_.itemCacheAt(when))
 
       itemCacheOf(computation)

@@ -29,7 +29,7 @@ class TimelineSpec
         }: _*)
 
       val itemCache: ItemCache =
-        emptyTimeline()
+        Timeline.emptyTimeline
           .revise(events)
           .itemCacheAt(queryWhen)
 
@@ -75,7 +75,7 @@ class TimelineSpec
         }: _*)
 
       val itemCacheFromBlockBooking =
-        emptyTimeline()
+        Timeline.emptyTimeline
           .revise(eventsInOneBlock)
           .itemCacheAt(queryWhen)
 
@@ -87,7 +87,7 @@ class TimelineSpec
             booking => TreeMap(booking.map(_.swap): _*)) toList
 
       val timelineResultingFromIncrementalBookings =
-        ((emptyTimeline(): Timeline) /: severalRevisionBookingsWithObsoleteEventsThrownIn) {
+        (Timeline.emptyTimeline /: severalRevisionBookingsWithObsoleteEventsThrownIn) {
           case (timeline, booking) =>
             timeline.revise(booking)
         }

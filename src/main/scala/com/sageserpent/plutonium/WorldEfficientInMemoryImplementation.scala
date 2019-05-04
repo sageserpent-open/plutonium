@@ -9,7 +9,8 @@ class WorldEfficientInMemoryImplementation(
     var timelineStorage: Array[(Instant, Timeline)],
     var numberOfTimelines: Int)
     extends WorldEfficientImplementation[Id] {
-  def this() = this(Array.empty[(Instant, Timeline)], World.initialRevision)
+  def this() =
+    this(Array.empty[(Instant, Timeline)], World.initialRevision)
 
   protected def allTimelinesPriorTo(
       nextRevision: World.Revision): Id[Array[(Instant, Timeline)]] =
