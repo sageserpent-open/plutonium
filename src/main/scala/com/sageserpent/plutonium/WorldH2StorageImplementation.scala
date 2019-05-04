@@ -3,6 +3,7 @@ package com.sageserpent.plutonium
 import java.time.Instant
 
 import cats.implicits._
+import com.sageserpent.plutonium.Timeline.ItemStateUpdatesDag
 import com.sageserpent.plutonium.World.Revision
 import com.sageserpent.plutonium.WorldH2StorageImplementation.{
   TrancheId,
@@ -27,20 +28,28 @@ object WorldH2StorageImplementation {
 
 class WorldH2StorageImplementation(
     val tranches: H2ViaScalikeJdbcTranches,
-    var timelineTrancheIdStorage: Array[(Instant, TrancheId)],
+    var timelineTrancheIdStorage: Array[(Instant, Vector[TrancheId])],
     var numberOfTimelines: Int)
     extends WorldEfficientImplementation[Session] {
   def this(connectionPool: ConnectionPool) =
     this(new H2ViaScalikeJdbcTranches(connectionPool)
          with TranchesContracts[TrancheId],
-         Array.empty[(Instant, TrancheId)],
+         Array.empty[(Instant, Vector[TrancheId])],
          World.initialRevision)
+
+  private def retrieveTimeline(trancheIds: Vector[TrancheId]) = {
+    (immutableObjectStorage.retrieve[AllEvents](trancheIds(0)),
+     immutableObjectStorage.retrieve[ItemStateUpdatesDag](trancheIds(1)),
+     immutableObjectStorage
+       .retrieve[Timeline.BlobStorage](trancheIds(2)))
+      .mapN(Timeline.apply)
+  }
 
   override protected def timelinePriorTo(
       nextRevision: Revision): Session[Option[Timeline]] =
     if (World.initialRevision < nextRevision) {
-      val trancheId = timelineTrancheIdStorage(nextRevision - 1)._2
-      for (timeline <- immutableObjectStorage.retrieve[Timeline](trancheId))
+      val trancheIds = timelineTrancheIdStorage(nextRevision - 1)._2
+      for (timeline <- retrieveTimeline(trancheIds))
         yield Some(timeline)
     } else none[Timeline].pure[Session]
 
@@ -50,15 +59,25 @@ class WorldH2StorageImplementation(
       .take(nextRevision)
       .toVector
       .traverse {
-        case (asOf, tranchedId) =>
-          immutableObjectStorage.retrieve[Timeline](tranchedId) map (asOf -> _)
+        case (asOf, trancheIds) =>
+          retrieveTimeline(trancheIds) map (asOf -> _)
       }
       .map(_.toArray)
 
+  private def storeTimeline(timeline: Timeline) = {
+    Vector(
+      immutableObjectStorage.store[AllEvents](timeline.allEvents),
+      immutableObjectStorage.store[ItemStateUpdatesDag](
+        timeline.itemStateUpdatesDag),
+      immutableObjectStorage.store[Timeline.BlobStorage](timeline.blobStorage)
+    ).sequence
+  }
+
   override protected def consumeNewTimeline(newTimeline: Session[Timeline],
                                             asOf: Instant): Unit = {
-    val Right(trancheId) = immutableObjectStorage.runToYieldTrancheId(
-      newTimeline.flatMap(immutableObjectStorage.store[Timeline]))(tranches)
+    val Right(trancheIds) =
+      immutableObjectStorage.runToYieldTrancheIds(
+        newTimeline.flatMap(storeTimeline))(tranches)
 
     if (nextRevision == timelineTrancheIdStorage.length) {
       val sourceOfCopy = timelineTrancheIdStorage
@@ -67,7 +86,7 @@ class WorldH2StorageImplementation(
       sourceOfCopy.copyToArray(timelineTrancheIdStorage)
     }
 
-    timelineTrancheIdStorage(nextRevision) = asOf -> trancheId
+    timelineTrancheIdStorage(nextRevision) = asOf -> trancheIds
 
     numberOfTimelines += 1
   }
@@ -79,8 +98,7 @@ class WorldH2StorageImplementation(
       timelines
         .flatMap(_.toVector.traverse {
           case (asOf, timeline) =>
-            immutableObjectStorage
-              .store[Timeline](timeline)
+            storeTimeline(timeline)
               .map(trancheId => asOf -> trancheId)
         })
     )(tranches)
