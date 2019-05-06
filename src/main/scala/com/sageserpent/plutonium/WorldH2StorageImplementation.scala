@@ -31,8 +31,15 @@ object WorldH2StorageImplementation {
       notToBeProxied.exists(_.isAssignableFrom(clazz))
 
     override protected def canBeProxiedViaSuperTypes(clazz: Class[_]): Boolean =
-      classOf[Traversable[_]]
-        .isAssignableFrom(clazz) ||
+      !(Nil.getClass.isAssignableFrom(clazz) || Map
+        .empty[Any, Nothing]
+        .getClass
+        .isAssignableFrom(clazz) || Set
+        .empty[Any]
+        .getClass
+        .isAssignableFrom(clazz)) &&
+        classOf[Traversable[_]]
+          .isAssignableFrom(clazz) ||
         classOf[FingerTree[_, _]].isAssignableFrom(clazz) ||
         classOf[RangedSeq[_, _]].isAssignableFrom(clazz)
 
