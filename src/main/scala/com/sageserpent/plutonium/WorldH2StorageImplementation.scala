@@ -3,6 +3,7 @@ package com.sageserpent.plutonium
 import java.time.Instant
 
 import cats.implicits._
+import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.Timeline.ItemStateUpdatesDag
 import com.sageserpent.plutonium.World.Revision
 import com.sageserpent.plutonium.WorldH2StorageImplementation.{
@@ -21,6 +22,13 @@ object WorldH2StorageImplementation {
   type TrancheId = H2ViaScalikeJdbcTranches#TrancheId
 
   object immutableObjectStorage extends ImmutableObjectStorage[TrancheId] {
+    private val notToBeProxied =
+      Set(classOf[ItemStateUpdateTime], classOf[Unbounded[_]])
+
+    override protected def isExcludedFromBeingProxied(
+        clazz: Class[_]): Boolean =
+      notToBeProxied.exists(_.isAssignableFrom(clazz))
+
     override protected val tranchesImplementationName: String =
       classOf[H2ViaScalikeJdbcTranches].getSimpleName
   }
