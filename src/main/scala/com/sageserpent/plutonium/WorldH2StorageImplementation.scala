@@ -24,7 +24,10 @@ object WorldH2StorageImplementation {
 
   object immutableObjectStorage extends ImmutableObjectStorage[TrancheId] {
     private val notToBeProxied =
-      Set(classOf[ItemStateUpdateTime], classOf[Unbounded[_]])
+      Set(classOf[(_, _)],
+          classOf[(_, _, _)],
+          classOf[ItemStateUpdateTime],
+          classOf[Unbounded[_]])
 
     override protected def isExcludedFromBeingProxied(
         clazz: Class[_]): Boolean =

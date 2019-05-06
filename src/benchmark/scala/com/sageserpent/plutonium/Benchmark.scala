@@ -32,8 +32,6 @@ trait Benchmark {
           val world = new WorldH2StorageImplementation(connectionPool)
 
           for (step <- 0 until size) {
-            println(
-              "--------------------------------------------------------------------------")
             val eventId = randomBehaviour.chooseOneOfRange(eventIds)
 
             val probabilityOfNotBackdatingAnEvent = 0 < randomBehaviour
@@ -53,8 +51,6 @@ trait Benchmark {
 
               val anotherId = randomBehaviour.chooseOneOfRange(idSet)
 
-              println("****** REVISING ******")
-
               world.revise(
                 eventId,
                 Change.forTwoItems[Thing, Thing](
@@ -67,11 +63,7 @@ trait Benchmark {
                   }),
                 Instant.now()
               )
-            } else {
-              println("++++++ ANNULLING ++++++")
-
-              world.annul(eventId, Instant.now())
-            }
+            } else world.annul(eventId, Instant.now())
 
             val onePastQueryRevision =
               randomBehaviour.chooseAnyNumberFromZeroToOneLessThan(
@@ -84,8 +76,6 @@ trait Benchmark {
             val scope = world.scopeFor(queryTime, onePastQueryRevision)
 
             val queryId = randomBehaviour.chooseOneOfRange(idSet)
-
-            println("@@@@@@ QUERYING @@@@@@")
 
             scope.render(Bitemporal.withId[Thing](queryId)).force
 
