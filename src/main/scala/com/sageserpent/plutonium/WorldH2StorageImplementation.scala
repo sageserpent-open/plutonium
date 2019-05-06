@@ -15,6 +15,7 @@ import com.sageserpent.plutonium.curium.{
   H2ViaScalikeJdbcTranches,
   ImmutableObjectStorage
 }
+import de.sciss.fingertree.{FingerTree, RangedSeq}
 import scalikejdbc.ConnectionPool
 
 object WorldH2StorageImplementation {
@@ -28,6 +29,12 @@ object WorldH2StorageImplementation {
     override protected def isExcludedFromBeingProxied(
         clazz: Class[_]): Boolean =
       notToBeProxied.exists(_.isAssignableFrom(clazz))
+
+    override protected def canBeProxiedViaSuperTypes(clazz: Class[_]): Boolean =
+      classOf[Traversable[_]]
+        .isAssignableFrom(clazz) ||
+        classOf[FingerTree[_, _]].isAssignableFrom(clazz) ||
+        classOf[RangedSeq[_, _]].isAssignableFrom(clazz)
 
     override protected val tranchesImplementationName: String =
       classOf[H2ViaScalikeJdbcTranches].getSimpleName
