@@ -27,6 +27,7 @@ object WorldH2StorageImplementation {
       Set(classOf[(_, _)],
           classOf[(_, _, _)],
           classOf[ItemStateUpdateTime],
+          classOf[Split[_]],
           classOf[Unbounded[_]])
 
     override protected def isExcludedFromBeingProxied(
@@ -40,11 +41,13 @@ object WorldH2StorageImplementation {
         .isAssignableFrom(clazz) || Set
         .empty[Any]
         .getClass
-        .isAssignableFrom(clazz)) &&
+        .isAssignableFrom(clazz) || clazz.getName.contains("Empty")) &&
         classOf[Traversable[_]]
           .isAssignableFrom(clazz) ||
         classOf[FingerTree[_, _]].isAssignableFrom(clazz) ||
-        classOf[RangedSeq[_, _]].isAssignableFrom(clazz)
+        classOf[RangedSeq[_, _]].isAssignableFrom(clazz) || clazz.getName
+        .contains("One") || clazz.getName.contains("Two") || clazz.getName
+        .contains("Three") || clazz.getName.contains("Four")
 
     override protected val tranchesImplementationName: String =
       classOf[H2ViaScalikeJdbcTranches].getSimpleName
