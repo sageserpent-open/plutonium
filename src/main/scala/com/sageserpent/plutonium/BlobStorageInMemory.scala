@@ -1,40 +1,10 @@
 package com.sageserpent.plutonium
 
-import scala.collection.Searching._
+import scala.collection.immutable.{SortedMap, TreeMap}
 import scala.collection.mutable
-import scala.math.Ordered.orderingToOrdered
 
 object BlobStorageInMemory {
   type Revision = Int
-
-  // NOTE: this is a workaround the lack of support for random-access indexing in the Scala
-  // immutable views. Otherwise we would create a view and map it to extract the times. Oddly
-  // enough, the view implementation in the Scala collections does the right thing, but won't
-  // admit to doing so with an appropriate marker trait.
-  implicit class timesSyntax[Time](underlying: Vector[(Time, _)]) {
-    def times: IndexedSeq[Time] = new IndexedSeq[Time] {
-      override def length: Revision = underlying.length
-
-      override def apply(idx: Revision): Time = underlying(idx)._1
-    }
-  }
-
-  def indexToSearchDownFromOrInsertAt[Time: Ordering](
-      when: Split[Time],
-      snapshotBlobTimes: IndexedSeq[Split[Time]]) = {
-
-    snapshotBlobTimes.search(when) match {
-      case Found(foundIndex) =>
-        snapshotBlobTimes
-          .view(1 + foundIndex, snapshotBlobTimes.size)
-          .indexWhere(when < _) match {
-          case -1    => snapshotBlobTimes.size
-          case index => 1 + foundIndex + index
-        }
-      case InsertionPoint(insertionPoint) =>
-        insertionPoint
-    }
-  }
 
   def apply[Time: Ordering, RecordingId, SnapshotBlob]() =
     new BlobStorageInMemory[Time, RecordingId, SnapshotBlob](
@@ -57,41 +27,27 @@ case class BlobStorageInMemory[Time, RecordingId, SnapshotBlob] private (
 
   case class PhoenixLifecycleSpanningAnnihilations(
       itemClazz: Class[_],
-      snapshotBlobs: Vector[(Split[Time],
-                             (Option[SnapshotBlob], RecordingId, Revision))] =
-        Vector.empty) {
-    val snapshotBlobTimes = snapshotBlobs.times
-
-    require(
-      snapshotBlobTimes.isEmpty || (snapshotBlobTimes zip snapshotBlobTimes.tail forall {
-        case (first, second) => first <= second
-      }))
-
-    private def indexOf(when: Split[Time],
-                        validRevisionFor: RecordingId => Revision) =
-      snapshotBlobs
-        .view(0, indexToSearchDownFromOrInsertAt(when, snapshotBlobTimes))
-        .lastIndexWhere(PartialFunction.cond(_) {
-          case (_, (_, key, blobRevision)) =>
-            blobRevision == validRevisionFor(key)
-        })
+      snapshotBlobs: SortedMap[
+        Split[Time],
+        List[(Option[SnapshotBlob], RecordingId, Revision)]] =
+        TreeMap.empty(Ordering[Split[Time]].reverse)) {
 
     def isValid(when: Split[Time],
-                validRevisionFor: RecordingId => Revision): Boolean = {
-      val index = indexOf(when, validRevisionFor)
-      -1 != index && snapshotBlobs(index)._2._1.isDefined
-    }
+                validRevisionFor: RecordingId => Revision): Boolean =
+      snapshotBlobFor(when, validRevisionFor).isDefined
 
     def snapshotBlobFor(
         when: Split[Time],
-        validRevisionFor: RecordingId => Revision): SnapshotBlob = {
-      val index = indexOf(when, validRevisionFor)
+        validRevisionFor: RecordingId => Revision): Option[SnapshotBlob] = {
+      val blobEntriesIterator = snapshotBlobs.valuesIteratorFrom(when).flatten
 
-      assert(-1 != index)
-
-      snapshotBlobs(index) match {
-        case (_, (Some(snapshot), _, _)) => snapshot
-      }
+      blobEntriesIterator
+        .find {
+          case (_, key, blobRevision) => blobRevision == validRevisionFor(key)
+        }
+        .collect {
+          case (Some(snapshotBlob), _, _) => snapshotBlob
+        }
     }
 
     def addSnapshotBlob(
@@ -99,18 +55,16 @@ case class BlobStorageInMemory[Time, RecordingId, SnapshotBlob] private (
         when: Split[Time],
         snapshotBlob: Option[SnapshotBlob],
         revision: Revision): PhoenixLifecycleSpanningAnnihilations = {
-      val insertionPoint =
-        indexToSearchDownFromOrInsertAt(when, snapshotBlobTimes)
       this.copy(
-        snapshotBlobs = this.snapshotBlobs
-          .patch(insertionPoint, Seq((when, (snapshotBlob, key, revision))), 0))
+        snapshotBlobs = this.snapshotBlobs + (when ->
+          ((snapshotBlob, key, revision) :: this.snapshotBlobs
+            .getOrElse(when, List.empty))))
     }
 
     def retainUpTo(
         when: Split[Time]): Option[PhoenixLifecycleSpanningAnnihilations] = {
-      val cutoffPoint = indexToSearchDownFromOrInsertAt(when, snapshotBlobTimes)
-
-      val retainedSnapshotBlobs = this.snapshotBlobs.take(cutoffPoint)
+      val retainedSnapshotBlobs =
+        this.snapshotBlobs.from(when)
 
       if (retainedSnapshotBlobs.nonEmpty)
         Some(this.copy(snapshotBlobs = retainedSnapshotBlobs))
@@ -240,8 +194,9 @@ case class BlobStorageInMemory[Time, RecordingId, SnapshotBlob] private (
           lifecycles <- lifecycles.get(uniqueItemSpecification.id)
           lifecycle <- lifecycles.find(
             uniqueItemSpecification.clazz == _.itemClazz)
-          if lifecycle.isValid(splitWhen, recordingRevisions.apply)
-        } yield lifecycle.snapshotBlobFor(splitWhen, recordingRevisions.apply)
+          snapshotBlob <- lifecycle.snapshotBlobFor(splitWhen,
+                                                    recordingRevisions.apply)
+        } yield snapshotBlob
 
     }
 
