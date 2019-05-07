@@ -29,9 +29,13 @@ object WorldH2StorageImplementation {
           classOf[ItemStateUpdateTime],
           classOf[Unbounded[_]])
 
-    override protected def isExcludedFromBeingProxied(
+    override protected def isBarredFromInterTrancheReferencing(
         clazz: Class[_]): Boolean =
       notToBeProxied.exists(_.isAssignableFrom(clazz))
+
+    override protected def isForNonProxiedInterTrancheReferencing(
+        clazz: Class[_]): Boolean =
+      clazz.getName.contains("scala.collection.immutable.Vector")
 
     override protected def canBeProxiedViaSuperTypes(clazz: Class[_]): Boolean =
       !(Nil.getClass.isAssignableFrom(clazz) || Map

@@ -331,7 +331,11 @@ trait ImmutableObjectStorage[TrancheId] {
   private val kryoPool: KryoPool =
     KryoPool.withByteArrayOutputStream(40, kryoInstantiator)
 
-  protected def isExcludedFromBeingProxied(clazz: Class[_]): Boolean = false
+  protected def isBarredFromInterTrancheReferencing(clazz: Class[_]): Boolean =
+    false
+
+  protected def isForNonProxiedInterTrancheReferencing(
+      clazz: Class[_]): Boolean = false
 
   // NOTE: this is a potential danger area when an override is defined - returning
   // true indicates that all uses of a proxied object can be performed via the supertype
@@ -378,8 +382,11 @@ trait ImmutableObjectStorage[TrancheId] {
         clazz, { clazz =>
           require(!isProxyClazz(clazz))
 
-          val clazzShouldNotBeProxiedAtAll = kryoClosureMarkerClazz.isAssignableFrom(
-            clazz) || !useReferences(clazz) || isExcludedFromBeingProxied(clazz)
+          val clazzShouldNotBeProxiedAtAll = kryoClosureMarkerClazz
+            .isAssignableFrom(clazz) ||
+            !useReferences(clazz) ||
+            isBarredFromInterTrancheReferencing(clazz) ||
+            isForNonProxiedInterTrancheReferencing(clazz)
 
           if (!clazzShouldNotBeProxiedAtAll)
             if (shouldNotBeProxiedAsItsOwnType(clazz))
@@ -679,18 +686,23 @@ trait ImmutableObjectStorage[TrancheId] {
             val nonProxyClazz =
               proxySupport.nonProxyClazzFor(clazz)
 
-            val Some(superClazzAndInterfaces) =
-              proxySupport.superClazzAndInterfacesToProxy(nonProxyClazz)
+            if (isForNonProxiedInterTrancheReferencing(nonProxyClazz))
+              retrieveUnderlying(trancheIdForExternalObjectReference,
+                                 objectReferenceId)
+            else {
+              val Some(superClazzAndInterfaces) =
+                proxySupport.superClazzAndInterfacesToProxy(nonProxyClazz)
 
-            val proxy =
-              proxySupport.createProxy(
-                superClazzAndInterfaces,
-                new AcquiredState(trancheIdForExternalObjectReference,
-                                  objectReferenceId))
+              val proxy =
+                proxySupport.createProxy(
+                  superClazzAndInterfaces,
+                  new AcquiredState(trancheIdForExternalObjectReference,
+                                    objectReferenceId))
 
-            tranches.noteReferenceId(proxy, objectReferenceId)
+              tranches.noteReferenceId(proxy, objectReferenceId)
 
-            proxy
+              proxy
+            }
           }
         }
 
