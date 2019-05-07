@@ -99,7 +99,6 @@ case class BlobStorageInMemory[Time, RecordingId, SnapshotBlob] private (
         when: Split[Time],
         snapshotBlob: Option[SnapshotBlob],
         revision: Revision): PhoenixLifecycleSpanningAnnihilations = {
-      require(!snapshotBlobs.contains(when))
       val insertionPoint =
         indexToSearchDownFromOrInsertAt(when, snapshotBlobTimes)
       this.copy(
