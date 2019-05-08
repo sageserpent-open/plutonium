@@ -1,6 +1,7 @@
 package com.sageserpent.plutonium
 
-import scala.collection.immutable.{SortedMap, TreeMap}
+import de.sciss.fingertree.{OrderedSeq => ScissOrderedSeq}
+
 import scala.collection.mutable
 
 object BlobStorageInMemory {
@@ -27,10 +28,10 @@ case class BlobStorageInMemory[Time, RecordingId, SnapshotBlob] private (
 
   case class PhoenixLifecycleSpanningAnnihilations(
       itemClazz: Class[_],
-      snapshotBlobs: SortedMap[
-        Split[Time],
-        List[(Option[SnapshotBlob], RecordingId, Revision)]] =
-        TreeMap.empty(Ordering[Split[Time]].reverse)) {
+      snapshotBlobs: ScissOrderedSeq[
+        (Split[Time], List[(Option[SnapshotBlob], RecordingId, Revision)]),
+        Split[Time]] =
+        ScissOrderedSeq.empty(_._1, Ordering[Split[Time]].reverse)) {
 
     def isValid(when: Split[Time],
                 validRevisionFor: RecordingId => Revision): Boolean =
@@ -39,7 +40,8 @@ case class BlobStorageInMemory[Time, RecordingId, SnapshotBlob] private (
     def snapshotBlobFor(
         when: Split[Time],
         validRevisionFor: RecordingId => Revision): Option[SnapshotBlob] = {
-      val blobEntriesIterator = snapshotBlobs.valuesIteratorFrom(when).flatten
+      val blobEntriesIterator =
+        snapshotBlobs.ceilIterator(when).map(_._2).flatten
 
       blobEntriesIterator
         .find {
@@ -56,15 +58,21 @@ case class BlobStorageInMemory[Time, RecordingId, SnapshotBlob] private (
         snapshotBlob: Option[SnapshotBlob],
         revision: Revision): PhoenixLifecycleSpanningAnnihilations = {
       this.copy(
-        snapshotBlobs = this.snapshotBlobs + (when ->
+        snapshotBlobs = this.snapshotBlobs
+          .get(when)
+          .fold(this.snapshotBlobs)(this.snapshotBlobs.removeAll(_)) + (when ->
           ((snapshotBlob, key, revision) :: this.snapshotBlobs
-            .getOrElse(when, List.empty))))
+            .get(when)
+            .fold(List.empty[(Option[SnapshotBlob], RecordingId, Revision)])(
+              _._2))))
     }
 
     def retainUpTo(
         when: Split[Time]): Option[PhoenixLifecycleSpanningAnnihilations] = {
       val retainedSnapshotBlobs =
-        this.snapshotBlobs.from(when)
+        ScissOrderedSeq(this.snapshotBlobs.ceilIterator(when).toSeq: _*)(
+          _._1,
+          Ordering[Split[Time]].reverse)
 
       if (retainedSnapshotBlobs.nonEmpty)
         Some(this.copy(snapshotBlobs = retainedSnapshotBlobs))
