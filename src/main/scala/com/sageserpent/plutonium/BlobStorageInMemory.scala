@@ -41,7 +41,7 @@ case class BlobStorageInMemory[Time, RecordingId, SnapshotBlob] private (
         when: Split[Time],
         validRevisionFor: RecordingId => Revision): Option[SnapshotBlob] = {
       val blobEntriesIterator =
-        snapshotBlobs.ceilIterator(when).map(_._2).flatten
+        snapshotBlobs.ceilIterator(when).flatMap(_._2)
 
       blobEntriesIterator
         .find {
@@ -60,7 +60,7 @@ case class BlobStorageInMemory[Time, RecordingId, SnapshotBlob] private (
       this.copy(
         snapshotBlobs = this.snapshotBlobs
           .get(when)
-          .fold(this.snapshotBlobs)(this.snapshotBlobs.removeAll(_)) + (when ->
+          .fold(this.snapshotBlobs)(this.snapshotBlobs.removeAll) + (when ->
           ((snapshotBlob, key, revision) :: this.snapshotBlobs
             .get(when)
             .fold(List.empty[(Option[SnapshotBlob], RecordingId, Revision)])(
@@ -85,7 +85,7 @@ case class BlobStorageInMemory[Time, RecordingId, SnapshotBlob] private (
       type Recording =
         (RecordingId, Time, Map[UniqueItemSpecification, Option[SnapshotBlob]])
 
-      val recordings = mutable.MutableList.empty[Recording]
+      private val recordings = mutable.MutableList.empty[Recording]
 
       override def record(
           key: RecordingId,
@@ -163,7 +163,7 @@ case class BlobStorageInMemory[Time, RecordingId, SnapshotBlob] private (
   override def timeSlice(when: Time,
                          inclusive: Boolean): Timeslice[SnapshotBlob] = {
     trait TimesliceImplementation extends Timeslice[SnapshotBlob] {
-      val splitWhen =
+      private val splitWhen =
         if (inclusive) Split.alignedWith(when) else Split.lowerBoundOf(when)
 
       override def uniqueItemQueriesFor[Item](
