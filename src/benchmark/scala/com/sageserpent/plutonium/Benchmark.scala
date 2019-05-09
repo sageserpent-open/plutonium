@@ -77,7 +77,11 @@ trait Benchmark {
 
             val queryId = randomBehaviour.chooseOneOfRange(idSet)
 
-            scope.render(Bitemporal.withId[Thing](queryId)).force
+            val transitiveClosureSize = scope
+              .render(Bitemporal.withId[Thing](queryId))
+              .force
+              .headOption
+              .fold(-1)(_.transitiveClosureSize)
 
             if (step % 50 == 0) {
               val currentTime = Deadline.now
@@ -85,7 +89,7 @@ trait Benchmark {
               val duration = currentTime - startTime
 
               println(
-                s"Step: $step, duration: ${duration.toMillis} milliseconds")
+                s"Step: $step, duration: ${duration.toMillis} milliseconds, transitive closure size: $transitiveClosureSize")
             }
           }
 

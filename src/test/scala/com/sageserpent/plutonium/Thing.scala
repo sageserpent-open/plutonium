@@ -10,4 +10,17 @@ abstract class Thing {
   }
 
   var reference: Option[Thing] = None
+
+  def transitiveClosureSize: Int = {
+    def visitTransitiveClosure(thing: Thing, visited: Set[Thing]): Set[Thing] =
+      if (visited.contains(thing)) visited
+      else {
+        val visitedWithThis = visited + thing
+
+        reference.fold(visitedWithThis)(
+          visitTransitiveClosure(_, visitedWithThis))
+      }
+
+    visitTransitiveClosure(this, Set.empty).size
+  }
 }
