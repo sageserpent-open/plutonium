@@ -1,6 +1,7 @@
 package com.sageserpent.plutonium
 
 import java.time.Instant
+import java.util.UUID
 
 import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.AllEvents.{ItemStateUpdatesDelta, noEvents}
@@ -17,6 +18,7 @@ import quiver._
 
 import scala.annotation.tailrec
 import scala.collection.immutable.Map
+import com.github.benmanes.caffeine.cache.Cache
 
 object Timeline {
   type ItemStateUpdatesDag =
@@ -35,9 +37,7 @@ object Timeline {
 case class Timeline(allEvents: AllEvents = noEvents,
                     itemStateUpdatesDag: ItemStateUpdatesDag = empty,
                     blobStorage: Timeline.BlobStorage =
-                      BlobStorageInMemory[ItemStateUpdateTime,
-                                          ItemStateUpdateKey,
-                                          SnapshotBlob]()) {
+                      PithedOutBlobStorage.empty) {
   def revise(events: Map[_ <: EventId, Option[Event]]): Timeline = {
     val ItemStateUpdatesDelta(allEventsForNewTimeline,
                               itemStateUpdateKeysThatNeedToBeRevoked,
@@ -289,4 +289,66 @@ case class Timeline(allEvents: AllEvents = noEvents,
     new ItemCacheUsingBlobStorage[ItemStateUpdateTime](
       blobStorage,
       UpperBoundOfTimeslice(when))
+}
+
+object PithedOutBlobStorage {
+  val cache: Cache[UUID, Timeline.BlobStorage] = caffeineBuilder().build()
+
+  val empty: Timeline.BlobStorage = {
+    val newImplementationId = UUID.randomUUID()
+
+    PithedOutBlobStorage.cache
+      .put(newImplementationId,
+           BlobStorageInMemory[ItemStateUpdateTime,
+                               ItemStateUpdateKey,
+                               SnapshotBlob]())
+
+    PithedOutBlobStorage(newImplementationId)
+  }
+}
+
+case class PithedOutBlobStorage(implementationId: UUID)(
+    override implicit val timeOrdering: Ordering[ItemStateUpdateTime])
+    extends Timeline.BlobStorage {
+  override def openRevision(): RevisionBuilder = {
+    val revisionBuilder =
+      Option(PithedOutBlobStorage.cache.getIfPresent(implementationId)).get
+        .openRevision()
+
+    new RevisionBuilder {
+      override def record(
+          key: ItemStateUpdateKey,
+          when: ItemStateUpdateTime,
+          snapshotBlobs: Map[UniqueItemSpecification, Option[SnapshotBlob]])
+        : Unit = revisionBuilder.record(key, when, snapshotBlobs)
+
+      override def build()
+        : BlobStorage[ItemStateUpdateTime, ItemStateUpdateKey, SnapshotBlob] = {
+        val newImplementationId = UUID.randomUUID()
+
+        PithedOutBlobStorage.cache
+          .put(newImplementationId, revisionBuilder.build())
+
+        PithedOutBlobStorage(newImplementationId)
+      }
+    }
+  }
+
+  override def timeSlice(
+      when: ItemStateUpdateTime,
+      inclusive: Boolean): BlobStorage.Timeslice[SnapshotBlob] =
+    Option(PithedOutBlobStorage.cache.getIfPresent(implementationId)).get
+      .timeSlice(when, inclusive)
+
+  override def retainUpTo(when: ItemStateUpdateTime)
+    : BlobStorage[ItemStateUpdateTime, ItemStateUpdateKey, SnapshotBlob] = {
+    val newImplementationId = UUID.randomUUID()
+
+    PithedOutBlobStorage.cache.put(
+      newImplementationId,
+      Option(PithedOutBlobStorage.cache.getIfPresent(implementationId)).get
+        .retainUpTo(when))
+
+    PithedOutBlobStorage(newImplementationId)
+  }
 }
