@@ -7,7 +7,7 @@ import universe.typeOf
 
 object classFromType {
 
-  implicit val clazzCache: Cache[universe.Type, Class[_]] =
+  val clazzCache: Cache[universe.Type, Class[_]] =
     caffeineBuilder().build()
 
   def apply[Item](reflectedType: universe.Type): Class[Item] =
