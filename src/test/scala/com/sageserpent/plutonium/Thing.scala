@@ -11,7 +11,7 @@ abstract class Thing {
 
   var reference: Option[Thing] = None
 
-  def transitiveClosureSize: Int = {
+  def transitiveClosure: Int = {
     def visitTransitiveClosure(thing: Thing, visited: Set[Thing]): Set[Thing] =
       if (visited.contains(thing)) visited
       else {

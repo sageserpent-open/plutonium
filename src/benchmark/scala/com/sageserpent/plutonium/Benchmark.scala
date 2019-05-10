@@ -81,7 +81,7 @@ trait Benchmark {
               .render(Bitemporal.withId[Thing](queryId))
               .force
               .headOption
-              .fold(-1)(_.transitiveClosureSize)
+              .fold(0)(_.transitiveClosure)
 
             if (step % 50 == 0) {
               val currentTime = Deadline.now
