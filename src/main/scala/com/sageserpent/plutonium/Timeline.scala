@@ -7,7 +7,6 @@ import com.sageserpent.plutonium.AllEvents.{ItemStateUpdatesDelta, noEvents}
 import com.sageserpent.plutonium.BlobStorage.SnapshotRetrievalApi
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
 import com.sageserpent.plutonium.ItemStateUpdateKey.ordering
-import com.sageserpent.plutonium.ItemStateUpdateTime.ordering
 import com.sageserpent.plutonium.Timeline.{
   ItemStateUpdatesDag,
   PriorityQueueKey
