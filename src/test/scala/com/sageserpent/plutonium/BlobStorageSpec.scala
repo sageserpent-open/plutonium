@@ -26,12 +26,7 @@ trait AnotherKindOfThing
 
 trait NoKindOfThing
 
-class BlobStorageSpec
-    extends FlatSpec
-    with Matchers
-    with SharedGenerators
-    with GeneratorDrivenPropertyChecks
-    with NoShrinking {
+object BlobStorageSpec extends SharedGenerators {
   type RecordingId = Int
 
   def mixedIdGenerator(disambiguation: Int) =
@@ -136,7 +131,8 @@ class BlobStorageSpec
         .fill(rightPaddingAmount)(PositiveInfinity[Instant])
   }
 
-  def timeSeriesGeneratorFor(uniqueItemSpecification: UniqueItemSpecification) =
+  def timeSeriesGeneratorFor(
+      uniqueItemSpecification: UniqueItemSpecification): Gen[TimeSeries] =
     for {
       snapshotBlobs <- blobsGenerator
       twiceTheNumberOfSnapshots = 2 * snapshotBlobs.size
@@ -242,7 +238,8 @@ class BlobStorageSpec
                  Seq[(UniqueItemSpecification, Option[SnapshotBlob])])],
          RecordingId)]
 
-  def blobStorageFrom(revisions: Seq[ScalaFmtWorkaround]) =
+  def blobStorageFrom(revisions: Seq[ScalaFmtWorkaround])
+    : BlobStorage[Unbounded[Instant], RecordingId, SnapshotBlob] =
     ((BlobStorageInMemory[Unbounded[Instant], RecordingId, SnapshotBlob](): BlobStorage[
       Unbounded[Instant],
       RecordingId,
@@ -260,6 +257,14 @@ class BlobStorageSpec
         }
         builder.build()
     }
+}
+
+class BlobStorageSpec
+    extends FlatSpec
+    with Matchers
+    with GeneratorDrivenPropertyChecks
+    with NoShrinking {
+  import BlobStorageSpec._
 
   def checkExpectationsForNonExistence(timeSlice: Timeslice[SnapshotBlob])(
       uniqueItemSpecification: UniqueItemSpecification): Any = {
