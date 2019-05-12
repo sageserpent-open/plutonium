@@ -1,5 +1,9 @@
 package com.sageserpent.plutonium
 
+object BlobStorageOnH2 {
+  val empty: BlobStorageOnH2 = ???
+}
+
 class BlobStorageOnH2 extends Timeline.BlobStorage {
   override implicit val timeOrdering: Ordering[ItemStateUpdateTime] = ???
 
