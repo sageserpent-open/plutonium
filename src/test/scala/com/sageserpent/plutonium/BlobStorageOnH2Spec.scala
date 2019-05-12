@@ -3,21 +3,10 @@ package com.sageserpent.plutonium
 import java.time.Instant
 import java.util.UUID
 
-import com.sageserpent.plutonium
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.{FlatSpec, Matchers}
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
-
-/*
-        key: RecordingId,
-        when: Time,
-        snapshotBlobs: Map[UniqueItemSpecification, Option[SnapshotBlob]]
-
-
-          type BlobStorage = com.sageserpent.plutonium.BlobStorage[ItemStateUpdateTime,
-                                                           ItemStateUpdateKey,
-                                                           SnapshotBlob]
- */
+import org.scalacheck.ScalacheckShapeless._
 
 object BlobStorageOnH2Spec extends SharedGenerators {
   case class RecordingData(
@@ -26,37 +15,55 @@ object BlobStorageOnH2Spec extends SharedGenerators {
       snapshotBlobs: Map[UniqueItemSpecification,
                          Option[ItemStateStorage.SnapshotBlob]])
 
-  case class RevisionData(recordings: Seq[RecordingData])
+  sealed trait Operation
 
-  val thingyGenerator = {
-    import org.scalacheck.ScalacheckShapeless._
+  case class Revision(recordingDatums: Seq[RecordingData]) extends Operation
 
-    implicit val arbitraryUuid: Arbitrary[UUID] = Arbitrary(Gen.uuid)
+  case class Retaining(when: ItemStateUpdateTime) extends Operation
 
+  case class Querying(when: ItemStateUpdateTime,
+                      itemId: Either[UniqueItemSpecification, Any])
+
+  case object Dropping extends Operation
+
+  val operationGenerator: Gen[Operation] = {
     implicit val arbitraryInstant: Arbitrary[Instant] = Arbitrary(
       instantGenerator)
 
+    implicit val arbitraryUuid: Arbitrary[UUID] = Arbitrary(Gen.uuid)
+
+    implicit val arbitraryId: Arbitrary[Any] = Arbitrary(
+      Gen.oneOf(stringIdGenerator, integerIdGenerator))
+
+    implicit val arbitraryClazz: Arbitrary[Class[_]] = Arbitrary(
+      Gen.oneOf(classOf[Thing], classOf[FooHistory]))
+
     implicit val arbitraryUniqueItemSpecification = Arbitrary(for {
-      id    <- Gen.oneOf(stringIdGenerator, integerIdGenerator)
-      clazz <- Gen.oneOf(classOf[Thing], classOf[FooHistory])
+      id    <- arbitraryId.arbitrary
+      clazz <- arbitraryClazz.arbitrary
     } yield UniqueItemSpecification(id, clazz))
 
-    implicitly[Arbitrary[RevisionData]].arbitrary
+    implicitly[Arbitrary[Operation]].arbitrary
   }
+
+  val operationsGenerator: Gen[Seq[Operation]] =
+    Gen.nonEmptyListOf(operationGenerator)
 }
 
 class BlobStorageOnH2Spec
     extends FlatSpec
     with Matchers
     with GeneratorDrivenPropertyChecks {
-  import BlobStorageOnH2Spec.thingyGenerator
-  "blob storage on H2" should "behave the same way as blob storage in memory" in {
-    var count = 0
-    forAll(thingyGenerator, MinSuccessful(200)) { thingy =>
-      count += 1
-      println(thingy)
-    }
+  import BlobStorageOnH2Spec._
 
-    println(count)
+  "blob storage on H2" should "behave the same way as blob storage in memory" in {
+    forAll(operationsGenerator, MinSuccessful(20)) { operations =>
+      whenever(operations.head match {
+        case Dropping => false
+        case _        => true
+      }) {
+        println(operations)
+      }
+    }
   }
 }
