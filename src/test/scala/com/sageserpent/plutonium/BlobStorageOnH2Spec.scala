@@ -3,12 +3,14 @@ package com.sageserpent.plutonium
 import java.time.Instant
 import java.util.UUID
 
+import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.{FlatSpec, Matchers}
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalacheck.ScalacheckShapeless._
 
 import scala.collection.mutable
+import scala.util.Try
 
 object BlobStorageOnH2Spec extends SharedGenerators {
   case class RecordingDatum(
@@ -38,9 +40,10 @@ object BlobStorageOnH2Spec extends SharedGenerators {
       Gen.oneOf(stringIdGenerator, integerIdGenerator))
 
     implicit val arbitraryClazz: Arbitrary[Class[_]] = Arbitrary(
-      Gen.oneOf(classOf[Thing], classOf[FooHistory]))
+      Gen.oneOf(classOf[Any], classOf[Thing], classOf[FooHistory]))
 
-    implicit val arbitraryUniqueItemSpecification = Arbitrary(for {
+    implicit val arbitraryUniqueItemSpecification
+      : Arbitrary[UniqueItemSpecification] = Arbitrary(for {
       id    <- arbitraryId.arbitrary
       clazz <- arbitraryClazz.arbitrary
     } yield UniqueItemSpecification(id, clazz))
@@ -61,13 +64,16 @@ class BlobStorageOnH2Spec
   import BlobStorageOnH2Spec._
 
   "blob storage on H2" should "behave the same way as blob storage in memory" in {
-    forAll(operationsGenerator, MinSuccessful(20)) { operations =>
+    forAll(operationsGenerator, MinSuccessful(200)) { operations =>
       val pairsOfRivalImplementations
         : mutable.Queue[(Timeline.BlobStorage, Timeline.BlobStorage)] =
         mutable.Queue.empty
 
       pairsOfRivalImplementations.enqueue(
-        BlobStorageOnH2.empty -> BlobStorageInMemory())
+        /*BlobStorageOnH2.empty*/ BlobStorageInMemory[
+          ItemStateUpdateTime,
+          ItemStateUpdateKey,
+          SnapshotBlob]() -> BlobStorageInMemory())
 
       for {
         operation <- operations
@@ -108,14 +114,18 @@ class BlobStorageOnH2Spec
               .uniqueItemQueriesFor(uniqueItemSpecification) -> exemplarTimeslice
               .uniqueItemQueriesFor(uniqueItemSpecification)
 
-            traineeResult should contain theSameElementsAs (exemplarResult)
+            traineeResult should contain theSameElementsAs exemplarResult
 
             (traineeResult zip exemplarResult).foreach {
               case (traineeUniqueItemSpecification,
                     exemplarUniqueItemSpecification) =>
-                traineeTimeslice.snapshotBlobFor(traineeUniqueItemSpecification) should be(
+                Try {
+                  traineeTimeslice.snapshotBlobFor(
+                    traineeUniqueItemSpecification)
+                }.toEither.left.map(_.getClass) should be(Try {
                   exemplarTimeslice.snapshotBlobFor(
-                    exemplarUniqueItemSpecification))
+                    exemplarUniqueItemSpecification)
+                }.toEither.left.map(_.getClass))
             }
 
           case Querying(when, Right(clazz)) =>
@@ -125,14 +135,18 @@ class BlobStorageOnH2Spec
               .uniqueItemQueriesFor(clazz) -> exemplarTimeslice
               .uniqueItemQueriesFor(clazz)
 
-            traineeResult should contain theSameElementsAs (exemplarResult)
+            traineeResult should contain theSameElementsAs exemplarResult
 
             (traineeResult zip exemplarResult).foreach {
               case (traineeUniqueItemSpecification,
                     exemplarUniqueItemSpecification) =>
-                traineeTimeslice.snapshotBlobFor(traineeUniqueItemSpecification) should be(
+                Try {
+                  traineeTimeslice.snapshotBlobFor(
+                    traineeUniqueItemSpecification)
+                }.toEither.left.map(_.getClass) should be(Try {
                   exemplarTimeslice.snapshotBlobFor(
-                    exemplarUniqueItemSpecification))
+                    exemplarUniqueItemSpecification)
+                }.toEither.left.map(_.getClass))
             }
         }
       }
