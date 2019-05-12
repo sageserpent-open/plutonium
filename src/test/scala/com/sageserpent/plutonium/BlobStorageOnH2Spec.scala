@@ -3,11 +3,10 @@ package com.sageserpent.plutonium
 import java.time.Instant
 import java.util.UUID
 
-import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
-import org.scalacheck.{Arbitrary, Gen}
-import org.scalatest.{FlatSpec, Matchers}
-import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalacheck.ScalacheckShapeless._
+import org.scalacheck.{Arbitrary, Gen}
+import org.scalatest.prop.GeneratorDrivenPropertyChecks
+import org.scalatest.{FlatSpec, Matchers}
 
 import scala.collection.mutable
 import scala.util.Try
@@ -65,24 +64,21 @@ class BlobStorageOnH2Spec
 
   "blob storage on H2" should "behave the same way as blob storage in memory" in {
     forAll(operationsGenerator, MinSuccessful(200)) { operations =>
-      val pairsOfRivalImplementations
+      val pairsOfTraineeAndExemplarImplementations
         : mutable.Queue[(Timeline.BlobStorage, Timeline.BlobStorage)] =
         mutable.Queue.empty
 
-      pairsOfRivalImplementations.enqueue(
-        /*BlobStorageOnH2.empty*/ BlobStorageInMemory[
-          ItemStateUpdateTime,
-          ItemStateUpdateKey,
-          SnapshotBlob]() -> BlobStorageInMemory())
+      pairsOfTraineeAndExemplarImplementations.enqueue(
+        BlobStorageOnH2.empty -> BlobStorageInMemory())
 
       for {
         operation <- operations
       } {
-        if (maximumNumberOfAlternativeBlobStorages < pairsOfRivalImplementations.size) {
-          pairsOfRivalImplementations.dequeue()
+        if (maximumNumberOfAlternativeBlobStorages < pairsOfTraineeAndExemplarImplementations.size) {
+          pairsOfTraineeAndExemplarImplementations.dequeue()
         }
 
-        val (trainee, exemplar) = pairsOfRivalImplementations.head
+        val (trainee, exemplar) = pairsOfTraineeAndExemplarImplementations.head
 
         operation match {
           case Revision(recordingDatums) =>
@@ -99,13 +95,15 @@ class BlobStorageOnH2Spec
             val (newTrainee, newExemplar) = builderFromTrainee
               .build() -> builderFromExemplar.build()
 
-            pairsOfRivalImplementations.enqueue(newTrainee -> newExemplar)
+            pairsOfTraineeAndExemplarImplementations.enqueue(
+              newTrainee -> newExemplar)
 
           case Retaining(when) =>
             val (newTrainee, newExemplar) = trainee.retainUpTo(when) -> exemplar
               .retainUpTo(when)
 
-            pairsOfRivalImplementations.enqueue(newTrainee -> newExemplar)
+            pairsOfTraineeAndExemplarImplementations.enqueue(
+              newTrainee -> newExemplar)
 
           case Querying(when, Left(uniqueItemSpecification)) =>
             val traineeTimeslice  = trainee.timeSlice(when)
