@@ -3,6 +3,8 @@ package com.sageserpent.plutonium
 import java.time.Instant
 import java.util.UUID
 
+import cats.effect.IO
+import com.sageserpent.plutonium.curium.H2ViaScalikeJdbcResource
 import org.scalacheck.ScalacheckShapeless._
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
@@ -64,90 +66,97 @@ class BlobStorageOnH2Spec
 
   "blob storage on H2" should "behave the same way as blob storage in memory" in {
     forAll(operationsGenerator, MinSuccessful(200)) { operations =>
-      val pairsOfTraineeAndExemplarImplementations
-        : mutable.Queue[(Timeline.BlobStorage, Timeline.BlobStorage)] =
-        mutable.Queue.empty
+      H2ViaScalikeJdbcResource.connectionPoolResource
+        .use(connectionPool =>
+          IO {
+            val pairsOfTraineeAndExemplarImplementations
+              : mutable.Queue[(Timeline.BlobStorage, Timeline.BlobStorage)] =
+              mutable.Queue.empty
 
-      pairsOfTraineeAndExemplarImplementations.enqueue(
-        BlobStorageOnH2.empty -> BlobStorageInMemory())
-
-      for {
-        operation <- operations
-      } {
-        if (maximumNumberOfAlternativeBlobStorages < pairsOfTraineeAndExemplarImplementations.size) {
-          pairsOfTraineeAndExemplarImplementations.dequeue()
-        }
-
-        val (trainee, exemplar) = pairsOfTraineeAndExemplarImplementations.head
-
-        operation match {
-          case Revision(recordingDatums) =>
-            val (builderFromTrainee, builderFromExemplar) = trainee
-              .openRevision() -> exemplar.openRevision()
+            pairsOfTraineeAndExemplarImplementations.enqueue(
+              BlobStorageOnH2.empty(connectionPool) -> BlobStorageInMemory())
 
             for {
-              RecordingDatum(key, when, snapshotBlobs) <- recordingDatums
+              operation <- operations
             } {
-              builderFromTrainee.record(key, when, snapshotBlobs)
-              builderFromExemplar.record(key, when, snapshotBlobs)
+              if (maximumNumberOfAlternativeBlobStorages < pairsOfTraineeAndExemplarImplementations.size) {
+                pairsOfTraineeAndExemplarImplementations.dequeue()
+              }
+
+              val (trainee, exemplar) =
+                pairsOfTraineeAndExemplarImplementations.head
+
+              operation match {
+                case Revision(recordingDatums) =>
+                  val (builderFromTrainee, builderFromExemplar) = trainee
+                    .openRevision() -> exemplar.openRevision()
+
+                  for {
+                    RecordingDatum(key, when, snapshotBlobs) <- recordingDatums
+                  } {
+                    builderFromTrainee.record(key, when, snapshotBlobs)
+                    builderFromExemplar.record(key, when, snapshotBlobs)
+                  }
+
+                  val (newTrainee, newExemplar) = builderFromTrainee
+                    .build() -> builderFromExemplar.build()
+
+                  pairsOfTraineeAndExemplarImplementations.enqueue(
+                    newTrainee -> newExemplar)
+
+                case Retaining(when) =>
+                  val (newTrainee, newExemplar) = trainee
+                    .retainUpTo(when) -> exemplar
+                    .retainUpTo(when)
+
+                  pairsOfTraineeAndExemplarImplementations.enqueue(
+                    newTrainee -> newExemplar)
+
+                case Querying(when, Left(uniqueItemSpecification)) =>
+                  val traineeTimeslice  = trainee.timeSlice(when)
+                  val exemplarTimeslice = exemplar.timeSlice(when)
+                  val (traineeResult, exemplarResult) = traineeTimeslice
+                    .uniqueItemQueriesFor(uniqueItemSpecification) -> exemplarTimeslice
+                    .uniqueItemQueriesFor(uniqueItemSpecification)
+
+                  traineeResult should contain theSameElementsAs exemplarResult
+
+                  (traineeResult zip exemplarResult).foreach {
+                    case (traineeUniqueItemSpecification,
+                          exemplarUniqueItemSpecification) =>
+                      Try {
+                        traineeTimeslice.snapshotBlobFor(
+                          traineeUniqueItemSpecification)
+                      }.toEither.left.map(_.getClass) should be(Try {
+                        exemplarTimeslice.snapshotBlobFor(
+                          exemplarUniqueItemSpecification)
+                      }.toEither.left.map(_.getClass))
+                  }
+
+                case Querying(when, Right(clazz)) =>
+                  val traineeTimeslice  = trainee.timeSlice(when)
+                  val exemplarTimeslice = exemplar.timeSlice(when)
+                  val (traineeResult, exemplarResult) = traineeTimeslice
+                    .uniqueItemQueriesFor(clazz) -> exemplarTimeslice
+                    .uniqueItemQueriesFor(clazz)
+
+                  traineeResult should contain theSameElementsAs exemplarResult
+
+                  (traineeResult zip exemplarResult).foreach {
+                    case (traineeUniqueItemSpecification,
+                          exemplarUniqueItemSpecification) =>
+                      Try {
+                        traineeTimeslice.snapshotBlobFor(
+                          traineeUniqueItemSpecification)
+                      }.toEither.left.map(_.getClass) should be(Try {
+                        exemplarTimeslice.snapshotBlobFor(
+                          exemplarUniqueItemSpecification)
+                      }.toEither.left.map(_.getClass))
+                  }
+              }
             }
-
-            val (newTrainee, newExemplar) = builderFromTrainee
-              .build() -> builderFromExemplar.build()
-
-            pairsOfTraineeAndExemplarImplementations.enqueue(
-              newTrainee -> newExemplar)
-
-          case Retaining(when) =>
-            val (newTrainee, newExemplar) = trainee.retainUpTo(when) -> exemplar
-              .retainUpTo(when)
-
-            pairsOfTraineeAndExemplarImplementations.enqueue(
-              newTrainee -> newExemplar)
-
-          case Querying(when, Left(uniqueItemSpecification)) =>
-            val traineeTimeslice  = trainee.timeSlice(when)
-            val exemplarTimeslice = exemplar.timeSlice(when)
-            val (traineeResult, exemplarResult) = traineeTimeslice
-              .uniqueItemQueriesFor(uniqueItemSpecification) -> exemplarTimeslice
-              .uniqueItemQueriesFor(uniqueItemSpecification)
-
-            traineeResult should contain theSameElementsAs exemplarResult
-
-            (traineeResult zip exemplarResult).foreach {
-              case (traineeUniqueItemSpecification,
-                    exemplarUniqueItemSpecification) =>
-                Try {
-                  traineeTimeslice.snapshotBlobFor(
-                    traineeUniqueItemSpecification)
-                }.toEither.left.map(_.getClass) should be(Try {
-                  exemplarTimeslice.snapshotBlobFor(
-                    exemplarUniqueItemSpecification)
-                }.toEither.left.map(_.getClass))
-            }
-
-          case Querying(when, Right(clazz)) =>
-            val traineeTimeslice  = trainee.timeSlice(when)
-            val exemplarTimeslice = exemplar.timeSlice(when)
-            val (traineeResult, exemplarResult) = traineeTimeslice
-              .uniqueItemQueriesFor(clazz) -> exemplarTimeslice
-              .uniqueItemQueriesFor(clazz)
-
-            traineeResult should contain theSameElementsAs exemplarResult
-
-            (traineeResult zip exemplarResult).foreach {
-              case (traineeUniqueItemSpecification,
-                    exemplarUniqueItemSpecification) =>
-                Try {
-                  traineeTimeslice.snapshotBlobFor(
-                    traineeUniqueItemSpecification)
-                }.toEither.left.map(_.getClass) should be(Try {
-                  exemplarTimeslice.snapshotBlobFor(
-                    exemplarUniqueItemSpecification)
-                }.toEither.left.map(_.getClass))
-            }
-        }
-      }
+        })
+        .unsafeRunSync()
     }
   }
 }

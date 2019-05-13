@@ -1,10 +1,13 @@
 package com.sageserpent.plutonium
 
+import scalikejdbc.ConnectionPool
+
 object BlobStorageOnH2 {
-  val empty: BlobStorageOnH2 = ???
+  def empty(connectionPool: ConnectionPool): BlobStorageOnH2 = ???
 }
 
-class BlobStorageOnH2 extends Timeline.BlobStorage {
+class BlobStorageOnH2(connectionPool: ConnectionPool)
+    extends Timeline.BlobStorage {
   override implicit val timeOrdering: Ordering[ItemStateUpdateTime] = ???
 
   override def openRevision(): RevisionBuilder = ???
