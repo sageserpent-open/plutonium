@@ -99,7 +99,7 @@ case class BlobStorageInMemory[Time, RecordingId, SnapshotBlob] private (
         val newRevision = 1 + thisBlobStorage.revision
 
         val newEventRevisions
-          : Map[RecordingId, Int] = thisBlobStorage.recordingRevisions ++ (recordings map {
+          : Map[RecordingId, Revision] = thisBlobStorage.recordingRevisions ++ (recordings map {
           case (key, _, _) => key
         }).distinct.map(_ -> newRevision)
 
