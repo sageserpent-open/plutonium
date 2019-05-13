@@ -1,9 +1,35 @@
 package com.sageserpent.plutonium
 
-import scalikejdbc.ConnectionPool
+import cats.effect.IO
+import com.sageserpent.plutonium.curium.DBResource
+import scalikejdbc._
 
 object BlobStorageOnH2 {
   def empty(connectionPool: ConnectionPool): BlobStorageOnH2 = ???
+
+  def setupDatabaseTables(connectionPool: ConnectionPool): IO[Unit] =
+    DBResource(connectionPool)
+      .use(db =>
+        IO {
+          db localTx { implicit session: DBSession =>
+            sql"""
+             CREATE TABLE ???(
+
+             )
+      """.update.apply()
+          }
+      })
+
+  def dropDatabaseTables(connectionPool: ConnectionPool): IO[Unit] =
+    DBResource(connectionPool)
+      .use(db =>
+        IO {
+          db localTx { implicit session: DBSession =>
+            sql"""
+             DROP ALL OBJECTS
+           """.update.apply()
+          }
+      })
 }
 
 class BlobStorageOnH2(connectionPool: ConnectionPool)

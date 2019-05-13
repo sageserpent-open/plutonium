@@ -12,7 +12,7 @@ import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.seqEnrichment._
 import com.sageserpent.plutonium.World._
 import com.sageserpent.plutonium.curium.{
-  H2ViaScalikeJdbcResource,
+  H2ViaScalikeJdbcDatabaseSetupResource,
   H2ViaDoobieResource
 }
 import io.lettuce.core.{RedisClient, RedisURI}
@@ -928,9 +928,11 @@ trait WorldEfficientInMemoryImplementationResource extends WorldResource {
     })
 }
 
-trait WorldH2StorageImplementationResource extends WorldResource {
+trait WorldH2StorageImplementationResource
+    extends WorldResource
+    with H2ViaScalikeJdbcDatabaseSetupResource {
   val worldResource: Resource[IO, World] =
-    H2ViaScalikeJdbcResource.connectionPoolResource.flatMap(connectionPool =>
+    connectionPoolResource.flatMap(connectionPool =>
       Resource.fromAutoCloseable(IO {
         new WorldH2StorageImplementation(connectionPool) with WorldContracts
       }))

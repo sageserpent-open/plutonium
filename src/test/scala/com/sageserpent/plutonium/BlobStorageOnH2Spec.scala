@@ -3,15 +3,28 @@ package com.sageserpent.plutonium
 import java.time.Instant
 import java.util.UUID
 
-import cats.effect.IO
-import com.sageserpent.plutonium.curium.H2ViaScalikeJdbcResource
+import cats.effect.{IO, Resource}
+import com.sageserpent.plutonium.curium.{
+  ConnectionPoolResource,
+  H2ViaScalikeJdbcDatabaseSetupResource
+}
 import org.scalacheck.ScalacheckShapeless._
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{FlatSpec, Matchers}
+import scalikejdbc.ConnectionPool
 
 import scala.collection.mutable
 import scala.util.Try
+
+trait BlobStorageOnH2DatabaseSetupResource extends ConnectionPoolResource {
+  override def connectionPoolResource: Resource[IO, ConnectionPool] =
+    for {
+      connectionPool <- super.connectionPoolResource
+      _ <- Resource.make(BlobStorageOnH2.setupDatabaseTables(connectionPool))(
+        _ => BlobStorageOnH2.dropDatabaseTables(connectionPool))
+    } yield connectionPool
+}
 
 object BlobStorageOnH2Spec extends SharedGenerators {
   case class RecordingDatum(
@@ -61,12 +74,13 @@ object BlobStorageOnH2Spec extends SharedGenerators {
 class BlobStorageOnH2Spec
     extends FlatSpec
     with Matchers
-    with GeneratorDrivenPropertyChecks {
+    with GeneratorDrivenPropertyChecks
+    with BlobStorageOnH2DatabaseSetupResource {
   import BlobStorageOnH2Spec._
 
   "blob storage on H2" should "behave the same way as blob storage in memory" in {
     forAll(operationsGenerator, MinSuccessful(200)) { operations =>
-      H2ViaScalikeJdbcResource.connectionPoolResource
+      connectionPoolResource
         .use(connectionPool =>
           IO {
             val pairsOfTraineeAndExemplarImplementations

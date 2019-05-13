@@ -4,13 +4,13 @@ import java.time.Instant
 
 import cats.effect.IO
 import com.sageserpent.americium.randomEnrichment._
-import com.sageserpent.plutonium.curium.H2ViaScalikeJdbcResource
+import com.sageserpent.plutonium.curium.H2ViaScalikeJdbcDatabaseSetupResource
 
 import scala.util.Random
 
 import scala.concurrent.duration._
 
-trait Benchmark {
+trait Benchmark extends H2ViaScalikeJdbcDatabaseSetupResource {
   implicit class Enhancement(randomBehaviour: Random) {
     def chooseOneOfRange(range: Range): Int =
       range(randomBehaviour.chooseAnyNumberFromZeroToOneLessThan(range.size))
@@ -27,7 +27,7 @@ trait Benchmark {
     val startTime = Deadline.now
 
     val world: IO[World] =
-      H2ViaScalikeJdbcResource.connectionPoolResource.use(connectionPool =>
+      connectionPoolResource.use(connectionPool =>
         IO {
           val world = new WorldH2StorageImplementation(connectionPool)
 
