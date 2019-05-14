@@ -1,11 +1,24 @@
 package com.sageserpent.plutonium
 
+import java.util.UUID
+
 import cats.effect.IO
 import com.sageserpent.plutonium.curium.DBResource
 import scalikejdbc._
 
+import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
+
+import scala.collection.mutable
+
 object BlobStorageOnH2 {
-  def empty(connectionPool: ConnectionPool): BlobStorageOnH2 = ???
+  type Revision = Int
+
+  // TODO - do we need a stable lineage id here that persists across processes?
+  def empty(connectionPool: ConnectionPool): BlobStorageOnH2 =
+    BlobStorageOnH2(connectionPool,
+                    UUID.randomUUID(),
+                    initialRevision,
+                    Map.empty)
 
   def setupDatabaseTables(connectionPool: ConnectionPool): IO[Unit] =
     DBResource(connectionPool)
@@ -13,8 +26,23 @@ object BlobStorageOnH2 {
         IO {
           db localTx { implicit session: DBSession =>
             sql"""
-             CREATE TABLE ???(
-
+             CREATE TABLE Lineage(
+                LineageId       IDENTITY  PRIMARY KEY,
+                MaximumRevision INTEGER   NOT NULL
+             )
+      """.update.apply()
+            sql"""
+             CREATE TABLE Recording(
+                EventTimeCategory       INT                       NOT NULL,
+                EventTime               TIMESTAMP WITH TIME ZONE  NOT NULL,
+                EventRevision           INT                       NOT NULL,
+                EventTiebreaker         INT                       NOT NULL,
+                IntraEventIndex         INT                       NOT NULL,
+                LineageId               BIGINT                    REFERENCES Lineage(LineageId),
+                Revision                INTEGER                   NOT NULL,
+                PRIMARY KEY (EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex),
+                CHECK Revision < ALL(SELECT MaximumRevision FROM Lineage),
+                CHECK EventTimeCategory IN (-1, 0, 1)
              )
       """.update.apply()
           }
@@ -30,13 +58,62 @@ object BlobStorageOnH2 {
            """.update.apply()
           }
       })
+
+  val initialRevision: Revision = 0
+
+  type LineageId = UUID
 }
 
-class BlobStorageOnH2(connectionPool: ConnectionPool)
+case class BlobStorageOnH2(
+    connectionPool: ConnectionPool,
+    lineageId: BlobStorageOnH2.LineageId,
+    revision: BlobStorageOnH2.Revision,
+    ancestralBranchpoints: Map[BlobStorageOnH2.LineageId,
+                               BlobStorageOnH2.Revision])(
+    override implicit val timeOrdering: Ordering[ItemStateUpdateTime])
     extends Timeline.BlobStorage {
-  override implicit val timeOrdering: Ordering[ItemStateUpdateTime] = ???
+  thisBlobStorage =>
+  import BlobStorageOnH2._
 
-  override def openRevision(): RevisionBuilder = ???
+  private def isHeadOfLineage(): IO[Boolean] = ???
+
+  override def openRevision(): RevisionBuilder = {
+    class RevisionBuilderImplementation extends RevisionBuilder {
+      type Recording =
+        (ItemStateUpdateKey,
+         ItemStateUpdateTime,
+         Map[UniqueItemSpecification, Option[SnapshotBlob]])
+
+      private val recordings = mutable.MutableList.empty[Recording]
+
+      override def record(
+          key: ItemStateUpdateKey,
+          when: ItemStateUpdateTime,
+          snapshotBlobs: Map[UniqueItemSpecification, Option[SnapshotBlob]])
+        : Unit = {
+        recordings += ((key, when, snapshotBlobs))
+      }
+
+      override def build()
+        : BlobStorage[ItemStateUpdateTime, ItemStateUpdateKey, SnapshotBlob] = {
+        (for {
+          isHeadOfLineage <- thisBlobStorage.isHeadOfLineage()
+          // TODO - update database with new recordings....
+        } yield
+          if (isHeadOfLineage)
+            thisBlobStorage.copy(revision = 1 + thisBlobStorage.revision)
+          else {
+            thisBlobStorage.copy(
+              lineageId = UUID.randomUUID(),
+              revision = initialRevision,
+              ancestralBranchpoints = thisBlobStorage.ancestralBranchpoints + (thisBlobStorage.lineageId -> thisBlobStorage.revision)
+            )
+          }).unsafeRunSync()
+      }
+    }
+
+    new RevisionBuilderImplementation
+  }
 
   override def timeSlice(when: ItemStateUpdateTime, inclusive: Boolean)
     : BlobStorage.Timeslice[ItemStateStorage.SnapshotBlob] = ???
