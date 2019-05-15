@@ -15,7 +15,7 @@ object ItemCacheUsingBlobStorage {
 }
 
 class ItemCacheUsingBlobStorage[Time](
-    blobStorage: BlobStorage[Time, ItemStateUpdateKey, SnapshotBlob],
+    blobStorage: BlobStorage[Time, SnapshotBlob],
     when: Time)
     extends ItemCacheImplementation
     with itemStateStorageUsingProxies.ReconstitutionContext {

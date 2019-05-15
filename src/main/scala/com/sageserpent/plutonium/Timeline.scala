@@ -26,17 +26,15 @@ object Timeline {
 
   val emptyTimeline: Timeline = Timeline()
 
-  type BlobStorage = com.sageserpent.plutonium.BlobStorage[ItemStateUpdateTime,
-                                                           ItemStateUpdateKey,
-                                                           SnapshotBlob]
+  type BlobStorage =
+    com.sageserpent.plutonium.BlobStorage[ItemStateUpdateTime, SnapshotBlob]
 }
 
-case class Timeline(allEvents: AllEvents = noEvents,
-                    itemStateUpdatesDag: ItemStateUpdatesDag = empty,
-                    blobStorage: Timeline.BlobStorage =
-                      BlobStorageInMemory[ItemStateUpdateTime,
-                                          ItemStateUpdateKey,
-                                          SnapshotBlob]()) {
+case class Timeline(
+    allEvents: AllEvents = noEvents,
+    itemStateUpdatesDag: ItemStateUpdatesDag = empty,
+    blobStorage: Timeline.BlobStorage =
+      BlobStorageInMemory[ItemStateUpdateTime, SnapshotBlob]()) {
   def revise(events: Map[_ <: EventId, Option[Event]]): Timeline = {
     val ItemStateUpdatesDelta(allEventsForNewTimeline,
                               itemStateUpdateKeysThatNeedToBeRevoked,
@@ -78,7 +76,6 @@ case class Timeline(allEvents: AllEvents = noEvents,
                   identifiedItemAccess(annihilation)
 
                 revisionBuilder.record(
-                  itemStateUpdateKey,
                   itemStateUpdateKey,
                   Map(annihilation.uniqueItemSpecification -> None))
 
@@ -130,7 +127,6 @@ case class Timeline(allEvents: AllEvents = noEvents,
                   identifiedItemAccess(patch, itemStateUpdateKey)
 
                 revisionBuilder.record(itemStateUpdateKey,
-                                       itemStateUpdateKey,
                                        mutatedItemSnapshots.mapValues {
                                          case (snapshot, _) => Some(snapshot)
                                        })
