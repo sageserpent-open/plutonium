@@ -67,8 +67,7 @@ class BlobStorageSpec
     })
   }
 
-  // TODO - decide whether 'Int' here should be considered to be 'Time'...
-  def ascendingTimes(numberRequired: Int): Gen[List[Int]] = {
+  def ascendingTimes(numberRequired: Int): Gen[List[Time]] = {
     if (0 == numberRequired) Gen.const(List.empty)
     else {
       val numberOfDeltas = numberRequired - 1
@@ -85,7 +84,7 @@ class BlobStorageSpec
         Gen.frequency(1 -> Gen.const(0), 5 -> Gen.posNum[Int])
 
       for {
-        earliest       <- Gen.oneOf(0 until 10)
+        earliest: Time <- Gen.oneOf(0 until 10)
         snapshotDeltas <- Gen.listOfN(half, snapshotDeltaGenerator)
         queryDeltas    <- Gen.listOfN(halfPlusOffCut, queryDeltaGenerator)
         deltas = interleave(queryDeltas, snapshotDeltas)
@@ -127,11 +126,59 @@ class BlobStorageSpec
                                lotsOfTimeSeries: Seq[TimeSeries],
                                forceUseOfAnOverlappingType: Boolean = false)
     : Seq[(Time, Seq[(UniqueItemSpecification, Option[SnapshotBlob])])] = {
+    def shuffleAndMergeBookingsSharingTheSameTime(
+        lotsOfTimeSeriesWithoutTheQueryTimeCruft: Seq[
+          (UniqueItemSpecification, Seq[(Time, Option[SnapshotBlob])])])
+      : Seq[(Time, Seq[(UniqueItemSpecification, Option[SnapshotBlob])])] = {
+      val forceUseOfAnOverlappingTypeDecisions = {
+        val numberOfTimeSeries = lotsOfTimeSeriesWithoutTheQueryTimeCruft.size
+        val numberOfNonDefaultDecisions =
+          randomBehaviour.chooseAnyNumberFromOneTo(numberOfTimeSeries)
+        randomBehaviour.shuffle(Seq
+          .fill(numberOfNonDefaultDecisions)(forceUseOfAnOverlappingType) ++ Seq
+          .fill(numberOfTimeSeries - numberOfNonDefaultDecisions)(false))
+      }
+
+      val snapshotSequencesForManyItems =
+        lotsOfTimeSeriesWithoutTheQueryTimeCruft zip forceUseOfAnOverlappingTypeDecisions flatMap {
+          case ((uniqueItemSpecification, snapshots),
+                forceUseOfAnOverlappingType) =>
+            val numberOfSnapshots = snapshots.size
+            val decisionsToForceOverlappingType = {
+              val numberOfNonDefaultDecisions =
+                randomBehaviour.chooseAnyNumberFromOneTo(numberOfSnapshots)
+              randomBehaviour.shuffle(
+                Seq.fill(numberOfNonDefaultDecisions)(
+                  forceUseOfAnOverlappingType) ++ Seq.fill(
+                  numberOfSnapshots - numberOfNonDefaultDecisions)(false))
+            }
+            snapshots zip decisionsToForceOverlappingType map {
+              case (snapshot, decision) =>
+                (if (decision)
+                   uniqueItemSpecification
+                     .copy(clazz = classOf[Any])
+                 else uniqueItemSpecification) -> snapshot
+            }
+        }
+
+      val snapshotBookingsForManyItemsAndTimesGroupedByTime =
+        (snapshotSequencesForManyItems groupBy {
+          case (_, (when, _)) => when
+        } mapValues (_.map {
+          case (uniqueItemSpecification, (_, blob)) =>
+            uniqueItemSpecification -> blob
+        })).toSeq map {
+          case (when, chunkedBookings) => when -> chunkedBookings
+        }
+
+      randomBehaviour.shuffle(snapshotBookingsForManyItemsAndTimesGroupedByTime)
+    }
+
     val lotsOfTimeSeriesWithoutTheQueryTimeCruft = lotsOfTimeSeries map {
       case TimeSeries(uniqueItemSpecification, snapshots, _) =>
         uniqueItemSpecification -> snapshots
     }
-    /*
+
     val timeSeriesWhoseSnapshotsWillCollide = randomBehaviour
       .buildRandomSequenceOfDistinctCandidatesChosenFrom(
         lotsOfTimeSeriesWithoutTheQueryTimeCruft)
@@ -145,55 +192,10 @@ class BlobStorageSpec
             }
       }
 
-
-    // Put the duplicating time series first, as these are the ones that we want the
-    // sut to disregard on account of them being booked in first at the same time.
-    val lotsOfTimeSeriesWithSomeDuplicates
-      : Seq[(UniqueItemSpecification, Seq[(Time, Option[SnapshotBlob])])] =
-      timeSeriesWhoseSnapshotsWillCollide ++ lotsOfTimeSeriesWithoutTheQueryTimeCruft*/
-
-    val forceUseOfAnOverlappingTypeDecisions = {
-      val numberOfTimeSeries = lotsOfTimeSeriesWithoutTheQueryTimeCruft.size
-      val numberOfNonDefaultDecisions =
-        randomBehaviour.chooseAnyNumberFromOneTo(numberOfTimeSeries)
-      randomBehaviour.shuffle(
-        Seq
-          .fill(numberOfNonDefaultDecisions)(forceUseOfAnOverlappingType) ++ Seq
-          .fill(numberOfTimeSeries - numberOfNonDefaultDecisions)(false))
-    }
-
-    val snapshotSequencesForManyItems =
-      lotsOfTimeSeriesWithoutTheQueryTimeCruft zip forceUseOfAnOverlappingTypeDecisions flatMap {
-        case ((uniqueItemSpecification, snapshots),
-              forceUseOfAnOverlappingType) =>
-          val numberOfSnapshots = snapshots.size
-          val decisionsToForceOverlappingType = {
-            val numberOfNonDefaultDecisions =
-              randomBehaviour.chooseAnyNumberFromOneTo(numberOfSnapshots)
-            randomBehaviour.shuffle(Seq.fill(numberOfNonDefaultDecisions)(
-              forceUseOfAnOverlappingType) ++ Seq.fill(
-              numberOfSnapshots - numberOfNonDefaultDecisions)(false))
-          }
-          snapshots zip decisionsToForceOverlappingType map {
-            case (snapshot, decision) =>
-              (if (decision)
-                 uniqueItemSpecification
-                   .copy(clazz = classOf[Any])
-               else uniqueItemSpecification) -> snapshot
-          }
-      }
-
-    val snapshotBookingsForManyItemsAndTimesGroupedByTime =
-      (snapshotSequencesForManyItems groupBy {
-        case (_, (when, _)) => when
-      } mapValues (_.map {
-        case (uniqueItemSpecification, (_, blob)) =>
-          uniqueItemSpecification -> blob
-      })).toSeq map {
-        case (when, chunkedBookings) => when -> chunkedBookings
-      }
-
-    randomBehaviour.shuffle(snapshotBookingsForManyItemsAndTimesGroupedByTime)
+    randomBehaviour.pickAlternatelyFrom(
+      (shuffleAndMergeBookingsSharingTheSameTime(
+        timeSeriesWhoseSnapshotsWillCollide) ++ shuffleAndMergeBookingsSharingTheSameTime(
+        lotsOfTimeSeriesWithoutTheQueryTimeCruft)).groupBy(_._1).values)
   }
 
   def blobStorageFrom(
