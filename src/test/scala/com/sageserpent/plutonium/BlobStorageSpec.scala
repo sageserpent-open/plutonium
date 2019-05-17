@@ -95,14 +95,12 @@ class BlobStorageSpec
     }
   }
 
-  def timeSeriesGeneratorFor(uniqueItemSpecification: UniqueItemSpecification,
-                             timeOffset: Int,
-                             timeOffsetCycle: Int): Gen[TimeSeries] =
+  def timeSeriesGeneratorFor(
+      uniqueItemSpecification: UniqueItemSpecification): Gen[TimeSeries] =
     for {
       snapshotBlobs <- blobsGenerator
       twiceTheNumberOfSnapshots = 2 * snapshotBlobs.size
-      times <- ascendingTimes(twiceTheNumberOfSnapshots).map(
-        _.map(timeOffset + timeOffsetCycle * _))
+      times <- ascendingTimes(twiceTheNumberOfSnapshots)
       (snapshotTimes, queryTimes) = times
         .grouped(2)
         .map {
@@ -120,17 +118,10 @@ class BlobStorageSpec
     : Gen[Seq[TimeSeries]] =
     Gen
       .nonEmptyContainerOf[Set, UniqueItemSpecification](
-        uniqueItemSpecificationGenerator) map (_.toSeq) flatMap {
-      uniqueItemSpecifications =>
-        val numberOfUniqueItemSpecifications = uniqueItemSpecifications.size
-        Gen.sequence[Seq[TimeSeries], TimeSeries](
-          uniqueItemSpecifications.zipWithIndex map {
-            case (uniqueItemSpecification, timeOffset) =>
-              timeSeriesGeneratorFor(uniqueItemSpecification,
-                                     timeOffset,
-                                     numberOfUniqueItemSpecifications)
-          })
-    }
+        uniqueItemSpecificationGenerator) map (_.toSeq) flatMap (
+        uniqueItemSpecifications =>
+          Gen.sequence[Seq[TimeSeries], TimeSeries](
+            uniqueItemSpecifications map timeSeriesGeneratorFor))
 
   def shuffledSnapshotBookings(randomBehaviour: Random,
                                lotsOfTimeSeries: Seq[TimeSeries],
