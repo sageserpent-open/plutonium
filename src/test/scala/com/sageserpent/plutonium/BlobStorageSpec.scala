@@ -22,8 +22,6 @@ class BlobStorageSpec
     with Matchers
     with SharedGenerators
     with GeneratorDrivenPropertyChecks {
-  type RecordingId = Int
-
   def mixedIdGenerator(disambiguation: Int): Gen[Any] =
     Gen.oneOf(integerIdGenerator map (disambiguation + 2 * _),
               stringIdGenerator map (_ + s"_$disambiguation"))
@@ -48,17 +46,19 @@ class BlobStorageSpec
     )
   }
 
-  type SnapshotBlob = Int
+  type Time         = Int
+  type SnapshotBlob = Double
 
   val blobGenerator: Gen[Option[SnapshotBlob]] =
-    Gen.frequency(5 -> (Gen.posNum[Int] map Some.apply), 1 -> Gen.const(None))
+    Gen.frequency(5 -> (Gen.posNum[Int] map (value => Some(value.toDouble))),
+                  1 -> Gen.const(None))
 
   val blobsGenerator: Gen[List[Option[SnapshotBlob]]] =
     Gen.nonEmptyListOf(blobGenerator)
 
   case class TimeSeries(uniqueItemSpecification: UniqueItemSpecification,
-                        snapshots: Seq[(Int, Option[SnapshotBlob])],
-                        queryTimes: Seq[Int]) {
+                        snapshots: Seq[(Time, Option[SnapshotBlob])],
+                        queryTimes: Seq[Time]) {
     require(queryTimes zip snapshots.init.map(_._1) forall {
       case (queryTime, snapshotTime) => queryTime >= snapshotTime
     })
@@ -67,6 +67,7 @@ class BlobStorageSpec
     })
   }
 
+  // TODO - decide whether 'Int' here should be considered to be 'Time'...
   def ascendingTimes(numberRequired: Int): Gen[List[Int]] = {
     if (0 == numberRequired) Gen.const(List.empty)
     else {
@@ -134,7 +135,7 @@ class BlobStorageSpec
   def shuffledSnapshotBookings(randomBehaviour: Random,
                                lotsOfTimeSeries: Seq[TimeSeries],
                                forceUseOfAnOverlappingType: Boolean = false)
-    : Seq[(Int, Seq[(UniqueItemSpecification, Option[SnapshotBlob])])] = {
+    : Seq[(Time, Seq[(UniqueItemSpecification, Option[SnapshotBlob])])] = {
     val lotsOfTimeSeriesWithoutTheQueryTimeCruft = lotsOfTimeSeries map {
       case TimeSeries(uniqueItemSpecification, snapshots, _) =>
         uniqueItemSpecification -> snapshots
@@ -155,7 +156,7 @@ class BlobStorageSpec
     // Put the duplicating time series first, as these are the ones that we want the
     // sut to disregard on account of them being booked in first at the same time.
     val lotsOfTimeSeriesWithSomeDuplicates
-      : Seq[(UniqueItemSpecification, Seq[(Int, Option[SnapshotBlob])])] =
+      : Seq[(UniqueItemSpecification, Seq[(Time, Option[SnapshotBlob])])] =
       timeSeriesWhoseSnapshotsWillCollide ++ lotsOfTimeSeriesWithoutTheQueryTimeCruft
 
     val forceUseOfAnOverlappingTypeDecisions = {
@@ -189,7 +190,8 @@ class BlobStorageSpec
           }
       }
 
-    val snapshotBookingsForManyItemsAndTimesGroupedByTime =
+    val snapshotBookingsForManyItemsAndTimesGroupedByTime: Seq[
+      Stream[(Time, Seq[(UniqueItemSpecification, Option[SnapshotBlob])])]] =
       (snapshotSequencesForManyItems groupBy {
         case (_, (when, _)) => when
       } mapValues (_.map {
@@ -205,9 +207,11 @@ class BlobStorageSpec
 
   def blobStorageFrom(
       revisions: Seq[
-        Seq[(Int, Seq[(UniqueItemSpecification, Option[SnapshotBlob])])]])
-    : BlobStorage[Int, SnapshotBlob] =
-    ((BlobStorageInMemory[Int, SnapshotBlob](): BlobStorage[Int, SnapshotBlob]) /: revisions) {
+        Seq[(Time, Seq[(UniqueItemSpecification, Option[SnapshotBlob])])]])
+    : BlobStorage[Time, SnapshotBlob] =
+    ((BlobStorageInMemory[Time, SnapshotBlob](): BlobStorage[
+      Time,
+      SnapshotBlob]) /: revisions) {
       case (blobStorage, bookingsForRevision) =>
         val builder = blobStorage.openRevision()
         for ((when, snapshotBlobs) <- bookingsForRevision) {
@@ -283,7 +287,7 @@ class BlobStorageSpec
       val finalBookings =
         shuffledSnapshotBookings(randomBehaviour, lotsOfFinalTimeSeries)
 
-      val blobStorage: BlobStorage[Int, SnapshotBlob] =
+      val blobStorage: BlobStorage[Time, SnapshotBlob] =
         blobStorageFrom(randomBehaviour.splitIntoNonEmptyPieces(finalBookings))
 
       for (TimeSeries(uniqueItemSpecification, snapshots, queryTimes) <- lotsOfFinalTimeSeries) {
@@ -408,7 +412,7 @@ class BlobStorageSpec
       val finalBookings =
         shuffledSnapshotBookings(randomBehaviour, lotsOfFinalTimeSeries)
 
-      val blobStorage: BlobStorage[Int, SnapshotBlob] =
+      val blobStorage: BlobStorage[Time, SnapshotBlob] =
         blobStorageFrom(randomBehaviour.splitIntoNonEmptyPieces(finalBookings))
 
       for (TimeSeries(uniqueItemSpecification, snapshots, queryTimes) <- lotsOfFinalTimeSeries) {
@@ -446,7 +450,7 @@ class BlobStorageSpec
       val finalBookings =
         shuffledSnapshotBookings(randomBehaviour, lotsOfFinalTimeSeries)
 
-      val blobStorage: BlobStorage[Int, SnapshotBlob] =
+      val blobStorage: BlobStorage[Time, SnapshotBlob] =
         blobStorageFrom(randomBehaviour.splitIntoNonEmptyPieces(finalBookings))
 
       for (TimeSeries(uniqueItemSpecification, snapshots, queryTimes) <- lotsOfFinalTimeSeries) {
