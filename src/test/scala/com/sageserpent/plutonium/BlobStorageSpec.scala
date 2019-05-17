@@ -140,6 +140,7 @@ class BlobStorageSpec
       case TimeSeries(uniqueItemSpecification, snapshots, _) =>
         uniqueItemSpecification -> snapshots
     }
+    /*
     val timeSeriesWhoseSnapshotsWillCollide = randomBehaviour
       .buildRandomSequenceOfDistinctCandidatesChosenFrom(
         lotsOfTimeSeriesWithoutTheQueryTimeCruft)
@@ -153,14 +154,15 @@ class BlobStorageSpec
             }
       }
 
+
     // Put the duplicating time series first, as these are the ones that we want the
     // sut to disregard on account of them being booked in first at the same time.
     val lotsOfTimeSeriesWithSomeDuplicates
       : Seq[(UniqueItemSpecification, Seq[(Time, Option[SnapshotBlob])])] =
-      timeSeriesWhoseSnapshotsWillCollide ++ lotsOfTimeSeriesWithoutTheQueryTimeCruft
+      timeSeriesWhoseSnapshotsWillCollide ++ lotsOfTimeSeriesWithoutTheQueryTimeCruft*/
 
     val forceUseOfAnOverlappingTypeDecisions = {
-      val numberOfTimeSeries = lotsOfTimeSeriesWithSomeDuplicates.size
+      val numberOfTimeSeries = lotsOfTimeSeriesWithoutTheQueryTimeCruft.size
       val numberOfNonDefaultDecisions =
         randomBehaviour.chooseAnyNumberFromOneTo(numberOfTimeSeries)
       randomBehaviour.shuffle(
@@ -170,7 +172,7 @@ class BlobStorageSpec
     }
 
     val snapshotSequencesForManyItems =
-      lotsOfTimeSeriesWithSomeDuplicates zip forceUseOfAnOverlappingTypeDecisions flatMap {
+      lotsOfTimeSeriesWithoutTheQueryTimeCruft zip forceUseOfAnOverlappingTypeDecisions flatMap {
         case ((uniqueItemSpecification, snapshots),
               forceUseOfAnOverlappingType) =>
           val numberOfSnapshots = snapshots.size
@@ -190,19 +192,17 @@ class BlobStorageSpec
           }
       }
 
-    val snapshotBookingsForManyItemsAndTimesGroupedByTime: Seq[
-      Stream[(Time, Seq[(UniqueItemSpecification, Option[SnapshotBlob])])]] =
+    val snapshotBookingsForManyItemsAndTimesGroupedByTime =
       (snapshotSequencesForManyItems groupBy {
         case (_, (when, _)) => when
       } mapValues (_.map {
         case (uniqueItemSpecification, (_, blob)) =>
           uniqueItemSpecification -> blob
-      }) mapValues randomBehaviour.splitIntoNonEmptyPieces).toSeq map {
-        case (when, chunkedBookings) => chunkedBookings map (when -> _)
+      })).toSeq map {
+        case (when, chunkedBookings) => when -> chunkedBookings
       }
 
-    randomBehaviour.pickAlternatelyFrom(
-      snapshotBookingsForManyItemsAndTimesGroupedByTime)
+    randomBehaviour.shuffle(snapshotBookingsForManyItemsAndTimesGroupedByTime)
   }
 
   def blobStorageFrom(
