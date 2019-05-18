@@ -207,11 +207,48 @@ class BlobStorageSpec
       SnapshotBlob]) /: revisions) {
       case (blobStorage, bookingsForRevision) =>
         val builder = blobStorage.openRevision()
-        for ((when, snapshotBlobs) <- bookingsForRevision) {
-          builder.record(when, snapshotBlobs.toMap)
-        }
+        for ((when, snapshotBlobs) <- bookingsForRevision)
+          // NOTE: this is rather hokey, as it turns out that the 'annul' is implemented
+          // by passing an empty map to 'record', but the idea here is to respect the
+          // abstraction boundary of 'BlobStorage' and pretend we don't know that it will
+          // do that.
+          if (snapshotBlobs.nonEmpty) {
+            builder.record(when, snapshotBlobs.toMap)
+          } else {
+            builder.annul(when)
+          }
         builder.build()
     }
+
+  def setUpBlobStorage(lotsOfFinalTimeSeries: Seq[TimeSeries],
+                       lotsOfObsoleteTimeSeries: Seq[TimeSeries],
+                       randomBehaviour: Random) = {
+    val obsoleteBookings
+      : Seq[(Time, Seq[(UniqueItemSpecification, Option[SnapshotBlob])])] =
+      shuffledSnapshotBookings(randomBehaviour, lotsOfObsoleteTimeSeries)
+
+    val timesOfObsoleteBookings: Seq[Time] = obsoleteBookings.map(_._1)
+
+    val annulments
+      : Seq[(Time, Seq[(UniqueItemSpecification, Option[SnapshotBlob])])] =
+      timesOfObsoleteBookings.map(_ -> Seq.empty)
+
+    val finalBookings
+      : Seq[(Time, Seq[(UniqueItemSpecification, Option[SnapshotBlob])])] =
+      shuffledSnapshotBookings(randomBehaviour, lotsOfFinalTimeSeries)
+
+    val bookingsCulminatingInFinalOnes
+      : Seq[(Time, Seq[(UniqueItemSpecification, Option[SnapshotBlob])])] =
+      randomBehaviour.pickAlternatelyFrom(
+        (obsoleteBookings ++ annulments ++ finalBookings)
+          .groupBy(_._1)
+          .values)
+
+    val blobStorage: BlobStorage[Time, SnapshotBlob] =
+      blobStorageFrom(
+        randomBehaviour.splitIntoNonEmptyPieces(bookingsCulminatingInFinalOnes))
+    blobStorage
+  }
 
   def checkExpectationsForNonExistence(timeSlice: Timeslice[SnapshotBlob])(
       uniqueItemSpecification: UniqueItemSpecification): Unit = {
@@ -273,15 +310,18 @@ class BlobStorageSpec
     forAll(
       seedGenerator,
       lotsOfTimeSeriesGenerator(
-        uniqueItemSpecificationWithUniqueTypePerIdGenerator)
-    ) { (seed, lotsOfFinalTimeSeries) =>
+        uniqueItemSpecificationWithUniqueTypePerIdGenerator),
+      Gen.frequency(10 -> lotsOfTimeSeriesGenerator(
+                      uniqueItemSpecificationWithUniqueTypePerIdGenerator),
+                    1 -> Gen.const(Seq.empty)),
+      MinSuccessful(50)
+    ) { (seed, lotsOfFinalTimeSeries, lotsOfObsoleteTimeSeries) =>
       val randomBehaviour = new Random(seed)
 
-      val finalBookings =
-        shuffledSnapshotBookings(randomBehaviour, lotsOfFinalTimeSeries)
-
       val blobStorage: BlobStorage[Time, SnapshotBlob] =
-        blobStorageFrom(randomBehaviour.splitIntoNonEmptyPieces(finalBookings))
+        setUpBlobStorage(lotsOfFinalTimeSeries,
+                         lotsOfObsoleteTimeSeries,
+                         randomBehaviour)
 
       for (TimeSeries(uniqueItemSpecification, snapshots, queryTimes) <- lotsOfFinalTimeSeries) {
         {
@@ -398,15 +438,18 @@ class BlobStorageSpec
       seedGenerator,
       lotsOfTimeSeriesGenerator(
         uniqueItemSpecificationWithDisjointTypesPerIdGenerator) filter (_.groupBy(
-        _.uniqueItemSpecification.id).values.exists(1 < _.size))
-    ) { (seed, lotsOfFinalTimeSeries) =>
+        _.uniqueItemSpecification.id).values.exists(1 < _.size)),
+      Gen.frequency(10 -> lotsOfTimeSeriesGenerator(
+                      uniqueItemSpecificationWithDisjointTypesPerIdGenerator),
+                    1 -> Gen.const(Seq.empty)),
+      MinSuccessful(50)
+    ) { (seed, lotsOfFinalTimeSeries, lotsOfObsoleteTimeSeries) =>
       val randomBehaviour = new Random(seed)
 
-      val finalBookings =
-        shuffledSnapshotBookings(randomBehaviour, lotsOfFinalTimeSeries)
-
       val blobStorage: BlobStorage[Time, SnapshotBlob] =
-        blobStorageFrom(randomBehaviour.splitIntoNonEmptyPieces(finalBookings))
+        setUpBlobStorage(lotsOfFinalTimeSeries,
+                         lotsOfObsoleteTimeSeries,
+                         randomBehaviour)
 
       for (TimeSeries(uniqueItemSpecification, snapshots, queryTimes) <- lotsOfFinalTimeSeries) {
         {
@@ -432,19 +475,22 @@ class BlobStorageSpec
     }
   }
 
-  "querying for a unique item's blob snapshot when it was booked when in exclusive mode" should "yield that latest earlier snapshot" in {
+  "querying for a unique item's blob snapshot when it was booked in exclusive mode" should "yield that latest earlier snapshot" in {
     forAll(
       seedGenerator,
       lotsOfTimeSeriesGenerator(
-        uniqueItemSpecificationWithUniqueTypePerIdGenerator)
-    ) { (seed, lotsOfFinalTimeSeries) =>
+        uniqueItemSpecificationWithUniqueTypePerIdGenerator),
+      Gen.frequency(10 -> lotsOfTimeSeriesGenerator(
+                      uniqueItemSpecificationWithUniqueTypePerIdGenerator),
+                    1 -> Gen.const(Seq.empty)),
+      MinSuccessful(50)
+    ) { (seed, lotsOfFinalTimeSeries, lotsOfObsoleteTimeSeries) =>
       val randomBehaviour = new Random(seed)
 
-      val finalBookings =
-        shuffledSnapshotBookings(randomBehaviour, lotsOfFinalTimeSeries)
-
       val blobStorage: BlobStorage[Time, SnapshotBlob] =
-        blobStorageFrom(randomBehaviour.splitIntoNonEmptyPieces(finalBookings))
+        setUpBlobStorage(lotsOfFinalTimeSeries,
+                         lotsOfObsoleteTimeSeries,
+                         randomBehaviour)
 
       for (TimeSeries(uniqueItemSpecification, snapshots, queryTimes) <- lotsOfFinalTimeSeries) {
         {
