@@ -240,9 +240,10 @@ class BlobStorageSpec
         builder.build()
     }
 
-  def setUpBlobStorage(lotsOfFinalTimeSeries: Seq[TimeSeries],
-                       lotsOfObsoleteTimeSeries: Seq[TimeSeries],
-                       randomBehaviour: Random) = {
+  def setUpBlobStorage(
+      lotsOfFinalTimeSeries: Seq[TimeSeries],
+      lotsOfObsoleteTimeSeries: Seq[TimeSeries],
+      randomBehaviour: Random): BlobStorage[Time, SnapshotBlob] = {
     val obsoleteBookings
       : Seq[(Time, Seq[(UniqueItemSpecification, Option[SnapshotBlob])])] =
       shuffledSnapshotBookings(randomBehaviour, lotsOfObsoleteTimeSeries)
@@ -257,16 +258,13 @@ class BlobStorageSpec
       : Seq[(Time, Seq[(UniqueItemSpecification, Option[SnapshotBlob])])] =
       shuffledSnapshotBookings(randomBehaviour, lotsOfFinalTimeSeries)
 
-    val bookingsCulminatingInFinalOnes
-      : Seq[(Time, Seq[(UniqueItemSpecification, Option[SnapshotBlob])])] =
-      randomBehaviour.pickAlternatelyFrom(
-        (obsoleteBookings ++ annulments ++ finalBookings)
-          .groupBy(_._1)
-          .values)
+    val bookingsCulminatingInFinalOnes =
+      randomBehaviour.splitIntoNonEmptyPieces(obsoleteBookings) ++
+        randomBehaviour.splitIntoNonEmptyPieces(annulments) ++
+        randomBehaviour.splitIntoNonEmptyPieces(finalBookings)
 
     val blobStorage: BlobStorage[Time, SnapshotBlob] =
-      blobStorageFrom(
-        randomBehaviour.splitIntoNonEmptyPieces(bookingsCulminatingInFinalOnes))
+      blobStorageFrom(bookingsCulminatingInFinalOnes)
     blobStorage
   }
 
