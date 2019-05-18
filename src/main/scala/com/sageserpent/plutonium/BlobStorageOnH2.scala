@@ -80,22 +80,19 @@ case class BlobStorageOnH2(
   override def openRevision(): RevisionBuilder = {
     class RevisionBuilderImplementation extends RevisionBuilder {
       type Recording =
-        (ItemStateUpdateKey,
-         ItemStateUpdateTime,
+        (ItemStateUpdateTime,
          Map[UniqueItemSpecification, Option[SnapshotBlob]])
 
       private val recordings = mutable.MutableList.empty[Recording]
 
       override def record(
-          key: ItemStateUpdateKey,
           when: ItemStateUpdateTime,
           snapshotBlobs: Map[UniqueItemSpecification, Option[SnapshotBlob]])
         : Unit = {
-        recordings += ((key, when, snapshotBlobs))
+        recordings += (when -> snapshotBlobs)
       }
 
-      override def build()
-        : BlobStorage[ItemStateUpdateTime, ItemStateUpdateKey, SnapshotBlob] = {
+      override def build(): BlobStorage[ItemStateUpdateTime, SnapshotBlob] = {
         (for {
           isHeadOfLineage <- thisBlobStorage.isHeadOfLineage()
           // TODO - update database with new recordings....

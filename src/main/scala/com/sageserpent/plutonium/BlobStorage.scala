@@ -29,7 +29,7 @@ object BlobStorage {
   }
 }
 
-trait BlobStorage[Time, RecordingId, SnapshotBlob] { blobStorage =>
+trait BlobStorage[Time, SnapshotBlob] { blobStorage =>
 
   import BlobStorage._
 
@@ -39,14 +39,13 @@ trait BlobStorage[Time, RecordingId, SnapshotBlob] { blobStorage =>
     // NOTE: the unique item specification must be exact and consistent for all of an item's snapshots. This implies that snapshots from a previous revision may have to be rewritten
     // if an item's greatest lower bound type changes.
     def record(
-        key: RecordingId,
         when: Time,
         snapshotBlobs: Map[UniqueItemSpecification, Option[SnapshotBlob]]): Unit
 
-    def annul(key: RecordingId): Unit =
-      record(key, null.asInstanceOf[Time], Map.empty)
+    def annul(when: Time): Unit =
+      record(when, Map.empty)
 
-    def build(): BlobStorage[Time, RecordingId, SnapshotBlob]
+    def build(): BlobStorage[Time, SnapshotBlob]
 
   }
 
@@ -54,6 +53,6 @@ trait BlobStorage[Time, RecordingId, SnapshotBlob] { blobStorage =>
 
   def timeSlice(when: Time, inclusive: Boolean = true): Timeslice[SnapshotBlob]
 
-  def retainUpTo(when: Time): BlobStorage[Time, RecordingId, SnapshotBlob]
+  def retainUpTo(when: Time): BlobStorage[Time, SnapshotBlob]
 
 }

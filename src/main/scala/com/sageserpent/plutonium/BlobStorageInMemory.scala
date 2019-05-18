@@ -7,45 +7,46 @@ import scala.collection.mutable
 object BlobStorageInMemory {
   type Revision = Int
 
-  def apply[Time: Ordering, RecordingId, SnapshotBlob]() =
-    new BlobStorageInMemory[Time, RecordingId, SnapshotBlob](
+  def apply[Time: Ordering, SnapshotBlob]() =
+    new BlobStorageInMemory[Time, SnapshotBlob](
       revision = 0,
       recordingRevisions = Map.empty,
       lifecycles = Map.empty
     )
 }
 
-case class BlobStorageInMemory[Time, RecordingId, SnapshotBlob] private (
+case class BlobStorageInMemory[Time, SnapshotBlob] private (
     revision: BlobStorageInMemory.Revision,
-    recordingRevisions: Map[RecordingId, BlobStorageInMemory.Revision],
+    recordingRevisions: Map[Time, BlobStorageInMemory.Revision],
     lifecycles: Map[
       Any,
-      Seq[BlobStorageInMemory[Time, RecordingId, SnapshotBlob]#PhoenixLifecycleSpanningAnnihilations]])(
+      Seq[BlobStorageInMemory[Time, SnapshotBlob]#PhoenixLifecycleSpanningAnnihilations]])(
     override implicit val timeOrdering: Ordering[Time])
-    extends BlobStorage[Time, RecordingId, SnapshotBlob] { thisBlobStorage =>
+    extends BlobStorage[Time, SnapshotBlob] { thisBlobStorage =>
   import BlobStorage._
   import BlobStorageInMemory._
 
   case class PhoenixLifecycleSpanningAnnihilations(
       itemClazz: Class[_],
       snapshotBlobs: ScissOrderedSeq[
-        (Split[Time], List[(Option[SnapshotBlob], RecordingId, Revision)]),
+        (Split[Time], List[(Option[SnapshotBlob], Time, Revision)]),
         Split[Time]] =
         ScissOrderedSeq.empty(_._1, Ordering[Split[Time]].reverse)) {
 
     def isValid(when: Split[Time],
-                validRevisionFor: RecordingId => Revision): Boolean =
+                validRevisionFor: Time => Revision): Boolean =
       snapshotBlobFor(when, validRevisionFor).isDefined
 
     def snapshotBlobFor(
         when: Split[Time],
-        validRevisionFor: RecordingId => Revision): Option[SnapshotBlob] = {
+        validRevisionFor: Time => Revision): Option[SnapshotBlob] = {
       val blobEntriesIterator =
         snapshotBlobs.ceilIterator(when).flatMap(_._2)
 
       blobEntriesIterator
         .find {
-          case (_, key, blobRevision) => blobRevision == validRevisionFor(key)
+          case (_, snapshotWhen, blobRevision) =>
+            blobRevision == validRevisionFor(snapshotWhen)
         }
         .collect {
           case (Some(snapshotBlob), _, _) => snapshotBlob
@@ -53,24 +54,24 @@ case class BlobStorageInMemory[Time, RecordingId, SnapshotBlob] private (
     }
 
     def addSnapshotBlob(
-        key: RecordingId,
-        when: Split[Time],
+        when: Time,
         snapshotBlob: Option[SnapshotBlob],
         revision: Revision): PhoenixLifecycleSpanningAnnihilations = {
+      val alignedWhen = Split.alignedWith(when)
       this.copy(
         snapshotBlobs = this.snapshotBlobs
-          .get(when)
-          .fold(this.snapshotBlobs)(this.snapshotBlobs.removeAll) + (when ->
-          ((snapshotBlob, key, revision) :: this.snapshotBlobs
-            .get(when)
-            .fold(List.empty[(Option[SnapshotBlob], RecordingId, Revision)])(
-              _._2))))
+          .get(alignedWhen)
+          .fold(this.snapshotBlobs)(this.snapshotBlobs.removeAll) + (alignedWhen ->
+          ((snapshotBlob, when, revision) :: this.snapshotBlobs
+            .get(alignedWhen)
+            .fold(List.empty[(Option[SnapshotBlob], Time, Revision)])(_._2))))
     }
 
     def retainUpTo(
-        when: Split[Time]): Option[PhoenixLifecycleSpanningAnnihilations] = {
+        when: Time): Option[PhoenixLifecycleSpanningAnnihilations] = {
       val retainedSnapshotBlobs =
-        ScissOrderedSeq(this.snapshotBlobs.ceilIterator(when).toSeq: _*)(
+        ScissOrderedSeq(
+          this.snapshotBlobs.ceilIterator(Split.alignedWith(when)).toSeq: _*)(
           _._1,
           Ordering[Split[Time]].reverse)
 
@@ -83,31 +84,30 @@ case class BlobStorageInMemory[Time, RecordingId, SnapshotBlob] private (
   override def openRevision(): RevisionBuilder = {
     class RevisionBuilderImplementation extends RevisionBuilder {
       type Recording =
-        (RecordingId, Time, Map[UniqueItemSpecification, Option[SnapshotBlob]])
+        (Time, Map[UniqueItemSpecification, Option[SnapshotBlob]])
 
       private val recordings = mutable.MutableList.empty[Recording]
 
       override def record(
-          key: RecordingId,
           when: Time,
           snapshotBlobs: Map[UniqueItemSpecification, Option[SnapshotBlob]])
         : Unit = {
-        recordings += ((key, when, snapshotBlobs))
+        recordings += (when -> snapshotBlobs)
       }
 
-      override def build(): BlobStorage[Time, RecordingId, SnapshotBlob] = {
+      override def build(): BlobStorage[Time, SnapshotBlob] = {
         val newRevision = 1 + thisBlobStorage.revision
 
         val newEventRevisions
-          : Map[RecordingId, Revision] = thisBlobStorage.recordingRevisions ++ (recordings map {
-          case (key, _, _) => key
+          : Map[Time, Revision] = thisBlobStorage.recordingRevisions ++ (recordings map {
+          case (when, _) => when
         }).distinct.map(_ -> newRevision)
 
         val newAndModifiedExplodedLifecycles =
           (Map
             .empty[UniqueItemSpecification,
-                   BlobStorageInMemory[Time, RecordingId, SnapshotBlob]#PhoenixLifecycleSpanningAnnihilations] /: recordings) {
-            case (explodedLifecycles, (keys, when, snapshots)) =>
+                   BlobStorageInMemory[Time, SnapshotBlob]#PhoenixLifecycleSpanningAnnihilations] /: recordings) {
+            case (explodedLifecycles, (when, snapshots)) =>
               val explodedLifecyclesWithDefault = explodedLifecycles withDefault {
                 case UniqueItemSpecification(id, itemClazz) =>
                   thisBlobStorage.lifecycles
@@ -118,17 +118,14 @@ case class BlobStorageInMemory[Time, RecordingId, SnapshotBlob] private (
 
               val updatedExplodedLifecycles
                 : Map[UniqueItemSpecification,
-                      BlobStorageInMemory[Time, RecordingId, SnapshotBlob]#PhoenixLifecycleSpanningAnnihilations] = snapshots map {
+                      BlobStorageInMemory[Time, SnapshotBlob]#PhoenixLifecycleSpanningAnnihilations] = snapshots map {
                 case (uniqueItemSpecification, snapshot) =>
                   val lifecycleForSnapshot =
                     explodedLifecyclesWithDefault(uniqueItemSpecification)
 
                   uniqueItemSpecification ->
                     lifecycleForSnapshot
-                      .addSnapshotBlob(keys,
-                                       Split.alignedWith(when),
-                                       snapshot,
-                                       newRevision)
+                      .addSnapshotBlob(when, snapshot, newRevision)
               }
 
               explodedLifecycles ++ updatedExplodedLifecycles
@@ -142,11 +139,8 @@ case class BlobStorageInMemory[Time, RecordingId, SnapshotBlob] private (
                 id,
                 lifecycles
                   .get(id)
-                  .fold(
-                    Seq.empty[BlobStorageInMemory[
-                      Time,
-                      RecordingId,
-                      SnapshotBlob]#PhoenixLifecycleSpanningAnnihilations])(
+                  .fold(Seq
+                    .empty[BlobStorageInMemory[Time, SnapshotBlob]#PhoenixLifecycleSpanningAnnihilations])(
                     _.filterNot(itemClazz == _.itemClazz)) :+ lifecycle
               )
           }
@@ -211,12 +205,10 @@ case class BlobStorageInMemory[Time, RecordingId, SnapshotBlob] private (
     new TimesliceImplementation with TimesliceContracts[SnapshotBlob]
   }
 
-  override def retainUpTo(
-      when: Time): BlobStorageInMemory[Time, RecordingId, SnapshotBlob] =
+  override def retainUpTo(when: Time): BlobStorageInMemory[Time, SnapshotBlob] =
     thisBlobStorage.copy(
       revision = this.revision,
       recordingRevisions = this.recordingRevisions,
-      lifecycles = this.lifecycles mapValues (_.flatMap(
-        _.retainUpTo(Split.alignedWith(when)))) filter (_._2.nonEmpty)
+      lifecycles = this.lifecycles mapValues (_.flatMap(_.retainUpTo(when))) filter (_._2.nonEmpty)
     )
 }

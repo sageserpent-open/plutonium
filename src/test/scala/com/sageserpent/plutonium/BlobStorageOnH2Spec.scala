@@ -28,7 +28,6 @@ trait BlobStorageOnH2DatabaseSetupResource extends ConnectionPoolResource {
 
 object BlobStorageOnH2Spec extends SharedGenerators {
   case class RecordingDatum(
-      key: ItemStateUpdateKey,
       when: ItemStateUpdateTime,
       snapshotBlobs: Map[UniqueItemSpecification,
                          Option[ItemStateStorage.SnapshotBlob]])
@@ -106,10 +105,10 @@ class BlobStorageOnH2Spec
                     .openRevision() -> exemplar.openRevision()
 
                   for {
-                    RecordingDatum(key, when, snapshotBlobs) <- recordingDatums
+                    RecordingDatum(when, snapshotBlobs) <- recordingDatums
                   } {
-                    builderFromTrainee.record(key, when, snapshotBlobs)
-                    builderFromExemplar.record(key, when, snapshotBlobs)
+                    builderFromTrainee.record(when, snapshotBlobs)
+                    builderFromExemplar.record(when, snapshotBlobs)
                   }
 
                   val (newTrainee, newExemplar) = builderFromTrainee
