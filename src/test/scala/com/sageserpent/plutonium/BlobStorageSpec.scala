@@ -314,7 +314,7 @@ class BlobStorageSpec
       Gen.frequency(10 -> lotsOfTimeSeriesGenerator(
                       uniqueItemSpecificationWithUniqueTypePerIdGenerator),
                     1 -> Gen.const(Seq.empty)),
-      MinSuccessful(50)
+      MinSuccessful(200)
     ) { (seed, lotsOfFinalTimeSeries, lotsOfObsoleteTimeSeries) =>
       val randomBehaviour = new Random(seed)
 
@@ -442,7 +442,7 @@ class BlobStorageSpec
       Gen.frequency(10 -> lotsOfTimeSeriesGenerator(
                       uniqueItemSpecificationWithDisjointTypesPerIdGenerator),
                     1 -> Gen.const(Seq.empty)),
-      MinSuccessful(50)
+      MinSuccessful(200)
     ) { (seed, lotsOfFinalTimeSeries, lotsOfObsoleteTimeSeries) =>
       val randomBehaviour = new Random(seed)
 
@@ -483,7 +483,7 @@ class BlobStorageSpec
       Gen.frequency(10 -> lotsOfTimeSeriesGenerator(
                       uniqueItemSpecificationWithUniqueTypePerIdGenerator),
                     1 -> Gen.const(Seq.empty)),
-      MinSuccessful(50)
+      MinSuccessful(200)
     ) { (seed, lotsOfFinalTimeSeries, lotsOfObsoleteTimeSeries) =>
       val randomBehaviour = new Random(seed)
 
