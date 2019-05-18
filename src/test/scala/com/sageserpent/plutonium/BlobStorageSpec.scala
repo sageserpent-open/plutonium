@@ -3,7 +3,7 @@ package com.sageserpent.plutonium
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.seqEnrichment._
 import com.sageserpent.plutonium.BlobStorage.Timeslice
-import org.scalacheck.Gen
+import org.scalacheck.{Gen, Shrink}
 import org.scalatest.LoneElement._
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{FlatSpec, Matchers}
@@ -49,23 +49,35 @@ class BlobStorageSpec
   type Time         = Int
   type SnapshotBlob = Double
 
-  val blobGenerator: Gen[Option[SnapshotBlob]] =
-    Gen.frequency(5 -> (Gen.posNum[Int] map (value => Some(value.toDouble))),
-                  1 -> Gen.const(None))
-
-  val blobsGenerator: Gen[List[Option[SnapshotBlob]]] =
-    Gen.nonEmptyListOf(blobGenerator)
-
   case class TimeSeries(uniqueItemSpecification: UniqueItemSpecification,
                         snapshots: Seq[(Time, Option[SnapshotBlob])],
                         queryTimes: Seq[Time]) {
+    require(snapshots.size == queryTimes.size)
     require(queryTimes zip snapshots.init.map(_._1) forall {
       case (queryTime, snapshotTime) => queryTime >= snapshotTime
     })
     require(queryTimes zip snapshots.tail.map(_._1) forall {
       case (queryTime, snapshotTime) => queryTime < snapshotTime
     })
+
+    def shrink(): Stream[TimeSeries] =
+      if (1 < snapshots.size) {
+        val indexToSplitAt = snapshots.size / 2
+
+        val (leftSnapshots, rightSnapshots) = snapshots.splitAt(indexToSplitAt)
+        val (leftQueryTimes, rightQueryTimes) =
+          queryTimes.splitAt(indexToSplitAt)
+
+        val leftTimeSeries =
+          this.copy(snapshots = leftSnapshots, queryTimes = leftQueryTimes)
+        val rightTimeSeries =
+          this.copy(snapshots = rightSnapshots, queryTimes = rightQueryTimes)
+        leftTimeSeries #:: rightTimeSeries #:: leftTimeSeries
+          .shrink() ++ rightTimeSeries.shrink()
+      } else Stream.empty
   }
+
+  implicit val shrink: Shrink[TimeSeries] = Shrink(_.shrink().distinct)
 
   def ascendingTimes(numberRequired: Int): Gen[List[Time]] = {
     if (0 == numberRequired) Gen.const(List.empty)
@@ -95,7 +107,14 @@ class BlobStorageSpec
   }
 
   def timeSeriesGeneratorFor(
-      uniqueItemSpecification: UniqueItemSpecification): Gen[TimeSeries] =
+      uniqueItemSpecification: UniqueItemSpecification): Gen[TimeSeries] = {
+    val blobGenerator: Gen[Option[SnapshotBlob]] =
+      Gen.frequency(5 -> (Gen.posNum[Int] map (value => Some(value.toDouble))),
+                    1 -> Gen.const(None))
+
+    val blobsGenerator: Gen[List[Option[SnapshotBlob]]] =
+      Gen.nonEmptyListOf(blobGenerator)
+
     for {
       snapshotBlobs <- blobsGenerator
       twiceTheNumberOfSnapshots = 2 * snapshotBlobs.size
@@ -111,6 +130,7 @@ class BlobStorageSpec
       TimeSeries(uniqueItemSpecification,
                  snapshotTimes zip snapshotBlobs,
                  queryTimes)
+  }
 
   def lotsOfTimeSeriesGenerator(
       uniqueItemSpecificationGenerator: Gen[UniqueItemSpecification])
