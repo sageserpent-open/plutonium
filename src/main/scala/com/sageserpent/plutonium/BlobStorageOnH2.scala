@@ -10,6 +10,7 @@ import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
 
 import scala.collection.mutable
 
+//noinspection SqlNoDataSourceInspection
 object BlobStorageOnH2 {
   type Revision = Int
 
@@ -26,13 +27,14 @@ object BlobStorageOnH2 {
         IO {
           db localTx { implicit session: DBSession =>
             sql"""
-             CREATE TABLE Lineage(
+              CREATE TABLE Lineage(
                 LineageId       IDENTITY  PRIMARY KEY,
                 MaximumRevision INTEGER   NOT NULL
-             )
+              )
       """.update.apply()
+
             sql"""
-             CREATE TABLE Recording(
+              CREATE TABLE Recording(
                 EventTimeCategory       INT                       NOT NULL,
                 EventTime               TIMESTAMP WITH TIME ZONE  NOT NULL,
                 EventRevision           INT                       NOT NULL,
@@ -41,9 +43,30 @@ object BlobStorageOnH2 {
                 LineageId               BIGINT                    REFERENCES Lineage(LineageId),
                 Revision                INTEGER                   NOT NULL,
                 PRIMARY KEY (EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex),
-                CHECK Revision < ALL(SELECT MaximumRevision FROM Lineage),
+                CHECK Revision < ALL(SELECT MaximumRevision FROM Lineage WHERE Lineage.LineageId = LineageId),
                 CHECK EventTimeCategory IN (-1, 0, 1)
-             )
+              )
+      """.update.apply()
+
+            sql"""
+              CREATE INDEX RecordingIndex ON Recording(LineageId DESC, Revision DESC)
+      """.update.apply()
+
+            sql"""
+              CREATE TABLE Snapshot(
+                ItemId                  BINARY                    NOT NULL,
+                ItemClass               BINARY                    NOT NULL,
+                EventTimeCategory       INT                       NOT NULL,
+                EventTime               TIMESTAMP WITH TIME ZONE  NOT NULL,
+                EventRevision           INT                       NOT NULL,
+                EventTiebreaker         INT                       NOT NULL,
+                IntraEventIndex         INT                       NOT NULL,
+                LineageId               BIGINT                    REFERENCES Lineage(LineageId),
+                Revision                INTEGER                   NOT NULL,
+                PRIMARY KEY (EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex),
+                CHECK Revision < ALL(SELECT MaximumRevision FROM Lineage WHERE Lineage.LineageId = LineageId),
+                CHECK EventTimeCategory IN (-1, 0, 1)
+              )
       """.update.apply()
           }
       })
