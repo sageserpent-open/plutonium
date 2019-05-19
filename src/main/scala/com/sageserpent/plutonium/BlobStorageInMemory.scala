@@ -26,12 +26,20 @@ case class BlobStorageInMemory[Time, SnapshotBlob] private (
   import BlobStorage._
   import BlobStorageInMemory._
 
+  object PhoenixLifecycleSpanningAnnihilations {
+    type SnapshotBlobEntry =
+      (Time, List[(Option[SnapshotBlob], Time, Revision)])
+    def timeOf(snapshotBlobEntry: SnapshotBlobEntry): Split[Time] =
+      Split.alignedWith(snapshotBlobEntry._1)
+  }
+
   case class PhoenixLifecycleSpanningAnnihilations(
       itemClazz: Class[_],
       snapshotBlobs: ScissOrderedSeq[
-        (Split[Time], List[(Option[SnapshotBlob], Time, Revision)]),
-        Split[Time]] =
-        ScissOrderedSeq.empty(_._1, Ordering[Split[Time]].reverse)) {
+        PhoenixLifecycleSpanningAnnihilations.SnapshotBlobEntry,
+        Split[Time]] = ScissOrderedSeq.empty(
+        PhoenixLifecycleSpanningAnnihilations.timeOf,
+        Ordering[Split[Time]].reverse)) {
 
     def isValid(when: Split[Time],
                 validRevisionFor: Time => Revision): Boolean =
@@ -61,7 +69,7 @@ case class BlobStorageInMemory[Time, SnapshotBlob] private (
       this.copy(
         snapshotBlobs = this.snapshotBlobs
           .get(alignedWhen)
-          .fold(this.snapshotBlobs)(this.snapshotBlobs.removeAll) + (alignedWhen ->
+          .fold(this.snapshotBlobs)(this.snapshotBlobs.removeAll) + (when ->
           ((snapshotBlob, when, revision) :: this.snapshotBlobs
             .get(alignedWhen)
             .fold(List.empty[(Option[SnapshotBlob], Time, Revision)])(_._2))))
@@ -72,7 +80,7 @@ case class BlobStorageInMemory[Time, SnapshotBlob] private (
       val retainedSnapshotBlobs =
         ScissOrderedSeq(
           this.snapshotBlobs.ceilIterator(Split.alignedWith(when)).toSeq: _*)(
-          _._1,
+          PhoenixLifecycleSpanningAnnihilations.timeOf,
           Ordering[Split[Time]].reverse)
 
       if (retainedSnapshotBlobs.nonEmpty)
