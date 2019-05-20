@@ -28,7 +28,7 @@ case class BlobStorageInMemory[Time, SnapshotBlob] private (
 
   object PhoenixLifecycleSpanningAnnihilations {
     type SnapshotBlobEntry =
-      (Time, List[(Option[SnapshotBlob], Time, Revision)])
+      (Time, List[(Option[SnapshotBlob], Revision)])
     def timeOf(snapshotBlobEntry: SnapshotBlobEntry): Split[Time] =
       Split.alignedWith(snapshotBlobEntry._1)
   }
@@ -49,15 +49,17 @@ case class BlobStorageInMemory[Time, SnapshotBlob] private (
         when: Split[Time],
         validRevisionFor: Time => Revision): Option[SnapshotBlob] = {
       val blobEntriesIterator =
-        snapshotBlobs.ceilIterator(when).flatMap(_._2)
+        snapshotBlobs.ceilIterator(when).flatMap {
+          case (snapshotWhen, blobEntries) => blobEntries.map(snapshotWhen -> _)
+        }
 
       blobEntriesIterator
         .find {
-          case (_, snapshotWhen, blobRevision) =>
+          case (snapshotWhen, (_, blobRevision)) =>
             blobRevision == validRevisionFor(snapshotWhen)
         }
         .collect {
-          case (Some(snapshotBlob), _, _) => snapshotBlob
+          case (_, (Some(snapshotBlob), _)) => snapshotBlob
         }
     }
 
@@ -70,9 +72,9 @@ case class BlobStorageInMemory[Time, SnapshotBlob] private (
         snapshotBlobs = this.snapshotBlobs
           .get(alignedWhen)
           .fold(this.snapshotBlobs)(this.snapshotBlobs.removeAll) + (when ->
-          ((snapshotBlob, when, revision) :: this.snapshotBlobs
+          ((snapshotBlob, revision) :: this.snapshotBlobs
             .get(alignedWhen)
-            .fold(List.empty[(Option[SnapshotBlob], Time, Revision)])(_._2))))
+            .fold(List.empty[(Option[SnapshotBlob], Revision)])(_._2))))
     }
 
     def retainUpTo(
