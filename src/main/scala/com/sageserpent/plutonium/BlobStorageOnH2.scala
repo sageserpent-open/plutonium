@@ -35,6 +35,7 @@ object BlobStorageOnH2 {
 
             sql"""
               CREATE TABLE Recording(
+                TimeCategory            INT                       NOT NULL,
                 EventTimeCategory       INT                       NOT NULL,
                 EventTime               TIMESTAMP WITH TIME ZONE  NOT NULL,
                 EventRevision           INT                       NOT NULL,
@@ -42,20 +43,18 @@ object BlobStorageOnH2 {
                 IntraEventIndex         INT                       NOT NULL,
                 LineageId               BIGINT                    REFERENCES Lineage(LineageId),
                 Revision                INTEGER                   NOT NULL,
-                PRIMARY KEY (EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex),
+                PRIMARY KEY (TimeCategory, EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex),
                 CHECK Revision < ALL(SELECT MaximumRevision FROM Lineage WHERE Lineage.LineageId = LineageId),
+                CHECK TimeCategory IN (-1, 0, 1),
                 CHECK EventTimeCategory IN (-1, 0, 1)
               )
-      """.update.apply()
-
-            sql"""
-              CREATE INDEX RecordingIndex ON Recording(LineageId DESC, Revision DESC)
       """.update.apply()
 
             sql"""
               CREATE TABLE Snapshot(
                 ItemId                  BINARY                    NOT NULL,
                 ItemClass               BINARY                    NOT NULL,
+                TimeCategory            INT                       NOT NULL,
                 EventTimeCategory       INT                       NOT NULL,
                 EventTime               TIMESTAMP WITH TIME ZONE  NOT NULL,
                 EventRevision           INT                       NOT NULL,
@@ -63,8 +62,12 @@ object BlobStorageOnH2 {
                 IntraEventIndex         INT                       NOT NULL,
                 LineageId               BIGINT                    REFERENCES Lineage(LineageId),
                 Revision                INTEGER                   NOT NULL,
-                PRIMARY KEY (EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex),
+                Payload                 BLOB                      NOT NULL,
+                PRIMARY KEY (ItemId, ItemClass, TimeCategory, EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex),
+                FOREIGN KEY (TimeCategory, EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex)
+                  REFERENCES Recording(TimeCategory, EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex),
                 CHECK Revision < ALL(SELECT MaximumRevision FROM Lineage WHERE Lineage.LineageId = LineageId),
+                CHECK TimeCategory IN (-1, 0, 1),
                 CHECK EventTimeCategory IN (-1, 0, 1)
               )
       """.update.apply()
