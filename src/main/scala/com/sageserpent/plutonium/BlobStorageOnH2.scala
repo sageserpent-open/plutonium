@@ -17,7 +17,7 @@ object BlobStorageOnH2 {
   // TODO - do we need a stable lineage id here that persists across processes?
   def empty(connectionPool: ConnectionPool): BlobStorageOnH2 =
     BlobStorageOnH2(connectionPool,
-                    UUID.randomUUID(),
+                    sentinelLineageId,
                     initialRevision,
                     Map.empty)
 
@@ -25,15 +25,19 @@ object BlobStorageOnH2 {
     DBResource(connectionPool)
       .use(db =>
         IO {
-          db localTx { implicit session: DBSession =>
-            sql"""
+          db localTx {
+            implicit session: DBSession =>
+              // NOTE: it would be nice to interpolate the following string so that the starting
+              // value for 'LineageId' would follow on from 'sentinelLineageId'. For now, we just have
+              // to be careful when editing this.
+              sql"""
               CREATE TABLE Lineage(
-                LineageId       IDENTITY  PRIMARY KEY,
-                MaximumRevision INTEGER   NOT NULL
+                LineageId               BIGINT                    IDENTITY(0, 1),
+                MaximumRevision         INTEGER                   NOT NULL
               )
       """.update.apply()
 
-            sql"""
+              sql"""
               CREATE TABLE Recording(
                 TimeCategory            INT                       NOT NULL,
                 EventTimeCategory       INT                       NOT NULL,
@@ -50,7 +54,7 @@ object BlobStorageOnH2 {
               )
       """.update.apply()
 
-            sql"""
+              sql"""
               CREATE TABLE Snapshot(
                 ItemId                  BINARY                    NOT NULL,
                 ItemClass               BINARY                    NOT NULL,
@@ -85,9 +89,11 @@ object BlobStorageOnH2 {
           }
       })
 
+  val sentinelLineageId = -1 // See note about creating the lineage table.
+
   val initialRevision: Revision = 0
 
-  type LineageId = UUID
+  type LineageId = Long
 }
 
 case class BlobStorageOnH2(
@@ -101,7 +107,16 @@ case class BlobStorageOnH2(
   thisBlobStorage =>
   import BlobStorageOnH2._
 
-  private def isHeadOfLineage(): IO[Boolean] = ???
+  private def isHeadOfLineage(): IO[Boolean] =
+    DBResource(connectionPool).use(db =>
+      IO {
+        db localTx { implicit session: DBSession =>
+          sql"""
+             SELECT MaximumRevision = $revision FROM Lineage WHERE LineageId = $lineageId
+           """.map(_.boolean(0)).single().apply().getOrElse(true)
+          false
+        }
+    })
 
   override def openRevision(): RevisionBuilder = {
     class RevisionBuilderImplementation extends RevisionBuilder {
@@ -127,7 +142,7 @@ case class BlobStorageOnH2(
             thisBlobStorage.copy(revision = 1 + thisBlobStorage.revision)
           else {
             thisBlobStorage.copy(
-              lineageId = UUID.randomUUID(),
+              lineageId = ???, // TODO - this needs to be set by the database via the update; it is an automatically generated key.
               revision = initialRevision,
               ancestralBranchpoints = thisBlobStorage.ancestralBranchpoints + (thisBlobStorage.lineageId -> thisBlobStorage.revision)
             )
