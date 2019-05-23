@@ -29,25 +29,22 @@ case class BlobStorageInMemory[Time, SnapshotBlob] private (
   object PhoenixLifecycleSpanningAnnihilations {
     type SnapshotBlobEntry =
       (Time, List[(Option[SnapshotBlob], Revision)])
-    def timeOf(snapshotBlobEntry: SnapshotBlobEntry): Split[Time] =
-      Split.alignedWith(snapshotBlobEntry._1)
   }
 
   case class PhoenixLifecycleSpanningAnnihilations(
       itemClazz: Class[_],
       snapshotBlobs: ScissOrderedSeq[
         PhoenixLifecycleSpanningAnnihilations.SnapshotBlobEntry,
-        Split[Time]] = ScissOrderedSeq.empty(
-        PhoenixLifecycleSpanningAnnihilations.timeOf,
-        Ordering[Split[Time]].reverse)) {
+        Time] = ScissOrderedSeq.empty(_._1, Ordering[Time].reverse)) {
 
-    def isValid(when: Split[Time],
-                validRevisionFor: Time => Revision): Boolean =
-      snapshotBlobFor(when, validRevisionFor).isDefined
+    def isValid(when: Time,
+                validRevisionFor: Time => Revision,
+                inclusive: Boolean): Boolean =
+      snapshotBlobFor(when, validRevisionFor, inclusive).isDefined
 
-    def snapshotBlobFor(
-        when: Split[Time],
-        validRevisionFor: Time => Revision): Option[SnapshotBlob] = {
+    def snapshotBlobFor(when: Time,
+                        validRevisionFor: Time => Revision,
+                        inclusive: Boolean): Option[SnapshotBlob] = {
       val blobEntriesIterator =
         snapshotBlobs.ceilIterator(when).flatMap {
           case (snapshotWhen, blobEntries) => blobEntries.map(snapshotWhen -> _)
@@ -56,7 +53,8 @@ case class BlobStorageInMemory[Time, SnapshotBlob] private (
       blobEntriesIterator
         .find {
           case (snapshotWhen, (_, blobRevision)) =>
-            blobRevision == validRevisionFor(snapshotWhen)
+            (inclusive || Ordering[Time].lt(snapshotWhen, when)) && blobRevision == validRevisionFor(
+              snapshotWhen)
         }
         .collect {
           case (_, (Some(snapshotBlob), _)) => snapshotBlob
@@ -67,23 +65,21 @@ case class BlobStorageInMemory[Time, SnapshotBlob] private (
         when: Time,
         snapshotBlob: Option[SnapshotBlob],
         revision: Revision): PhoenixLifecycleSpanningAnnihilations = {
-      val alignedWhen = Split.alignedWith(when)
       this.copy(
         snapshotBlobs = this.snapshotBlobs
-          .get(alignedWhen)
+          .get(when)
           .fold(this.snapshotBlobs)(this.snapshotBlobs.removeAll) + (when ->
           ((snapshotBlob, revision) :: this.snapshotBlobs
-            .get(alignedWhen)
+            .get(when)
             .fold(List.empty[(Option[SnapshotBlob], Revision)])(_._2))))
     }
 
     def retainUpTo(
         when: Time): Option[PhoenixLifecycleSpanningAnnihilations] = {
       val retainedSnapshotBlobs =
-        ScissOrderedSeq(
-          this.snapshotBlobs.ceilIterator(Split.alignedWith(when)).toSeq: _*)(
-          PhoenixLifecycleSpanningAnnihilations.timeOf,
-          Ordering[Split[Time]].reverse)
+        ScissOrderedSeq(this.snapshotBlobs.ceilIterator(when).toSeq: _*)(
+          _._1,
+          Ordering[Time].reverse)
 
       if (retainedSnapshotBlobs.nonEmpty)
         Some(this.copy(snapshotBlobs = retainedSnapshotBlobs))
@@ -167,9 +163,6 @@ case class BlobStorageInMemory[Time, SnapshotBlob] private (
   override def timeSlice(when: Time,
                          inclusive: Boolean): Timeslice[SnapshotBlob] = {
     trait TimesliceImplementation extends Timeslice[SnapshotBlob] {
-      private val splitWhen =
-        if (inclusive) Split.alignedWith(when) else Split.lowerBoundOf(when)
-
       override def uniqueItemQueriesFor[Item](
           clazz: Class[Item]): Stream[UniqueItemSpecification] =
         lifecycles.flatMap {
@@ -177,7 +170,7 @@ case class BlobStorageInMemory[Time, SnapshotBlob] private (
             lifecyclesForThatId collect {
               case lifecycle
                   if clazz.isAssignableFrom(lifecycle.itemClazz) && lifecycle
-                    .isValid(splitWhen, recordingRevisions.apply) =>
+                    .isValid(when, recordingRevisions.apply, inclusive) =>
                 UniqueItemSpecification(id, lifecycle.itemClazz)
             }
         }.toStream
@@ -193,7 +186,7 @@ case class BlobStorageInMemory[Time, SnapshotBlob] private (
               case lifecycle
                   if uniqueItemSpecification.clazz.isAssignableFrom(
                     lifecycle.itemClazz) && lifecycle
-                    .isValid(splitWhen, recordingRevisions.apply) =>
+                    .isValid(when, recordingRevisions.apply, inclusive) =>
                 uniqueItemSpecification.copy(clazz = lifecycle.itemClazz)
             }
           }
@@ -206,8 +199,9 @@ case class BlobStorageInMemory[Time, SnapshotBlob] private (
           lifecycles <- lifecycles.get(uniqueItemSpecification.id)
           lifecycle <- lifecycles.find(
             uniqueItemSpecification.clazz == _.itemClazz)
-          snapshotBlob <- lifecycle.snapshotBlobFor(splitWhen,
-                                                    recordingRevisions.apply)
+          snapshotBlob <- lifecycle.snapshotBlobFor(when,
+                                                    recordingRevisions.apply,
+                                                    inclusive)
         } yield snapshotBlob
 
     }
