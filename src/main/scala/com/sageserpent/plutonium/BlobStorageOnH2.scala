@@ -27,7 +27,7 @@ object BlobStorageOnH2 {
     BlobStorageOnH2(connectionPool,
                     sentinelLineageId,
                     initialRevision,
-                    TreeMap.empty)
+                    TreeMap.empty(implicitly[Ordering[LineageId]].reverse))
 
   def setupDatabaseTables(connectionPool: ConnectionPool): IO[Unit] =
     DBResource(connectionPool)
@@ -47,24 +47,6 @@ object BlobStorageOnH2 {
 
               // TODO - add check about what is and isn't null...
               sql"""
-              CREATE TABLE Recording(
-                ItemStateUpdateTimeCategory INT                       NOT NULL,
-                EventTimeCategory           INT                       NULL,
-                EventTime                   TIMESTAMP WITH TIME ZONE  NULL,
-                EventRevision               INT                       NULL,
-                EventTiebreaker             INT                       NULL,
-                IntraEventIndex             INT                       NULL,
-                LineageId                   BIGINT                    REFERENCES Lineage(LineageId),
-                Revision                    INTEGER                   NOT NULL,
-                PRIMARY KEY (ItemStateUpdateTimeCategory, EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex, LineageId, Revision),
-                CHECK Revision < ALL(SELECT MaximumRevision FROM Lineage WHERE Lineage.LineageId = LineageId),
-                CHECK ItemStateUpdateTimeCategory IN (-1, 0, 1),
-                CHECK EventTimeCategory IN (-1, 0, 1)
-              )
-      """.update.apply()
-
-              // TODO - add check about what is and isn't null...
-              sql"""
               CREATE TABLE Snapshot(
                 ItemId                      BINARY                    NOT NULL,
                 ItemClass                   BINARY                    NOT NULL,
@@ -78,8 +60,6 @@ object BlobStorageOnH2 {
                 Revision                    INTEGER                   NOT NULL,
                 Payload                     BLOB                      NULL,
                 PRIMARY KEY (ItemId, ItemClass, ItemStateUpdateTimeCategory, EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex, LineageId, Revision),
-                FOREIGN KEY (ItemStateUpdateTimeCategory, EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex, LineageId, Revision)
-                  REFERENCES Recording(ItemStateUpdateTimeCategory, EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex, LineageId, Revision),
                 CHECK Revision < ALL(SELECT MaximumRevision FROM Lineage WHERE Lineage.LineageId = LineageId),
                 CHECK ItemStateUpdateTimeCategory IN (-1, 0, 1),
                 CHECK EventTimeCategory IN (-1, 0, 1)
@@ -168,12 +148,29 @@ object BlobStorageOnH2 {
                        includePayload: Boolean): SQLSyntax = {
     val payloadSelection = if (includePayload) sqls", Payload" else sqls""
 
-    // TODO - nested query to ensure that what is selected has the maximum permitted revision for that lineage id...
-
     sqls"""
-      SELECT ItemId, ItemClass${payloadSelection} FROM SNAPSHOT
-      WHERE LineageId = $lineageId AND Revision <= $revision AND
-      ${lessThanOrEqualTo(when)}
+      SELECT ItemId, ItemClass${payloadSelection}
+        NATURAL JOIN (SELECT ItemStateUpdateTimeCategory,
+                             EventTimeCategory,
+                             EventTime
+                             EventRevision,
+                             EventTiebreaker,
+                             IntraEventIndex,
+                             LineageId,
+                             MAX(Revision) AS Revision,
+                      FROM SNAPSHOT
+                      WHERE LineageId = $lineageId
+                        AND Revision <= $revision
+                        AND ${lessThanOrEqualTo(when)}
+                      GROUP BY ItemStateUpdateTimeCategory,
+                               EventTimeCategory,
+                               EventTime
+                               EventRevision,
+                               EventTiebreaker,
+                               IntraEventIndex,
+                               LineageId)
+        WHERE ItemId IS NOT NULL
+              AND ItemClass IS NOT NULL
       """
   }
 
@@ -280,6 +277,7 @@ case class BlobStorageOnH2(
           )
           .unsafeRunSync()
           .flatten
+          .filter { case (_, itemClazz) => clazz.isAssignableFrom(itemClazz) }
           .distinct
           .map {
             case (itemId, itemClazz) =>
