@@ -16,7 +16,7 @@ import com.twitter.chill.{KryoPool, KryoSerializer}
 import scalikejdbc._
 
 import scala.collection.immutable.{SortedMap, TreeMap}
-import scala.collection.mutable
+import scala.collection.{immutable, mutable}
 
 //noinspection SqlNoDataSourceInspection
 object BlobStorageOnH2 {
@@ -46,6 +46,7 @@ object BlobStorageOnH2 {
       """.update.apply()
 
               // TODO - add check about what is and isn't null...
+              // TODO - pull out ItemId and ItemClass into their own table and use the Scala hash of the serialized form as the primary key into this table.
               sql"""
               CREATE TABLE Snapshot(
                 ItemId                      BINARY                    NOT NULL,
@@ -131,13 +132,15 @@ object BlobStorageOnH2 {
       case ItemStateUpdateKey(
           (when, eventRevision, eventOrderingTiebreakerIndex),
           intraEventIndex) =>
-        //ItemStateUpdateTimeCategory, EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex
-        sqls"""(ItemStateUpdateTimeCategory = -1 OR
-                                          ItemStateUpdateTimeCategory = 0 AND (${lessThan(
-          when)} OR
-                                            (${equalTo(when)} AND (EventRevision < $eventRevision OR 
-                                              (EventRevision = $eventRevision AND (EventTiebreaker < $eventOrderingTiebreakerIndex OR
-                                                (EventTiebreaker = $eventOrderingTiebreakerIndex AND IntraEventIndex <= $intraEventIndex)))))))"""
+        sqls"""(ItemStateUpdateTimeCategory = -1
+                OR ItemStateUpdateTimeCategory = 0
+                   AND (${lessThan(when)}
+                        OR (${equalTo(when)}
+                            AND (EventRevision < $eventRevision
+                                 OR (EventRevision = $eventRevision
+                                     AND (EventTiebreaker < $eventOrderingTiebreakerIndex
+                                          OR (EventTiebreaker = $eventOrderingTiebreakerIndex
+                                              AND IntraEventIndex <= $intraEventIndex)))))))"""
       case UpperBoundOfTimeslice(when) =>
         sqls"(ItemStateUpdateTimeCategory < 1 OR ItemStateUpdateTimeCategory = 1 AND ${lessThanOrEqualTo(when)})"
     }
@@ -171,6 +174,7 @@ object BlobStorageOnH2 {
                                LineageId)
         WHERE ItemId IS NOT NULL
               AND ItemClass IS NOT NULL
+              AND Payload IS NOT NULL
       """
   }
 
@@ -243,13 +247,7 @@ case class BlobStorageOnH2(
       when: ItemStateUpdateTime,
       inclusive: Boolean): BlobStorage.Timeslice[SnapshotBlob] =
     new BlobStorage.Timeslice[SnapshotBlob] {
-      private def snapshotBlobFor[Item](itemId: Option[Any],
-                                        when: ItemStateUpdateTime,
-                                        inclusive: Boolean)
-        : IO[(UniqueItemSpecification, Option[SnapshotBlob])] = ???
-
-      override def uniqueItemQueriesFor[Item](
-          clazz: Class[Item]): Stream[UniqueItemSpecification] = {
+      private def items[Item](clazz: Class[Item]): Stream[(Any, Class[_])] = {
         val branchPoints
           : Map[LineageId, Revision] = ancestralBranchpoints + (lineageId -> revision)
 
@@ -260,40 +258,91 @@ case class BlobStorageOnH2(
                 .traverse {
                   case (lineageId: LineageId, revision: Revision) =>
                     IO {
-                      db localTx {
-                        implicit session: DBSession =>
-                          sql"${matchingSnapshot(lineageId, revision, when, includePayload = false)}"
-                            .map(
-                              resultSet =>
-                                kryoPool.fromBytes(resultSet.bytes("ItemId"),
-                                                   classOf[Any]) -> kryoPool
-                                  .fromBytes(resultSet.bytes("ItemClass"),
-                                             classOf[Class[_]]))
-                            .single()
-                            .apply()
+                      db localTx { implicit session: DBSession =>
+                        sql"${matchingSnapshot(lineageId, revision, when, includePayload = false)}"
+                          .map(resultSet =>
+                            resultSet.bytes("ItemId")
+                              -> resultSet.bytes("ItemClass"))
+                          .list()
+                          .apply()
                       }
                     }
               }
           )
           .unsafeRunSync()
           .flatten
-          .filter { case (_, itemClazz) => clazz.isAssignableFrom(itemClazz) }
           .distinct
           .map {
-            case (itemId, itemClazz) =>
-              UniqueItemSpecification(itemId, itemClazz)
+            case (itemBytes, itemClazzBytes) =>
+              kryoPool.fromBytes(itemBytes, classOf[Any]) ->
+                kryoPool.fromBytes(itemClazzBytes, classOf[Class[_]])
           }
       }
 
       override def uniqueItemQueriesFor[Item](
+          clazz: Class[Item]): Stream[UniqueItemSpecification] =
+        items(clazz)
+          .filter { case (_, itemClazz) => clazz.isAssignableFrom(itemClazz) }
+          .map {
+            case (itemId, itemClazz) =>
+              UniqueItemSpecification(itemId, itemClazz)
+          }
+
+      override def uniqueItemQueriesFor[Item](
           uniqueItemSpecification: UniqueItemSpecification)
-        : Stream[UniqueItemSpecification] = ???
+        : Stream[UniqueItemSpecification] =
+        items(uniqueItemSpecification.clazz)
+          .collect {
+            case (itemId, itemClazz)
+                if uniqueItemSpecification.id == itemId &&
+                  uniqueItemSpecification.clazz.isAssignableFrom(itemClazz) =>
+              UniqueItemSpecification(itemId, itemClazz)
+          }
 
       override def snapshotBlobFor(
           uniqueItemSpecification: UniqueItemSpecification)
-        : Option[SnapshotBlob] = ???
+        : Option[SnapshotBlob] = {
+        val branchPoints
+          : Map[LineageId, Revision] = ancestralBranchpoints + (lineageId -> revision)
+
+        DBResource(connectionPool)
+          .use(
+            db =>
+              branchPoints.toStream
+                .traverse {
+                  case (lineageId: LineageId, revision: Revision) =>
+                    IO {
+                      db localTx { implicit session: DBSession =>
+                        sql"${matchingSnapshot(lineageId, revision, when, includePayload = true)}"
+                          .map(resultSet =>
+                            (resultSet.bytes("ItemId"),
+                             resultSet.bytes("ItemClass"),
+                             resultSet.bytes("Payload")))
+                          .list()
+                          .apply()
+                      }
+                    }
+              }
+          )
+          .unsafeRunSync()
+          .flatten
+          .distinct
+          .map {
+            case (itemBytes, itemClazzBytes, payload) =>
+              (kryoPool.fromBytes(itemBytes, classOf[Any]),
+               kryoPool.fromBytes(itemClazzBytes, classOf[Class[_]]),
+               kryoPool.fromBytes(payload, classOf[SnapshotBlob]))
+          }
+          .collect {
+            case (itemId, itemClazz, snapshotBlob)
+                if uniqueItemSpecification.id == itemId &&
+                  uniqueItemSpecification.clazz == itemClazz =>
+              snapshotBlob
+          }
+          .headOption
+      }
     }
 
-  override def retainUpTo(when: ItemStateUpdateTime): Timeline.BlobStorage =
-    ???
+  override def retainUpTo(when: ItemStateUpdateTime): Timeline.BlobStorage = ???
+
 }
