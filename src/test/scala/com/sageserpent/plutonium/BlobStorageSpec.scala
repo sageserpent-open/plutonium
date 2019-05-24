@@ -263,9 +263,7 @@ class BlobStorageSpec
         randomBehaviour.splitIntoNonEmptyPieces(annulments) ++
         randomBehaviour.splitIntoNonEmptyPieces(finalBookings)
 
-    val blobStorage: BlobStorage[Time, SnapshotBlob] =
-      blobStorageFrom(bookingsCulminatingInFinalOnes)
-    blobStorage
+    blobStorageFrom(bookingsCulminatingInFinalOnes)
   }
 
   def checkExpectationsForNonExistence(timeSlice: Timeslice[SnapshotBlob])(
