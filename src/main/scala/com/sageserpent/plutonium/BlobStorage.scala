@@ -46,7 +46,29 @@ trait BlobStorage[Time, SnapshotBlob] { blobStorage =>
       record(when, Map.empty)
 
     def build(): BlobStorage[Time, SnapshotBlob]
+  }
 
+  trait RevisionBuilderContracts extends RevisionBuilder {
+    protected def hasBooked(when: Time): Boolean
+
+    abstract override def record(
+        when: Time,
+        snapshotBlobs: Map[UniqueItemSpecification, Option[SnapshotBlob]])
+      : Unit = {
+      require(!hasBooked(when))
+
+      super.record(when, snapshotBlobs)
+
+      assert(hasBooked(when))
+    }
+
+    abstract override def annul(when: Time): Unit = {
+      require(!hasBooked(when))
+
+      super.annul(when)
+
+      assert(hasBooked(when))
+    }
   }
 
   def openRevision(): RevisionBuilder
