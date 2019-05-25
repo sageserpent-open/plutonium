@@ -53,8 +53,8 @@ trait World extends javaApi.World {
 
 trait WorldContracts extends World {
   def checkInvariant: Unit = {
-    require(revisionAsOfs.size == nextRevision)
-    require(
+    assert(revisionAsOfs.size == nextRevision)
+    assert(
       revisionAsOfs.isEmpty || (revisionAsOfs zip revisionAsOfs.tail forall {
         case (first, second) => !second.isBefore(first)
       }))
