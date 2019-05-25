@@ -205,7 +205,7 @@ object BlobStorageSpec extends SharedGenerators {
       revisions: Seq[
         Seq[(Time, Seq[(UniqueItemSpecification, Option[SnapshotBlob])])]])
     : BlobStorage[Time, SnapshotBlob] =
-    ((BlobStorageInMemory[Time, SnapshotBlob](): BlobStorage[
+    ((BlobStorageInMemory.empty[Time, SnapshotBlob]: BlobStorage[
       Time,
       SnapshotBlob]) /: revisions) {
       case (blobStorage, bookingsForRevision) =>

@@ -214,7 +214,7 @@ case class BlobStorageOnH2(
         (ItemStateUpdateTime,
          Map[UniqueItemSpecification, Option[SnapshotBlob]])
 
-      private val recordings = mutable.MutableList.empty[Recording]
+      protected val recordings = mutable.MutableList.empty[Recording]
 
       override def record(
           when: ItemStateUpdateTime,
@@ -240,7 +240,10 @@ case class BlobStorageOnH2(
       }
     }
 
-    new RevisionBuilderImplementation
+    new RevisionBuilderImplementation with RevisionBuilderContracts {
+      override protected def hasBooked(when: ItemStateUpdateTime): Boolean =
+        recordings.view.map(_._1).contains(when)
+    }
   }
 
   override def timeSlice(

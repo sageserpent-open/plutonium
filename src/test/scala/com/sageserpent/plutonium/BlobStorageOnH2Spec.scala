@@ -4,10 +4,7 @@ import java.time.Instant
 import java.util.UUID
 
 import cats.effect.{IO, Resource}
-import com.sageserpent.plutonium.curium.{
-  ConnectionPoolResource,
-  H2ViaScalikeJdbcDatabaseSetupResource
-}
+import com.sageserpent.plutonium.curium.ConnectionPoolResource
 import org.scalacheck.ScalacheckShapeless._
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
@@ -27,14 +24,13 @@ trait BlobStorageOnH2DatabaseSetupResource extends ConnectionPoolResource {
 }
 
 object BlobStorageOnH2Spec extends SharedGenerators {
-  case class RecordingDatum(
-      when: ItemStateUpdateTime,
-      snapshotBlobs: Map[UniqueItemSpecification,
-                         Option[ItemStateStorage.SnapshotBlob]])
-
   sealed trait Operation
 
-  case class Revision(recordingDatums: Seq[RecordingDatum]) extends Operation
+  case class Revision(
+      recordingDatums: Map[
+        ItemStateUpdateTime,
+        Map[UniqueItemSpecification, Option[ItemStateStorage.SnapshotBlob]]])
+      extends Operation
 
   case class Retaining(when: ItemStateUpdateTime) extends Operation
 
@@ -86,8 +82,8 @@ class BlobStorageOnH2Spec
               : mutable.Queue[(Timeline.BlobStorage, Timeline.BlobStorage)] =
               mutable.Queue.empty
 
-            pairsOfTraineeAndExemplarImplementations.enqueue(
-              BlobStorageOnH2.empty(connectionPool) -> BlobStorageInMemory())
+            pairsOfTraineeAndExemplarImplementations.enqueue(BlobStorageOnH2
+              .empty(connectionPool) -> BlobStorageInMemory.empty)
 
             for {
               operation <- operations
@@ -105,7 +101,7 @@ class BlobStorageOnH2Spec
                     .openRevision() -> exemplar.openRevision()
 
                   for {
-                    RecordingDatum(when, snapshotBlobs) <- recordingDatums
+                    (when, snapshotBlobs) <- recordingDatums
                   } {
                     builderFromTrainee.record(when, snapshotBlobs)
                     builderFromExemplar.record(when, snapshotBlobs)

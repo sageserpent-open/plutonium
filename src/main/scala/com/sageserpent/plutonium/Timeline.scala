@@ -34,7 +34,7 @@ case class Timeline(
     allEvents: AllEvents = noEvents,
     itemStateUpdatesDag: ItemStateUpdatesDag = empty,
     blobStorage: Timeline.BlobStorage =
-      BlobStorageInMemory[ItemStateUpdateTime, SnapshotBlob]()) {
+      BlobStorageInMemory.empty[ItemStateUpdateTime, SnapshotBlob]) {
   def revise(events: Map[_ <: EventId, Option[Event]]): Timeline = {
     val ItemStateUpdatesDelta(allEventsForNewTimeline,
                               itemStateUpdateKeysThatNeedToBeRevoked,

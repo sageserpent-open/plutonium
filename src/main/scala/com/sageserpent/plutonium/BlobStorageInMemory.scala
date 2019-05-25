@@ -7,7 +7,7 @@ import scala.collection.mutable
 object BlobStorageInMemory {
   type Revision = Int
 
-  def apply[Time: Ordering, SnapshotBlob]() =
+  def empty[Time: Ordering, SnapshotBlob] =
     new BlobStorageInMemory[Time, SnapshotBlob](
       revision = 0,
       recordingRevisions = Map.empty,
