@@ -197,23 +197,8 @@ object BlobStorageSpec extends SharedGenerators {
         uniqueItemSpecification -> snapshots
     }
 
-    val timeSeriesWhoseSnapshotsWillCollide = randomBehaviour
-      .buildRandomSequenceOfDistinctCandidatesChosenFrom(
-        lotsOfTimeSeriesWithoutTheQueryTimeCruft)
-      .map {
-        case (uniqueItemSpecification, snapshots) =>
-          uniqueItemSpecification -> randomBehaviour
-            .buildRandomSequenceOfDistinctCandidatesChosenFrom(snapshots)
-            .map {
-              case (when, snapshotBlob) =>
-                when -> snapshotBlob.map(-_) // An easy way to mutate the blob that usually makes it obvious that it's the intended duplicate when debugging.
-            }
-      }
-
-    randomBehaviour.pickAlternatelyFrom(
-      (shuffleAndMergeBookingsSharingTheSameTime(
-        timeSeriesWhoseSnapshotsWillCollide) ++ shuffleAndMergeBookingsSharingTheSameTime(
-        lotsOfTimeSeriesWithoutTheQueryTimeCruft)).groupBy(_._1).values)
+    shuffleAndMergeBookingsSharingTheSameTime(
+      lotsOfTimeSeriesWithoutTheQueryTimeCruft)
   }
 
   def blobStorageFrom(
@@ -268,9 +253,7 @@ class BlobStorageSpec
         randomBehaviour.splitIntoNonEmptyPieces(annulments) ++
         randomBehaviour.splitIntoNonEmptyPieces(finalBookings)
 
-    val blobStorage: BlobStorage[Time, SnapshotBlob] =
-      blobStorageFrom(bookingsCulminatingInFinalOnes)
-    blobStorage
+    blobStorageFrom(bookingsCulminatingInFinalOnes)
   }
 
   def checkExpectationsForNonExistence(timeSlice: Timeslice[SnapshotBlob])(

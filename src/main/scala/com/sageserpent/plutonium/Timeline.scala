@@ -54,8 +54,6 @@ case class Timeline(
               (PriorityQueueKey(itemStateUpdateKey,
                                 isAlreadyReferencedAsADependencyInTheDag),
                _)) =>
-            val revisionBuilder = blobStorage.openRevision()
-
             val itemStateUpdate =
               itemStateUpdatesDag.label(itemStateUpdateKey).get
 
@@ -74,6 +72,8 @@ case class Timeline(
               case ItemStateAnnihilation(annihilation) =>
                 val ancestorKey: ItemStateUpdateKey =
                   identifiedItemAccess(annihilation)
+
+                val revisionBuilder = blobStorage.openRevision()
 
                 revisionBuilder.record(
                   itemStateUpdateKey,
@@ -121,10 +121,10 @@ case class Timeline(
                 ).afterRecalculations
 
               case ItemStatePatch(patch) =>
-                val revisionBuilder = blobStorage.openRevision()
-
                 val (mutatedItemSnapshots, discoveredReadDependencies) =
                   identifiedItemAccess(patch, itemStateUpdateKey)
+
+                val revisionBuilder = blobStorage.openRevision()
 
                 revisionBuilder.record(itemStateUpdateKey,
                                        mutatedItemSnapshots.mapValues {

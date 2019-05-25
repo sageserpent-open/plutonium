@@ -92,7 +92,7 @@ case class BlobStorageInMemory[Time, SnapshotBlob] private (
       type Recording =
         (Time, Map[UniqueItemSpecification, Option[SnapshotBlob]])
 
-      private val recordings = mutable.MutableList.empty[Recording]
+      protected val recordings = mutable.MutableList.empty[Recording]
 
       override def record(
           when: Time,
@@ -157,7 +157,10 @@ case class BlobStorageInMemory[Time, SnapshotBlob] private (
       }
     }
 
-    new RevisionBuilderImplementation
+    new RevisionBuilderImplementation with RevisionBuilderContracts {
+      override protected def hasBooked(when: Time): Boolean =
+        recordings.view.map(_._1).contains(when)
+    }
   }
 
   override def timeSlice(when: Time,
