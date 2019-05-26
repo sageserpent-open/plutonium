@@ -153,6 +153,7 @@ object BlobStorageOnH2 {
 
     sqls"""
       SELECT ItemId, ItemClass${payloadSelection}
+        FROM SNAPSHOT
         NATURAL JOIN (SELECT ItemStateUpdateTimeCategory,
                              EventTimeCategory,
                              EventTime
@@ -160,14 +161,14 @@ object BlobStorageOnH2 {
                              EventTiebreaker,
                              IntraEventIndex,
                              LineageId,
-                             MAX(Revision) AS Revision,
-                      FROM SNAPSHOT
+                             MAX(Revision) AS Revision
+                      FROM Snapshot
                       WHERE LineageId = $lineageId
                         AND Revision <= $revision
                         AND ${lessThanOrEqualTo(when)}
                       GROUP BY ItemStateUpdateTimeCategory,
                                EventTimeCategory,
-                               EventTime
+                               EventTime,
                                EventRevision,
                                EventTiebreaker,
                                IntraEventIndex,
@@ -228,8 +229,8 @@ case class BlobStorageOnH2(
                   .apply()
 
                 val newRevision: Revision = sql"""
-                  SELECT MaximumRevision FROM Lineage WHERE LineageId = $lineageId
-                  """.map(_.int(0)).single().apply().get
+                  SELECT MaximumRevision FROM Lineage WHERE LineageId = $newOrReusedLineageId
+                  """.map(_.int(1)).single().apply().get
 
                 // Iterate over recordings...
 
