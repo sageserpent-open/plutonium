@@ -82,7 +82,7 @@ object BlobStorageOnH2 {
 
   val sentinelLineageId = -1 // See note about creating the lineage table.
 
-  val initialRevision: Revision = 0
+  val initialRevision: Revision = 1
 
   type LineageId = Long
 
@@ -193,21 +193,6 @@ case class BlobStorageOnH2(
   thisBlobStorage =>
   import BlobStorageOnH2._
 
-  private def isHeadOfLineage(): IO[Boolean] =
-    DBResource(connectionPool).use(db =>
-      IO {
-        db localTx {
-          implicit session: DBSession =>
-            // NOTE: the sentinel lineage id is always branched from, never extended; as
-            // it is not actually present in 'Lineage', the fallback below is false to
-            // cause 'build()' to force a new lineage branch each time an empty blob storage
-            // is revised.
-            sql"""
-             SELECT MaximumRevision = $revision FROM Lineage WHERE LineageId = $lineageId
-           """.map(_.boolean(0)).single().apply().getOrElse(false)
-        }
-    })
-
   override def openRevision(): RevisionBuilder = {
     class RevisionBuilderImplementation extends RevisionBuilder {
       type Recording =
@@ -223,20 +208,72 @@ case class BlobStorageOnH2(
         recordings += (when -> snapshotBlobs)
       }
 
+      private def makeRevision(): IO[(LineageId, Revision)] =
+        DBResource(connectionPool).use(db =>
+          IO {
+            db localTx {
+              implicit session: DBSession =>
+                // NOTE: the sentinel lineage id is always branched from, never extended;
+                // this works because there should be no entry in 'Lineage' using the
+                // sentinel lineage id.
+                val newOrReusedLineageId: LineageId = sql"""
+                   MERGE INTO Lineage
+                    USING DUAL
+                    ON LineageId = $lineageId AND MaximumRevision = $revision
+                    WHEN MATCHED THEN UPDATE SET MaximumRevision = 1 + $revision
+                    WHEN NOT MATCHED THEN INSERT SET MaximumRevision = $initialRevision
+                    """
+                  .map(_.long("LineageId"))
+                  .updateAndReturnGeneratedKey()
+                  .apply()
+
+                val newRevision: Revision = sql"""
+                  SELECT MaximumRevision FROM Lineage WHERE LineageId = $lineageId
+                  """.map(_.int(0)).single().apply().get
+
+                // Iterate over recordings...
+
+                for ((when, snapshotBlobs) <- recordings) {
+                  // ItemId, ItemClass, ItemStateUpdateTimeCategory, EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex, LineageId, Revision, Payload
+
+                  val itemSql =
+                    // ItemId, ItemClass
+                    sqls"""
+                          
+                        """
+
+                  val whenSql =
+                    // ItemStateUpdateTimeCategory, EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex
+                    sqls"""
+                      SET 
+                        """
+
+                  val payloadSql =
+                    // Payload
+                    sqls"""
+                    
+                        """
+                }
+
+                newOrReusedLineageId -> newRevision
+            }
+        })
+
       override def build(): BlobStorage[ItemStateUpdateTime, SnapshotBlob] = {
         (for {
-          isHeadOfLineage <- thisBlobStorage.isHeadOfLineage()
-          // TODO - update database with new recordings....
-        } yield
-          if (isHeadOfLineage)
-            thisBlobStorage.copy(revision = 1 + thisBlobStorage.revision)
+          newLineageEntry <- makeRevision()
+          (newLineageId, newRevision) = newLineageEntry
+        } yield {
+          if (newLineageId == lineageId)
+            thisBlobStorage.copy(revision = newRevision)
           else {
             thisBlobStorage.copy(
-              lineageId = ???, // TODO - this needs to be set by the database via the update; it is an automatically generated key.
-              revision = initialRevision,
+              lineageId = newLineageId,
+              revision = newRevision,
               ancestralBranchpoints = thisBlobStorage.ancestralBranchpoints + (thisBlobStorage.lineageId -> thisBlobStorage.revision)
             )
-          }).unsafeRunSync()
+          }
+        }).unsafeRunSync()
       }
     }
 
