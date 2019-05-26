@@ -298,13 +298,13 @@ case class BlobStorageOnH2(
         DBResource(connectionPool)
           .use(
             db =>
-              // TODO: this is a fudge, as inside the 'localTx' block, the code is essentially Java-style
-              // imperative code. The queries should be wrapped up in IO blocks, but this doesn't play well
-              // with 'localTx'. Need to reconcile the two approaches...
+              // HACK: currently having to fudge the interoperation of Cats' resources, ScalikeJdbc' localTx
+              // and the Scala library's stream so that that they can agree on when to run imperative effects.
+              // What a mess!
               IO {
                 db localTx {
                   implicit session: DBSession =>
-                    branchPoints.toStream
+                    branchPoints
                       .map {
                         case (lineageId: LineageId, revision: Revision) =>
                           sql"${matchingSnapshot(lineageId, revision, when, includePayload = false)}"
@@ -319,6 +319,7 @@ case class BlobStorageOnH2(
           )
           .unsafeRunSync()
           .flatten
+          .toStream
           .distinct
           .map {
             case (itemBytes, itemClazzBytes) =>
