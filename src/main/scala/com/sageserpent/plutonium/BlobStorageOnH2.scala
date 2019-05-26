@@ -220,13 +220,16 @@ case class BlobStorageOnH2(
                 val newOrReusedLineageId: LineageId = sql"""
                    MERGE INTO Lineage
                     USING DUAL
-                    ON LineageId = $lineageId AND MaximumRevision = $revision
-                    WHEN MATCHED THEN UPDATE SET MaximumRevision = 1 + $revision
-                    WHEN NOT MATCHED THEN INSERT SET MaximumRevision = $initialRevision
+                    ON LineageId = ? AND MaximumRevision = ?
+                    WHEN MATCHED THEN UPDATE SET MaximumRevision = ?
+                    WHEN NOT MATCHED THEN INSERT SET MaximumRevision = ?
                     """
-                  .map(_.long("LineageId"))
-                  .updateAndReturnGeneratedKey()
+                  .batchAndReturnGeneratedKey(
+                    "LineageId",
+                    Seq(lineageId, revision, 1 + revision, initialRevision))
                   .apply()
+                  .headOption
+                  .getOrElse(lineageId)
 
                 val newRevision: Revision = sql"""
                   SELECT MaximumRevision FROM Lineage WHERE LineageId = $newOrReusedLineageId
@@ -295,20 +298,24 @@ case class BlobStorageOnH2(
         DBResource(connectionPool)
           .use(
             db =>
-              branchPoints.toStream
-                .traverse {
-                  case (lineageId: LineageId, revision: Revision) =>
-                    IO {
-                      db localTx { implicit session: DBSession =>
-                        sql"${matchingSnapshot(lineageId, revision, when, includePayload = false)}"
-                          .map(resultSet =>
-                            resultSet.bytes("ItemId")
-                              -> resultSet.bytes("ItemClass"))
-                          .list()
-                          .apply()
+              // TODO: this is a fudge, as inside the 'localTx' block, the code is essentially Java-style
+              // imperative code. The queries should be wrapped up in IO blocks, but this doesn't play well
+              // with 'localTx'. Need to reconcile the two approaches...
+              IO {
+                db localTx {
+                  implicit session: DBSession =>
+                    branchPoints.toStream
+                      .map {
+                        case (lineageId: LineageId, revision: Revision) =>
+                          sql"${matchingSnapshot(lineageId, revision, when, includePayload = false)}"
+                            .map(resultSet =>
+                              resultSet.bytes("ItemId")
+                                -> resultSet.bytes("ItemClass"))
+                            .list()
+                            .apply()
                       }
-                    }
-              }
+                }
+            }
           )
           .unsafeRunSync()
           .flatten
