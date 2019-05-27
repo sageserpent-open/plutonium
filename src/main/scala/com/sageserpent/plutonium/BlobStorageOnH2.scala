@@ -61,7 +61,6 @@ object BlobStorageOnH2 {
                 Revision                    INTEGER                   NOT NULL,
                 Payload                     BLOB                      NULL,
                 PRIMARY KEY (ItemId, ItemClass, ItemStateUpdateTimeCategory, EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex, LineageId, Revision),
-
                 CHECK ItemStateUpdateTimeCategory IN (-1, 0, 1),
                 CHECK EventTimeCategory IN (-1, 0, 1)
               )
@@ -463,24 +462,29 @@ case class BlobStorageOnH2(
         DBResource(connectionPool)
           .use(
             db =>
-              branchPoints.toStream
-                .traverse {
-                  case (lineageId: LineageId, revision: Revision) =>
-                    IO {
-                      db localTx { implicit session: DBSession =>
-                        sql"${matchingSnapshot(lineageId, revision, when, includePayload = true)}"
-                          .map(resultSet =>
-                            (resultSet.bytes("ItemId"),
-                             resultSet.bytes("ItemClass"),
-                             resultSet.bytes("Payload")))
-                          .list()
-                          .apply()
+              // HACK: currently having to fudge the interoperation of Cats' resources, ScalikeJdbc' localTx
+              // and the Scala library's stream so that that they can agree on when to run imperative effects.
+              // What a mess!
+              IO {
+                db localTx {
+                  implicit session: DBSession =>
+                    branchPoints
+                      .map {
+                        case (lineageId: LineageId, revision: Revision) =>
+                          sql"${matchingSnapshot(lineageId, revision, when, includePayload = true)}"
+                            .map(resultSet =>
+                              (resultSet.bytes("ItemId"),
+                               resultSet.bytes("ItemClass"),
+                               resultSet.bytes("Payload")))
+                            .list()
+                            .apply()
                       }
-                    }
-              }
+                }
+            }
           )
           .unsafeRunSync()
           .flatten
+          .toStream
           .distinct
           .map {
             case (itemBytes, itemClazzBytes, payload) =>
