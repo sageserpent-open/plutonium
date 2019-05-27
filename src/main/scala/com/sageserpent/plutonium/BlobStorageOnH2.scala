@@ -61,7 +61,7 @@ object BlobStorageOnH2 {
                 Revision                    INTEGER                   NOT NULL,
                 Payload                     BLOB                      NULL,
                 PRIMARY KEY (ItemId, ItemClass, ItemStateUpdateTimeCategory, EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex, LineageId, Revision),
-                CHECK Revision <= ALL(SELECT MaximumRevision FROM Lineage WHERE Lineage.LineageId = LineageId),
+
                 CHECK ItemStateUpdateTimeCategory IN (-1, 0, 1),
                 CHECK EventTimeCategory IN (-1, 0, 1)
               )
@@ -166,26 +166,34 @@ object BlobStorageOnH2 {
 
     sqls"""
       SELECT ItemId, ItemClass${payloadSelection}
-        FROM SNAPSHOT
-        NATURAL JOIN (SELECT ItemStateUpdateTimeCategory,
-                             EventTimeCategory,
-                             EventTime
-                             EventRevision,
-                             EventTiebreaker,
-                             IntraEventIndex,
-                             LineageId,
-                             MAX(Revision) AS Revision
-                      FROM Snapshot
-                      WHERE LineageId = $lineageId
-                        AND Revision <= $revision
-                        AND ${lessThanOrEqualTo(when)}
-                      GROUP BY ItemStateUpdateTimeCategory,
-                               EventTimeCategory,
-                               EventTime,
-                               EventRevision,
-                               EventTiebreaker,
-                               IntraEventIndex,
-                               LineageId)
+        FROM Snapshot
+        JOIN (SELECT ItemStateUpdateTimeCategory,
+                     EventTimeCategory,
+                     EventTime AS EventTime,
+                     EventRevision,
+                     EventTiebreaker,
+                     IntraEventIndex,
+                     LineageId,
+                     MAX(Revision) AS Revision
+              FROM Snapshot
+              WHERE LineageId = $lineageId
+              AND Revision <= $revision
+              AND ${lessThanOrEqualTo(when)}
+              GROUP BY ItemStateUpdateTimeCategory,
+                       EventTimeCategory,
+                       EventTime,
+                       EventRevision,
+                       EventTiebreaker,
+                       IntraEventIndex,
+                       LineageId) AS DominantRevision
+        ON Snapshot.ItemStateUpdateTimeCategory = DominantRevision.ItemStateUpdateTimeCategory
+           AND Snapshot.EventTimeCategory = DominantRevision.EventTimeCategory
+           AND Snapshot.EventTime = DominantRevision.EventTime
+           AND Snapshot.EventRevision = DominantRevision.EventRevision
+           AND Snapshot.EventTiebreaker = DominantRevision.EventTiebreaker
+           AND Snapshot.IntraEventIndex = DominantRevision.IntraEventIndex
+           AND Snapshot.LineageId = DominantRevision.LineageId
+           AND Snapshot.Revision = DominantRevision.Revision
         WHERE ItemId != $placeholderItemIdBytes
               AND ItemClass != $placeholderItemClazzBytes
               AND Payload IS NOT NULL
@@ -215,7 +223,7 @@ object BlobStorageOnH2 {
     when match {
       case NegativeInfinity() =>
         sqls"""
-          EventTimeCategory = 0,
+          EventTimeCategory = -1,
           EventTime = $placeholderEventTime
           """
       case Finite(when) =>
@@ -225,7 +233,7 @@ object BlobStorageOnH2 {
           """
       case PositiveInfinity() =>
         sqls"""
-          EventTimeCategory = 0,
+          EventTimeCategory = 1,
           EventTime = $placeholderEventTime
           """
     }
@@ -320,12 +328,13 @@ case class BlobStorageOnH2(
                    MERGE INTO Lineage
                     USING DUAL
                     ON LineageId = ? AND MaximumRevision = ?
-                    WHEN MATCHED THEN UPDATE SET MaximumRevision = ?
+                    WHEN MATCHED THEN UPDATE SET MaximumRevision = 1 + MaximumRevision
                     WHEN NOT MATCHED THEN INSERT SET MaximumRevision = ?
                     """
-                  .batchAndReturnGeneratedKey(
-                    "LineageId",
-                    Seq(lineageId, revision, 1 + revision, initialRevision))
+                  .batchAndReturnGeneratedKey("LineageId",
+                                              Seq(lineageId,
+                                                  revision,
+                                                  initialRevision))
                   .apply()
                   .headOption
                   .getOrElse(lineageId)
@@ -334,7 +343,7 @@ case class BlobStorageOnH2(
                   SELECT MaximumRevision FROM Lineage WHERE LineageId = $newOrReusedLineageId
                   """.map(_.int(1)).single().apply().get
 
-                for ((when, snapshotBlobs) <- recordings) {
+                for ((when, snapshotBlobs) <- recordings.toMap) {
                   if (snapshotBlobs.nonEmpty) {
                     for ((uniqueItemSpecification, snapshotBlob) <- snapshotBlobs) {
                       sql"""
