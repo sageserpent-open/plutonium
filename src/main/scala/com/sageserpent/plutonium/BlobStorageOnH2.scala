@@ -16,7 +16,7 @@ import com.twitter.chill.{KryoPool, KryoSerializer}
 import scalikejdbc._
 
 import scala.collection.immutable.{SortedMap, TreeMap}
-import scala.collection.{immutable, mutable}
+import scala.collection.mutable
 
 //noinspection SqlNoDataSourceInspection
 object BlobStorageOnH2 {
@@ -52,16 +52,16 @@ object BlobStorageOnH2 {
                 ItemId                      BINARY                    NOT NULL,
                 ItemClass                   BINARY                    NOT NULL,
                 ItemStateUpdateTimeCategory INT                       NOT NULL,
-                EventTimeCategory           INT                       NULL,
-                EventTime                   TIMESTAMP WITH TIME ZONE  NULL,
-                EventRevision               INT                       NULL,
-                EventTiebreaker             INT                       NULL,
-                IntraEventIndex             INT                       NULL,
+                EventTimeCategory           INT                       NOT NULL,
+                EventTime                   TIMESTAMP WITH TIME ZONE  NOT NULL,
+                EventRevision               INT                       NOT NULL,
+                EventTiebreaker             INT                       NOT NULL,
+                IntraEventIndex             INT                       NOT NULL,
                 LineageId                   BIGINT                    REFERENCES Lineage(LineageId),
                 Revision                    INTEGER                   NOT NULL,
                 Payload                     BLOB                      NULL,
                 PRIMARY KEY (ItemId, ItemClass, ItemStateUpdateTimeCategory, EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex, LineageId, Revision),
-                CHECK Revision < ALL(SELECT MaximumRevision FROM Lineage WHERE Lineage.LineageId = LineageId),
+                CHECK Revision <= ALL(SELECT MaximumRevision FROM Lineage WHERE Lineage.LineageId = LineageId),
                 CHECK ItemStateUpdateTimeCategory IN (-1, 0, 1),
                 CHECK EventTimeCategory IN (-1, 0, 1)
               )
@@ -83,6 +83,19 @@ object BlobStorageOnH2 {
   val sentinelLineageId = -1 // See note about creating the lineage table.
 
   val initialRevision: Revision = 1
+
+  val placeholderItemIdBytes: Array[Byte] = Array.emptyByteArray
+
+  val placeholderItemClazzBytes: Array[Byte] = Array.emptyByteArray
+
+  val placeholderEventTime: Instant = Instant.ofEpochSecond(0L)
+
+  val placeholderEventRevision: World.Revision = World.initialRevision
+
+  val placeholderEventTiebreaker
+    : WorldImplementationCodeFactoring.EventOrderingTiebreakerIndex = 0
+
+  val placeholderIntraEventIndex: ItemStateUpdateTime.IntraEventIndex = 0
 
   type LineageId = Long
 
@@ -173,11 +186,97 @@ object BlobStorageOnH2 {
                                EventTiebreaker,
                                IntraEventIndex,
                                LineageId)
-        WHERE ItemId IS NOT NULL
-              AND ItemClass IS NOT NULL
+        WHERE ItemId != $placeholderItemIdBytes
+              AND ItemClass != $placeholderItemClazzBytes
               AND Payload IS NOT NULL
       """
   }
+
+  def itemSql(
+      uniqueItemSpecification: Option[UniqueItemSpecification]): SQLSyntax =
+    uniqueItemSpecification.fold {
+      sqls"""
+      ItemId = $placeholderItemIdBytes,
+      ItemClass = $placeholderItemClazzBytes
+      """
+    } { uniqueItemSpecification =>
+      val itemIdBytes =
+        kryoPool.toBytesWithClass(uniqueItemSpecification.id)
+      val itemClazzBytes =
+        kryoPool.toBytesWithClass(uniqueItemSpecification.clazz)
+
+      sqls"""
+      ItemId = $itemIdBytes,
+      ItemClass = $itemClazzBytes
+      """
+    }
+
+  def whenSql(when: Unbounded[Instant]): SQLSyntax =
+    when match {
+      case NegativeInfinity() =>
+        sqls"""
+          EventTimeCategory = 0,
+          EventTime = $placeholderEventTime
+          """
+      case Finite(when) =>
+        sqls"""
+          EventTimeCategory = 0,
+          EventTime = $when
+          """
+      case PositiveInfinity() =>
+        sqls"""
+          EventTimeCategory = 0,
+          EventTime = $placeholderEventTime
+          """
+    }
+
+  def whenSql(when: ItemStateUpdateTime): SQLSyntax =
+    when match {
+      case LowerBoundOfTimeslice(when) =>
+        sqls"""
+          ItemStateUpdateTimeCategory = -1,
+          ${whenSql(when)},
+          eventRevision = $placeholderEventRevision,
+          eventTiebreaker = $placeholderEventTiebreaker,
+          intraEventIndex = $placeholderIntraEventIndex
+          """
+      case ItemStateUpdateKey((eventWhen, eventRevision, eventTiebreaker),
+                              intraEventIndex) =>
+        sqls"""
+          ItemStateUpdateTimeCategory = 0,
+          ${whenSql(eventWhen)},
+          eventRevision = $eventRevision,
+          eventTiebreaker = $eventTiebreaker,
+          intraEventIndex = $intraEventIndex
+          """
+      case UpperBoundOfTimeslice(when) =>
+        sqls"""
+          ItemStateUpdateTimeCategory = 1,
+          ${whenSql(when)},
+          eventRevision = $placeholderEventRevision,
+          eventTiebreaker = $placeholderEventTiebreaker,
+          intraEventIndex = $placeholderIntraEventIndex
+          """
+    }
+
+  def lineageSql(lineageId: LineageId, revision: Revision): SQLSyntax = {
+    sqls"""
+      LineageId = $lineageId,
+      Revision = $revision
+        """
+  }
+
+  def snapshotSql(snapshot: Option[SnapshotBlob]): SQLSyntax =
+    snapshot.fold {
+      sqls"""
+        Payload = NULL
+        """
+    } { payload =>
+      val payloadBytes = kryoPool.toBytesWithClass(payload)
+      sqls"""
+        Payload = $payloadBytes
+        """
+    }
 
   val kryoPool: KryoPool =
     KryoPool.withByteArrayOutputStream(40, KryoSerializer.registered)
@@ -235,28 +334,26 @@ case class BlobStorageOnH2(
                   SELECT MaximumRevision FROM Lineage WHERE LineageId = $newOrReusedLineageId
                   """.map(_.int(1)).single().apply().get
 
-                // Iterate over recordings...
-
                 for ((when, snapshotBlobs) <- recordings) {
-                  // ItemId, ItemClass, ItemStateUpdateTimeCategory, EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex, LineageId, Revision, Payload
-
-                  val itemSql =
-                    // ItemId, ItemClass
-                    sqls"""
-                          
-                        """
-
-                  val whenSql =
-                    // ItemStateUpdateTimeCategory, EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex
-                    sqls"""
-                      SET 
-                        """
-
-                  val payloadSql =
-                    // Payload
-                    sqls"""
-                    
-                        """
+                  if (snapshotBlobs.nonEmpty) {
+                    for ((uniqueItemSpecification, snapshotBlob) <- snapshotBlobs) {
+                      sql"""
+                          INSERT INTO Snapshot SET
+                          ${itemSql(Some(uniqueItemSpecification))},
+                          ${whenSql(when)},
+                          ${lineageSql(newOrReusedLineageId, newRevision)},
+                          ${snapshotSql(snapshotBlob)}
+                         """.update().apply()
+                    }
+                  } else {
+                    sql"""
+                          INSERT INTO Snapshot SET
+                          ${itemSql(None)},
+                          ${whenSql(when)},
+                          ${lineageSql(newOrReusedLineageId, newRevision)},
+                          ${snapshotSql(None)}
+                         """.update().apply()
+                  }
                 }
 
                 newOrReusedLineageId -> newRevision
@@ -323,8 +420,8 @@ case class BlobStorageOnH2(
           .distinct
           .map {
             case (itemBytes, itemClazzBytes) =>
-              kryoPool.fromBytes(itemBytes, classOf[Any]) ->
-                kryoPool.fromBytes(itemClazzBytes, classOf[Class[_]])
+              kryoPool.fromBytes(itemBytes).asInstanceOf[Any] ->
+                kryoPool.fromBytes(itemClazzBytes).asInstanceOf[Class[_]]
           }
       }
 
