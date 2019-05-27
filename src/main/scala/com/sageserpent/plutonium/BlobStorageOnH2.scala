@@ -117,7 +117,7 @@ object BlobStorageOnH2 {
       case NegativeInfinity() =>
         sqls"FALSE"
       case Finite(unlifted) =>
-        sqls"(EventTimeCategory < 0 OR EventTimeCategory = 0 AND EventTime < $unlifted)"
+        sqls"(EventTimeCategory = -1 OR EventTimeCategory = 0 AND EventTime < $unlifted)"
       case PositiveInfinity() =>
         sqls"EventTimeCategory < 1"
     }
@@ -157,16 +157,24 @@ object BlobStorageOnH2 {
         sqls"(ItemStateUpdateTimeCategory < 1 OR ItemStateUpdateTimeCategory = 1 AND ${lessThanOrEqualTo(when)})"
     }
 
-  def matchingSnapshot(lineageId: LineageId,
-                       revision: Revision,
-                       when: ItemStateUpdateTime,
-                       includePayload: Boolean): SQLSyntax = {
+  def matchingSnapshots(branchPoints: Map[LineageId, Revision],
+                        when: ItemStateUpdateTime,
+                        includePayload: Boolean): SQLSyntax = {
     val payloadSelection =
       if (includePayload) sqls", Snapshot.Payload" else sqls""
 
+    val lineageSql: SQLSyntax = sqls"""(${branchPoints
+      .map {
+        case (lineageId, revision) =>
+          sqls"""
+        LineageId = $lineageId
+        AND Revision <= $revision"""
+      }
+      .reduce((left, right) => sqls"""$left OR $right""")})"""
+
     sqls"""
       WITH DominantResultWithLineage AS(
-      SELECT Snapshot.ItemId, Snapshot.ItemClass, Snapshot.LineageId, Snapshot.Revision
+      SELECT DISTINCT Snapshot.ItemId, Snapshot.ItemClass, Snapshot.LineageId, Snapshot.Revision
         FROM Snapshot
         JOIN (SELECT ItemStateUpdateTimeCategory,
                      EventTimeCategory,
@@ -177,8 +185,7 @@ object BlobStorageOnH2 {
                      LineageId,
                      MAX(Revision) AS Revision
               FROM Snapshot
-              WHERE LineageId = $lineageId
-              AND Revision <= $revision
+              WHERE $lineageSql
               AND ${lessThanOrEqualTo(when)}
               GROUP BY ItemStateUpdateTimeCategory,
                        EventTimeCategory,
@@ -195,7 +202,7 @@ object BlobStorageOnH2 {
            AND Snapshot.IntraEventIndex = DominantRevision.IntraEventIndex
            AND Snapshot.LineageId = DominantRevision.LineageId
            AND Snapshot.Revision = DominantRevision.Revision)
-      SELECT Snapshot.ItemId, Snapshot.ItemClass${payloadSelection}
+      SELECT DISTINCT Snapshot.ItemId, Snapshot.ItemClass${payloadSelection}
       FROM Snapshot
       JOIN (SELECT ItemId,
                    ItemClass,
@@ -391,7 +398,7 @@ case class BlobStorageOnH2(
           newLineageEntry <- makeRevision()
           (newLineageId, newRevision) = newLineageEntry
         } yield {
-          if (newLineageId == lineageId)
+          if (newLineageId == thisBlobStorage.lineageId)
             thisBlobStorage.copy(revision = newRevision)
           else {
             thisBlobStorage.copy(
@@ -421,27 +428,18 @@ case class BlobStorageOnH2(
         DBResource(connectionPool)
           .use(
             db =>
-              // HACK: currently having to fudge the interoperation of Cats' resources, ScalikeJdbc' localTx
-              // and the Scala library's stream so that that they can agree on when to run imperative effects.
-              // What a mess!
               IO {
-                db localTx {
-                  implicit session: DBSession =>
-                    branchPoints
-                      .map {
-                        case (lineageId: LineageId, revision: Revision) =>
-                          sql"${matchingSnapshot(lineageId, revision, when, includePayload = false)}"
-                            .map(resultSet =>
-                              resultSet.bytes("ItemId")
-                                -> resultSet.bytes("ItemClass"))
-                            .list()
-                            .apply()
-                      }
+                db localTx { implicit session: DBSession =>
+                  sql"${matchingSnapshots(branchPoints, when, includePayload = false)}"
+                    .map(resultSet =>
+                      resultSet.bytes("ItemId")
+                        -> resultSet.bytes("ItemClass"))
+                    .list()
+                    .apply()
                 }
             }
           )
           .unsafeRunSync()
-          .flatten
           .toStream
           .distinct
           .map {
@@ -480,28 +478,19 @@ case class BlobStorageOnH2(
         DBResource(connectionPool)
           .use(
             db =>
-              // HACK: currently having to fudge the interoperation of Cats' resources, ScalikeJdbc' localTx
-              // and the Scala library's stream so that that they can agree on when to run imperative effects.
-              // What a mess!
               IO {
-                db localTx {
-                  implicit session: DBSession =>
-                    branchPoints
-                      .map {
-                        case (lineageId: LineageId, revision: Revision) =>
-                          sql"${matchingSnapshot(lineageId, revision, when, includePayload = true)}"
-                            .map(resultSet =>
-                              (resultSet.bytes("ItemId"),
-                               resultSet.bytes("ItemClass"),
-                               resultSet.bytes("Payload")))
-                            .list()
-                            .apply()
-                      }
+                db localTx { implicit session: DBSession =>
+                  sql"${matchingSnapshots(branchPoints, when, includePayload = true)}"
+                    .map(resultSet =>
+                      (resultSet.bytes("ItemId"),
+                       resultSet.bytes("ItemClass"),
+                       resultSet.bytes("Payload")))
+                    .list()
+                    .apply()
                 }
             }
           )
           .unsafeRunSync()
-          .flatten
           .toStream
           .distinct
           .map {
