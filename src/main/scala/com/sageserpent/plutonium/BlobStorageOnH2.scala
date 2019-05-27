@@ -161,10 +161,12 @@ object BlobStorageOnH2 {
                        revision: Revision,
                        when: ItemStateUpdateTime,
                        includePayload: Boolean): SQLSyntax = {
-    val payloadSelection = if (includePayload) sqls", Payload" else sqls""
+    val payloadSelection =
+      if (includePayload) sqls", Snapshot.Payload" else sqls""
 
     sqls"""
-      SELECT ItemId, ItemClass${payloadSelection}
+      WITH DominantResultWithLineage AS(
+      SELECT Snapshot.ItemId, Snapshot.ItemClass, Snapshot.LineageId, Snapshot.Revision
         FROM Snapshot
         JOIN (SELECT ItemStateUpdateTimeCategory,
                      EventTimeCategory,
@@ -192,10 +194,26 @@ object BlobStorageOnH2 {
            AND Snapshot.EventTiebreaker = DominantRevision.EventTiebreaker
            AND Snapshot.IntraEventIndex = DominantRevision.IntraEventIndex
            AND Snapshot.LineageId = DominantRevision.LineageId
-           AND Snapshot.Revision = DominantRevision.Revision
-        WHERE ItemId != $placeholderItemIdBytes
-              AND ItemClass != $placeholderItemClazzBytes
-              AND Payload IS NOT NULL
+           AND Snapshot.Revision = DominantRevision.Revision)
+      SELECT Snapshot.ItemId, Snapshot.ItemClass${payloadSelection}
+      FROM Snapshot
+      JOIN (SELECT ItemId,
+                   ItemClass,
+                   MAX(LineageId) AS LineageId
+            FROM DominantResultWithLineage
+            GROUP BY ItemId,
+                     ItemClass) AS DominantLineageId
+      JOIN DominantResultWithLineage
+      ON Snapshot.ItemId = DominantLineageId.ItemId
+      AND Snapshot.ItemClass = DominantLineageId.ItemClass
+      AND Snapshot.LineageId = DominantLineageId.LineageId
+      AND Snapshot.Revision = DominantResultWithLineage.Revision
+      AND DominantLineageId.ItemId = DominantResultWithLineage.ItemId
+      AND DominantLineageId.ItemClass = DominantResultWithLineage.ItemClass
+      AND DominantLineageId.LineageId = DominantResultWithLineage.LineageId
+      WHERE Snapshot.ItemId != $placeholderItemIdBytes
+      AND Snapshot.ItemClass != $placeholderItemClazzBytes
+      AND Snapshot.Payload IS NOT NULL
       """
   }
 
