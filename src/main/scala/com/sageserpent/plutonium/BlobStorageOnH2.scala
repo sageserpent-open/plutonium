@@ -20,14 +20,35 @@ import scala.collection.mutable
 
 //noinspection SqlNoDataSourceInspection
 object BlobStorageOnH2 {
-  type Revision = Int
+  type LineageId = Long
+  type Revision  = Int
+
+  val kryoPool: KryoPool =
+    KryoPool.withByteArrayOutputStream(40, KryoSerializer.registered)
+
+  val sentinelLineageId = -1 // See note about creating the lineage table.
+
+  val initialRevision: Revision = 1
+
+  val placeholderItemIdBytes: Array[Byte] = Array.emptyByteArray
+
+  val placeholderItemClazzBytes: Array[Byte] = Array.emptyByteArray
+
+  val placeholderEventTime: Instant = Instant.ofEpochSecond(0L)
+
+  val placeholderEventRevision: World.Revision = World.initialRevision
+
+  val placeholderEventTiebreaker
+    : WorldImplementationCodeFactoring.EventOrderingTiebreakerIndex = 0
+
+  val placeholderIntraEventIndex: ItemStateUpdateTime.IntraEventIndex = 0
 
   // TODO - do we need a stable lineage id here that persists across processes?
   def empty(connectionPool: ConnectionPool): BlobStorageOnH2 =
     BlobStorageOnH2(connectionPool,
                     sentinelLineageId,
                     initialRevision,
-                    TreeMap.empty(implicitly[Ordering[LineageId]].reverse))
+                    TreeMap.empty)
 
   def setupDatabaseTables(connectionPool: ConnectionPool): IO[Unit] =
     DBResource(connectionPool)
@@ -79,25 +100,6 @@ object BlobStorageOnH2 {
           }
       })
 
-  val sentinelLineageId = -1 // See note about creating the lineage table.
-
-  val initialRevision: Revision = 1
-
-  val placeholderItemIdBytes: Array[Byte] = Array.emptyByteArray
-
-  val placeholderItemClazzBytes: Array[Byte] = Array.emptyByteArray
-
-  val placeholderEventTime: Instant = Instant.ofEpochSecond(0L)
-
-  val placeholderEventRevision: World.Revision = World.initialRevision
-
-  val placeholderEventTiebreaker
-    : WorldImplementationCodeFactoring.EventOrderingTiebreakerIndex = 0
-
-  val placeholderIntraEventIndex: ItemStateUpdateTime.IntraEventIndex = 0
-
-  type LineageId = Long
-
   def lessThanOrEqualTo(when: Unbounded[Instant]): SQLSyntax =
     // NOTE: take advantage that the event time category
     // can only take values from the set {-1, 0, 1}.
@@ -105,7 +107,7 @@ object BlobStorageOnH2 {
       case NegativeInfinity() =>
         sqls"EventTimeCategory = -1"
       case Finite(unlifted) =>
-        sqls"(EventTimeCategory < 0 OR EventTimeCategory = 0 AND EventTime <= $unlifted)"
+        sqls"(EventTimeCategory = -1 OR EventTimeCategory = 0 AND EventTime <= $unlifted)"
       case PositiveInfinity() =>
         sqls"EventTimeCategory <= 1"
     }
@@ -173,54 +175,72 @@ object BlobStorageOnH2 {
       .reduce((left, right) => sqls"""$left OR $right""")})"""
 
     sqls"""
-      WITH DominantResultWithLineage AS(
-      SELECT DISTINCT Snapshot.ItemId, Snapshot.ItemClass, Snapshot.LineageId, Snapshot.Revision
+      WITH DominantRevision AS(
+        SELECT ItemStateUpdateTimeCategory,
+               EventTimeCategory,
+               EventTime AS EventTime,
+               EventRevision,
+               EventTiebreaker,
+               IntraEventIndex,
+               LineageId,
+               MAX(Revision) AS Revision
         FROM Snapshot
-        JOIN (SELECT ItemStateUpdateTimeCategory,
+        WHERE $lineageSql
+        AND ${lessThanOrEqualTo(when)}
+        GROUP BY ItemStateUpdateTimeCategory,
+                 EventTimeCategory,
+                 EventTime,
+                 EventRevision,
+                 EventTiebreaker,
+                 IntraEventIndex,
+                 LineageId)
+      SELECT DISTINCT ON(ItemId, ItemClass)
+          Snapshot.ItemId,
+          Snapshot.ItemClass${payloadSelection},
+          Snapshot.ItemStateUpdateTimeCategory,
+          Snapshot.EventTimeCategory,
+          Snapshot.EventTime,
+          Snapshot.EventRevision,
+          Snapshot.EventTiebreaker,
+          Snapshot.IntraEventIndex
+      FROM Snapshot
+      JOIN (SELECT ItemStateUpdateTimeCategory,
+                   EventTimeCategory,
+                   EventTime AS EventTime,
+                   EventRevision,
+                   EventTiebreaker,
+                   IntraEventIndex,
+                   MAX(LineageId) AS LineageId
+            FROM DominantRevision
+            GROUP BY ItemStateUpdateTimeCategory,
                      EventTimeCategory,
-                     EventTime AS EventTime,
+                     EventTime,
                      EventRevision,
                      EventTiebreaker,
-                     IntraEventIndex,
-                     LineageId,
-                     MAX(Revision) AS Revision
-              FROM Snapshot
-              WHERE $lineageSql
-              AND ${lessThanOrEqualTo(when)}
-              GROUP BY ItemStateUpdateTimeCategory,
-                       EventTimeCategory,
-                       EventTime,
-                       EventRevision,
-                       EventTiebreaker,
-                       IntraEventIndex,
-                       LineageId) AS DominantRevision
-        ON Snapshot.ItemStateUpdateTimeCategory = DominantRevision.ItemStateUpdateTimeCategory
-           AND Snapshot.EventTimeCategory = DominantRevision.EventTimeCategory
-           AND Snapshot.EventTime = DominantRevision.EventTime
-           AND Snapshot.EventRevision = DominantRevision.EventRevision
-           AND Snapshot.EventTiebreaker = DominantRevision.EventTiebreaker
-           AND Snapshot.IntraEventIndex = DominantRevision.IntraEventIndex
-           AND Snapshot.LineageId = DominantRevision.LineageId
-           AND Snapshot.Revision = DominantRevision.Revision)
-      SELECT DISTINCT Snapshot.ItemId, Snapshot.ItemClass${payloadSelection}
-      FROM Snapshot
-      JOIN (SELECT ItemId,
-                   ItemClass,
-                   MAX(LineageId) AS LineageId
-            FROM DominantResultWithLineage
-            GROUP BY ItemId,
-                     ItemClass) AS DominantLineageId
-      JOIN DominantResultWithLineage
-      ON Snapshot.ItemId = DominantLineageId.ItemId
-      AND Snapshot.ItemClass = DominantLineageId.ItemClass
-      AND Snapshot.LineageId = DominantLineageId.LineageId
-      AND Snapshot.Revision = DominantResultWithLineage.Revision
-      AND DominantLineageId.ItemId = DominantResultWithLineage.ItemId
-      AND DominantLineageId.ItemClass = DominantResultWithLineage.ItemClass
-      AND DominantLineageId.LineageId = DominantResultWithLineage.LineageId
+                     IntraEventIndex) AS DominantLineageId
+      JOIN DominantRevision
+      ON Snapshot.EventTimeCategory = DominantRevision.EventTimeCategory
+         AND Snapshot.EventTime = DominantRevision.EventTime
+         AND Snapshot.EventRevision = DominantRevision.EventRevision
+         AND Snapshot.EventTiebreaker = DominantRevision.EventTiebreaker
+         AND Snapshot.IntraEventIndex = DominantRevision.IntraEventIndex
+         AND Snapshot.Revision = DominantRevision.Revision
+         AND Snapshot.LineageId = DominantRevision.LineageId
+         AND DominantRevision.EventTimeCategory = DominantLineageId.EventTimeCategory
+         AND DominantRevision.EventTime = DominantLineageId.EventTime
+         AND DominantRevision.EventRevision = DominantLineageId.EventRevision
+         AND DominantRevision.EventTiebreaker = DominantLineageId.EventTiebreaker
+         AND DominantRevision.IntraEventIndex = DominantLineageId.IntraEventIndex
+         AND DominantRevision.LineageId = DominantLineageId.LineageId
       WHERE Snapshot.ItemId != $placeholderItemIdBytes
-      AND Snapshot.ItemClass != $placeholderItemClazzBytes
-      AND Snapshot.Payload IS NOT NULL
+            AND Snapshot.ItemClass != $placeholderItemClazzBytes
+            AND Snapshot.Payload IS NOT NULL
+      ORDER BY ItemStateUpdateTimeCategory DESC,
+               EventTimeCategory DESC,
+               EventTime DESC,
+               EventRevision DESC,
+               EventTiebreaker DESC,
+               IntraEventIndex DESC
       """
   }
 
@@ -309,9 +329,6 @@ object BlobStorageOnH2 {
         Payload = $payloadBytes
         """
     }
-
-  val kryoPool: KryoPool =
-    KryoPool.withByteArrayOutputStream(40, KryoSerializer.registered)
 }
 
 case class BlobStorageOnH2(
@@ -441,7 +458,6 @@ case class BlobStorageOnH2(
           )
           .unsafeRunSync()
           .toStream
-          .distinct
           .map {
             case (itemBytes, itemClazzBytes) =>
               kryoPool.fromBytes(itemBytes).asInstanceOf[Any] ->
@@ -492,7 +508,6 @@ case class BlobStorageOnH2(
           )
           .unsafeRunSync()
           .toStream
-          .distinct
           .map {
             case (itemBytes, itemClazzBytes, payload) =>
               (kryoPool.fromBytes(itemBytes, classOf[Any]),
