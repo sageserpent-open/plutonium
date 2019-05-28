@@ -30,9 +30,11 @@ object BlobStorageOnH2 {
 
   val initialRevision: Revision = 1
 
-  val placeholderItemIdBytes: Array[Byte] = Array.emptyByteArray
+  val placeholderItemIdBytes: Array[Byte] =
+    "**** Numpty ****".map(_.toByte).toArray
 
-  val placeholderItemClazzBytes: Array[Byte] = Array.emptyByteArray
+  val placeholderItemClazzBytes: Array[Byte] =
+    "**** Humpty ****".map(_.toByte).toArray
 
   val placeholderEventTime: Instant = Instant.ofEpochSecond(0L)
 
@@ -107,9 +109,9 @@ object BlobStorageOnH2 {
       case NegativeInfinity() =>
         sqls"EventTimeCategory = -1"
       case Finite(unlifted) =>
-        sqls"(EventTimeCategory = -1 OR EventTimeCategory = 0 AND EventTime <= $unlifted)"
+        sqls"(EventTimeCategory < 0 OR EventTimeCategory = 0 AND EventTime <= $unlifted)"
       case PositiveInfinity() =>
-        sqls"EventTimeCategory <= 1"
+        sqls"TRUE"
     }
 
   def lessThan(when: Unbounded[Instant]): SQLSyntax =
@@ -119,7 +121,7 @@ object BlobStorageOnH2 {
       case NegativeInfinity() =>
         sqls"FALSE"
       case Finite(unlifted) =>
-        sqls"(EventTimeCategory = -1 OR EventTimeCategory = 0 AND EventTime < $unlifted)"
+        sqls"(EventTimeCategory < 0 OR EventTimeCategory = 0 AND EventTime < $unlifted)"
       case PositiveInfinity() =>
         sqls"EventTimeCategory < 1"
     }
@@ -137,26 +139,22 @@ object BlobStorageOnH2 {
     }
 
   def lessThanOrEqualTo(when: ItemStateUpdateTime): SQLSyntax =
-    // NOTE: 'when' is flattened into one of three alternative tuples; these are then subject to
-    // lexicographic ordering, but taking advantage that the item state update time category can
-    // only take values from the set {-1, 0, 1}.
     when match {
       case LowerBoundOfTimeslice(when) =>
-        sqls"(ItemStateUpdateTimeCategory = -1 AND ${lessThanOrEqualTo(when)})"
+        sqls"(${lessThan(when)} OR ItemStateUpdateTimeCategory = -1 AND ${equalTo(when)})"
       case ItemStateUpdateKey(
           (when, eventRevision, eventOrderingTiebreakerIndex),
           intraEventIndex) =>
-        sqls"""(ItemStateUpdateTimeCategory = -1
-                OR ItemStateUpdateTimeCategory = 0
-                   AND (${lessThan(when)}
-                        OR (${equalTo(when)}
-                            AND (EventRevision < $eventRevision
-                                 OR (EventRevision = $eventRevision
-                                     AND (EventTiebreaker < $eventOrderingTiebreakerIndex
-                                          OR (EventTiebreaker = $eventOrderingTiebreakerIndex
-                                              AND IntraEventIndex <= $intraEventIndex)))))))"""
+        sqls"""((${lessThan(when)}
+                 OR (${equalTo(when)}
+                     AND (EventRevision < $eventRevision
+                          OR (EventRevision = $eventRevision
+                              AND (EventTiebreaker < $eventOrderingTiebreakerIndex
+                                   OR (EventTiebreaker = $eventOrderingTiebreakerIndex
+                                       AND IntraEventIndex < $intraEventIndex
+                                           OR ItemStateUpdateTimeCategory <= 0 AND IntraEventIndex = $intraEventIndex)))))))"""
       case UpperBoundOfTimeslice(when) =>
-        sqls"(ItemStateUpdateTimeCategory < 1 OR ItemStateUpdateTimeCategory = 1 AND ${lessThanOrEqualTo(when)})"
+        sqls"(${lessThanOrEqualTo(when)})"
     }
 
   def matchingSnapshots(branchPoints: Map[LineageId, Revision],
@@ -406,6 +404,9 @@ case class BlobStorageOnH2(
                   }
                 }
 
+                assert(
+                  newOrReusedLineageId != lineageId || newRevision == 1 + revision)
+
                 newOrReusedLineageId -> newRevision
             }
         })
@@ -460,6 +461,8 @@ case class BlobStorageOnH2(
           .toStream
           .map {
             case (itemBytes, itemClazzBytes) =>
+              assert(itemBytes.nonEmpty)
+              assert(itemClazzBytes.nonEmpty)
               kryoPool.fromBytes(itemBytes).asInstanceOf[Any] ->
                 kryoPool.fromBytes(itemClazzBytes).asInstanceOf[Class[_]]
           }
@@ -510,9 +513,12 @@ case class BlobStorageOnH2(
           .toStream
           .map {
             case (itemBytes, itemClazzBytes, payload) =>
-              (kryoPool.fromBytes(itemBytes, classOf[Any]),
-               kryoPool.fromBytes(itemClazzBytes, classOf[Class[_]]),
-               kryoPool.fromBytes(payload, classOf[SnapshotBlob]))
+              assert(itemBytes.nonEmpty)
+              assert(itemClazzBytes.nonEmpty)
+              assert(payload.nonEmpty)
+              (kryoPool.fromBytes(itemBytes).asInstanceOf[Any],
+               kryoPool.fromBytes(itemClazzBytes).asInstanceOf[Class[_]],
+               kryoPool.fromBytes(payload).asInstanceOf[SnapshotBlob])
           }
           .collect {
             case (itemId, itemClazz, snapshotBlob)
