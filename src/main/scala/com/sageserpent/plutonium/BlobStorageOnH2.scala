@@ -68,12 +68,16 @@ object BlobStorageOnH2 {
               CREATE TABLE Snapshot(
                 ItemId                      BINARY                    NOT NULL,
                 ItemClass                   BINARY                    NOT NULL,
-                TIME                        INT                       NOT NULL,
+                Time                        INT                       NOT NULL,
                 LineageId                   BIGINT                    REFERENCES Lineage(LineageId),
                 Revision                    INTEGER                   NOT NULL,
                 Payload                     BLOB                      NULL,
                 PRIMARY KEY (ItemId, ItemClass, Time, LineageId, Revision)
               )
+      """.update.apply()
+
+              sql"""
+              CREATE INDEX ON Snapshot(Time, LineageId, Revision)
       """.update.apply()
           }
       })
