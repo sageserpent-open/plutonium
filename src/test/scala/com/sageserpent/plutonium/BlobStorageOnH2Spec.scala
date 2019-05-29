@@ -100,15 +100,20 @@ class BlobStorageOnH2Spec
                     ItemStateStorage.SnapshotBlob]): Unit = {
                 traineeResult should contain theSameElementsAs exemplarResult
 
-                // NOTE: just use the results from the exemplar, as there is no
-                // guarantee that the results come back in the same order from
-                // the trainee and the exemplar. If execution reaches this point,
-                // we know there are the same unique item specifications with the
-                // same multiplicities, so there is no harm in doing this.
+                // NOTE: just use the result from the exemplar, as there is no
+                // guarantee that the result contents come back in the same order
+                // from the trainee and the exemplar. If execution reaches this
+                // point, we know there are the same unique item specifications
+                // with the same multiplicities, so there is no harm in doing this.
+
+                if (traineeResult.nonEmpty) println("*** GOT RESULTS ***")
 
                 exemplarResult.foreach(
                   uniqueItemSpecification =>
                     Try {
+                      println(
+                        s"Unique item specification: $uniqueItemSpecification, snapshot blob: ${traineeTimeslice
+                          .snapshotBlobFor(uniqueItemSpecification)}")
                       traineeTimeslice.snapshotBlobFor(uniqueItemSpecification)
                     }.toEither.left.map(_.getClass) should be(Try {
                       exemplarTimeslice.snapshotBlobFor(uniqueItemSpecification)
@@ -116,14 +121,11 @@ class BlobStorageOnH2Spec
                 )
               }
 
+              val (trainee, exemplar) =
+                pairsOfTraineeAndExemplarImplementations.dequeue()
+
               operation match {
                 case Revision(recordingDatums) =>
-                  val (trainee, exemplar) =
-                    if (maximumNumberOfAlternativeBlobStorages > pairsOfTraineeAndExemplarImplementations.size)
-                      pairsOfTraineeAndExemplarImplementations.head
-                    else
-                      pairsOfTraineeAndExemplarImplementations.dequeue()
-
                   val (builderFromTrainee, builderFromExemplar) = trainee
                     .openRevision() -> exemplar.openRevision()
 
@@ -140,24 +142,25 @@ class BlobStorageOnH2Spec
                   pairsOfTraineeAndExemplarImplementations.enqueue(
                     newTrainee -> newExemplar)
 
-                /*                case Retaining(when) =>
-                  val (trainee, exemplar) =
-                    if (maximumNumberOfAlternativeBlobStorages > pairsOfTraineeAndExemplarImplementations.size)
-                      pairsOfTraineeAndExemplarImplementations.head
-                    else
-                      pairsOfTraineeAndExemplarImplementations.dequeue()
+                  if (maximumNumberOfAlternativeBlobStorages > pairsOfTraineeAndExemplarImplementations.size) {
+                    pairsOfTraineeAndExemplarImplementations.enqueue(
+                      trainee -> exemplar)
+                  }
 
+                /*                case Retaining(when) =>
                   val (newTrainee, newExemplar) = trainee
                     .retainUpTo(when) -> exemplar
                     .retainUpTo(when)
 
                   pairsOfTraineeAndExemplarImplementations.enqueue(
-                    newTrainee -> newExemplar)*/
+                    newTrainee -> newExemplar)
+
+                  if (maximumNumberOfAlternativeBlobStorages > pairsOfTraineeAndExemplarImplementations.size) {
+                    pairsOfTraineeAndExemplarImplementations.enqueue(
+                      trainee -> exemplar)
+                  }*/
 
                 case Querying(when, Left(uniqueItemSpecification)) =>
-                  val (trainee, exemplar) =
-                    pairsOfTraineeAndExemplarImplementations.head
-
                   val traineeTimeslice  = trainee.timeSlice(when)
                   val exemplarTimeslice = exemplar.timeSlice(when)
                   val (traineeResult, exemplarResult) = traineeTimeslice
@@ -168,10 +171,10 @@ class BlobStorageOnH2Spec
                     exemplarResult,
                     exemplarTimeslice)
 
-                case Querying(when, Right(clazz)) =>
-                  val (trainee, exemplar) =
-                    pairsOfTraineeAndExemplarImplementations.head
+                  pairsOfTraineeAndExemplarImplementations.enqueue(
+                    trainee -> exemplar)
 
+                case Querying(when, Right(clazz)) =>
                   val traineeTimeslice  = trainee.timeSlice(when)
                   val exemplarTimeslice = exemplar.timeSlice(when)
                   val (traineeResult, exemplarResult) = traineeTimeslice
@@ -183,6 +186,9 @@ class BlobStorageOnH2Spec
                   checkResults(traineeResult, traineeTimeslice)(
                     exemplarResult,
                     exemplarTimeslice)
+
+                  pairsOfTraineeAndExemplarImplementations.enqueue(
+                    trainee -> exemplar)
               }
             }
         })
