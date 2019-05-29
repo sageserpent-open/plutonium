@@ -64,8 +64,6 @@ object BlobStorageOnH2 {
       """.update.apply()
 
               // TODO - pull out ItemId and ItemClass into their own table and use the Scala hash of the serialized form as the primary key into this table.
-              // TODO - reinstate the check on consistency of revision versus the lineage table's maximum revision. Was it really down to cross table checks
-              //  being unsupported?
               sql"""
               CREATE TABLE Snapshot(
                 ItemId                      BINARY                    NOT NULL,
