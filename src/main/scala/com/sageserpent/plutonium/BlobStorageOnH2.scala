@@ -151,7 +151,7 @@ object BlobStorageOnH2 {
                         when: Time,
                         includePayload: Boolean): SQLSyntax = {
     val payloadSelection =
-      if (includePayload) sqls", Snapshot.Payload" else sqls""
+      if (includePayload) sqls", Payload" else sqls""
 
     val lineageSql: SQLSyntax = sqls"""(${branchPoints
       .map {
@@ -163,9 +163,12 @@ object BlobStorageOnH2 {
       .reduce((left, right) => sqls"""$left OR $right""")})"""
 
     sqls"""
+      WITH DominantEntriesByItemIdAndItemClass AS(
       SELECT DISTINCT ON(ItemId, ItemClass)
+          Snapshot.Time,
           Snapshot.ItemId,
-          Snapshot.ItemClass${payloadSelection}
+          Snapshot.ItemClass,
+          Snapshot.Payload
       FROM Snapshot
       JOIN (SELECT DISTINCT ON(Time)
               Time,
@@ -180,9 +183,12 @@ object BlobStorageOnH2 {
          AND Snapshot.Revision = DominantRevisionInLineage.Revision
          AND Snapshot.LineageId = DominantRevisionInLineage.LineageId
          AND Snapshot.Time = DominantRevisionInLineage.Time
-      WHERE Snapshot.ItemId != $placeholderItemIdBytes
-            AND Snapshot.ItemClass != $placeholderItemClazzBytes
-            AND Snapshot.Payload IS NOT NULL
+      ORDER BY Time DESC)
+      SELECT ItemId, ItemClass${payloadSelection}
+      FROM DominantEntriesByItemIdAndItemClass
+      WHERE ItemId != $placeholderItemIdBytes
+            AND ItemClass != $placeholderItemClazzBytes
+            AND Payload IS NOT NULL
       """
   }
 
