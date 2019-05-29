@@ -63,24 +63,18 @@ object BlobStorageOnH2 {
               )
       """.update.apply()
 
-              // TODO - add check about what is and isn't null...
               // TODO - pull out ItemId and ItemClass into their own table and use the Scala hash of the serialized form as the primary key into this table.
+              // TODO - reinstate the check on consistency of revision versus the lineage table's maximum revision. Was it really down to cross table checks
+              //  being unsupported?
               sql"""
               CREATE TABLE Snapshot(
                 ItemId                      BINARY                    NOT NULL,
                 ItemClass                   BINARY                    NOT NULL,
-                ItemStateUpdateTimeCategory INT                       NOT NULL,
-                EventTimeCategory           INT                       NOT NULL,
-                EventTime                   TIMESTAMP WITH TIME ZONE  NOT NULL,
-                EventRevision               INT                       NOT NULL,
-                EventTiebreaker             INT                       NOT NULL,
-                IntraEventIndex             INT                       NOT NULL,
+                TIME                        INT                       NOT NULL,
                 LineageId                   BIGINT                    REFERENCES Lineage(LineageId),
                 Revision                    INTEGER                   NOT NULL,
                 Payload                     BLOB                      NULL,
-                PRIMARY KEY (ItemId, ItemClass, ItemStateUpdateTimeCategory, EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex, LineageId, Revision),
-                CHECK ItemStateUpdateTimeCategory IN (-1, 0, 1),
-                CHECK EventTimeCategory IN (-1, 0, 1)
+                PRIMARY KEY (ItemId, ItemClass, Time, LineageId, Revision)
               )
       """.update.apply()
           }
@@ -151,7 +145,7 @@ object BlobStorageOnH2 {
       case UpperBoundOfTimeslice(when) =>
         sqls"(${lessThanOrEqualTo(when)})"
     }*/
-    ???
+    sqls"""(Time <= $when)""" // So much nicer then the commented-out morass above.
 
   def matchingSnapshots(branchPoints: Map[LineageId, Revision],
                         when: Time,
@@ -170,71 +164,33 @@ object BlobStorageOnH2 {
 
     sqls"""
       WITH DominantRevision AS(
-        SELECT ItemStateUpdateTimeCategory,
-               EventTimeCategory,
-               EventTime AS EventTime,
-               EventRevision,
-               EventTiebreaker,
-               IntraEventIndex,
+        SELECT Time,
                LineageId,
                MAX(Revision) AS Revision
         FROM Snapshot
         WHERE $lineageSql
         AND ${lessThanOrEqualTo(when)}
-        GROUP BY ItemStateUpdateTimeCategory,
-                 EventTimeCategory,
-                 EventTime,
-                 EventRevision,
-                 EventTiebreaker,
-                 IntraEventIndex,
+        GROUP BY Time,
                  LineageId)
       SELECT DISTINCT ON(ItemId, ItemClass)
           Snapshot.ItemId,
           Snapshot.ItemClass${payloadSelection},
-          Snapshot.ItemStateUpdateTimeCategory,
-          Snapshot.EventTimeCategory,
-          Snapshot.EventTime,
-          Snapshot.EventRevision,
-          Snapshot.EventTiebreaker,
-          Snapshot.IntraEventIndex
+          Snapshot.Time
       FROM Snapshot
-      JOIN (SELECT ItemStateUpdateTimeCategory,
-                   EventTimeCategory,
-                   EventTime AS EventTime,
-                   EventRevision,
-                   EventTiebreaker,
-                   IntraEventIndex,
+      JOIN (SELECT Time,
                    MAX(LineageId) AS LineageId
             FROM DominantRevision
-            GROUP BY ItemStateUpdateTimeCategory,
-                     EventTimeCategory,
-                     EventTime,
-                     EventRevision,
-                     EventTiebreaker,
-                     IntraEventIndex) AS DominantLineageId
+            GROUP BY Time) AS DominantLineageId
       JOIN DominantRevision
-      ON Snapshot.EventTimeCategory = DominantRevision.EventTimeCategory
-         AND Snapshot.EventTime = DominantRevision.EventTime
-         AND Snapshot.EventRevision = DominantRevision.EventRevision
-         AND Snapshot.EventTiebreaker = DominantRevision.EventTiebreaker
-         AND Snapshot.IntraEventIndex = DominantRevision.IntraEventIndex
+      ON Snapshot.Time = DominantRevision.Time
          AND Snapshot.Revision = DominantRevision.Revision
          AND Snapshot.LineageId = DominantRevision.LineageId
-         AND DominantRevision.EventTimeCategory = DominantLineageId.EventTimeCategory
-         AND DominantRevision.EventTime = DominantLineageId.EventTime
-         AND DominantRevision.EventRevision = DominantLineageId.EventRevision
-         AND DominantRevision.EventTiebreaker = DominantLineageId.EventTiebreaker
-         AND DominantRevision.IntraEventIndex = DominantLineageId.IntraEventIndex
+         AND DominantRevision.Time = DominantLineageId.Time
          AND DominantRevision.LineageId = DominantLineageId.LineageId
       WHERE Snapshot.ItemId != $placeholderItemIdBytes
             AND Snapshot.ItemClass != $placeholderItemClazzBytes
             AND Snapshot.Payload IS NOT NULL
-      ORDER BY ItemStateUpdateTimeCategory DESC,
-               EventTimeCategory DESC,
-               EventTime DESC,
-               EventRevision DESC,
-               EventTiebreaker DESC,
-               IntraEventIndex DESC
+      ORDER BY Time DESC
       """
   }
 
@@ -304,7 +260,7 @@ object BlobStorageOnH2 {
           intraEventIndex = $placeholderIntraEventIndex
           """
     }*/
-    ???
+    sqls"""Time = $when""" // So much nicer then the commented-out morass above.
 
   def lineageSql(lineageId: LineageId, revision: Revision): SQLSyntax = {
     sqls"""
