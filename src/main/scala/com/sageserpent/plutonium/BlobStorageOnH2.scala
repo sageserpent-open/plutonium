@@ -163,34 +163,26 @@ object BlobStorageOnH2 {
       .reduce((left, right) => sqls"""$left OR $right""")})"""
 
     sqls"""
-      WITH DominantRevision AS(
-        SELECT Time,
-               LineageId,
-               MAX(Revision) AS Revision
-        FROM Snapshot
-        WHERE $lineageSql
-        AND ${lessThanOrEqualTo(when)}
-        GROUP BY Time,
-                 LineageId)
       SELECT DISTINCT ON(ItemId, ItemClass)
           Snapshot.ItemId,
-          Snapshot.ItemClass${payloadSelection},
-          Snapshot.Time
+          Snapshot.ItemClass${payloadSelection}
       FROM Snapshot
-      JOIN (SELECT Time,
-                   MAX(LineageId) AS LineageId
-            FROM DominantRevision
-            GROUP BY Time) AS DominantLineageId
-      JOIN DominantRevision
-      ON Snapshot.Time = DominantRevision.Time
-         AND Snapshot.Revision = DominantRevision.Revision
-         AND Snapshot.LineageId = DominantRevision.LineageId
-         AND DominantRevision.Time = DominantLineageId.Time
-         AND DominantRevision.LineageId = DominantLineageId.LineageId
+      JOIN (SELECT DISTINCT ON(Time)
+              Time,
+              LineageId,
+              Revision
+            FROM Snapshot
+            WHERE $lineageSql
+                  AND ${lessThanOrEqualTo(when)}
+            ORDER BY LineageId DESC,
+                     Revision DESC) AS DominantRevisionInLineage
+      ON Snapshot.Time = DominantRevisionInLineage.Time
+         AND Snapshot.Revision = DominantRevisionInLineage.Revision
+         AND Snapshot.LineageId = DominantRevisionInLineage.LineageId
+         AND Snapshot.Time = DominantRevisionInLineage.Time
       WHERE Snapshot.ItemId != $placeholderItemIdBytes
             AND Snapshot.ItemClass != $placeholderItemClazzBytes
             AND Snapshot.Payload IS NOT NULL
-      ORDER BY Time DESC
       """
   }
 
