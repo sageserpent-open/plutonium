@@ -10,6 +10,7 @@ import com.sageserpent.americium.{
   PositiveInfinity,
   Unbounded
 }
+import com.sageserpent.plutonium.BlobStorage.TimesliceContracts
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
 import com.sageserpent.plutonium.curium.DBResource
 import com.twitter.chill.{KryoPool, KryoSerializer}
@@ -382,6 +383,9 @@ case class BlobStorageOnH2(
                   SELECT MaximumRevision FROM Lineage WHERE LineageId = $newOrReusedLineageId
                   """.map(_.int(1)).single().apply().get
 
+                println(
+                  s"Revising: ${thisBlobStorage.hashCode}, lineage id: $newOrReusedLineageId, new revision: $newRevision")
+
                 for ((when, snapshotBlobs) <- recordings.toMap) {
                   if (snapshotBlobs.nonEmpty) {
                     for ((uniqueItemSpecification, snapshotBlob) <- snapshotBlobs) {
@@ -437,8 +441,8 @@ case class BlobStorageOnH2(
 
   override def timeSlice(
       when: ItemStateUpdateTime,
-      inclusive: Boolean): BlobStorage.Timeslice[SnapshotBlob] =
-    new BlobStorage.Timeslice[SnapshotBlob] {
+      inclusive: Boolean): BlobStorage.Timeslice[SnapshotBlob] = {
+    trait TimesliceImplementation extends BlobStorage.Timeslice[SnapshotBlob] {
       private def items[Item](clazz: Class[Item]): Stream[(Any, Class[_])] = {
         val branchPoints
           : Map[LineageId, Revision] = ancestralBranchpoints + (lineageId -> revision)
@@ -529,6 +533,9 @@ case class BlobStorageOnH2(
           .headOption
       }
     }
+
+    new TimesliceImplementation with TimesliceContracts[SnapshotBlob]
+  }
 
   override def retainUpTo(when: ItemStateUpdateTime): Timeline.BlobStorage = ???
 
