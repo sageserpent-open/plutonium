@@ -11,6 +11,8 @@ import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{FlatSpec, Matchers}
 import scalikejdbc.ConnectionPool
 
+import BlobStorageOnH2.{Time, SnapshotBlob}
+
 import scala.collection.mutable
 import scala.util.Try
 
@@ -27,15 +29,14 @@ object BlobStorageOnH2Spec extends SharedGenerators {
   sealed trait Operation
 
   case class Revision(
-      recordingDatums: Map[
-        ItemStateUpdateTime,
-        Map[UniqueItemSpecification, Option[ItemStateStorage.SnapshotBlob]]])
+      recordingDatums: Map[Time,
+                           Map[UniqueItemSpecification, Option[SnapshotBlob]]])
       extends Operation
 
-  /*  case class Retaining(when: ItemStateUpdateTime) extends Operation*/
+  /*  case class Retaining(when: Time) extends Operation*/
 
   case class Querying(
-      when: ItemStateUpdateTime,
+      when: Time,
       itemSpecification: Either[UniqueItemSpecification, Class[_]])
       extends Operation
 
@@ -83,7 +84,8 @@ class BlobStorageOnH2Spec
         .use(connectionPool =>
           IO {
             val pairsOfTraineeAndExemplarImplementations
-              : mutable.Queue[(Timeline.BlobStorage, Timeline.BlobStorage)] =
+              : mutable.Queue[(BlobStorageOnH2.BlobStorage,
+                               BlobStorageOnH2.BlobStorage)] =
               mutable.Queue.empty
 
             pairsOfTraineeAndExemplarImplementations.enqueue(BlobStorageOnH2
@@ -94,10 +96,10 @@ class BlobStorageOnH2Spec
             } {
               def checkResults(traineeResult: Stream[UniqueItemSpecification],
                                traineeTimeslice: BlobStorage.Timeslice[
-                                 ItemStateStorage.SnapshotBlob])(
+                                 BlobStorageOnH2.SnapshotBlob])(
                   exemplarResult: Stream[UniqueItemSpecification],
                   exemplarTimeslice: BlobStorage.Timeslice[
-                    ItemStateStorage.SnapshotBlob]): Unit = {
+                    BlobStorageOnH2.SnapshotBlob]): Unit = {
                 traineeResult should contain theSameElementsAs exemplarResult
 
                 // NOTE: just use the result from the exemplar, as there is no

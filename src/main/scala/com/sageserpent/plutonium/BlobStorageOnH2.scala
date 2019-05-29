@@ -11,7 +11,7 @@ import com.sageserpent.americium.{
   Unbounded
 }
 import com.sageserpent.plutonium.BlobStorage.TimesliceContracts
-import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
+import com.sageserpent.plutonium.BlobStorageOnH2.Time
 import com.sageserpent.plutonium.curium.DBResource
 import com.twitter.chill.{KryoPool, KryoSerializer}
 import scalikejdbc._
@@ -21,6 +21,11 @@ import scala.collection.mutable
 
 //noinspection SqlNoDataSourceInspection
 object BlobStorageOnH2 {
+  type Time         = Int
+  type SnapshotBlob = Double
+
+  type BlobStorage = com.sageserpent.plutonium.BlobStorage[Time, SnapshotBlob]
+
   type LineageId = Long
   type Revision  = Int
 
@@ -31,20 +36,9 @@ object BlobStorageOnH2 {
 
   val initialRevision: Revision = 1
 
-  val placeholderItemIdBytes: Array[Byte] =
-    "**** Numpty ****".map(_.toByte).toArray
+  val placeholderItemIdBytes: Array[Byte] = Array.emptyByteArray
 
-  val placeholderItemClazzBytes: Array[Byte] =
-    "**** Humpty ****".map(_.toByte).toArray
-
-  val placeholderEventTime: Instant = Instant.ofEpochSecond(0L)
-
-  val placeholderEventRevision: World.Revision = World.initialRevision
-
-  val placeholderEventTiebreaker
-    : WorldImplementationCodeFactoring.EventOrderingTiebreakerIndex = 0
-
-  val placeholderIntraEventIndex: ItemStateUpdateTime.IntraEventIndex = 0
+  val placeholderItemClazzBytes: Array[Byte] = Array.emptyByteArray
 
   // TODO - do we need a stable lineage id here that persists across processes?
   def empty(connectionPool: ConnectionPool): BlobStorageOnH2 =
@@ -139,8 +133,8 @@ object BlobStorageOnH2 {
         sqls"EventTimeCategory = 1"
     }
 
-  def lessThanOrEqualTo(when: ItemStateUpdateTime): SQLSyntax =
-    when match {
+  def lessThanOrEqualTo(when: Time): SQLSyntax =
+    /*    when match {
       case LowerBoundOfTimeslice(when) =>
         sqls"(${lessThan(when)} OR ItemStateUpdateTimeCategory = -1 AND ${equalTo(when)})"
       case ItemStateUpdateKey(
@@ -156,10 +150,11 @@ object BlobStorageOnH2 {
                                            OR ItemStateUpdateTimeCategory <= 0 AND IntraEventIndex = $intraEventIndex)))))))"""
       case UpperBoundOfTimeslice(when) =>
         sqls"(${lessThanOrEqualTo(when)})"
-    }
+    }*/
+    ???
 
   def matchingSnapshots(branchPoints: Map[LineageId, Revision],
-                        when: ItemStateUpdateTime,
+                        when: Time,
                         includePayload: Boolean): SQLSyntax = {
     val payloadSelection =
       if (includePayload) sqls", Snapshot.Payload" else sqls""
@@ -262,7 +257,7 @@ object BlobStorageOnH2 {
       """
     }
 
-  def whenSql(when: Unbounded[Instant]): SQLSyntax =
+  /*  def whenSql(when: Unbounded[Instant]): SQLSyntax =
     when match {
       case NegativeInfinity() =>
         sqls"""
@@ -279,10 +274,10 @@ object BlobStorageOnH2 {
           EventTimeCategory = 1,
           EventTime = $placeholderEventTime
           """
-    }
+    }*/
 
-  def whenSql(when: ItemStateUpdateTime): SQLSyntax =
-    when match {
+  def whenSql(when: Time): SQLSyntax =
+    /*    when match {
       case LowerBoundOfTimeslice(when) =>
         sqls"""
           ItemStateUpdateTimeCategory = -1,
@@ -308,7 +303,8 @@ object BlobStorageOnH2 {
           eventTiebreaker = $placeholderEventTiebreaker,
           intraEventIndex = $placeholderIntraEventIndex
           """
-    }
+    }*/
+    ???
 
   def lineageSql(lineageId: LineageId, revision: Revision): SQLSyntax = {
     sqls"""
@@ -336,21 +332,20 @@ case class BlobStorageOnH2(
     revision: BlobStorageOnH2.Revision,
     ancestralBranchpoints: SortedMap[BlobStorageOnH2.LineageId,
                                      BlobStorageOnH2.Revision])(
-    override implicit val timeOrdering: Ordering[ItemStateUpdateTime])
-    extends Timeline.BlobStorage {
+    override implicit val timeOrdering: Ordering[Time])
+    extends BlobStorageOnH2.BlobStorage {
   thisBlobStorage =>
   import BlobStorageOnH2._
 
   override def openRevision(): RevisionBuilder = {
     class RevisionBuilderImplementation extends RevisionBuilder {
       type Recording =
-        (ItemStateUpdateTime,
-         Map[UniqueItemSpecification, Option[SnapshotBlob]])
+        (Time, Map[UniqueItemSpecification, Option[SnapshotBlob]])
 
       protected val recordings = mutable.MutableList.empty[Recording]
 
       override def record(
-          when: ItemStateUpdateTime,
+          when: Time,
           snapshotBlobs: Map[UniqueItemSpecification, Option[SnapshotBlob]])
         : Unit = {
         recordings += (when -> snapshotBlobs)
@@ -415,7 +410,7 @@ case class BlobStorageOnH2(
             }
         })
 
-      override def build(): BlobStorage[ItemStateUpdateTime, SnapshotBlob] = {
+      override def build(): BlobStorage = {
         (for {
           newLineageEntry <- makeRevision()
           (newLineageId, newRevision) = newLineageEntry
@@ -434,13 +429,13 @@ case class BlobStorageOnH2(
     }
 
     new RevisionBuilderImplementation with RevisionBuilderContracts {
-      override protected def hasBooked(when: ItemStateUpdateTime): Boolean =
+      override protected def hasBooked(when: Time): Boolean =
         recordings.view.map(_._1).contains(when)
     }
   }
 
   override def timeSlice(
-      when: ItemStateUpdateTime,
+      when: Time,
       inclusive: Boolean): BlobStorage.Timeslice[SnapshotBlob] = {
     trait TimesliceImplementation extends BlobStorage.Timeslice[SnapshotBlob] {
       private def items[Item](clazz: Class[Item]): Stream[(Any, Class[_])] = {
@@ -537,6 +532,6 @@ case class BlobStorageOnH2(
     new TimesliceImplementation with TimesliceContracts[SnapshotBlob]
   }
 
-  override def retainUpTo(when: ItemStateUpdateTime): Timeline.BlobStorage = ???
+  override def retainUpTo(when: Time): BlobStorage = ???
 
 }
