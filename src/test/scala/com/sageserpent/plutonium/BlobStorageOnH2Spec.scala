@@ -124,9 +124,6 @@ class BlobStorageOnH2Spec
                 exemplarResult.foreach(
                   uniqueItemSpecification =>
                     Try {
-                      println(
-                        s"Unique item specification: $uniqueItemSpecification, snapshot blob: ${traineeTimeslice
-                          .snapshotBlobFor(uniqueItemSpecification)}")
                       traineeTimeslice.snapshotBlobFor(uniqueItemSpecification)
                     }.toEither.left.map(_.getClass) should be(Try {
                       exemplarTimeslice.snapshotBlobFor(uniqueItemSpecification)
