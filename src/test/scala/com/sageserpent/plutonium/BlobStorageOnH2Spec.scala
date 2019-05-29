@@ -100,7 +100,18 @@ class BlobStorageOnH2Spec
                   exemplarResult: Stream[UniqueItemSpecification],
                   exemplarTimeslice: BlobStorage.Timeslice[
                     BlobStorageOnH2.SnapshotBlob]): Unit = {
-                traineeResult should contain theSameElementsAs exemplarResult
+                try {
+                  traineeResult should contain theSameElementsAs exemplarResult
+                } catch {
+                  case exception: Exception =>
+                    val traineeResultSet  = traineeResult.toSet
+                    val exemplarResultSet = exemplarResult.toSet
+                    println(
+                      s"Failure to match unique item specifications, got:\n$traineeResultSet, expected:\n$exemplarResultSet, left difference:\n${traineeResultSet
+                        .diff(exemplarResultSet)}, right difference:\n${exemplarResultSet
+                        .diff(traineeResultSet)}")
+                    throw exception
+                }
 
                 // NOTE: just use the result from the exemplar, as there is no
                 // guarantee that the result contents come back in the same order
