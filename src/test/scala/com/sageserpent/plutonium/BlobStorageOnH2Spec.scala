@@ -32,7 +32,7 @@ object BlobStorageOnH2Spec extends SharedGenerators {
         Map[UniqueItemSpecification, Option[ItemStateStorage.SnapshotBlob]]])
       extends Operation
 
-  case class Retaining(when: ItemStateUpdateTime) extends Operation
+  /*  case class Retaining(when: ItemStateUpdateTime) extends Operation*/
 
   case class Querying(
       when: ItemStateUpdateTime,
@@ -74,7 +74,11 @@ class BlobStorageOnH2Spec
   import BlobStorageOnH2Spec._
 
   "blob storage on H2" should "behave the same way as blob storage in memory" in {
+    var counter = 0
+
     forAll(operationsGenerator, MinSuccessful(200)) { operations =>
+      println(counter)
+      counter += 1
       connectionPoolResource
         .use(connectionPool =>
           IO {
@@ -88,15 +92,38 @@ class BlobStorageOnH2Spec
             for {
               operation <- operations
             } {
-              if (maximumNumberOfAlternativeBlobStorages < pairsOfTraineeAndExemplarImplementations.size) {
-                pairsOfTraineeAndExemplarImplementations.dequeue()
-              }
+              def checkResults(traineeResult: Stream[UniqueItemSpecification],
+                               traineeTimeslice: BlobStorage.Timeslice[
+                                 ItemStateStorage.SnapshotBlob])(
+                  exemplarResult: Stream[UniqueItemSpecification],
+                  exemplarTimeslice: BlobStorage.Timeslice[
+                    ItemStateStorage.SnapshotBlob]): Unit = {
+                traineeResult should contain theSameElementsAs exemplarResult
 
-              val (trainee, exemplar) =
-                pairsOfTraineeAndExemplarImplementations.head
+                // NOTE: just use the results from the exemplar, as there is no
+                // guarantee that the results come back in the same order from
+                // the trainee and the exemplar. If execution reaches this point,
+                // we know there are the same unique item specifications with the
+                // same multiplicities, so there is no harm in doing this.
+
+                exemplarResult.foreach(
+                  uniqueItemSpecification =>
+                    Try {
+                      traineeTimeslice.snapshotBlobFor(uniqueItemSpecification)
+                    }.toEither.left.map(_.getClass) should be(Try {
+                      exemplarTimeslice.snapshotBlobFor(uniqueItemSpecification)
+                    }.toEither.left.map(_.getClass))
+                )
+              }
 
               operation match {
                 case Revision(recordingDatums) =>
+                  val (trainee, exemplar) =
+                    if (maximumNumberOfAlternativeBlobStorages > pairsOfTraineeAndExemplarImplementations.size)
+                      pairsOfTraineeAndExemplarImplementations.head
+                    else
+                      pairsOfTraineeAndExemplarImplementations.dequeue()
+
                   val (builderFromTrainee, builderFromExemplar) = trainee
                     .openRevision() -> exemplar.openRevision()
 
@@ -113,55 +140,49 @@ class BlobStorageOnH2Spec
                   pairsOfTraineeAndExemplarImplementations.enqueue(
                     newTrainee -> newExemplar)
 
-                case Retaining(when) =>
+                /*                case Retaining(when) =>
+                  val (trainee, exemplar) =
+                    if (maximumNumberOfAlternativeBlobStorages > pairsOfTraineeAndExemplarImplementations.size)
+                      pairsOfTraineeAndExemplarImplementations.head
+                    else
+                      pairsOfTraineeAndExemplarImplementations.dequeue()
+
                   val (newTrainee, newExemplar) = trainee
                     .retainUpTo(when) -> exemplar
                     .retainUpTo(when)
 
                   pairsOfTraineeAndExemplarImplementations.enqueue(
-                    newTrainee -> newExemplar)
+                    newTrainee -> newExemplar)*/
 
                 case Querying(when, Left(uniqueItemSpecification)) =>
+                  val (trainee, exemplar) =
+                    pairsOfTraineeAndExemplarImplementations.head
+
                   val traineeTimeslice  = trainee.timeSlice(when)
                   val exemplarTimeslice = exemplar.timeSlice(when)
                   val (traineeResult, exemplarResult) = traineeTimeslice
                     .uniqueItemQueriesFor(uniqueItemSpecification) -> exemplarTimeslice
                     .uniqueItemQueriesFor(uniqueItemSpecification)
 
-                  traineeResult should contain theSameElementsAs exemplarResult
-
-                  (traineeResult zip exemplarResult).foreach {
-                    case (traineeUniqueItemSpecification,
-                          exemplarUniqueItemSpecification) =>
-                      Try {
-                        traineeTimeslice.snapshotBlobFor(
-                          traineeUniqueItemSpecification)
-                      }.toEither.left.map(_.getClass) should be(Try {
-                        exemplarTimeslice.snapshotBlobFor(
-                          exemplarUniqueItemSpecification)
-                      }.toEither.left.map(_.getClass))
-                  }
+                  checkResults(traineeResult, traineeTimeslice)(
+                    exemplarResult,
+                    exemplarTimeslice)
 
                 case Querying(when, Right(clazz)) =>
+                  val (trainee, exemplar) =
+                    pairsOfTraineeAndExemplarImplementations.head
+
                   val traineeTimeslice  = trainee.timeSlice(when)
                   val exemplarTimeslice = exemplar.timeSlice(when)
                   val (traineeResult, exemplarResult) = traineeTimeslice
-                    .uniqueItemQueriesFor(clazz) -> exemplarTimeslice
                     .uniqueItemQueriesFor(clazz)
+                    .force -> exemplarTimeslice
+                    .uniqueItemQueriesFor(clazz)
+                    .force
 
-                  traineeResult should contain theSameElementsAs exemplarResult
-
-                  (traineeResult zip exemplarResult).foreach {
-                    case (traineeUniqueItemSpecification,
-                          exemplarUniqueItemSpecification) =>
-                      Try {
-                        traineeTimeslice.snapshotBlobFor(
-                          traineeUniqueItemSpecification)
-                      }.toEither.left.map(_.getClass) should be(Try {
-                        exemplarTimeslice.snapshotBlobFor(
-                          exemplarUniqueItemSpecification)
-                      }.toEither.left.map(_.getClass))
-                  }
+                  checkResults(traineeResult, traineeTimeslice)(
+                    exemplarResult,
+                    exemplarTimeslice)
               }
             }
         })
