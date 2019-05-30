@@ -11,7 +11,7 @@ import com.sageserpent.americium.{
   Unbounded
 }
 import com.sageserpent.plutonium.BlobStorage.TimesliceContracts
-import com.sageserpent.plutonium.BlobStorageOnH2.Time
+import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
 import com.sageserpent.plutonium.curium.DBResource
 import com.twitter.chill.{KryoPool, KryoSerializer}
 import scalikejdbc._
@@ -21,11 +21,6 @@ import scala.collection.mutable
 
 //noinspection SqlNoDataSourceInspection
 object BlobStorageOnH2 {
-  type Time         = Int
-  type SnapshotBlob = Double
-
-  type BlobStorage = com.sageserpent.plutonium.BlobStorage[Time, SnapshotBlob]
-
   type LineageId = Long
   type Revision  = Int
 
@@ -36,9 +31,20 @@ object BlobStorageOnH2 {
 
   val initialRevision: Revision = 1
 
-  val placeholderItemIdBytes: Array[Byte] = Array.emptyByteArray
+  val placeholderItemIdBytes: Array[Byte] =
+    "**** Numpty ****".map(_.toByte).toArray
 
-  val placeholderItemClazzBytes: Array[Byte] = Array.emptyByteArray
+  val placeholderItemClazzBytes: Array[Byte] =
+    "**** Humpty ****".map(_.toByte).toArray
+
+  val placeholderEventTime: Instant = Instant.ofEpochSecond(0L)
+
+  val placeholderEventRevision: World.Revision = World.initialRevision
+
+  val placeholderEventTiebreaker
+    : WorldImplementationCodeFactoring.EventOrderingTiebreakerIndex = 0
+
+  val placeholderIntraEventIndex: ItemStateUpdateTime.IntraEventIndex = 0
 
   // TODO - do we need a stable lineage id here that persists across processes?
   def empty(connectionPool: ConnectionPool): BlobStorageOnH2 =
@@ -63,25 +69,33 @@ object BlobStorageOnH2 {
               )
       """.update.apply()
 
+              // TODO - add check about what is and isn't null...
               // TODO - pull out ItemId and ItemClass into their own table and use the Scala hash of the serialized form as the primary key into this table.
               sql"""
               CREATE TABLE Snapshot(
                 ItemId                      BINARY                    NOT NULL,
                 ItemClass                   BINARY                    NOT NULL,
-                Time                        INT                       NOT NULL,
+                ItemStateUpdateTimeCategory INT                       NOT NULL,
+                EventTimeCategory           INT                       NOT NULL,
+                EventTime                   TIMESTAMP WITH TIME ZONE  NOT NULL,
+                EventRevision               INT                       NOT NULL,
+                EventTiebreaker             INT                       NOT NULL,
+                IntraEventIndex             INT                       NOT NULL,
                 LineageId                   BIGINT                    REFERENCES Lineage(LineageId),
                 Revision                    INTEGER                   NOT NULL,
                 Payload                     BLOB                      NULL,
-                PRIMARY KEY (ItemId, ItemClass, Time, LineageId, Revision)
+                PRIMARY KEY (ItemId, ItemClass, ItemStateUpdateTimeCategory, EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex, LineageId, Revision),
+                CHECK ItemStateUpdateTimeCategory IN (-1, 0, 1),
+                CHECK EventTimeCategory IN (-1, 0, 1)
               )
       """.update.apply()
 
               sql"""
-              CREATE INDEX Fred ON Snapshot(Time, LineageId, Revision)
+              CREATE INDEX Fred ON Snapshot(ItemStateUpdateTimeCategory, EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex, LineageId, Revision)
       """.update.apply()
 
               sql"""
-              CREATE INDEX Bet ON Snapshot(ItemId, ItemClass, Time)
+              CREATE INDEX Bet ON Snapshot(ItemId, ItemClass, ItemStateUpdateTimeCategory, EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex)
       """.update.apply()
 
               sql"""
@@ -89,7 +103,7 @@ object BlobStorageOnH2 {
       """.update.apply()
 
               sql"""
-              CREATE INDEX Marge ON Snapshot(LineageId, Revision, Time)
+              CREATE INDEX Marge ON Snapshot(LineageId, Revision, ItemStateUpdateTimeCategory, EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex)
       """.update.apply()
           }
       })
@@ -141,8 +155,8 @@ object BlobStorageOnH2 {
         sqls"EventTimeCategory = 1"
     }
 
-  def lessThanOrEqualTo(when: Time): SQLSyntax =
-    /*    when match {
+  def lessThanOrEqualTo(when: ItemStateUpdateTime): SQLSyntax =
+    when match {
       case LowerBoundOfTimeslice(when) =>
         sqls"(${lessThan(when)} OR ItemStateUpdateTimeCategory = -1 AND ${equalTo(when)})"
       case ItemStateUpdateKey(
@@ -158,13 +172,12 @@ object BlobStorageOnH2 {
                                            OR ItemStateUpdateTimeCategory <= 0 AND IntraEventIndex = $intraEventIndex)))))))"""
       case UpperBoundOfTimeslice(when) =>
         sqls"(${lessThanOrEqualTo(when)})"
-    }*/
-    sqls"""(Time <= $when)""" // So much nicer then the commented-out morass above.
+    }
 
   def matchingSnapshots(targetItemId: Option[Any],
                         targetItemClazz: Option[Class[_]])(
       branchPoints: Map[LineageId, Revision],
-      when: Time,
+      when: ItemStateUpdateTime,
       includePayload: Boolean): SQLSyntax = {
     val payloadSelection =
       if (includePayload) sqls", Payload" else sqls""
@@ -193,14 +206,19 @@ object BlobStorageOnH2 {
       def templateToDistributeOverLineages(
           lineageSelectionSql: SQLSyntax): SQLSyntax =
         sqls"""
-            SELECT Time,
+            SELECT ItemStateUpdateTimeCategory, EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex,
                    LineageId,
                    Revision
             FROM Snapshot
-            JOIN (SELECT DISTINCT Time AS RelevantTime
+            JOIN (SELECT DISTINCT ItemStateUpdateTimeCategory AS RelevantItemStateUpdateTimeCategory, EventTimeCategory AS RelevantEventTimeCategory, EventTime AS RelevantEventTime, EventRevision AS RelevantEventRevision, EventTiebreaker AS RelevantEventTiebreaker, IntraEventIndex AS RelevantIntraEventIndex
                   FROM Snapshot
                   $whereClauseForItemSelectionSql)
-            ON Time = RelevantTime
+            ON ItemStateUpdateTimeCategory = RelevantItemStateUpdateTimeCategory
+               AND EventTimeCategory = RelevantEventTimeCategory
+               AND EventTime = RelevantEventTime
+               AND EventRevision = RelevantEventRevision
+               AND EventTiebreaker = RelevantEventTiebreaker
+               AND IntraEventIndex = RelevantIntraEventIndex
             WHERE $lineageSelectionSql
                   AND ${lessThanOrEqualTo(when)}
            """
@@ -221,23 +239,38 @@ object BlobStorageOnH2 {
     sqls"""
       WITH DominantEntriesByItemIdAndItemClass AS(
       SELECT DISTINCT ON(ItemId, ItemClass)
-          Snapshot.Time,
+          Snapshot.ItemStateUpdateTimeCategory,
+          Snapshot.EventTimeCategory,
+          Snapshot.EventTime,
+          Snapshot.EventRevision,
+          Snapshot.EventTiebreaker,
+          Snapshot.IntraEventIndex,
           Snapshot.ItemId,
           Snapshot.ItemClass,
           Snapshot.Payload
       FROM Snapshot
-      JOIN (SELECT DISTINCT ON(Time)
-                   Time,
+      JOIN (SELECT DISTINCT ON(ItemStateUpdateTimeCategory, EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex)
+                   ItemStateUpdateTimeCategory, EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex,
                    LineageId,
                    Revision
            FROM ($dominantRevisionInLineageSql)
            ORDER BY LineageId DESC,
                     Revision DESC) AS DominantRevisionInLineage
-      ON Snapshot.Time = DominantRevisionInLineage.Time
+      ON Snapshot.ItemStateUpdateTimeCategory = DominantRevisionInLineage.ItemStateUpdateTimeCategory
+         AND Snapshot.EventTimeCategory = DominantRevisionInLineage.EventTimeCategory
+         AND Snapshot.EventTime = DominantRevisionInLineage.EventTime
+         AND Snapshot.EventRevision = DominantRevisionInLineage.EventRevision
+         AND Snapshot.EventTiebreaker = DominantRevisionInLineage.EventTiebreaker
+         AND Snapshot.IntraEventIndex = DominantRevisionInLineage.IntraEventIndex
          AND Snapshot.LineageId = DominantRevisionInLineage.LineageId
          AND Snapshot.Revision = DominantRevisionInLineage.Revision
       $whereClauseForItemSelectionSql
-      ORDER BY Time DESC)
+      ORDER BY ItemStateUpdateTimeCategory DESC,
+               EventTimeCategory DESC,
+               EventTime DESC,
+               EventRevision DESC,
+               EventTiebreaker DESC,
+               IntraEventIndex DESC)
       SELECT ItemId, ItemClass${payloadSelection}
       FROM DominantEntriesByItemIdAndItemClass
       WHERE ItemId != $placeholderItemIdBytes
@@ -265,7 +298,7 @@ object BlobStorageOnH2 {
       """
     }
 
-  /*  def whenSql(when: Unbounded[Instant]): SQLSyntax =
+  def whenSql(when: Unbounded[Instant]): SQLSyntax =
     when match {
       case NegativeInfinity() =>
         sqls"""
@@ -282,10 +315,10 @@ object BlobStorageOnH2 {
           EventTimeCategory = 1,
           EventTime = $placeholderEventTime
           """
-    }*/
+    }
 
-  def whenSql(when: Time): SQLSyntax =
-    /*    when match {
+  def whenSql(when: ItemStateUpdateTime): SQLSyntax =
+    when match {
       case LowerBoundOfTimeslice(when) =>
         sqls"""
           ItemStateUpdateTimeCategory = -1,
@@ -311,8 +344,7 @@ object BlobStorageOnH2 {
           eventTiebreaker = $placeholderEventTiebreaker,
           intraEventIndex = $placeholderIntraEventIndex
           """
-    }*/
-    sqls"""Time = $when""" // So much nicer then the commented-out morass above.
+    }
 
   def lineageSql(lineageId: LineageId, revision: Revision): SQLSyntax = {
     sqls"""
@@ -340,20 +372,21 @@ case class BlobStorageOnH2(
     revision: BlobStorageOnH2.Revision,
     ancestralBranchpoints: SortedMap[BlobStorageOnH2.LineageId,
                                      BlobStorageOnH2.Revision])(
-    override implicit val timeOrdering: Ordering[Time])
-    extends BlobStorageOnH2.BlobStorage {
+    override implicit val timeOrdering: Ordering[ItemStateUpdateTime])
+    extends Timeline.BlobStorage {
   thisBlobStorage =>
   import BlobStorageOnH2._
 
   override def openRevision(): RevisionBuilder = {
     class RevisionBuilderImplementation extends RevisionBuilder {
       type Recording =
-        (Time, Map[UniqueItemSpecification, Option[SnapshotBlob]])
+        (ItemStateUpdateTime,
+         Map[UniqueItemSpecification, Option[SnapshotBlob]])
 
       protected val recordings = mutable.MutableList.empty[Recording]
 
       override def record(
-          when: Time,
+          when: ItemStateUpdateTime,
           snapshotBlobs: Map[UniqueItemSpecification, Option[SnapshotBlob]])
         : Unit = {
         recordings += (when -> snapshotBlobs)
@@ -418,7 +451,7 @@ case class BlobStorageOnH2(
             }
         })
 
-      override def build(): BlobStorage = {
+      override def build(): BlobStorage[ItemStateUpdateTime, SnapshotBlob] = {
         (for {
           newLineageEntry <- makeRevision()
           (newLineageId, newRevision) = newLineageEntry
@@ -437,13 +470,13 @@ case class BlobStorageOnH2(
     }
 
     new RevisionBuilderImplementation with RevisionBuilderContracts {
-      override protected def hasBooked(when: Time): Boolean =
+      override protected def hasBooked(when: ItemStateUpdateTime): Boolean =
         recordings.view.map(_._1).contains(when)
     }
   }
 
   override def timeSlice(
-      when: Time,
+      when: ItemStateUpdateTime,
       inclusive: Boolean): BlobStorage.Timeslice[SnapshotBlob] = {
     trait TimesliceImplementation extends BlobStorage.Timeslice[SnapshotBlob] {
       private def uniqueItemSpecifications[Item](
@@ -562,6 +595,6 @@ case class BlobStorageOnH2(
     new TimesliceImplementation with TimesliceContracts[SnapshotBlob]
   }
 
-  override def retainUpTo(when: Time): BlobStorage = ???
+  override def retainUpTo(when: ItemStateUpdateTime): Timeline.BlobStorage = ???
 
 }
