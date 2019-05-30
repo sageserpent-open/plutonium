@@ -79,6 +79,10 @@ object BlobStorageOnH2 {
               sql"""
               CREATE INDEX ON Snapshot(Time, LineageId, Revision)
       """.update.apply()
+
+              sql"""
+              CREATE INDEX ON Snapshot(ItemId, ItemClass, Time)
+      """.update.apply()
           }
       })
 
@@ -182,9 +186,8 @@ object BlobStorageOnH2 {
             ORDER BY LineageId DESC,
                      Revision DESC) AS DominantRevisionInLineage
       ON Snapshot.Time = DominantRevisionInLineage.Time
-         AND Snapshot.Revision = DominantRevisionInLineage.Revision
          AND Snapshot.LineageId = DominantRevisionInLineage.LineageId
-         AND Snapshot.Time = DominantRevisionInLineage.Time
+         AND Snapshot.Revision = DominantRevisionInLineage.Revision
       ORDER BY Time DESC)
       SELECT ItemId, ItemClass${payloadSelection}
       FROM DominantEntriesByItemIdAndItemClass
