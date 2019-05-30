@@ -27,15 +27,15 @@ object BlobStorageOnH2 {
   val kryoPool: KryoPool =
     KryoPool.withByteArrayOutputStream(40, KryoSerializer.registered)
 
-  val sentinelLineageId = -1 // See note about creating the lineage table.
+  val sentinelLineageId = -1
 
   val initialRevision: Revision = 1
 
   val placeholderItemIdBytes: Array[Byte] =
-    "**** Numpty ****".map(_.toByte).toArray
+    Array.emptyByteArray
 
   val placeholderItemClazzBytes: Array[Byte] =
-    "**** Humpty ****".map(_.toByte).toArray
+    Array.emptyByteArray
 
   val placeholderEventTime: Instant = Instant.ofEpochSecond(0L)
 
@@ -46,7 +46,6 @@ object BlobStorageOnH2 {
 
   val placeholderIntraEventIndex: ItemStateUpdateTime.IntraEventIndex = 0
 
-  // TODO - do we need a stable lineage id here that persists across processes?
   def empty(connectionPool: ConnectionPool): BlobStorageOnH2 =
     BlobStorageOnH2(connectionPool,
                     sentinelLineageId,
@@ -69,13 +68,10 @@ object BlobStorageOnH2 {
               )
       """.update.apply()
 
-              // TODO - add check about what is and isn't null...
-              // TODO - pull out ItemId and ItemClass into their own table and use the Scala hash of the serialized form as the primary key into this table.
               sql"""
               CREATE TABLE Snapshot(
                 ItemId                      BINARY                    NOT NULL,
                 ItemClass                   BINARY                    NOT NULL,
-                ItemStateUpdateTimeCategory INT                       NOT NULL,
                 EventTimeCategory           INT                       NOT NULL,
                 EventTime                   TIMESTAMP WITH TIME ZONE  NOT NULL,
                 EventRevision               INT                       NOT NULL,
@@ -84,18 +80,17 @@ object BlobStorageOnH2 {
                 LineageId                   BIGINT                    REFERENCES Lineage(LineageId),
                 Revision                    INTEGER                   NOT NULL,
                 Payload                     BLOB                      NULL,
-                PRIMARY KEY (ItemId, ItemClass, ItemStateUpdateTimeCategory, EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex, LineageId, Revision),
-                CHECK ItemStateUpdateTimeCategory IN (-1, 0, 1),
+                PRIMARY KEY (ItemId, ItemClass, EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex, LineageId, Revision),
                 CHECK EventTimeCategory IN (-1, 0, 1)
               )
       """.update.apply()
 
               sql"""
-              CREATE INDEX Fred ON Snapshot(ItemStateUpdateTimeCategory, EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex, LineageId, Revision)
+              CREATE INDEX Fred ON Snapshot(EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex, LineageId, Revision)
       """.update.apply()
 
               sql"""
-              CREATE INDEX Bet ON Snapshot(ItemId, ItemClass, ItemStateUpdateTimeCategory, EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex)
+              CREATE INDEX Bet ON Snapshot(ItemId, ItemClass, EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex)
       """.update.apply()
 
               sql"""
@@ -103,7 +98,7 @@ object BlobStorageOnH2 {
       """.update.apply()
 
               sql"""
-              CREATE INDEX Marge ON Snapshot(LineageId, Revision, ItemStateUpdateTimeCategory, EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex)
+              CREATE INDEX Marge ON Snapshot(LineageId, Revision, EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex)
       """.update.apply()
           }
       })
@@ -158,7 +153,7 @@ object BlobStorageOnH2 {
   def lessThanOrEqualTo(when: ItemStateUpdateTime): SQLSyntax =
     when match {
       case LowerBoundOfTimeslice(when) =>
-        sqls"(${lessThan(when)} OR ItemStateUpdateTimeCategory = -1 AND ${equalTo(when)})"
+        sqls"(${lessThan(when)})"
       case ItemStateUpdateKey(
           (when, eventRevision, eventOrderingTiebreakerIndex),
           intraEventIndex) =>
@@ -168,8 +163,7 @@ object BlobStorageOnH2 {
                           OR (EventRevision = $eventRevision
                               AND (EventTiebreaker < $eventOrderingTiebreakerIndex
                                    OR (EventTiebreaker = $eventOrderingTiebreakerIndex
-                                       AND IntraEventIndex < $intraEventIndex
-                                           OR ItemStateUpdateTimeCategory <= 0 AND IntraEventIndex = $intraEventIndex)))))))"""
+                                       AND IntraEventIndex <= $intraEventIndex)))))))"""
       case UpperBoundOfTimeslice(when) =>
         sqls"(${lessThanOrEqualTo(when)})"
     }
@@ -206,15 +200,14 @@ object BlobStorageOnH2 {
       def templateToDistributeOverLineages(
           lineageSelectionSql: SQLSyntax): SQLSyntax =
         sqls"""
-            SELECT ItemStateUpdateTimeCategory, EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex,
+            SELECT EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex,
                    LineageId,
                    Revision
             FROM Snapshot
-            JOIN (SELECT DISTINCT ItemStateUpdateTimeCategory AS RelevantItemStateUpdateTimeCategory, EventTimeCategory AS RelevantEventTimeCategory, EventTime AS RelevantEventTime, EventRevision AS RelevantEventRevision, EventTiebreaker AS RelevantEventTiebreaker, IntraEventIndex AS RelevantIntraEventIndex
+            JOIN (SELECT DISTINCT EventTimeCategory AS RelevantEventTimeCategory, EventTime AS RelevantEventTime, EventRevision AS RelevantEventRevision, EventTiebreaker AS RelevantEventTiebreaker, IntraEventIndex AS RelevantIntraEventIndex
                   FROM Snapshot
                   $whereClauseForItemSelectionSql)
-            ON ItemStateUpdateTimeCategory = RelevantItemStateUpdateTimeCategory
-               AND EventTimeCategory = RelevantEventTimeCategory
+            ON EventTimeCategory = RelevantEventTimeCategory
                AND EventTime = RelevantEventTime
                AND EventRevision = RelevantEventRevision
                AND EventTiebreaker = RelevantEventTiebreaker
@@ -239,7 +232,6 @@ object BlobStorageOnH2 {
     sqls"""
       WITH DominantEntriesByItemIdAndItemClass AS(
       SELECT DISTINCT ON(ItemId, ItemClass)
-          Snapshot.ItemStateUpdateTimeCategory,
           Snapshot.EventTimeCategory,
           Snapshot.EventTime,
           Snapshot.EventRevision,
@@ -249,15 +241,14 @@ object BlobStorageOnH2 {
           Snapshot.ItemClass,
           Snapshot.Payload
       FROM Snapshot
-      JOIN (SELECT DISTINCT ON(ItemStateUpdateTimeCategory, EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex)
-                   ItemStateUpdateTimeCategory, EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex,
+      JOIN (SELECT DISTINCT ON(EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex)
+                   EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex,
                    LineageId,
                    Revision
            FROM ($dominantRevisionInLineageSql)
            ORDER BY LineageId DESC,
                     Revision DESC) AS DominantRevisionInLineage
-      ON Snapshot.ItemStateUpdateTimeCategory = DominantRevisionInLineage.ItemStateUpdateTimeCategory
-         AND Snapshot.EventTimeCategory = DominantRevisionInLineage.EventTimeCategory
+      ON Snapshot.EventTimeCategory = DominantRevisionInLineage.EventTimeCategory
          AND Snapshot.EventTime = DominantRevisionInLineage.EventTime
          AND Snapshot.EventRevision = DominantRevisionInLineage.EventRevision
          AND Snapshot.EventTiebreaker = DominantRevisionInLineage.EventTiebreaker
@@ -265,8 +256,7 @@ object BlobStorageOnH2 {
          AND Snapshot.LineageId = DominantRevisionInLineage.LineageId
          AND Snapshot.Revision = DominantRevisionInLineage.Revision
       $whereClauseForItemSelectionSql
-      ORDER BY ItemStateUpdateTimeCategory DESC,
-               EventTimeCategory DESC,
+      ORDER BY EventTimeCategory DESC,
                EventTime DESC,
                EventRevision DESC,
                EventTiebreaker DESC,
@@ -320,30 +310,17 @@ object BlobStorageOnH2 {
   def whenSql(when: ItemStateUpdateTime): SQLSyntax =
     when match {
       case LowerBoundOfTimeslice(when) =>
-        sqls"""
-          ItemStateUpdateTimeCategory = -1,
-          ${whenSql(when)},
-          eventRevision = $placeholderEventRevision,
-          eventTiebreaker = $placeholderEventTiebreaker,
-          intraEventIndex = $placeholderIntraEventIndex
-          """
+        ???
       case ItemStateUpdateKey((eventWhen, eventRevision, eventTiebreaker),
                               intraEventIndex) =>
         sqls"""
-          ItemStateUpdateTimeCategory = 0,
           ${whenSql(eventWhen)},
           eventRevision = $eventRevision,
           eventTiebreaker = $eventTiebreaker,
           intraEventIndex = $intraEventIndex
           """
       case UpperBoundOfTimeslice(when) =>
-        sqls"""
-          ItemStateUpdateTimeCategory = 1,
-          ${whenSql(when)},
-          eventRevision = $placeholderEventRevision,
-          eventTiebreaker = $placeholderEventTiebreaker,
-          intraEventIndex = $placeholderIntraEventIndex
-          """
+        ???
     }
 
   def lineageSql(lineageId: LineageId, revision: Revision): SQLSyntax = {
