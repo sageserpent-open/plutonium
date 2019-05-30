@@ -77,11 +77,19 @@ object BlobStorageOnH2 {
       """.update.apply()
 
               sql"""
-              CREATE INDEX ON Snapshot(Time, LineageId, Revision)
+              CREATE INDEX Fred ON Snapshot(Time, LineageId, Revision)
       """.update.apply()
 
               sql"""
-              CREATE INDEX ON Snapshot(ItemId, ItemClass, Time)
+              CREATE INDEX Bet ON Snapshot(ItemId, ItemClass, Time)
+      """.update.apply()
+
+              sql"""
+              CREATE INDEX Virginia ON Snapshot(LineageId, Revision)
+      """.update.apply()
+
+              sql"""
+              CREATE INDEX Marge ON Snapshot(LineageId, Revision, Time)
       """.update.apply()
           }
       })
@@ -202,7 +210,10 @@ object BlobStorageOnH2 {
               Time,
               LineageId,
               Revision
-            FROM Snapshot
+            FROM Snapshot JOIN (SELECT DISTINCT Time AS RelevantTime
+                                FROM Snapshot
+                                $whereClauseForItemSelectionSql)
+            ON Time = RelevantTime
             WHERE $lineageSelectionSql
                   AND ${lessThanOrEqualTo(when)}
             ORDER BY LineageId DESC,
@@ -430,13 +441,25 @@ case class BlobStorageOnH2(
           .use(
             db =>
               IO {
-                db localTx { implicit session: DBSession =>
-                  sql"${matchingSnapshots(targetItemId, None)(branchPoints, when, includePayload = false)}"
-                    .map(resultSet =>
-                      resultSet.bytes("ItemId")
-                        -> resultSet.bytes("ItemClass"))
-                    .list()
-                    .apply()
+                db localTx {
+                  implicit session: DBSession =>
+                    /*
+                    val explanation =
+                      sql"EXPLAIN ANALYZE ${matchingSnapshots(targetItemId, None)(branchPoints, when, includePayload = false)}"
+                        .map(_.string(1))
+                        .single()
+                        .apply
+
+                    println("Fetching unique item specifications...")
+                    println(explanation)
+
+                     */
+                    sql"${matchingSnapshots(targetItemId, None)(branchPoints, when, includePayload = false)}"
+                      .map(resultSet =>
+                        resultSet.bytes("ItemId")
+                          -> resultSet.bytes("ItemClass"))
+                      .list()
+                      .apply()
                 }
             }
           )
@@ -479,6 +502,17 @@ case class BlobStorageOnH2(
               IO {
                 db localTx {
                   implicit session: DBSession =>
+                    /*
+                    val explanation =
+                      sql"EXPLAIN ANALYZE ${matchingSnapshots(Some(uniqueItemSpecification.id), Some(uniqueItemSpecification.clazz))(branchPoints, when, includePayload = true)}"
+                        .map(_.string(1))
+                        .single()
+                        .apply
+
+                    println("Fetching snapshot blob...")
+                    println(explanation)
+
+                     */
                     sql"${matchingSnapshots(Some(uniqueItemSpecification.id), Some(uniqueItemSpecification.clazz))(branchPoints, when, includePayload = true)}"
                       .map(resultSet =>
                         (resultSet.bytes("ItemId"),
