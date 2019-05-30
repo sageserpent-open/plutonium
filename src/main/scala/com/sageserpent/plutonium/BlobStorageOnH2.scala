@@ -153,13 +153,15 @@ object BlobStorageOnH2 {
     }*/
     sqls"""(Time <= $when)""" // So much nicer then the commented-out morass above.
 
-  def matchingSnapshots(branchPoints: Map[LineageId, Revision],
-                        when: Time,
-                        includePayload: Boolean): SQLSyntax = {
+  def matchingSnapshots(targetItemId: Option[Any],
+                        targetItemClazz: Option[Class[_]])(
+      branchPoints: Map[LineageId, Revision],
+      when: Time,
+      includePayload: Boolean): SQLSyntax = {
     val payloadSelection =
       if (includePayload) sqls", Payload" else sqls""
 
-    val lineageSql: SQLSyntax = sqls"""(${branchPoints
+    val lineageSelectionSql: SQLSyntax = sqls"""(${branchPoints
       .map {
         case (lineageId, revision) =>
           sqls"""
@@ -167,6 +169,26 @@ object BlobStorageOnH2 {
         AND Revision <= $revision"""
       }
       .reduce((left, right) => sqls"""$left OR $right""")})"""
+
+    val whereClauseForItemSelectionSql: SQLSyntax = {
+      val itemIdSql = targetItemId.map { targetItemId =>
+        val targetItemIdBytes = kryoPool.toBytesWithClass(targetItemId)
+        sqls"""
+            ItemId = $targetItemIdBytes
+              """
+      }
+
+      val itemClazzSql = targetItemClazz.map { targetItemClazz =>
+        val targetItemClazzBytes = kryoPool.toBytesWithClass(targetItemClazz)
+        sqls"""
+          ItemClass = $targetItemClazzBytes
+            """
+      }
+
+      Seq(itemIdSql, itemClazzSql).flatten
+        .reduceOption((left, right) => sqls"""$left AND $right""")
+        .fold(sqls"")(conditionsSql => sqls"""WHERE $conditionsSql""")
+    }
 
     sqls"""
       WITH DominantEntriesByItemIdAndItemClass AS(
@@ -181,13 +203,14 @@ object BlobStorageOnH2 {
               LineageId,
               Revision
             FROM Snapshot
-            WHERE $lineageSql
+            WHERE $lineageSelectionSql
                   AND ${lessThanOrEqualTo(when)}
             ORDER BY LineageId DESC,
                      Revision DESC) AS DominantRevisionInLineage
       ON Snapshot.Time = DominantRevisionInLineage.Time
          AND Snapshot.LineageId = DominantRevisionInLineage.LineageId
          AND Snapshot.Revision = DominantRevisionInLineage.Revision
+      $whereClauseForItemSelectionSql
       ORDER BY Time DESC)
       SELECT ItemId, ItemClass${payloadSelection}
       FROM DominantEntriesByItemIdAndItemClass
@@ -397,7 +420,9 @@ case class BlobStorageOnH2(
       when: Time,
       inclusive: Boolean): BlobStorage.Timeslice[SnapshotBlob] = {
     trait TimesliceImplementation extends BlobStorage.Timeslice[SnapshotBlob] {
-      private def items[Item](clazz: Class[Item]): Stream[(Any, Class[_])] = {
+      private def uniqueItemSpecifications[Item](
+          targetItemId: Option[Any],
+          itemClazzUpperBound: Class[Item]): Stream[UniqueItemSpecification] = {
         val branchPoints
           : Map[LineageId, Revision] = ancestralBranchpoints + (lineageId -> revision)
 
@@ -406,7 +431,7 @@ case class BlobStorageOnH2(
             db =>
               IO {
                 db localTx { implicit session: DBSession =>
-                  sql"${matchingSnapshots(branchPoints, when, includePayload = false)}"
+                  sql"${matchingSnapshots(targetItemId, None)(branchPoints, when, includePayload = false)}"
                     .map(resultSet =>
                       resultSet.bytes("ItemId")
                         -> resultSet.bytes("ItemClass"))
@@ -418,33 +443,29 @@ case class BlobStorageOnH2(
           .unsafeRunSync()
           .toStream
           .map {
-            case (itemBytes, itemClazzBytes) =>
-              assert(itemBytes.nonEmpty)
-              assert(itemClazzBytes.nonEmpty)
-              kryoPool.fromBytes(itemBytes).asInstanceOf[Any] ->
+            case (itemIdBytes, itemClazzBytes) =>
+              val itemId =
+                targetItemId.getOrElse(kryoPool.fromBytes(itemIdBytes))
+              val itemClazz =
                 kryoPool.fromBytes(itemClazzBytes).asInstanceOf[Class[_]]
+              itemId -> itemClazz
+          }
+          .collect {
+            case (itemId, itemClazz)
+                if itemClazzUpperBound.isAssignableFrom(itemClazz) =>
+              UniqueItemSpecification(itemId, itemClazz)
           }
       }
 
       override def uniqueItemQueriesFor[Item](
           clazz: Class[Item]): Stream[UniqueItemSpecification] =
-        items(clazz)
-          .filter { case (_, itemClazz) => clazz.isAssignableFrom(itemClazz) }
-          .map {
-            case (itemId, itemClazz) =>
-              UniqueItemSpecification(itemId, itemClazz)
-          }
+        uniqueItemSpecifications(None, clazz)
 
       override def uniqueItemQueriesFor[Item](
           uniqueItemSpecification: UniqueItemSpecification)
         : Stream[UniqueItemSpecification] =
-        items(uniqueItemSpecification.clazz)
-          .collect {
-            case (itemId, itemClazz)
-                if uniqueItemSpecification.id == itemId &&
-                  uniqueItemSpecification.clazz.isAssignableFrom(itemClazz) =>
-              UniqueItemSpecification(itemId, itemClazz)
-          }
+        uniqueItemSpecifications(Some(uniqueItemSpecification.id),
+                                 uniqueItemSpecification.clazz)
 
       override def snapshotBlobFor(
           uniqueItemSpecification: UniqueItemSpecification)
@@ -456,14 +477,15 @@ case class BlobStorageOnH2(
           .use(
             db =>
               IO {
-                db localTx { implicit session: DBSession =>
-                  sql"${matchingSnapshots(branchPoints, when, includePayload = true)}"
-                    .map(resultSet =>
-                      (resultSet.bytes("ItemId"),
-                       resultSet.bytes("ItemClass"),
-                       resultSet.bytes("Payload")))
-                    .list()
-                    .apply()
+                db localTx {
+                  implicit session: DBSession =>
+                    sql"${matchingSnapshots(Some(uniqueItemSpecification.id), Some(uniqueItemSpecification.clazz))(branchPoints, when, includePayload = true)}"
+                      .map(resultSet =>
+                        (resultSet.bytes("ItemId"),
+                         resultSet.bytes("ItemClass"),
+                         resultSet.bytes("Payload")))
+                      .list()
+                      .apply()
                 }
             }
           )
