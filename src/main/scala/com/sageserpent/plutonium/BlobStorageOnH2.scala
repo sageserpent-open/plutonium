@@ -396,9 +396,6 @@ case class BlobStorageOnH2(
                   SELECT MaximumRevision FROM Lineage WHERE LineageId = $newOrReusedLineageId
                   """.map(_.int(1)).single().apply().get
 
-                println(
-                  s"Revising: ${thisBlobStorage.hashCode}, lineage id: $newOrReusedLineageId, new revision: $newRevision")
-
                 for ((when, snapshotBlobs) <- recordings.toMap) {
                   if (snapshotBlobs.nonEmpty) {
                     for ((uniqueItemSpecification, snapshotBlob) <- snapshotBlobs) {
