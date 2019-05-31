@@ -56,14 +56,18 @@ object WorldH2StorageImplementation {
 
 class WorldH2StorageImplementation(
     val tranches: H2ViaScalikeJdbcTranches,
+    val emptyBlobStorage: BlobStorageOnH2,
     var timelineTrancheIdStorage: Array[(Instant, Vector[TrancheId])],
     var numberOfTimelines: Int)
     extends WorldEfficientImplementation[Session] {
   def this(connectionPool: ConnectionPool) =
-    this(new H2ViaScalikeJdbcTranches(connectionPool)
-         with TranchesContracts[TrancheId],
-         Array.empty[(Instant, Vector[TrancheId])],
-         World.initialRevision)
+    this(
+      new H2ViaScalikeJdbcTranches(connectionPool)
+      with TranchesContracts[TrancheId],
+      BlobStorageOnH2.empty(connectionPool),
+      Array.empty[(Instant, Vector[TrancheId])],
+      World.initialRevision
+    )
 
   private def retrieveTimeline(trancheIds: Vector[TrancheId]) = {
     (immutableObjectStorage.retrieve[AllEvents](trancheIds(0)),
@@ -132,12 +136,16 @@ class WorldH2StorageImplementation(
     )(tranches)
 
     new WorldH2StorageImplementation(tranches,
+                                     emptyBlobStorage,
                                      timelineTrancheIds.toArray,
                                      numberOfTimelines)
   }
 
   override protected def itemCacheOf(itemCache: Session[ItemCache]): ItemCache =
     immutableObjectStorage.unsafeRun(itemCache)(tranches).right.get
+
+  override protected def emptyTimeline(): Timeline =
+    new Timeline(blobStorage = emptyBlobStorage)
 
   override def nextRevision: Revision =
     numberOfTimelines

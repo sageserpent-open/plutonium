@@ -344,7 +344,7 @@ object BlobStorageOnH2 {
 }
 
 case class BlobStorageOnH2(
-    connectionPool: ConnectionPool,
+    @transient connectionPool: ConnectionPool,
     lineageId: BlobStorageOnH2.LineageId,
     revision: BlobStorageOnH2.Revision,
     ancestralBranchpoints: SortedMap[BlobStorageOnH2.LineageId,

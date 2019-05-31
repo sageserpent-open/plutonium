@@ -930,7 +930,8 @@ trait WorldEfficientInMemoryImplementationResource extends WorldResource {
 
 trait WorldH2StorageImplementationResource
     extends WorldResource
-    with H2ViaScalikeJdbcDatabaseSetupResource {
+    with H2ViaScalikeJdbcDatabaseSetupResource
+    with BlobStorageOnH2DatabaseSetupResource {
   val worldResource: Resource[IO, World] =
     connectionPoolResource.flatMap(connectionPool =>
       Resource.fromAutoCloseable(IO {

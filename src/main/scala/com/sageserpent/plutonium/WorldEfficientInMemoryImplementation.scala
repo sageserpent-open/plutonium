@@ -45,4 +45,6 @@ class WorldEfficientInMemoryImplementation(
 
   override protected def itemCacheOf(itemCache: Id[ItemCache]): ItemCache =
     itemCache
+
+  override protected def emptyTimeline(): Timeline = Timeline.emptyTimeline
 }
