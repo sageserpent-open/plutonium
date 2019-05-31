@@ -167,6 +167,15 @@ object BlobStorageOnH2 {
     val payloadSelection =
       if (includePayload) sqls", Payload" else sqls""
 
+    val lineageSelectionSql: SQLSyntax = sqls"""(${branchPoints
+      .map {
+        case (lineageId, revision) =>
+          sqls"""
+        LineageId = $lineageId
+        AND Revision <= $revision"""
+      }
+      .reduce((left, right) => sqls"""$left OR $right""")})"""
+
     val whereClauseForItemSelectionSql: SQLSyntax = {
       val itemIdSql = targetItemId.map { targetItemId =>
         val targetItemIdBytes = kryoPool.toBytesWithClass(targetItemId)
@@ -187,35 +196,6 @@ object BlobStorageOnH2 {
         .fold(sqls"")(conditionsSql => sqls"""WHERE $conditionsSql""")
     }
 
-    val dominantRevisionInLineageSql: SQLSyntax = {
-      def templateToDistributeOverLineages(
-          lineageSelectionSql: SQLSyntax): SQLSyntax =
-        sqls"""
-            SELECT Time,
-                   LineageId,
-                   Revision
-            FROM Snapshot
-            JOIN (SELECT DISTINCT Time AS RelevantTime
-                  FROM Snapshot
-                  $whereClauseForItemSelectionSql)
-            ON Time = RelevantTime
-            WHERE $lineageSelectionSql
-                  AND ${lessThanOrEqualTo(when)}
-           """
-
-      val distributedSelectionSqls = branchPoints
-        .map {
-          case (lineageId, revision) =>
-            sqls"""
-        LineageId = $lineageId
-        AND Revision <= $revision"""
-        }
-        .map(templateToDistributeOverLineages)
-
-      distributedSelectionSqls.reduce((left, right) =>
-        sqls"""($left) UNION ($right)""")
-    }
-
     sqls"""
       WITH DominantEntriesByItemIdAndItemClass AS(
       SELECT DISTINCT ON(ItemId, ItemClass)
@@ -225,12 +205,17 @@ object BlobStorageOnH2 {
           Snapshot.Payload
       FROM Snapshot
       JOIN (SELECT DISTINCT ON(Time)
-                   Time,
-                   LineageId,
-                   Revision
-           FROM ($dominantRevisionInLineageSql)
-           ORDER BY LineageId DESC,
-                    Revision DESC) AS DominantRevisionInLineage
+              Time,
+              LineageId,
+              Revision
+            FROM Snapshot JOIN (SELECT DISTINCT Time AS RelevantTime
+                                FROM Snapshot
+                                $whereClauseForItemSelectionSql)
+            ON Time = RelevantTime
+            WHERE $lineageSelectionSql
+                  AND ${lessThanOrEqualTo(when)}
+            ORDER BY LineageId DESC,
+                     Revision DESC) AS DominantRevisionInLineage
       ON Snapshot.Time = DominantRevisionInLineage.Time
          AND Snapshot.LineageId = DominantRevisionInLineage.LineageId
          AND Snapshot.Revision = DominantRevisionInLineage.Revision
