@@ -39,15 +39,6 @@ object BlobStorageOnH2 {
   val placeholderItemClazzBytes: Array[Byte] =
     Array.emptyByteArray
 
-  val placeholderEventTime: Instant = Instant.ofEpochSecond(0L)
-
-  val placeholderEventRevision: World.Revision = World.initialRevision
-
-  val placeholderEventTiebreaker
-    : WorldImplementationCodeFactoring.EventOrderingTiebreakerIndex = 0
-
-  val placeholderIntraEventIndex: ItemStateUpdateTime.IntraEventIndex = 0
-
   def empty(connectionPool: ConnectionPool): BlobStorageOnH2 =
     BlobStorageOnH2(connectionPool,
                     sentinelLineageId,
@@ -112,9 +103,15 @@ object BlobStorageOnH2 {
       })
 
   def lessThanOrEqualTo(when: ItemStateUpdateTime): SQLSyntax = when match {
-    case LowerBoundOfTimeslice(when) => sqls"""(Time < ${unpack(when)})"""
-    case _: ItemStateUpdateKey       => sqls"""(Time <= ${unpack(when)})"""
-    case UpperBoundOfTimeslice(when) => sqls"""(Time <= ${unpack(when)})"""
+    case LowerBoundOfTimeslice(when) =>
+      sqls"""(Time < ${unpack(when) ++ Array(Int.MinValue,
+                                             Int.MinValue,
+                                             Int.MinValue)})"""
+    case _: ItemStateUpdateKey => sqls"""(Time <= ${unpack(when)})"""
+    case UpperBoundOfTimeslice(when) =>
+      sqls"""(Time <= ${unpack(when) ++ Array(Int.MaxValue,
+                                              Int.MaxValue,
+                                              Int.MaxValue)})"""
   }
 
   def itemSql(
