@@ -12,6 +12,8 @@ import com.sageserpent.americium.{
 }
 import com.sageserpent.plutonium.BlobStorage.TimesliceContracts
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
+import com.sageserpent.plutonium.ItemStateUpdateTime.IntraEventIndex
+import com.sageserpent.plutonium.WorldImplementationCodeFactoring.EventOrderingTiebreakerIndex
 import com.sageserpent.plutonium.curium.DBResource
 import com.twitter.chill.{KryoPool, KryoSerializer}
 import scalikejdbc._
@@ -72,25 +74,20 @@ object BlobStorageOnH2 {
               CREATE TABLE Snapshot(
                 ItemId                      BINARY                    NOT NULL,
                 ItemClass                   BINARY                    NOT NULL,
-                EventTimeCategory           INT                       NOT NULL,
-                EventTime                   TIMESTAMP WITH TIME ZONE  NOT NULL,
-                EventRevision               INT                       NOT NULL,
-                EventTiebreaker             INT                       NOT NULL,
-                IntraEventIndex             INT                       NOT NULL,
+                Time                        ARRAY                     NOT NULL,
                 LineageId                   BIGINT                    REFERENCES Lineage(LineageId),
                 Revision                    INTEGER                   NOT NULL,
-                Payload                     BLOB                      NULL,
-                PRIMARY KEY (ItemId, ItemClass, EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex, LineageId, Revision),
-                CHECK EventTimeCategory IN (-1, 0, 1)
+                Payload                     BINARY                    NULL,
+				PRIMARY KEY (ItemId, ItemClass, Time, LineageId, Revision)
               )
       """.update.apply()
 
               sql"""
-              CREATE INDEX Fred ON Snapshot(EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex, LineageId, Revision)
+              CREATE INDEX Fred ON Snapshot(Time, LineageId, Revision)
       """.update.apply()
 
               sql"""
-              CREATE INDEX Bet ON Snapshot(ItemId, ItemClass, EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex)
+              CREATE INDEX Bet ON Snapshot(ItemId, ItemClass, Time)
       """.update.apply()
 
               sql"""
@@ -98,7 +95,7 @@ object BlobStorageOnH2 {
       """.update.apply()
 
               sql"""
-              CREATE INDEX Marge ON Snapshot(LineageId, Revision, EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex)
+              CREATE INDEX Marge ON Snapshot(LineageId, Revision, Time)
       """.update.apply()
           }
       })
@@ -114,159 +111,10 @@ object BlobStorageOnH2 {
           }
       })
 
-  def lessThanOrEqualTo(when: Unbounded[Instant]): SQLSyntax =
-    // NOTE: take advantage that the event time category
-    // can only take values from the set {-1, 0, 1}.
-    when match {
-      case NegativeInfinity() =>
-        sqls"EventTimeCategory = -1"
-      case Finite(unlifted) =>
-        sqls"(EventTimeCategory < 0 OR EventTimeCategory = 0 AND EventTime <= $unlifted)"
-      case PositiveInfinity() =>
-        sqls"TRUE"
-    }
-
-  def lessThan(when: Unbounded[Instant]): SQLSyntax =
-    // NOTE: take advantage that the event time category
-    // can only take values from the set {-1, 0, 1}.
-    when match {
-      case NegativeInfinity() =>
-        sqls"FALSE"
-      case Finite(unlifted) =>
-        sqls"(EventTimeCategory < 0 OR EventTimeCategory = 0 AND EventTime < $unlifted)"
-      case PositiveInfinity() =>
-        sqls"EventTimeCategory < 1"
-    }
-
-  def equalTo(when: Unbounded[Instant]): SQLSyntax =
-    // NOTE: take advantage that the event time category
-    // can only take values from the set {-1, 0, 1}.
-    when match {
-      case NegativeInfinity() =>
-        sqls"EventTimeCategory = -1"
-      case Finite(unlifted) =>
-        sqls"(EventTimeCategory = 0 AND EventTime = $unlifted)"
-      case PositiveInfinity() =>
-        sqls"EventTimeCategory = 1"
-    }
-
-  def lessThanOrEqualTo(when: ItemStateUpdateTime): SQLSyntax =
-    when match {
-      case LowerBoundOfTimeslice(when) =>
-        sqls"(${lessThan(when)})"
-      case ItemStateUpdateKey(
-          (when, eventRevision, eventOrderingTiebreakerIndex),
-          intraEventIndex) =>
-        sqls"""((${lessThan(when)}
-                 OR (${equalTo(when)}
-                     AND (EventRevision < $eventRevision
-                          OR (EventRevision = $eventRevision
-                              AND (EventTiebreaker < $eventOrderingTiebreakerIndex
-                                   OR (EventTiebreaker = $eventOrderingTiebreakerIndex
-                                       AND IntraEventIndex <= $intraEventIndex)))))))"""
-      case UpperBoundOfTimeslice(when) =>
-        sqls"(${lessThanOrEqualTo(when)})"
-    }
-
-  def matchingSnapshots(targetItemId: Option[Any],
-                        targetItemClazz: Option[Class[_]])(
-      branchPoints: Map[LineageId, Revision],
-      when: ItemStateUpdateTime,
-      includePayload: Boolean): SQLSyntax = {
-    val payloadSelection =
-      if (includePayload) sqls", Payload" else sqls""
-
-    val whereClauseForItemSelectionSql: SQLSyntax = {
-      val itemIdSql = targetItemId.map { targetItemId =>
-        val targetItemIdBytes = kryoPool.toBytesWithClass(targetItemId)
-        sqls"""
-            ItemId = $targetItemIdBytes
-              """
-      }
-
-      val itemClazzSql = targetItemClazz.map { targetItemClazz =>
-        val targetItemClazzBytes = kryoPool.toBytesWithClass(targetItemClazz)
-        sqls"""
-          ItemClass = $targetItemClazzBytes
-            """
-      }
-
-      Seq(itemIdSql, itemClazzSql).flatten
-        .reduceOption((left, right) => sqls"""$left AND $right""")
-        .fold(sqls"")(conditionsSql => sqls"""WHERE $conditionsSql""")
-    }
-
-    val dominantRevisionInLineageSql: SQLSyntax = {
-      def templateToDistributeOverLineages(
-          lineageSelectionSql: SQLSyntax): SQLSyntax =
-        sqls"""
-            SELECT EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex,
-                   LineageId,
-                   Revision
-            FROM Snapshot
-            JOIN (SELECT DISTINCT EventTimeCategory AS RelevantEventTimeCategory, EventTime AS RelevantEventTime, EventRevision AS RelevantEventRevision, EventTiebreaker AS RelevantEventTiebreaker, IntraEventIndex AS RelevantIntraEventIndex
-                  FROM Snapshot
-                  $whereClauseForItemSelectionSql)
-            ON EventTimeCategory = RelevantEventTimeCategory
-               AND EventTime = RelevantEventTime
-               AND EventRevision = RelevantEventRevision
-               AND EventTiebreaker = RelevantEventTiebreaker
-               AND IntraEventIndex = RelevantIntraEventIndex
-            WHERE $lineageSelectionSql
-                  AND ${lessThanOrEqualTo(when)}
-           """
-
-      val distributedSelectionSqls = branchPoints
-        .map {
-          case (lineageId, revision) =>
-            sqls"""
-        LineageId = $lineageId
-        AND Revision <= $revision"""
-        }
-        .map(templateToDistributeOverLineages)
-
-      distributedSelectionSqls.reduce((left, right) =>
-        sqls"""($left) UNION ($right)""")
-    }
-
-    sqls"""
-      WITH DominantEntriesByItemIdAndItemClass AS(
-      SELECT DISTINCT ON(ItemId, ItemClass)
-          Snapshot.EventTimeCategory,
-          Snapshot.EventTime,
-          Snapshot.EventRevision,
-          Snapshot.EventTiebreaker,
-          Snapshot.IntraEventIndex,
-          Snapshot.ItemId,
-          Snapshot.ItemClass,
-          Snapshot.Payload
-      FROM Snapshot
-      JOIN (SELECT DISTINCT ON(EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex)
-                   EventTimeCategory, EventTime, EventRevision, EventTiebreaker, IntraEventIndex,
-                   LineageId,
-                   Revision
-           FROM ($dominantRevisionInLineageSql)
-           ORDER BY LineageId DESC,
-                    Revision DESC) AS DominantRevisionInLineage
-      ON Snapshot.EventTimeCategory = DominantRevisionInLineage.EventTimeCategory
-         AND Snapshot.EventTime = DominantRevisionInLineage.EventTime
-         AND Snapshot.EventRevision = DominantRevisionInLineage.EventRevision
-         AND Snapshot.EventTiebreaker = DominantRevisionInLineage.EventTiebreaker
-         AND Snapshot.IntraEventIndex = DominantRevisionInLineage.IntraEventIndex
-         AND Snapshot.LineageId = DominantRevisionInLineage.LineageId
-         AND Snapshot.Revision = DominantRevisionInLineage.Revision
-      $whereClauseForItemSelectionSql
-      ORDER BY EventTimeCategory DESC,
-               EventTime DESC,
-               EventRevision DESC,
-               EventTiebreaker DESC,
-               IntraEventIndex DESC)
-      SELECT ItemId, ItemClass${payloadSelection}
-      FROM DominantEntriesByItemIdAndItemClass
-      WHERE ItemId != $placeholderItemIdBytes
-            AND ItemClass != $placeholderItemClazzBytes
-            AND Payload IS NOT NULL
-      """
+  def lessThanOrEqualTo(when: ItemStateUpdateTime): SQLSyntax = when match {
+    case LowerBoundOfTimeslice(when) => sqls"""(Time < ${unpack(when)})"""
+    case _: ItemStateUpdateKey       => sqls"""(Time <= ${unpack(when)})"""
+    case UpperBoundOfTimeslice(when) => sqls"""(Time <= ${unpack(when)})"""
   }
 
   def itemSql(
@@ -288,40 +136,92 @@ object BlobStorageOnH2 {
       """
     }
 
-  def whenSql(when: Unbounded[Instant]): SQLSyntax =
-    when match {
-      case NegativeInfinity() =>
+  def matchingSnapshots(targetItemId: Option[Any],
+                        targetItemClazz: Option[Class[_]])(
+      branchPoints: Map[LineageId, Revision],
+      when: ItemStateUpdateTime,
+      includePayload: Boolean): SQLSyntax = {
+    val payloadSelection =
+      if (includePayload) sqls", Payload" else sqls""
+
+    val lineageSelectionSql: SQLSyntax = sqls"""(${branchPoints
+      .map {
+        case (lineageId, revision) =>
+          sqls"""
+        LineageId = $lineageId
+        AND Revision <= $revision"""
+      }
+      .reduce((left, right) => sqls"""$left OR $right""")})"""
+
+    val whereClauseForItemSelectionSql: SQLSyntax = {
+      val itemIdSql = targetItemId.map { targetItemId =>
+        val targetItemIdBytes = kryoPool.toBytesWithClass(targetItemId)
         sqls"""
-          EventTimeCategory = -1,
-          EventTime = $placeholderEventTime
-          """
-      case Finite(when) =>
+            ItemId = $targetItemIdBytes
+              """
+      }
+
+      val itemClazzSql = targetItemClazz.map { targetItemClazz =>
+        val targetItemClazzBytes = kryoPool.toBytesWithClass(targetItemClazz)
         sqls"""
-          EventTimeCategory = 0,
-          EventTime = $when
-          """
-      case PositiveInfinity() =>
-        sqls"""
-          EventTimeCategory = 1,
-          EventTime = $placeholderEventTime
-          """
+          ItemClass = $targetItemClazzBytes
+            """
+      }
+
+      Seq(itemIdSql, itemClazzSql).flatten
+        .reduceOption((left, right) => sqls"""$left AND $right""")
+        .fold(sqls"")(conditionsSql => sqls"""WHERE $conditionsSql""")
     }
 
+    sqls"""
+      WITH DominantEntriesByItemIdAndItemClass AS(
+      SELECT DISTINCT ON(ItemId, ItemClass)
+          Snapshot.Time,
+          Snapshot.ItemId,
+          Snapshot.ItemClass,
+          Snapshot.Payload
+      FROM Snapshot
+      JOIN (SELECT DISTINCT ON(Time)
+              Time,
+              LineageId,
+              Revision
+            FROM Snapshot JOIN (SELECT DISTINCT Time AS RelevantTime
+                                FROM Snapshot
+                                $whereClauseForItemSelectionSql)
+            ON Time = RelevantTime
+            WHERE $lineageSelectionSql
+                  AND ${lessThanOrEqualTo(when)}
+            ORDER BY LineageId DESC,
+                     Revision DESC) AS DominantRevisionInLineage
+      ON Snapshot.Time = DominantRevisionInLineage.Time
+         AND Snapshot.LineageId = DominantRevisionInLineage.LineageId
+         AND Snapshot.Revision = DominantRevisionInLineage.Revision
+      $whereClauseForItemSelectionSql
+      ORDER BY Time DESC)
+      SELECT ItemId, ItemClass${payloadSelection}
+      FROM DominantEntriesByItemIdAndItemClass
+      WHERE ItemId != $placeholderItemIdBytes
+            AND ItemClass != $placeholderItemClazzBytes
+            AND Payload IS NOT NULL
+      """
+  }
+
+  def unpack(when: Unbounded[Instant]): Array[Any] = when match {
+    case NegativeInfinity() => Array(-1, 0)
+    case Finite(unlifted)   => Array(0, unlifted)
+    case PositiveInfinity() => Array(1, 0)
+  }
+
+  def unpack(when: ItemStateUpdateTime): Array[Any] = when match {
+    case ItemStateUpdateKey((eventWhen, eventRevision, eventTiebreaker),
+                            intraEventIndex) =>
+      unpack(eventWhen) ++ Array(eventRevision,
+                                 eventTiebreaker,
+                                 intraEventIndex)
+  }
+
   def whenSql(when: ItemStateUpdateTime): SQLSyntax =
-    when match {
-      case LowerBoundOfTimeslice(when) =>
-        ???
-      case ItemStateUpdateKey((eventWhen, eventRevision, eventTiebreaker),
-                              intraEventIndex) =>
-        sqls"""
-          ${whenSql(eventWhen)},
-          eventRevision = $eventRevision,
-          eventTiebreaker = $eventTiebreaker,
-          intraEventIndex = $intraEventIndex
-          """
-      case UpperBoundOfTimeslice(when) =>
-        ???
-    }
+    sqls"""Time = ${unpack(when)}"""
 
   def lineageSql(lineageId: LineageId, revision: Revision): SQLSyntax = {
     sqls"""
@@ -536,10 +436,7 @@ case class BlobStorageOnH2(
 
                      */
                     sql"${matchingSnapshots(Some(uniqueItemSpecification.id), Some(uniqueItemSpecification.clazz))(branchPoints, when, includePayload = true)}"
-                      .map(resultSet =>
-                        (resultSet.bytes("ItemId"),
-                         resultSet.bytes("ItemClass"),
-                         resultSet.bytes("Payload")))
+                      .map(resultSet => resultSet.bytes("Payload"))
                       .list()
                       .apply()
                 }
@@ -547,20 +444,9 @@ case class BlobStorageOnH2(
           )
           .unsafeRunSync()
           .toStream
-          .map {
-            case (itemBytes, itemClazzBytes, payload) =>
-              assert(itemBytes.nonEmpty)
-              assert(itemClazzBytes.nonEmpty)
-              assert(payload.nonEmpty)
-              (kryoPool.fromBytes(itemBytes).asInstanceOf[Any],
-               kryoPool.fromBytes(itemClazzBytes).asInstanceOf[Class[_]],
-               kryoPool.fromBytes(payload).asInstanceOf[SnapshotBlob])
-          }
-          .collect {
-            case (itemId, itemClazz, snapshotBlob)
-                if uniqueItemSpecification.id == itemId &&
-                  uniqueItemSpecification.clazz == itemClazz =>
-              snapshotBlob
+          .map { payload =>
+            assert(payload.nonEmpty)
+            kryoPool.fromBytes(payload).asInstanceOf[SnapshotBlob]
           }
           .headOption
       }
