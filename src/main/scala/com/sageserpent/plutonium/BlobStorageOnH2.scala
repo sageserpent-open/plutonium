@@ -529,10 +529,7 @@ case class BlobStorageOnH2(
 
                      */
                     sql"${matchingSnapshots(Some(uniqueItemSpecification.id), Some(uniqueItemSpecification.clazz))(branchPoints, when, includePayload = true)}"
-                      .map(resultSet =>
-                        (resultSet.bytes("ItemId"),
-                         resultSet.bytes("ItemClass"),
-                         resultSet.bytes("Payload")))
+                      .map(resultSet => resultSet.bytes("Payload"))
                       .list()
                       .apply()
                 }
@@ -540,20 +537,9 @@ case class BlobStorageOnH2(
           )
           .unsafeRunSync()
           .toStream
-          .map {
-            case (itemBytes, itemClazzBytes, payload) =>
-              assert(itemBytes.nonEmpty)
-              assert(itemClazzBytes.nonEmpty)
-              assert(payload.nonEmpty)
-              (kryoPool.fromBytes(itemBytes).asInstanceOf[Any],
-               kryoPool.fromBytes(itemClazzBytes).asInstanceOf[Class[_]],
-               kryoPool.fromBytes(payload).asInstanceOf[SnapshotBlob])
-          }
-          .collect {
-            case (itemId, itemClazz, snapshotBlob)
-                if uniqueItemSpecification.id == itemId &&
-                  uniqueItemSpecification.clazz == itemClazz =>
-              snapshotBlob
+          .map { payload =>
+            assert(payload.nonEmpty)
+            kryoPool.fromBytes(payload).asInstanceOf[SnapshotBlob]
           }
           .headOption
       }
