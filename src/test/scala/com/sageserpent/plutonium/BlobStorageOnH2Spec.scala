@@ -36,7 +36,8 @@ object BlobStorageOnH2Spec extends SharedGenerators {
 
   case class Querying(
       when: ItemStateUpdateTime,
-      itemSpecification: Either[UniqueItemSpecification, Class[_]])
+      itemSpecification: Either[UniqueItemSpecification, Class[_]],
+      inclusive: Boolean)
       extends Operation
 
   val operationGenerator: Gen[Operation] = {
@@ -168,9 +169,9 @@ class BlobStorageOnH2Spec
                       trainee -> exemplar)
                   }*/
 
-                case Querying(when, Left(uniqueItemSpecification)) =>
-                  val traineeTimeslice  = trainee.timeSlice(when)
-                  val exemplarTimeslice = exemplar.timeSlice(when)
+                case Querying(when, Left(uniqueItemSpecification), inclusive) =>
+                  val traineeTimeslice  = trainee.timeSlice(when, inclusive)
+                  val exemplarTimeslice = exemplar.timeSlice(when, inclusive)
                   val (traineeResult, exemplarResult) = traineeTimeslice
                     .uniqueItemQueriesFor(uniqueItemSpecification) -> exemplarTimeslice
                     .uniqueItemQueriesFor(uniqueItemSpecification)
@@ -182,9 +183,9 @@ class BlobStorageOnH2Spec
                   pairsOfTraineeAndExemplarImplementations.enqueue(
                     trainee -> exemplar)
 
-                case Querying(when, Right(clazz)) =>
-                  val traineeTimeslice  = trainee.timeSlice(when)
-                  val exemplarTimeslice = exemplar.timeSlice(when)
+                case Querying(when, Right(clazz), inclusive) =>
+                  val traineeTimeslice  = trainee.timeSlice(when, inclusive)
+                  val exemplarTimeslice = exemplar.timeSlice(when, inclusive)
                   val (traineeResult, exemplarResult) = traineeTimeslice
                     .uniqueItemQueriesFor(clazz)
                     .force -> exemplarTimeslice
