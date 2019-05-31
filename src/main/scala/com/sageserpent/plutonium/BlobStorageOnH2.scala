@@ -40,7 +40,6 @@ object BlobStorageOnH2 {
 
   val placeholderItemClazzBytes: Array[Byte] = Array.emptyByteArray
 
-  // TODO - do we need a stable lineage id here that persists across processes?
   def empty(connectionPool: ConnectionPool): BlobStorageOnH2 =
     BlobStorageOnH2(connectionPool,
                     sentinelLineageId,
@@ -63,7 +62,6 @@ object BlobStorageOnH2 {
               )
       """.update.apply()
 
-              // TODO - pull out ItemId and ItemClass into their own table and use the Scala hash of the serialized form as the primary key into this table.
               sql"""
               CREATE TABLE Snapshot(
                 ItemId                      BINARY                    NOT NULL,
@@ -71,7 +69,7 @@ object BlobStorageOnH2 {
                 Time                        INT                       NOT NULL,
                 LineageId                   BIGINT                    REFERENCES Lineage(LineageId),
                 Revision                    INTEGER                   NOT NULL,
-                Payload                     BLOB                      NULL,
+                Payload                     BINARY                    NULL,
                 PRIMARY KEY (ItemId, ItemClass, Time, LineageId, Revision)
               )
       """.update.apply()
