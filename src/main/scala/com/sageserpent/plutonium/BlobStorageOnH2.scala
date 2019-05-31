@@ -66,7 +66,7 @@ object BlobStorageOnH2 {
               CREATE TABLE Snapshot(
                 ItemId                      BINARY                    NOT NULL,
                 ItemClass                   BINARY                    NOT NULL,
-                Time                        INT                       NOT NULL,
+                Time                        ARRAY                     NOT NULL,
                 LineageId                   BIGINT                    REFERENCES Lineage(LineageId),
                 Revision                    INTEGER                   NOT NULL,
                 Payload                     BINARY                    NULL,
@@ -157,7 +157,7 @@ object BlobStorageOnH2 {
       case UpperBoundOfTimeslice(when) =>
         sqls"(${lessThanOrEqualTo(when)})"
     }*/
-    sqls"""(Time <= $when)""" // So much nicer then the commented-out morass above.
+    sqls"""(Time <= ${Array(when.asInstanceOf[Any])})""" // So much nicer than the commented-out morass above.
 
   def matchingSnapshots(targetItemId: Option[Any],
                         targetItemClazz: Option[Class[_]])(
@@ -295,7 +295,7 @@ object BlobStorageOnH2 {
           intraEventIndex = $placeholderIntraEventIndex
           """
     }*/
-    sqls"""Time = $when""" // So much nicer then the commented-out morass above.
+    sqls"""Time = ${Array(when.asInstanceOf[Any])}""" // So much nicer than the commented-out morass above.
 
   def lineageSql(lineageId: LineageId, revision: Revision): SQLSyntax = {
     sqls"""
