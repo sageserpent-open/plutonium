@@ -159,11 +159,15 @@ object BlobStorageOnH2 {
     }*/
     sqls"""(Time <= ${Array(when.asInstanceOf[Any])})""" // So much nicer than the commented-out morass above.
 
+  def lessThan(when: Time): SQLSyntax =
+    sqls"""(Time < ${Array(when.asInstanceOf[Any])})"""
+
   def matchingSnapshots(targetItemId: Option[Any],
                         targetItemClazz: Option[Class[_]])(
       branchPoints: Map[LineageId, Revision],
       when: Time,
-      includePayload: Boolean): SQLSyntax = {
+      includePayload: Boolean,
+      inclusive: Boolean): SQLSyntax = {
     val payloadSelection =
       if (includePayload) sqls", Payload" else sqls""
 
@@ -213,7 +217,8 @@ object BlobStorageOnH2 {
                                 $whereClauseForItemSelectionSql)
             ON Time = RelevantTime
             WHERE $lineageSelectionSql
-                  AND ${lessThanOrEqualTo(when)}
+                  AND ${if (inclusive) lessThanOrEqualTo(when)
+    else lessThan(when)}
             ORDER BY LineageId DESC,
                      Revision DESC) AS DominantRevisionInLineage
       ON Snapshot.Time = DominantRevisionInLineage.Time
@@ -452,7 +457,7 @@ case class BlobStorageOnH2(
                     println(explanation)
 
                      */
-                    sql"${matchingSnapshots(targetItemId, None)(branchPoints, when, includePayload = false)}"
+                    sql"${matchingSnapshots(targetItemId, None)(branchPoints, when, includePayload = false, inclusive)}"
                       .map(resultSet =>
                         resultSet.bytes("ItemId")
                           -> resultSet.bytes("ItemClass"))
@@ -511,7 +516,7 @@ case class BlobStorageOnH2(
                     println(explanation)
 
                      */
-                    sql"${matchingSnapshots(Some(uniqueItemSpecification.id), Some(uniqueItemSpecification.clazz))(branchPoints, when, includePayload = true)}"
+                    sql"${matchingSnapshots(Some(uniqueItemSpecification.id), Some(uniqueItemSpecification.clazz))(branchPoints, when, includePayload = true, inclusive)}"
                       .map(resultSet => resultSet.bytes("Payload"))
                       .list()
                       .apply()
