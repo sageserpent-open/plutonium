@@ -10,7 +10,9 @@ import scala.util.Random
 
 import scala.concurrent.duration._
 
-trait Benchmark extends H2ViaScalikeJdbcDatabaseSetupResource {
+trait Benchmark
+    extends H2ViaScalikeJdbcDatabaseSetupResource
+    with BlobStorageOnH2DatabaseSetupResource {
   implicit class Enhancement(randomBehaviour: Random) {
     def chooseOneOfRange(range: Range): Int =
       range(randomBehaviour.chooseAnyNumberFromZeroToOneLessThan(range.size))

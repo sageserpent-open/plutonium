@@ -58,7 +58,8 @@ class WorldH2StorageImplementation(
     val tranches: H2ViaScalikeJdbcTranches,
     val emptyBlobStorage: BlobStorageOnH2,
     var timelineTrancheIdStorage: Array[(Instant, Vector[TrancheId])],
-    var numberOfTimelines: Int)
+    var numberOfTimelines: Int,
+    val connectionPool: ConnectionPool)
     extends WorldEfficientImplementation[Session] {
   def this(connectionPool: ConnectionPool) =
     this(
@@ -66,14 +67,17 @@ class WorldH2StorageImplementation(
       with TranchesContracts[TrancheId],
       BlobStorageOnH2.empty(connectionPool),
       Array.empty[(Instant, Vector[TrancheId])],
-      World.initialRevision
+      World.initialRevision,
+      connectionPool
     )
 
   private def retrieveTimeline(trancheIds: Vector[TrancheId]) = {
     (immutableObjectStorage.retrieve[AllEvents](trancheIds(0)),
      immutableObjectStorage.retrieve[ItemStateUpdatesDag](trancheIds(1)),
      immutableObjectStorage
-       .retrieve[Timeline.BlobStorage](trancheIds(2)))
+       .retrieve[Timeline.BlobStorage](trancheIds(2))
+       .map(
+         _.asInstanceOf[BlobStorageOnH2].copy(connectionPool = connectionPool)))
       .mapN(Timeline.apply)
   }
 
@@ -138,7 +142,8 @@ class WorldH2StorageImplementation(
     new WorldH2StorageImplementation(tranches,
                                      emptyBlobStorage,
                                      timelineTrancheIds.toArray,
-                                     numberOfTimelines)
+                                     numberOfTimelines,
+                                     connectionPool)
   }
 
   override protected def itemCacheOf(itemCache: Session[ItemCache]): ItemCache =
