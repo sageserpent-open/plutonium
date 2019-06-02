@@ -186,17 +186,19 @@ object BlobStorageOnH2 {
     sqls"""
       WITH DominantEntriesByItemIdAndItemClass AS(
       SELECT DISTINCT ON(ItemId, ItemClass)
-          Snapshot.Time,
-          Snapshot.ItemId,
-          Snapshot.ItemClass,
-          Snapshot.Payload
-      FROM Snapshot
+          ItemId,
+          ItemClass,
+          RelevantItem.Time,
+          Payload
+      FROM (SELECT ItemId, ItemClass, Time, LineageId, Revision, Payload
+            FROM Snapshot
+            $whereClauseForItemSelectionSql) AS RelevantItem
       JOIN (SELECT DISTINCT ON(Time)
               Time,
               LineageId,
               Revision
             FROM Snapshot JOIN (SELECT DISTINCT Time AS RelevantTime
-                                FROM Snapshot
+                                      FROM Snapshot
                                 $whereClauseForItemSelectionSql)
             ON Time = RelevantTime
             WHERE $lineageSelectionSql
@@ -204,10 +206,9 @@ object BlobStorageOnH2 {
     else lessThan(when)}
             ORDER BY LineageId DESC,
                      Revision DESC) AS DominantRevisionInLineage
-      ON Snapshot.Time = DominantRevisionInLineage.Time
-         AND Snapshot.LineageId = DominantRevisionInLineage.LineageId
-         AND Snapshot.Revision = DominantRevisionInLineage.Revision
-      $whereClauseForItemSelectionSql
+      ON RelevantItem.Time = DominantRevisionInLineage.Time
+         AND RelevantItem.LineageId = DominantRevisionInLineage.LineageId
+         AND RelevantItem.Revision = DominantRevisionInLineage.Revision
       ORDER BY Time DESC)
       SELECT ItemId, ItemClass${payloadSelection}
       FROM DominantEntriesByItemIdAndItemClass
