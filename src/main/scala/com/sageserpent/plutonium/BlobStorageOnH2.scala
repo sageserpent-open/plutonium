@@ -82,10 +82,6 @@ object BlobStorageOnH2 {
       """.update.apply()
 
               sql"""
-              CREATE INDEX Virginia ON Snapshot(LineageId, Revision)
-      """.update.apply()
-
-              sql"""
               CREATE INDEX Marge ON Snapshot(LineageId, Revision, Time)
       """.update.apply()
           }
@@ -154,12 +150,14 @@ object BlobStorageOnH2 {
     val payloadSelection =
       if (includePayload) sqls", Payload" else sqls""
 
-    val lineageSelectionSql: SQLSyntax = sqls"""(${branchPoints
+    val lineageAndTimeSelectionSql: SQLSyntax = sqls"""(${branchPoints
       .map {
         case (lineageId, revision) =>
           sqls"""
         LineageId = $lineageId
-        AND Revision <= $revision"""
+        AND Revision <= $revision
+        AND ${if (inclusive) lessThanOrEqualTo(when)
+          else lessThan(when)}"""
       }
       .reduce((left, right) => sqls"""$left OR $right""")})"""
 
@@ -201,9 +199,7 @@ object BlobStorageOnH2 {
                                       FROM Snapshot
                                 $whereClauseForItemSelectionSql)
             ON Time = RelevantTime
-            WHERE $lineageSelectionSql
-                  AND ${if (inclusive) lessThanOrEqualTo(when)
-    else lessThan(when)}
+            WHERE $lineageAndTimeSelectionSql
             ORDER BY LineageId DESC,
                      Revision DESC) AS DominantRevisionInLineage
       ON RelevantItem.Time = DominantRevisionInLineage.Time
@@ -379,7 +375,7 @@ case class BlobStorageOnH2(
                   implicit session: DBSession =>
                     /*
                     val explanation =
-                      sql"EXPLAIN ANALYZE ${matchingSnapshots(targetItemId, None)(branchPoints, when, includePayload = false)}"
+                      sql"EXPLAIN ANALYZE ${matchingSnapshots(targetItemId, None)(branchPoints, when, includePayload = false, inclusive)}"
                         .map(_.string(1))
                         .single()
                         .apply
@@ -438,7 +434,7 @@ case class BlobStorageOnH2(
                   implicit session: DBSession =>
                     /*
                     val explanation =
-                      sql"EXPLAIN ANALYZE ${matchingSnapshots(Some(uniqueItemSpecification.id), Some(uniqueItemSpecification.clazz))(branchPoints, when, includePayload = true)}"
+                      sql"EXPLAIN ANALYZE ${matchingSnapshots(Some(uniqueItemSpecification.id), Some(uniqueItemSpecification.clazz))(branchPoints, when, includePayload = true, inclusive)}"
                         .map(_.string(1))
                         .single()
                         .apply
