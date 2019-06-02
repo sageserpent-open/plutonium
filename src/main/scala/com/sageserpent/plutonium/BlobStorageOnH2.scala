@@ -72,15 +72,11 @@ object BlobStorageOnH2 {
       """.update.apply()
 
               sql"""
-              CREATE INDEX Fred ON Snapshot(Time, LineageId, Revision)
+              CREATE INDEX ON Snapshot(Time, LineageId, Revision)
       """.update.apply()
 
               sql"""
-              CREATE INDEX Bet ON Snapshot(ItemId, ItemClass, Time)
-      """.update.apply()
-
-              sql"""
-              CREATE INDEX Marge ON Snapshot(LineageId, Revision, Time)
+              CREATE INDEX ON Snapshot(ItemId, ItemClass, Time)
       """.update.apply()
           }
       })
@@ -160,9 +156,7 @@ object BlobStorageOnH2 {
               .min(_, cumulativeCutoffTime))) orElse cutoff
 
         val conditionSql = sqls"""
-        LineageId = $lineageId
-        AND Revision <= $revision
-        AND ${if (inclusive)
+        ${if (inclusive)
           lessThanOrEqualTo(
             foldedCutoff.fold(when)(Ordering[ItemStateUpdateTime].min(when, _)))
         else
@@ -170,7 +164,9 @@ object BlobStorageOnH2 {
             cutoffTime =>
               if (Ordering[ItemStateUpdateTime].gt(when, cutoffTime))
                 lessThanOrEqualTo(cutoffTime)
-              else lessThan(when))}"""
+              else lessThan(when))}
+        AND LineageId = $lineageId
+        AND Revision <= $revision"""
 
         foldedCutoff -> (conditionSql :: cumulativeResult)
     }._2.reduce((left, right) => sqls"""$left OR $right""")})"""
