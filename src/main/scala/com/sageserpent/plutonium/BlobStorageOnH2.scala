@@ -12,8 +12,6 @@ import com.sageserpent.americium.{
 }
 import com.sageserpent.plutonium.BlobStorage.TimesliceContracts
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
-import com.sageserpent.plutonium.ItemStateUpdateTime.IntraEventIndex
-import com.sageserpent.plutonium.WorldImplementationCodeFactoring.EventOrderingTiebreakerIndex
 import com.sageserpent.plutonium.curium.DBResource
 import com.twitter.chill.{KryoPool, KryoSerializer}
 import scalikejdbc._
@@ -143,23 +141,39 @@ object BlobStorageOnH2 {
 
   def matchingSnapshots(targetItemId: Option[Any],
                         targetItemClazz: Option[Class[_]])(
-      branchPoints: Map[LineageId, Revision],
+      branchPoints: SortedMap[LineageId,
+                              (Revision, Option[ItemStateUpdateTime])],
       when: ItemStateUpdateTime,
       includePayload: Boolean,
       inclusive: Boolean): SQLSyntax = {
     val payloadSelection =
       if (includePayload) sqls", Payload" else sqls""
 
-    val lineageAndTimeSelectionSql: SQLSyntax = sqls"""(${branchPoints
-      .map {
-        case (lineageId, revision) =>
-          sqls"""
+    val lineageAndTimeSelectionSql: SQLSyntax = sqls"""(
+      ${(branchPoints :\ ((None: Option[ItemStateUpdateTime]) -> List
+      .empty[SQLSyntax])) {
+      case ((lineageId, (revision, cutoff)),
+            (cumulativeCutoff, cumulativeResult)) =>
+        val foldedCutoff = cumulativeCutoff.flatMap(
+          cumulativeCutoffTime =>
+            cutoff.map(Ordering[ItemStateUpdateTime]
+              .min(_, cumulativeCutoffTime))) orElse cutoff
+
+        val conditionSql = sqls"""
         LineageId = $lineageId
         AND Revision <= $revision
-        AND ${if (inclusive) lessThanOrEqualTo(when)
-          else lessThan(when)}"""
-      }
-      .reduce((left, right) => sqls"""$left OR $right""")})"""
+        AND ${if (inclusive)
+          lessThanOrEqualTo(
+            foldedCutoff.fold(when)(Ordering[ItemStateUpdateTime].min(when, _)))
+        else
+          foldedCutoff.fold(lessThan(when))(
+            cutoffTime =>
+              if (Ordering[ItemStateUpdateTime].gt(when, cutoffTime))
+                lessThanOrEqualTo(cutoffTime)
+              else lessThan(when))}"""
+
+        foldedCutoff -> (conditionSql :: cumulativeResult)
+    }._2.reduce((left, right) => sqls"""$left OR $right""")})"""
 
     val whereClauseForItemSelectionSql: SQLSyntax = {
       val itemIdSql = targetItemId.map { targetItemId =>
@@ -196,7 +210,7 @@ object BlobStorageOnH2 {
               LineageId,
               Revision
             FROM Snapshot JOIN (SELECT DISTINCT Time AS RelevantTime
-                                      FROM Snapshot
+                                FROM Snapshot
                                 $whereClauseForItemSelectionSql)
             ON Time = RelevantTime
             WHERE $lineageAndTimeSelectionSql
@@ -256,7 +270,8 @@ case class BlobStorageOnH2(
     lineageId: BlobStorageOnH2.LineageId,
     revision: BlobStorageOnH2.Revision,
     ancestralBranchpoints: SortedMap[BlobStorageOnH2.LineageId,
-                                     BlobStorageOnH2.Revision])(
+                                     (BlobStorageOnH2.Revision,
+                                      Option[ItemStateUpdateTime])])(
     override implicit val timeOrdering: Ordering[ItemStateUpdateTime])
     extends Timeline.BlobStorage {
   thisBlobStorage =>
@@ -344,7 +359,7 @@ case class BlobStorageOnH2(
             thisBlobStorage.copy(
               lineageId = newLineageId,
               revision = newRevision,
-              ancestralBranchpoints = thisBlobStorage.ancestralBranchpoints + (thisBlobStorage.lineageId -> thisBlobStorage.revision)
+              ancestralBranchpoints = thisBlobStorage.ancestralBranchpoints + (thisBlobStorage.lineageId -> (thisBlobStorage.revision, None))
             )
           }
         }).unsafeRunSync()
@@ -364,8 +379,7 @@ case class BlobStorageOnH2(
       private def uniqueItemSpecifications[Item](
           targetItemId: Option[Any],
           itemClazzUpperBound: Class[Item]): Stream[UniqueItemSpecification] = {
-        val branchPoints
-          : Map[LineageId, Revision] = ancestralBranchpoints + (lineageId -> revision)
+        val branchPoints = ancestralBranchpoints + (lineageId -> (revision -> None))
 
         DBResource(connectionPool)
           .use(
@@ -423,8 +437,7 @@ case class BlobStorageOnH2(
       override def snapshotBlobFor(
           uniqueItemSpecification: UniqueItemSpecification)
         : Option[SnapshotBlob] = {
-        val branchPoints
-          : Map[LineageId, Revision] = ancestralBranchpoints + (lineageId -> revision)
+        val branchPoints = ancestralBranchpoints + (lineageId -> (revision -> None))
 
         DBResource(connectionPool)
           .use(
@@ -463,6 +476,35 @@ case class BlobStorageOnH2(
     new TimesliceImplementation with TimesliceContracts[SnapshotBlob]
   }
 
-  override def retainUpTo(when: ItemStateUpdateTime): Timeline.BlobStorage = ???
+  override def retainUpTo(when: ItemStateUpdateTime): Timeline.BlobStorage = {
+    def makeRevision(): IO[(LineageId, Revision)] =
+      DBResource(connectionPool).use(db =>
+        IO {
+          db localTx {
+            implicit session: DBSession =>
+              val newLineageId: LineageId = sql"""
+                   INSERT INTO Lineage SET MaximumRevision = $initialRevision
+                    """
+                .updateAndReturnGeneratedKey("LineageId")
+                .apply()
+
+              assert(newLineageId != lineageId)
+
+              newLineageId -> initialRevision
+          }
+      })
+
+    (for {
+      newLineageEntry <- makeRevision()
+      (newLineageId, newRevision) = newLineageEntry
+    } yield {
+      thisBlobStorage.copy(
+        lineageId = newLineageId,
+        revision = newRevision,
+        ancestralBranchpoints = thisBlobStorage.ancestralBranchpoints + (thisBlobStorage.lineageId -> (thisBlobStorage.revision, Some(
+          when)))
+      )
+    }).unsafeRunSync()
+  }
 
 }
