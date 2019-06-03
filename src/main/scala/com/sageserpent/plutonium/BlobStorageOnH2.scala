@@ -171,7 +171,7 @@ object BlobStorageOnH2 {
         foldedCutoff -> (conditionSql :: cumulativeResult)
     }._2.reduce((left, right) => sqls"""$left OR $right""")})"""
 
-    val whereClauseForItemSelectionSql: SQLSyntax = {
+    val clauseForItemSelectionSql: Option[SQLSyntax] = {
       val itemIdSql = targetItemId.map { targetItemId =>
         val targetItemIdBytes = kryoPool.toBytesWithClass(targetItemId)
         sqls"""
@@ -187,8 +187,7 @@ object BlobStorageOnH2 {
       }
 
       Seq(itemIdSql, itemClazzSql).flatten
-        .reduceOption((left, right) => sqls"""$left AND $right""")
-        .fold(sqls"")(conditionsSql => sqls"""WHERE $conditionsSql""")
+        .reduceOption((left, right) => sqls"""($left AND $right)""")
     }
 
     sqls"""
@@ -200,14 +199,16 @@ object BlobStorageOnH2 {
           Payload
       FROM (SELECT ItemId, ItemClass, Time, LineageId, Revision, Payload
             FROM Snapshot
-            $whereClauseForItemSelectionSql) AS RelevantItem
+            ${clauseForItemSelectionSql.fold(sqls"")(clause =>
+      sqls"WHERE $clause")}) AS RelevantItem
       JOIN (SELECT DISTINCT ON(Time)
               Time,
               LineageId,
               Revision
             FROM Snapshot JOIN (SELECT DISTINCT Time AS RelevantTime
                                 FROM Snapshot
-                                $whereClauseForItemSelectionSql)
+                                ${clauseForItemSelectionSql.fold(sqls"")(
+      clause => sqls"WHERE $clause")})
             ON Time = RelevantTime
             WHERE $lineageAndTimeSelectionSql
             ORDER BY LineageId DESC,
