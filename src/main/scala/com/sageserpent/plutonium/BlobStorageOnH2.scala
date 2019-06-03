@@ -94,26 +94,26 @@ object BlobStorageOnH2 {
 
   def lessThanOrEqualTo(when: ItemStateUpdateTime): SQLSyntax = when match {
     case LowerBoundOfTimeslice(when) =>
-      sqls"""(Time < ${unpack(when) ++ Array(Int.MinValue,
-                                             Int.MinValue,
-                                             Int.MinValue)})"""
-    case _: ItemStateUpdateKey => sqls"""(Time <= ${unpack(when)})"""
+      sqls"""(Snapshot.Time < ${unpack(when) ++ Array(Int.MinValue,
+                                                      Int.MinValue,
+                                                      Int.MinValue)})"""
+    case _: ItemStateUpdateKey => sqls"""(Snapshot.Time <= ${unpack(when)})"""
     case UpperBoundOfTimeslice(when) =>
-      sqls"""(Time <= ${unpack(when) ++ Array(Int.MaxValue,
-                                              Int.MaxValue,
-                                              Int.MaxValue)})"""
+      sqls"""(Snapshot.Time <= ${unpack(when) ++ Array(Int.MaxValue,
+                                                       Int.MaxValue,
+                                                       Int.MaxValue)})"""
   }
 
   def lessThan(when: ItemStateUpdateTime): SQLSyntax = when match {
     case LowerBoundOfTimeslice(when) =>
-      sqls"""(Time < ${unpack(when) ++ Array(Int.MinValue,
-                                             Int.MinValue,
-                                             Int.MinValue)})"""
-    case _: ItemStateUpdateKey => sqls"""(Time < ${unpack(when)})"""
+      sqls"""(Snapshot.Time < ${unpack(when) ++ Array(Int.MinValue,
+                                                      Int.MinValue,
+                                                      Int.MinValue)})"""
+    case _: ItemStateUpdateKey => sqls"""(Snapshot.Time < ${unpack(when)})"""
     case UpperBoundOfTimeslice(when) =>
-      sqls"""(Time <= ${unpack(when) ++ Array(Int.MaxValue,
-                                              Int.MaxValue,
-                                              Int.MaxValue)})"""
+      sqls"""(Snapshot.Time <= ${unpack(when) ++ Array(Int.MaxValue,
+                                                       Int.MaxValue,
+                                                       Int.MaxValue)})"""
   }
 
   def itemSql(
@@ -165,8 +165,8 @@ object BlobStorageOnH2 {
               if (Ordering[ItemStateUpdateTime].gt(when, cutoffTime))
                 lessThanOrEqualTo(cutoffTime)
               else lessThan(when))}
-        AND LineageId = $lineageId
-        AND Revision <= $revision"""
+        AND Snapshot.LineageId = $lineageId
+        AND Snapshot.Revision <= $revision"""
 
         foldedCutoff -> (conditionSql :: cumulativeResult)
     }._2.reduce((left, right) => sqls"""$left OR $right""")})"""
@@ -191,25 +191,23 @@ object BlobStorageOnH2 {
     }
 
     sqls"""
-      WITH DominantEntriesByItemIdAndItemClass AS(
+      WITH RelevantItem AS (
+      SELECT ItemId, ItemClass, Time, LineageId, Revision, Payload
+      FROM Snapshot
+      ${clauseForItemSelectionSql.fold(sqls"")(clause => sqls"WHERE $clause")}),
+      DominantEntriesByItemIdAndItemClass AS(
       SELECT DISTINCT ON(ItemId, ItemClass)
           ItemId,
           ItemClass,
           RelevantItem.Time,
           Payload
-      FROM (SELECT ItemId, ItemClass, Time, LineageId, Revision, Payload
-            FROM Snapshot
-            ${clauseForItemSelectionSql.fold(sqls"")(clause =>
-      sqls"WHERE $clause")}) AS RelevantItem
-      JOIN (SELECT DISTINCT ON(Time)
-              Time,
-              LineageId,
-              Revision
-            FROM Snapshot JOIN (SELECT DISTINCT Time AS RelevantTime
-                                FROM Snapshot
-                                ${clauseForItemSelectionSql.fold(sqls"")(
-      clause => sqls"WHERE $clause")})
-            ON Time = RelevantTime
+      FROM RelevantItem
+      JOIN (SELECT DISTINCT ON(Snapshot.Time)
+              Snapshot.Time,
+              Snapshot.LineageId,
+              Snapshot.Revision
+            FROM Snapshot JOIN RelevantItem
+            ON Snapshot.Time = RelevantItem.Time
             WHERE $lineageAndTimeSelectionSql
             ORDER BY LineageId DESC,
                      Revision DESC) AS DominantRevisionInLineage
