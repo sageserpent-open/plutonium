@@ -76,8 +76,8 @@ class WorldH2StorageImplementation(
      immutableObjectStorage.retrieve[ItemStateUpdatesDag](trancheIds(1)),
      immutableObjectStorage
        .retrieve[Timeline.BlobStorage](trancheIds(2))
-       .map(
-         _.asInstanceOf[BlobStorageOnH2].copy(connectionPool = connectionPool)))
+       // NASTY HACK: need to cutover the API of 'BlobStorage' to allow monadic contexts, thus avoiding the following mess...
+       .map(_.asInstanceOf[BlobStorageOnH2].reconnectTo(connectionPool)))
       .mapN(Timeline.apply)
   }
 

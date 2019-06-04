@@ -272,6 +272,9 @@ case class BlobStorageOnH2(
   thisBlobStorage =>
   import BlobStorageOnH2._
 
+  def reconnectTo(connectionPool: ConnectionPool): BlobStorageOnH2 =
+    copy(connectionPool = connectionPool)
+
   override def openRevision(): RevisionBuilder = {
     class RevisionBuilderImplementation extends RevisionBuilder {
       type Recording =
