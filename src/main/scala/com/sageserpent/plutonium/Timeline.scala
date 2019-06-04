@@ -279,9 +279,4 @@ case class Timeline(
         when >= key.when),
       blobStorage = this.blobStorage.retainUpTo(UpperBoundOfTimeslice(when))
     )
-
-  def itemCacheAt(when: Unbounded[Instant]): ItemCache =
-    new ItemCacheUsingBlobStorage[ItemStateUpdateTime](
-      blobStorage,
-      UpperBoundOfTimeslice(when))
 }
