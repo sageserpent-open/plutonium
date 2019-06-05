@@ -41,7 +41,9 @@ object BlobStorageOnH2 {
     BlobStorageOnH2(connectionPool,
                     sentinelLineageId,
                     initialRevision,
-                    TreeMap.empty)
+                    TreeMap.empty,
+                    BlobStorageInMemory.empty,
+                    useH2ForTimeslices = false)
 
   def setupDatabaseTables(connectionPool: ConnectionPool): IO[Unit] =
     DBResource(connectionPool)
@@ -266,7 +268,9 @@ case class BlobStorageOnH2(
     revision: BlobStorageOnH2.Revision,
     ancestralBranchpoints: SortedMap[BlobStorageOnH2.LineageId,
                                      (BlobStorageOnH2.Revision,
-                                      Option[ItemStateUpdateTime])])(
+                                      Option[ItemStateUpdateTime])],
+    shadowBlobStorage: Timeline.BlobStorage,
+    useH2ForTimeslices: Boolean)(
     override implicit val timeOrdering: Ordering[ItemStateUpdateTime])
     extends Timeline.BlobStorage {
   thisBlobStorage =>
@@ -274,6 +278,9 @@ case class BlobStorageOnH2(
 
   def reconnectTo(connectionPool: ConnectionPool): BlobStorageOnH2 =
     copy(connectionPool = connectionPool)
+
+  def h2Timeslices(): BlobStorageOnH2 =
+    copy(useH2ForTimeslices = true)
 
   override def openRevision(): RevisionBuilder = {
     class RevisionBuilderImplementation extends RevisionBuilder {
@@ -283,11 +290,15 @@ case class BlobStorageOnH2(
 
       protected val recordings = mutable.MutableList.empty[Recording]
 
+      private val shadowBuilder = shadowBlobStorage.openRevision()
+
       override def record(
           when: ItemStateUpdateTime,
           snapshotBlobs: Map[UniqueItemSpecification, Option[SnapshotBlob]])
         : Unit = {
         recordings += (when -> snapshotBlobs)
+
+        shadowBuilder.record(when, snapshotBlobs)
       }
 
       private def makeRevision(): IO[(LineageId, Revision)] =
@@ -347,17 +358,21 @@ case class BlobStorageOnH2(
         })
 
       override def build(): BlobStorage[ItemStateUpdateTime, SnapshotBlob] = {
+        val newShadowBlobStorage = shadowBuilder.build()
+
         (for {
           newLineageEntry <- makeRevision()
           (newLineageId, newRevision) = newLineageEntry
         } yield {
           if (newLineageId == thisBlobStorage.lineageId)
-            thisBlobStorage.copy(revision = newRevision)
+            thisBlobStorage.copy(revision = newRevision,
+                                 shadowBlobStorage = newShadowBlobStorage)
           else {
             thisBlobStorage.copy(
               lineageId = newLineageId,
               revision = newRevision,
-              ancestralBranchpoints = thisBlobStorage.ancestralBranchpoints + (thisBlobStorage.lineageId -> (thisBlobStorage.revision, None))
+              ancestralBranchpoints = thisBlobStorage.ancestralBranchpoints + (thisBlobStorage.lineageId -> (thisBlobStorage.revision, None)),
+              shadowBlobStorage = newShadowBlobStorage
             )
           }
         }).unsafeRunSync()
@@ -372,20 +387,23 @@ case class BlobStorageOnH2(
 
   override def timeSlice(
       when: ItemStateUpdateTime,
-      inclusive: Boolean): BlobStorage.Timeslice[SnapshotBlob] = {
-    trait TimesliceImplementation extends BlobStorage.Timeslice[SnapshotBlob] {
-      private def uniqueItemSpecifications[Item](
-          targetItemId: Option[Any],
-          itemClazzUpperBound: Class[Item]): Stream[UniqueItemSpecification] = {
-        val branchPoints = ancestralBranchpoints + (lineageId -> (revision -> None))
+      inclusive: Boolean): BlobStorage.Timeslice[SnapshotBlob] =
+    if (useH2ForTimeslices) {
+      trait TimesliceImplementation
+          extends BlobStorage.Timeslice[SnapshotBlob] {
+        private def uniqueItemSpecifications[Item](
+            targetItemId: Option[Any],
+            itemClazzUpperBound: Class[Item])
+          : Stream[UniqueItemSpecification] = {
+          val branchPoints = ancestralBranchpoints + (lineageId -> (revision -> None))
 
-        DBResource(connectionPool)
-          .use(
-            db =>
-              IO {
-                db localTx {
-                  implicit session: DBSession =>
-                    /*
+          DBResource(connectionPool)
+            .use(
+              db =>
+                IO {
+                  db localTx {
+                    implicit session: DBSession =>
+                      /*
                     val explanation =
                       sql"EXPLAIN ANALYZE ${matchingSnapshots(targetItemId, None)(branchPoints, when, includePayload = false, inclusive)}"
                         .map(_.string(1))
@@ -395,55 +413,55 @@ case class BlobStorageOnH2(
                     println("Fetching unique item specifications...")
                     println(explanation)
 
-                     */
-                    sql"${matchingSnapshots(targetItemId, None)(branchPoints, when, includePayload = false, inclusive)}"
-                      .map(resultSet =>
-                        resultSet.bytes("ItemId")
-                          -> resultSet.bytes("ItemClass"))
-                      .list()
-                      .apply()
-                }
+                       */
+                      sql"${matchingSnapshots(targetItemId, None)(branchPoints, when, includePayload = false, inclusive)}"
+                        .map(resultSet =>
+                          resultSet.bytes("ItemId")
+                            -> resultSet.bytes("ItemClass"))
+                        .list()
+                        .apply()
+                  }
+              }
+            )
+            .unsafeRunSync()
+            .toStream
+            .map {
+              case (itemIdBytes, itemClazzBytes) =>
+                val itemId =
+                  targetItemId.getOrElse(kryoPool.fromBytes(itemIdBytes))
+                val itemClazz =
+                  kryoPool.fromBytes(itemClazzBytes).asInstanceOf[Class[_]]
+                itemId -> itemClazz
             }
-          )
-          .unsafeRunSync()
-          .toStream
-          .map {
-            case (itemIdBytes, itemClazzBytes) =>
-              val itemId =
-                targetItemId.getOrElse(kryoPool.fromBytes(itemIdBytes))
-              val itemClazz =
-                kryoPool.fromBytes(itemClazzBytes).asInstanceOf[Class[_]]
-              itemId -> itemClazz
-          }
-          .collect {
-            case (itemId, itemClazz)
-                if itemClazzUpperBound.isAssignableFrom(itemClazz) =>
-              UniqueItemSpecification(itemId, itemClazz)
-          }
-      }
+            .collect {
+              case (itemId, itemClazz)
+                  if itemClazzUpperBound.isAssignableFrom(itemClazz) =>
+                UniqueItemSpecification(itemId, itemClazz)
+            }
+        }
 
-      override def uniqueItemQueriesFor[Item](
-          clazz: Class[Item]): Stream[UniqueItemSpecification] =
-        uniqueItemSpecifications(None, clazz)
+        override def uniqueItemQueriesFor[Item](
+            clazz: Class[Item]): Stream[UniqueItemSpecification] =
+          uniqueItemSpecifications(None, clazz)
 
-      override def uniqueItemQueriesFor[Item](
-          uniqueItemSpecification: UniqueItemSpecification)
-        : Stream[UniqueItemSpecification] =
-        uniqueItemSpecifications(Some(uniqueItemSpecification.id),
-                                 uniqueItemSpecification.clazz)
+        override def uniqueItemQueriesFor[Item](
+            uniqueItemSpecification: UniqueItemSpecification)
+          : Stream[UniqueItemSpecification] =
+          uniqueItemSpecifications(Some(uniqueItemSpecification.id),
+                                   uniqueItemSpecification.clazz)
 
-      override def snapshotBlobFor(
-          uniqueItemSpecification: UniqueItemSpecification)
-        : Option[SnapshotBlob] = {
-        val branchPoints = ancestralBranchpoints + (lineageId -> (revision -> None))
+        override def snapshotBlobFor(
+            uniqueItemSpecification: UniqueItemSpecification)
+          : Option[SnapshotBlob] = {
+          val branchPoints = ancestralBranchpoints + (lineageId -> (revision -> None))
 
-        DBResource(connectionPool)
-          .use(
-            db =>
-              IO {
-                db localTx {
-                  implicit session: DBSession =>
-                    /*
+          DBResource(connectionPool)
+            .use(
+              db =>
+                IO {
+                  db localTx {
+                    implicit session: DBSession =>
+                      /*
                     val explanation =
                       sql"EXPLAIN ANALYZE ${matchingSnapshots(Some(uniqueItemSpecification.id), Some(uniqueItemSpecification.clazz))(branchPoints, when, includePayload = true, inclusive)}"
                         .map(_.string(1))
@@ -453,28 +471,30 @@ case class BlobStorageOnH2(
                     println("Fetching snapshot blob...")
                     println(explanation)
 
-                     */
-                    sql"${matchingSnapshots(Some(uniqueItemSpecification.id), Some(uniqueItemSpecification.clazz))(branchPoints, when, includePayload = true, inclusive)}"
-                      .map(resultSet => resultSet.bytes("Payload"))
-                      .list()
-                      .apply()
-                }
+                       */
+                      sql"${matchingSnapshots(Some(uniqueItemSpecification.id), Some(uniqueItemSpecification.clazz))(branchPoints, when, includePayload = true, inclusive)}"
+                        .map(resultSet => resultSet.bytes("Payload"))
+                        .list()
+                        .apply()
+                  }
+              }
+            )
+            .unsafeRunSync()
+            .toStream
+            .map { payload =>
+              assert(payload.nonEmpty)
+              kryoPool.fromBytes(payload).asInstanceOf[SnapshotBlob]
             }
-          )
-          .unsafeRunSync()
-          .toStream
-          .map { payload =>
-            assert(payload.nonEmpty)
-            kryoPool.fromBytes(payload).asInstanceOf[SnapshotBlob]
-          }
-          .headOption
+            .headOption
+        }
       }
-    }
 
-    new TimesliceImplementation with TimesliceContracts[SnapshotBlob]
-  }
+      new TimesliceImplementation with TimesliceContracts[SnapshotBlob]
+    } else shadowBlobStorage.timeSlice(when, inclusive)
 
   override def retainUpTo(when: ItemStateUpdateTime): Timeline.BlobStorage = {
+    val newShadowBlobStorage = shadowBlobStorage.retainUpTo(when)
+
     def makeRevision(): IO[(LineageId, Revision)] =
       DBResource(connectionPool).use(db =>
         IO {
@@ -500,7 +520,8 @@ case class BlobStorageOnH2(
         lineageId = newLineageId,
         revision = newRevision,
         ancestralBranchpoints = thisBlobStorage.ancestralBranchpoints + (thisBlobStorage.lineageId -> (thisBlobStorage.revision, Some(
-          when)))
+          when))),
+        shadowBlobStorage = newShadowBlobStorage
       )
     }).unsafeRunSync()
   }

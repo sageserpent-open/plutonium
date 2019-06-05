@@ -33,7 +33,7 @@ class WorldEfficientInMemoryImplementation(
                           numberOfTimelines: Int): World =
     new WorldEfficientInMemoryImplementation(timelines, numberOfTimelines)
 
-  protected def timelinePriorTo(nextRevision: Revision): Id[Option[Timeline]] =
+  protected def priorTimeline(): Id[Option[Timeline]] =
     if (World.initialRevision < nextRevision)
       Some(timelineStorage(nextRevision - 1)._2)
     else None
