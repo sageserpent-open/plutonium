@@ -10,8 +10,8 @@ object BlobStorageInMemory {
   def empty[Time: Ordering, SnapshotBlob] =
     new BlobStorageInMemory[Time, SnapshotBlob](
       revision = 0,
-      recordingRevisions = Map.empty,
-      lifecycles = Map.empty
+      recordingRevisions = curium.ScuzzyMap.empty,
+      lifecycles = curium.ScuzzyMap.empty
     )
 }
 
