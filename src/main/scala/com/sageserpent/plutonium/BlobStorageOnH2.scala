@@ -81,17 +81,6 @@ object BlobStorageOnH2 {
           }
       })
 
-  def dropDatabaseTables(connectionPool: ConnectionPool): IO[Unit] =
-    DBResource(connectionPool)
-      .use(db =>
-        IO {
-          db localTx { implicit session: DBSession =>
-            sql"""
-             DROP ALL OBJECTS
-           """.update.apply()
-          }
-      })
-
   def lessThanOrEqualTo(when: ItemStateUpdateTime): SQLSyntax = when match {
     case LowerBoundOfTimeslice(when) =>
       sqls"""(Snapshot.Time < ${unpack(when) ++ Array(Int.MinValue,

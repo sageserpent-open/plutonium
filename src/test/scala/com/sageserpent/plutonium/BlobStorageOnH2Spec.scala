@@ -19,7 +19,7 @@ trait BlobStorageOnH2DatabaseSetupResource extends ConnectionPoolResource {
     for {
       connectionPool <- super.connectionPoolResource
       _ <- Resource.make(BlobStorageOnH2.setupDatabaseTables(connectionPool))(
-        _ => BlobStorageOnH2.dropDatabaseTables(connectionPool))
+        _ => IO {})
     } yield connectionPool
 }
 
