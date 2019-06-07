@@ -47,7 +47,7 @@ object WorldH2StorageImplementation {
         classOf[FingerTree[_, _]].isAssignableFrom(clazz) ||
         classOf[RangedSeq[_, _]].isAssignableFrom(clazz) || clazz.getName
         .contains("One") || clazz.getName.contains("Two") || clazz.getName
-        .contains("Three") || clazz.getName.contains("Four")
+        .contains("Three")
 
     override protected val tranchesImplementationName: String =
       classOf[H2ViaScalikeJdbcTranches].getSimpleName
