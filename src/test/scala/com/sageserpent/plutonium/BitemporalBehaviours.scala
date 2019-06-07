@@ -282,17 +282,19 @@ trait BitemporalBehaviours
                     Prop.all(ids.toSeq map (id => {
                       val itemsFromSpecificQuery =
                         scope.render(Bitemporal.withId[AHistory](id)).toSet
-                      itemsFromSpecificQuery
-                        .subsetOf(itemsFromWildcardQuery) :| s"${itemsFromSpecificQuery
+                      Prop(itemsFromSpecificQuery
+                        .subsetOf(itemsFromWildcardQuery)) :| s"${itemsFromSpecificQuery
                         .map(_.asInstanceOf[ItemExtensionApi].uniqueItemSpecification)} should be a subset of: ${itemsFromWildcardQuery
                         .map(_.asInstanceOf[ItemExtensionApi].uniqueItemSpecification)}"
                     }): _*)
                   } else Prop.undecided
                 }
 
-                holdsFor[History] && holdsFor[BarHistory] &&
-                holdsFor[FooHistory] && holdsFor[IntegerHistory] &&
-                holdsFor[MoreSpecificFooHistory]
+                Prop.all(holdsFor[History],
+                         holdsFor[BarHistory],
+                         holdsFor[FooHistory],
+                         holdsFor[IntegerHistory],
+                         holdsFor[MoreSpecificFooHistory])
             })
             .unsafeRunSync
       })
@@ -352,14 +354,16 @@ trait BitemporalBehaviours
                       val itemsFromSpecificQuery =
                         scope.render(Bitemporal.withId[AHistory](id)).toSet
                       val idsFromItems = itemsFromSpecificQuery map (_.id)
-                      (idsFromItems.isEmpty || id == idsFromItems.head) :| s"idsFromItems.isEmpty || ${id} == idsFromItems.head"
+                      Prop(idsFromItems.isEmpty || id == idsFromItems.head) :| s"idsFromItems.isEmpty || ${id} == idsFromItems.head"
                     }): _*)
                   } else Prop.undecided
                 }
 
-                holdsFor[History] && holdsFor[BarHistory] &&
-                holdsFor[FooHistory] && holdsFor[IntegerHistory] &&
-                holdsFor[MoreSpecificFooHistory]
+                Prop.all(holdsFor[History],
+                         holdsFor[BarHistory],
+                         holdsFor[FooHistory],
+                         holdsFor[IntegerHistory],
+                         holdsFor[MoreSpecificFooHistory])
             })
             .unsafeRunSync
       })
@@ -421,15 +425,17 @@ trait BitemporalBehaviours
                         scope.render(Bitemporal.withId[AHistory](id))
                       itemsFromSpecificQuery.groupBy(identity).map {
                         case (item, group) =>
-                          (1 == group.size) :| s"More than occurrence of item: ${item} with id: ${item.id}."
+                          Prop(1 == group.size) :| s"More than occurrence of item: ${item} with id: ${item.id}."
                       }
                     }): _*)
                   else Prop.undecided
                 }
 
-                holdsFor[History] && holdsFor[BarHistory] &&
-                holdsFor[FooHistory] && holdsFor[IntegerHistory] &&
-                holdsFor[MoreSpecificFooHistory]
+                Prop.all(holdsFor[History],
+                         holdsFor[BarHistory],
+                         holdsFor[FooHistory],
+                         holdsFor[IntegerHistory],
+                         holdsFor[MoreSpecificFooHistory])
             })
             .unsafeRunSync
       })
@@ -498,16 +504,17 @@ trait BitemporalBehaviours
                       val itemsFromAgglomeratedQuery =
                         scope.render(agglomeratedBitemporalQuery).toSet
                       val repeatedItemPairs
-                        : Set[(AHistory, AHistory)] = itemsFromAgglomeratedQuery filter ((_: AHistory) eq (_: AHistory))
-                        .tupled
-                      (numberOfItems == repeatedItemPairs.size) :| s"Expected to have $numberOfItems pairs of the same item repeated, but got: '$repeatedItemPairs'."
+                        : Set[(AHistory, AHistory)] = itemsFromAgglomeratedQuery filter ((_: AHistory) eq (_: AHistory)).tupled
+                      Prop(numberOfItems == repeatedItemPairs.size) :| s"Expected to have $numberOfItems pairs of the same item repeated, but got: '$repeatedItemPairs'."
                     }): _*)
                   } else Prop.undecided
                 }
 
-                holdsFor[History] && holdsFor[BarHistory] &&
-                holdsFor[FooHistory] && holdsFor[IntegerHistory] &&
-                holdsFor[MoreSpecificFooHistory]
+                Prop.all(holdsFor[History],
+                         holdsFor[BarHistory],
+                         holdsFor[FooHistory],
+                         holdsFor[IntegerHistory],
+                         holdsFor[MoreSpecificFooHistory])
             })
             .unsafeRunSync
       })
@@ -567,15 +574,17 @@ trait BitemporalBehaviours
                     Prop.all(ids.toSeq map (id => {
                       val itemsFromGenericQueryById =
                         scope.render(Bitemporal.withId[History](id)).toSet
-                      (itemsFromGenericQueryById.size == scope.numberOf(
+                      Prop(itemsFromGenericQueryById.size == scope.numberOf(
                         Bitemporal.withId[History](id))) :| s""
                     }): _*)
                   } else Prop.undecided
                 }
 
-                holdsFor[History] && holdsFor[BarHistory] &&
-                holdsFor[FooHistory] && holdsFor[IntegerHistory] &&
-                holdsFor[MoreSpecificFooHistory]
+                Prop.all(holdsFor[History],
+                         holdsFor[BarHistory],
+                         holdsFor[FooHistory],
+                         holdsFor[IntegerHistory],
+                         holdsFor[MoreSpecificFooHistory])
             })
             .unsafeRunSync
       })
@@ -609,10 +618,7 @@ trait BitemporalBehaviours
          asOfs,
          queryWhen)
       check(Prop.forAllNoShrink(testCaseGenerator) {
-        case (recordingsGroupedById,
-              bigShuffledHistoryOverLotsOfThings,
-              asOfs,
-              queryWhen) =>
+        case (_, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
           worldResource
             .use(world =>
               IO {
@@ -683,17 +689,19 @@ trait BitemporalBehaviours
                   def subsetProperty[AHistory <: History](
                       itemSubset: Set[AHistory],
                       itemSuperset: Set[AHistory]) =
-                    itemSubset
-                      .subsetOf(itemSuperset) :| s"'$itemSubset' should be a subset of '$itemSuperset'."
+                    Prop(itemSubset
+                      .subsetOf(itemSuperset)) :| s"'$itemSubset' should be a subset of '$itemSuperset'."
 
-                  val wildcardProperty = subsetProperty(
-                    (itemsFromWildcardQuery[MoreSpecificFooHistory] map (_.asInstanceOf[
-                      FooHistory])),
-                    itemsFromWildcardQuery[FooHistory]) &&
+                  val wildcardProperty = Prop.all(
+                    subsetProperty(itemsFromWildcardQuery[
+                                     MoreSpecificFooHistory] map (_.asInstanceOf[
+                                     FooHistory]),
+                                   itemsFromWildcardQuery[FooHistory]),
                     subsetProperty(
                       itemsFromWildcardQuery[FooHistory] map (_.asInstanceOf[
                         History]),
                       itemsFromWildcardQuery[History])
+                  )
 
                   val genericQueryByIdProperty = Prop.all(ids.toSeq map (id => {
                     def itemsFromGenericQueryById[
@@ -702,17 +710,19 @@ trait BitemporalBehaviours
                         .render(Bitemporal.withId[AHistory](
                           id.asInstanceOf[AHistory#Id]))
                         .toSet
-                    subsetProperty(itemsFromGenericQueryById[
-                                     MoreSpecificFooHistory] map (_.asInstanceOf[
-                                     FooHistory]),
-                                   itemsFromGenericQueryById[FooHistory]) &&
-                    subsetProperty(
-                      itemsFromGenericQueryById[FooHistory] map (_.asInstanceOf[
-                        History]),
-                      itemsFromGenericQueryById[History])
+                    Prop.all(
+                      subsetProperty(itemsFromGenericQueryById[
+                                       MoreSpecificFooHistory] map (_.asInstanceOf[
+                                       FooHistory]),
+                                     itemsFromGenericQueryById[FooHistory]),
+                      subsetProperty(
+                        itemsFromGenericQueryById[FooHistory] map (_.asInstanceOf[
+                          History]),
+                        itemsFromGenericQueryById[History])
+                    )
                   }): _*)
 
-                  wildcardProperty && genericQueryByIdProperty
+                  Prop.all(wildcardProperty, genericQueryByIdProperty)
                 } else Prop.undecided
             })
             .unsafeRunSync
@@ -760,7 +770,7 @@ trait BitemporalBehaviours
                 val scope = world.scopeFor(queryWhen, world.nextRevision)
 
                 val allItemsFromWildcard =
-                  scope.render(Bitemporal.wildcard[History])
+                  scope.render(Bitemporal.wildcard[History]).toList
 
                 val allIdsFromWildcard =
                   allItemsFromWildcard map (_.id) distinct
@@ -782,15 +792,16 @@ trait BitemporalBehaviours
                         barHistory.method1("No", 0)
                     }
                   }
-                  item.shouldBeUnchanged :| s"${item}.shouldBeUnchanged"
+                  Prop(item.shouldBeUnchanged) :| s"${item}.shouldBeUnchanged"
                 }
 
                 if (allIdsFromWildcard.nonEmpty) {
-                  Prop.all(allItemsFromWildcard map isReadonly: _*) && Prop.all(
-                    allIdsFromWildcard flatMap { id =>
-                      val items = scope.render(Bitemporal.withId[History](id))
-                      items map isReadonly
-                    }: _*)
+                  Prop.all(
+                    (allItemsFromWildcard map isReadonly) ++ (allIdsFromWildcard flatMap {
+                      id =>
+                        val items = scope.render(Bitemporal.withId[History](id))
+                        items map isReadonly
+                    }): _*)
                 } else Prop.undecided
             })
             .unsafeRunSync
