@@ -11,6 +11,7 @@ import com.sageserpent.plutonium.Timeline.{
   ItemStateUpdatesDag,
   PriorityQueueKey
 }
+import com.sageserpent.plutonium.curium.ScuzzyMap
 import de.ummels.prioritymap.PriorityMap
 import quiver._
 
@@ -21,6 +22,8 @@ object Timeline {
   type ItemStateUpdatesDag =
     Graph[ItemStateUpdateKey, ItemStateUpdate, Unit]
 
+  val emptyItemStateUpdatesDag: ItemStateUpdatesDag = Graph(ScuzzyMap.empty)
+
   case class PriorityQueueKey(itemStateUpdateKey: ItemStateUpdateKey,
                               isAlreadyReferencedAsADependencyInTheDag: Boolean)
 
@@ -30,11 +33,11 @@ object Timeline {
     com.sageserpent.plutonium.BlobStorage[ItemStateUpdateTime, SnapshotBlob]
 }
 
-case class Timeline(
-    allEvents: AllEvents = noEvents,
-    itemStateUpdatesDag: ItemStateUpdatesDag = empty,
-    blobStorage: Timeline.BlobStorage =
-      BlobStorageInMemory.empty[ItemStateUpdateTime, SnapshotBlob]) {
+case class Timeline(allEvents: AllEvents = noEvents,
+                    itemStateUpdatesDag: ItemStateUpdatesDag =
+                      Timeline.emptyItemStateUpdatesDag,
+                    blobStorage: Timeline.BlobStorage = BlobStorageInMemory
+                      .empty[ItemStateUpdateTime, SnapshotBlob]) {
   def revise(events: Map[_ <: EventId, Option[Event]]): Timeline = {
     val ItemStateUpdatesDelta(allEventsForNewTimeline,
                               itemStateUpdateKeysThatNeedToBeRevoked,
