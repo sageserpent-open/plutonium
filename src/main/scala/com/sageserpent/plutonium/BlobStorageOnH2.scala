@@ -81,19 +81,6 @@ object BlobStorageOnH2 {
           }
       })
 
-  private val cycleCountBeforeAnalysis: Int = 1000
-
-  private var cycles: Int = 0
-
-  private def noteCycle(implicit session: DBSession = AutoSession): Unit = {
-    cycles = (cycles + 1) % cycleCountBeforeAnalysis
-
-    if (0 == cycles) {
-      { val _ = sql"""ANALYZE TABLE Lineage""".execute().apply() }
-      { val _ = sql"""ANALYZE TABLE Snapshot""".execute().apply() }
-    }
-  }
-
   def lessThanOrEqualTo(when: ItemStateUpdateTime): SQLSyntax = when match {
     case LowerBoundOfTimeslice(when) =>
       sqls"""(Snapshot.Time < ${unpack(when) ++ Array(Int.MinValue,
@@ -297,8 +284,6 @@ case class BlobStorageOnH2(
           IO {
             db localTx {
               implicit session: DBSession =>
-                noteCycle
-
                 // NOTE: the sentinel lineage id is always branched from, never extended;
                 // this works because there should be no entry in 'Lineage' using the
                 // sentinel lineage id.
@@ -389,8 +374,6 @@ case class BlobStorageOnH2(
               IO {
                 db localTx {
                   implicit session: DBSession =>
-                    noteCycle
-
                     /*
                     val explanation =
                       sql"EXPLAIN ANALYZE ${matchingSnapshots(targetItemId, None)(branchPoints, when, includePayload = false, inclusive)}"
