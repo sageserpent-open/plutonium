@@ -67,12 +67,20 @@ object BlobStorageOnH2 {
                 LineageId                   BIGINT                    REFERENCES Lineage(LineageId),
                 Revision                    INTEGER                   NOT NULL,
                 Payload                     BINARY                    NULL,
-				PRIMARY KEY (ItemId, ItemClass, Time, LineageId, Revision)
+				        PRIMARY KEY (ItemId, ItemClass, Time, LineageId, Revision)
               )
       """.update.apply()
 
               sql"""
               CREATE INDEX ON Snapshot(Time, LineageId, Revision)
+      """.update.apply()
+
+              sql"""
+              CREATE INDEX ON Snapshot(LineageId, Revision, Time)
+      """.update.apply()
+
+              sql"""
+              CREATE INDEX ON Snapshot(LineageId, Revision)
       """.update.apply()
 
               sql"""
