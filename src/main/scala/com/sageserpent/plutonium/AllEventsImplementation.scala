@@ -17,7 +17,6 @@ import com.sageserpent.plutonium.AllEvents.ItemStateUpdatesDelta
 import com.sageserpent.plutonium.AllEventsImplementation.Lifecycle._
 import com.sageserpent.plutonium.AllEventsImplementation._
 import com.sageserpent.plutonium.World.{Revision, initialRevision}
-import com.sageserpent.plutonium.curium.ScuzzyMap
 import de.sciss.fingertree.RangedSeq
 import de.ummels.prioritymap.PriorityMap
 
@@ -56,8 +55,7 @@ object AllEventsImplementation {
         eventsArrangedInReverseTimeOrder =
           SortedMap(itemStateUpdateKey -> indivisibleEvent)(
             Ordering[ItemStateUpdateKey].reverse),
-        itemStateUpdateTimesByEventId = ScuzzyMap.empty + (eventId -> Set(
-          itemStateUpdateKey))
+        itemStateUpdateTimesByEventId = Map(eventId -> Set(itemStateUpdateKey))
       ) with LifecycleContracts
 
     def fromChange(eventId: EventId,
@@ -807,8 +805,8 @@ class AllEventsImplementation(
     nextRevision: Revision = initialRevision,
     lifecycleFootprintPerEvent: Map[EventId,
                                     AllEventsImplementation.EventFootprint] =
-      ScuzzyMap.empty,
-    lifecyclesById: LifecyclesById = ScuzzyMap.empty,
+      Map.empty,
+    lifecyclesById: LifecyclesById = Map.empty,
     bestPatchSelection: BestPatchSelection = bestPatchSelection)
     extends AllEvents {
   val sampleLifecyclesById = lifecyclesById.take(maxNumberOfIdsToSample)
