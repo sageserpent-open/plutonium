@@ -32,7 +32,7 @@ object BlobStorageOnH2Spec extends SharedGenerators {
         Map[UniqueItemSpecification, Option[ItemStateStorage.SnapshotBlob]]])
       extends Operation
 
-  /*  case class Retaining(when: ItemStateUpdateTime) extends Operation*/
+  case class Retaining(when: ItemStateUpdateTime) extends Operation
 
   case class Querying(
       when: ItemStateUpdateTime,
@@ -156,7 +156,7 @@ class BlobStorageOnH2Spec
                       trainee -> exemplar)
                   }
 
-                /*                case Retaining(when) =>
+                case Retaining(when) =>
                   val (newTrainee, newExemplar) = trainee
                     .retainUpTo(when) -> exemplar
                     .retainUpTo(when)
@@ -167,7 +167,7 @@ class BlobStorageOnH2Spec
                   if (maximumNumberOfAlternativeBlobStorages > pairsOfTraineeAndExemplarImplementations.size) {
                     pairsOfTraineeAndExemplarImplementations.enqueue(
                       trainee -> exemplar)
-                  }*/
+                  }
 
                 case Querying(when, Left(uniqueItemSpecification), inclusive) =>
                   val traineeTimeslice  = trainee.timeSlice(when, inclusive)
