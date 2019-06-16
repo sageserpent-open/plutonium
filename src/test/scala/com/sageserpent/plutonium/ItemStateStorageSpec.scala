@@ -82,8 +82,8 @@ class OddGraphNode(@transient override val id: OddGraphNode#Id)
   override def mark: Int = id.toInt
 
   override def checkInvariant(): Unit = {
-    require(!mark.isEven)
-    require(referencedNodes forall (_.mark.isEven))
+    assert(!mark.isEven)
+    assert(referencedNodes forall (_.mark.isEven))
   }
 }
 
@@ -96,8 +96,8 @@ class EvenGraphNode(@transient override val id: EvenGraphNode#Id)
   override def mark: Int = id
 
   override def checkInvariant(): Unit = {
-    require(mark.isEven)
-    require(referencedNodes forall (!_.mark.isEven))
+    assert(mark.isEven)
+    assert(referencedNodes forall (!_.mark.isEven))
   }
 }
 

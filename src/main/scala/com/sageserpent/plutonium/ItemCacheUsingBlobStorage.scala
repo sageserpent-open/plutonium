@@ -1,7 +1,9 @@
 package com.sageserpent.plutonium
 
+import java.time.Instant
 import java.util.UUID
 
+import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
 
 object ItemCacheUsingBlobStorage {
@@ -12,10 +14,16 @@ object ItemCacheUsingBlobStorage {
     override val acquiredStateClazz: Class[_ <: AcquiredState] =
       classOf[AcquiredState]
   }
+
+  def itemCacheAt(when: Unbounded[Instant],
+                  blobStorage: Timeline.BlobStorage): ItemCache =
+    new ItemCacheUsingBlobStorage[ItemStateUpdateTime](
+      blobStorage,
+      UpperBoundOfTimeslice(when))
 }
 
 class ItemCacheUsingBlobStorage[Time](
-    blobStorage: BlobStorage[Time, ItemStateUpdateKey, SnapshotBlob],
+    blobStorage: BlobStorage[Time, SnapshotBlob],
     when: Time)
     extends ItemCacheImplementation
     with itemStateStorageUsingProxies.ReconstitutionContext {

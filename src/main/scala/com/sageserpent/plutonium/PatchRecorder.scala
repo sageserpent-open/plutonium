@@ -68,7 +68,7 @@ trait PatchRecorderContracts extends PatchRecorder {
     require(whenEventPertainedToByLastRecordingTookPlace.fold(true)(when >= _))
     require(!allRecordingsAreCaptured)
     val result = super.recordPatchFromChange(eventId, when, patch)
-    require(whenEventPertainedToByLastRecordingTookPlace == Some(when))
+    assert(whenEventPertainedToByLastRecordingTookPlace == Some(when))
     result
   }
 
@@ -79,7 +79,7 @@ trait PatchRecorderContracts extends PatchRecorder {
     require(whenEventPertainedToByLastRecordingTookPlace.fold(true)(when >= _))
     require(!allRecordingsAreCaptured)
     val result = super.recordPatchFromMeasurement(eventId, when, patch)
-    require(whenEventPertainedToByLastRecordingTookPlace == Some(when))
+    assert(whenEventPertainedToByLastRecordingTookPlace == Some(when))
     result
   }
 
@@ -90,7 +90,7 @@ trait PatchRecorderContracts extends PatchRecorder {
         .fold(true)(annihilation.when >= _))
     require(!allRecordingsAreCaptured)
     val result = super.recordAnnihilation(eventId, annihilation)
-    require(
+    assert(
       whenEventPertainedToByLastRecordingTookPlace.contains(annihilation.when))
     result
   }
@@ -98,7 +98,7 @@ trait PatchRecorderContracts extends PatchRecorder {
   abstract override def noteThatThereAreNoFollowingRecordings(): Unit = {
     require(!allRecordingsAreCaptured)
     val result = super.noteThatThereAreNoFollowingRecordings()
-    require(allRecordingsAreCaptured)
+    assert(allRecordingsAreCaptured)
     result
   }
 }

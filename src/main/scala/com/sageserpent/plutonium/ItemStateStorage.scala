@@ -19,11 +19,26 @@ import org.objenesis.strategy.InstantiatorStrategy
 
 import scala.collection.mutable
 import scala.util.DynamicVariable
+import scala.util.hashing.MurmurHash3
 
 object ItemStateStorage {
   case class SnapshotBlob(payload: Array[Byte],
                           lifecycleUUID: UUID,
-                          itemStateUpdateKey: Option[ItemStateUpdateKey])
+                          itemStateUpdateKey: Option[ItemStateUpdateKey]) {
+    override def equals(another: Any): Boolean =
+      another match {
+        case SnapshotBlob(anotherPayload,
+                          anotherLifecycleUUID,
+                          anotherItemStateUpdateKey) =>
+          payload.sameElements(anotherPayload) &&
+            (lifecycleUUID, itemStateUpdateKey) == (anotherLifecycleUUID, anotherItemStateUpdateKey)
+        case _ => false
+      }
+
+    override def hashCode(): Int =
+      (MurmurHash3.arrayHash(payload), lifecycleUUID, itemStateUpdateKey)
+        .hashCode()
+  }
 }
 
 trait ItemStateStorage { itemStateStorageObject =>
@@ -54,7 +69,7 @@ trait ItemStateStorage { itemStateStorageObject =>
     }
   }
 
-  protected type ItemSuperType // TODO - ideally this would be a type bound for all the 'Item' generic type paremeter references. The problem is the Kryo instantiator needs
+  protected type ItemSuperType // TODO - ideally this would be a type bound for all the 'Item' generic type parameter references. The problem is the Kryo instantiator needs
   // to call into this generic API, and it knows nothing of type bounds as its types are defined in third party code.
 
   protected val clazzOfItemSuperType: Class[ItemSuperType]

@@ -29,9 +29,10 @@ class TimelineSpec
         }: _*)
 
       val itemCache: ItemCache =
-        emptyTimeline()
-          .revise(events)
-          .itemCacheAt(queryWhen)
+        ItemCacheUsingBlobStorage.itemCacheAt(queryWhen,
+                                              Timeline.emptyTimeline
+                                                .revise(events)
+                                                .blobStorage)
 
       val checks = for {
         RecordingsNoLaterThan(
@@ -75,9 +76,10 @@ class TimelineSpec
         }: _*)
 
       val itemCacheFromBlockBooking =
-        emptyTimeline()
-          .revise(eventsInOneBlock)
-          .itemCacheAt(queryWhen)
+        ItemCacheUsingBlobStorage.itemCacheAt(queryWhen,
+                                              Timeline.emptyTimeline
+                                                .revise(eventsInOneBlock)
+                                                .blobStorage)
 
       val random = new Random(seed)
 
@@ -87,13 +89,15 @@ class TimelineSpec
             booking => TreeMap(booking.map(_.swap): _*)) toList
 
       val timelineResultingFromIncrementalBookings =
-        ((emptyTimeline(): Timeline) /: severalRevisionBookingsWithObsoleteEventsThrownIn) {
+        (Timeline.emptyTimeline /: severalRevisionBookingsWithObsoleteEventsThrownIn) {
           case (timeline, booking) =>
             timeline.revise(booking)
         }
 
       val itemCacheFromIncrementalBookings =
-        timelineResultingFromIncrementalBookings.itemCacheAt(queryWhen)
+        ItemCacheUsingBlobStorage.itemCacheAt(
+          queryWhen,
+          timelineResultingFromIncrementalBookings.blobStorage)
 
       val checks = for {
         RecordingsNoLaterThan(historyId, historiesFrom, _, _, _) <- recordingsGroupedById flatMap (_.thePartNoLaterThan(

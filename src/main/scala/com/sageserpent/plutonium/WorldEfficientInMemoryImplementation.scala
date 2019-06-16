@@ -9,7 +9,8 @@ class WorldEfficientInMemoryImplementation(
     var timelineStorage: Array[(Instant, Timeline)],
     var numberOfTimelines: Int)
     extends WorldEfficientImplementation[Id] {
-  def this() = this(Array.empty[(Instant, Timeline)], World.initialRevision)
+  def this() =
+    this(Array.empty[(Instant, Timeline)], World.initialRevision)
 
   protected def allTimelinesPriorTo(
       nextRevision: World.Revision): Id[Array[(Instant, Timeline)]] =
@@ -37,6 +38,12 @@ class WorldEfficientInMemoryImplementation(
       Some(timelineStorage(nextRevision - 1)._2)
     else None
 
+  protected def blobStoragePriorTo(
+      nextRevision: Revision): Id[Option[Timeline.BlobStorage]] =
+    if (World.initialRevision < nextRevision)
+      Some(timelineStorage(nextRevision - 1)._2.blobStorage)
+    else None
+
   override def revisionAsOfs: Array[Instant] =
     timelineStorage.slice(0, numberOfTimelines).map(_._1)
 
@@ -44,4 +51,6 @@ class WorldEfficientInMemoryImplementation(
 
   override protected def itemCacheOf(itemCache: Id[ItemCache]): ItemCache =
     itemCache
+
+  override protected def emptyTimeline(): Timeline = Timeline.emptyTimeline
 }
