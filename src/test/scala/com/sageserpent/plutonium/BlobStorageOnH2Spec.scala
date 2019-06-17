@@ -28,7 +28,7 @@ object BlobStorageOnH2Spec extends SharedGenerators {
 
   case class Revision(
       recordingDatums: Map[
-        ItemStateUpdateKey,
+        ItemStateUpdateTime,
         Map[UniqueItemSpecification, Option[ItemStateStorage.SnapshotBlob]]])
       extends Operation
 
