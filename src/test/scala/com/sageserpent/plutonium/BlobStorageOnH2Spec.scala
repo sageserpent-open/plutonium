@@ -93,9 +93,10 @@ class BlobStorageOnH2Spec
             for {
               operation <- operations
             } {
-              def checkResults(traineeResult: Stream[UniqueItemSpecification],
-                               traineeTimeslice: BlobStorage.Timeslice[
-                                 ItemStateStorage.SnapshotBlob])(
+              def checkResults(when: ItemStateUpdateTime, inclusive: Boolean)(
+                  traineeResult: Stream[UniqueItemSpecification],
+                  traineeTimeslice: BlobStorage.Timeslice[
+                    ItemStateStorage.SnapshotBlob])(
                   exemplarResult: Stream[UniqueItemSpecification],
                   exemplarTimeslice: BlobStorage.Timeslice[
                     ItemStateStorage.SnapshotBlob]): Unit = {
@@ -108,7 +109,7 @@ class BlobStorageOnH2Spec
                     println(
                       s"Failure to match unique item specifications, got:\n$traineeResultSet, expected:\n$exemplarResultSet, left difference:\n${traineeResultSet
                         .diff(exemplarResultSet)}, right difference:\n${exemplarResultSet
-                        .diff(traineeResultSet)}")
+                        .diff(traineeResultSet)}\nwhen: $when, inclusive: $inclusive")
                     throw exception
                 }
 
@@ -176,9 +177,9 @@ class BlobStorageOnH2Spec
                     .uniqueItemQueriesFor(uniqueItemSpecification) -> exemplarTimeslice
                     .uniqueItemQueriesFor(uniqueItemSpecification)
 
-                  checkResults(traineeResult, traineeTimeslice)(
-                    exemplarResult,
-                    exemplarTimeslice)
+                  checkResults(when, inclusive)(
+                    traineeResult,
+                    traineeTimeslice)(exemplarResult, exemplarTimeslice)
 
                   pairsOfTraineeAndExemplarImplementations.enqueue(
                     trainee -> exemplar)
@@ -192,9 +193,9 @@ class BlobStorageOnH2Spec
                     .uniqueItemQueriesFor(clazz)
                     .force
 
-                  checkResults(traineeResult, traineeTimeslice)(
-                    exemplarResult,
-                    exemplarTimeslice)
+                  checkResults(when, inclusive)(
+                    traineeResult,
+                    traineeTimeslice)(exemplarResult, exemplarTimeslice)
 
                   pairsOfTraineeAndExemplarImplementations.enqueue(
                     trainee -> exemplar)

@@ -147,10 +147,12 @@ object BlobStorageOnH2 {
       .empty[SQLSyntax])) {
       case ((lineageId, (revision, cutoff)),
             (cumulativeCutoff, cumulativeResult)) =>
-        val foldedCutoff = cumulativeCutoff.flatMap(
-          cumulativeCutoffTime =>
-            cutoff.map(Ordering[ItemStateUpdateTime]
-              .min(_, cumulativeCutoffTime))) orElse cutoff
+        val foldedCutoff = cumulativeCutoff
+          .flatMap(
+            cumulativeCutoffTime =>
+              cutoff
+                .map(Ordering[ItemStateUpdateTime]
+                  .min(cumulativeCutoffTime, _))) orElse cumulativeCutoff orElse cutoff
 
         val conditionSql = sqls"""
         ${if (inclusive)
