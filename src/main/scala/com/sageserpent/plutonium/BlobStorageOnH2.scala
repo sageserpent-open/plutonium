@@ -91,26 +91,18 @@ object BlobStorageOnH2 {
 
   def lessThanOrEqualTo(when: ItemStateUpdateTime): SQLSyntax = when match {
     case LowerBoundOfTimeslice(when) =>
-      sqls"""(Snapshot.Time < ${unpack(when) ++ Array(Int.MinValue,
-                                                      Int.MinValue,
-                                                      Int.MinValue)})"""
+      sqls"""(Snapshot.Time <= ${unpack(when) ++ Array(-1, 0, 0, 0)})"""
     case _: ItemStateUpdateKey => sqls"""(Snapshot.Time <= ${unpack(when)})"""
     case UpperBoundOfTimeslice(when) =>
-      sqls"""(Snapshot.Time <= ${unpack(when) ++ Array(Int.MaxValue,
-                                                       Int.MaxValue,
-                                                       Int.MaxValue)})"""
+      sqls"""(Snapshot.Time <= ${unpack(when) ++ Array(1, 0, 0, 0)})"""
   }
 
   def lessThan(when: ItemStateUpdateTime): SQLSyntax = when match {
     case LowerBoundOfTimeslice(when) =>
-      sqls"""(Snapshot.Time < ${unpack(when) ++ Array(Int.MinValue,
-                                                      Int.MinValue,
-                                                      Int.MinValue)})"""
+      sqls"""(Snapshot.Time < ${unpack(when) ++ Array(-1, 0, 0, 0)})"""
     case _: ItemStateUpdateKey => sqls"""(Snapshot.Time < ${unpack(when)})"""
     case UpperBoundOfTimeslice(when) =>
-      sqls"""(Snapshot.Time <= ${unpack(when) ++ Array(Int.MaxValue,
-                                                       Int.MaxValue,
-                                                       Int.MaxValue)})"""
+      sqls"""(Snapshot.Time < ${unpack(when) ++ Array(1, 0, 0, 0)})"""
   }
 
   def itemSql(
@@ -231,7 +223,8 @@ object BlobStorageOnH2 {
   def unpack(when: ItemStateUpdateTime): Array[Any] = when match {
     case ItemStateUpdateKey((eventWhen, eventRevision, eventTiebreaker),
                             intraEventIndex) =>
-      unpack(eventWhen) ++ Array(eventRevision,
+      unpack(eventWhen) ++ Array(0,
+                                 eventRevision,
                                  eventTiebreaker,
                                  intraEventIndex)
   }
