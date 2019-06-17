@@ -89,21 +89,11 @@ object BlobStorageOnH2 {
           }
       })
 
-  def lessThanOrEqualTo(when: ItemStateUpdateTime): SQLSyntax = when match {
-    case LowerBoundOfTimeslice(when) =>
-      sqls"""(Snapshot.Time <= ${unpack(when) ++ Array(-1, 0, 0, 0)})"""
-    case _: ItemStateUpdateKey => sqls"""(Snapshot.Time <= ${unpack(when)})"""
-    case UpperBoundOfTimeslice(when) =>
-      sqls"""(Snapshot.Time <= ${unpack(when) ++ Array(1, 0, 0, 0)})"""
-  }
+  def lessThanOrEqualTo(when: ItemStateUpdateTime): SQLSyntax =
+    sqls"""(Snapshot.Time <= ${unpack(when)})"""
 
-  def lessThan(when: ItemStateUpdateTime): SQLSyntax = when match {
-    case LowerBoundOfTimeslice(when) =>
-      sqls"""(Snapshot.Time < ${unpack(when) ++ Array(-1, 0, 0, 0)})"""
-    case _: ItemStateUpdateKey => sqls"""(Snapshot.Time < ${unpack(when)})"""
-    case UpperBoundOfTimeslice(when) =>
-      sqls"""(Snapshot.Time < ${unpack(when) ++ Array(1, 0, 0, 0)})"""
-  }
+  def lessThan(when: ItemStateUpdateTime): SQLSyntax =
+    sqls"""(Snapshot.Time < ${unpack(when)})"""
 
   def itemSql(
       uniqueItemSpecification: Option[UniqueItemSpecification]): SQLSyntax =
@@ -221,12 +211,16 @@ object BlobStorageOnH2 {
   }
 
   def unpack(when: ItemStateUpdateTime): Array[Any] = when match {
+    case LowerBoundOfTimeslice(when) =>
+      unpack(when) ++ Array(-1, 0, 0, 0)
     case ItemStateUpdateKey((eventWhen, eventRevision, eventTiebreaker),
                             intraEventIndex) =>
       unpack(eventWhen) ++ Array(0,
                                  eventRevision,
                                  eventTiebreaker,
                                  intraEventIndex)
+    case UpperBoundOfTimeslice(when) =>
+      unpack(when) ++ Array(1, 0, 0, 0)
   }
 
   def whenSql(when: ItemStateUpdateTime): SQLSyntax =
