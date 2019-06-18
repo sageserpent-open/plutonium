@@ -27,18 +27,6 @@ trait BlobStorageOnH2DatabaseSetupResource extends ConnectionPoolResource {
     } yield connectionPool
 }
 
-trait BlobStorageOnH2Resource extends BlobStorageResource {
-  object blobStorageOnH2DatabaseSetupResource
-      extends BlobStorageOnH2DatabaseSetupResource
-
-  override val blobStorageResource: Resource[IO, Timeline.BlobStorage] =
-    blobStorageOnH2DatabaseSetupResource.connectionPoolResource.flatMap(
-      connectionPool =>
-        Resource.make(IO {
-          BlobStorageOnH2.empty(connectionPool): Timeline.BlobStorage
-        })(_ => IO {}))
-}
-
 object BlobStorageConformanceAgainstReferenceImplementation
     extends SharedGenerators {
   sealed trait Operation
@@ -232,8 +220,36 @@ trait BlobStorageConformanceAgainstReferenceImplementation
   }
 }
 
+trait BlobStorageOnH2Resource
+    extends BlobStorageResource
+    with BlobStorageOnH2DatabaseSetupResource {
+  override val blobStorageResource: Resource[IO, Timeline.BlobStorage] =
+    connectionPoolResource.flatMap(connectionPool =>
+      Resource.make(IO {
+        BlobStorageOnH2.empty(connectionPool): Timeline.BlobStorage
+      })(_ => IO {}))
+}
+
 class BlobStorageOnH2Spec
     extends BlobStorageConformanceAgainstReferenceImplementation
     with BlobStorageOnH2Resource {
   "blob storage on H2" should behave like suite
+}
+
+trait BlobStorageOnRedisResource
+    extends BlobStorageResource
+    with RedisClientResource {
+  override val blobStorageResource: Resource[IO, Timeline.BlobStorage] = for {
+    redisClient      <- redisClientResource
+    executionService <- executionServiceResource
+  } yield
+    BlobStorageOnRedis.empty(redisClient, executionService) // TODO - do we need to use the auto-close API here?
+}
+
+class BlobStorageOnRedisSpec
+    extends BlobStorageConformanceAgainstReferenceImplementation
+    with BlobStorageOnRedisResource {
+  override val redisServerPort: Int = 6457
+
+  "blob storage on Redis" should behave like suite
 }
