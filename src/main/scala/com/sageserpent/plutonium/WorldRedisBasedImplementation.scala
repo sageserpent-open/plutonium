@@ -5,7 +5,6 @@ import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.Executor
 
-import com.esotericsoftware.kryo.Kryo
 import com.sageserpent.americium.{PositiveInfinity, Unbounded}
 import com.twitter.chill.{KryoPool, ScalaKryoInstantiator}
 import io.lettuce.core.api.async.RedisAsyncCommands

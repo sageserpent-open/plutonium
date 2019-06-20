@@ -6,8 +6,10 @@ import ImmutableObjectStorage.{
   Tranches,
   TranchesContracts
 }
-import cats.effect.{Resource, IO}
+import cats.effect.{IO, Resource}
+import com.sageserpent.plutonium.RedisClientResource
 import com.sageserpent.plutonium.curium.ImmutableObjectStorageSpec.FakeTranches
+import com.sageserpent.plutonium.curium.RedisTranchesResource.TrancheId
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{FlatSpec, Matchers}
@@ -202,4 +204,25 @@ class H2ViaScalikeJdbcTranchesSpec
     extends TranchesBehaviours[H2ViaScalikeJdbcTranchesResource.TrancheId]
     with H2ViaScalikeJdbcTranchesResource {
   "H2 tranches" should behave like tranchesBehaviour
+}
+
+object RedisTranchesResource {
+  type TrancheId = RedisTranches#TrancheId
+}
+
+trait RedisTranchesResource
+    extends TranchesResource[RedisTranchesResource.TrancheId]
+    with RedisClientResource {
+  override val tranchesResource: Resource[IO, Tranches[TrancheId]] = for {
+    redisClient      <- redisClientResource
+    executionService <- executionServiceResource
+  } yield new RedisTranches(redisClient, executionService)
+}
+
+class RedisTranchesSpec
+    extends TranchesBehaviours[RedisTranchesResource.TrancheId]
+    with RedisTranchesResource {
+  override val redisServerPort: ObjectReferenceId = 6458
+
+  "Redis tranches" should behave like tranchesBehaviour
 }
