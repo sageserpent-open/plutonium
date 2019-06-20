@@ -80,30 +80,30 @@ class WorldH2StorageImplementation(
        .map(_.asInstanceOf[BlobStorageOnH2].reconnectTo(connectionPool)))
       .mapN(Timeline.apply)
 
-  private def retrieveBlobStorage(trancheIds: Vector[TrancheId]) =
-    immutableObjectStorage.retrieve[Timeline.BlobStorage](trancheIds(2))
-
-  override protected def timelinePriorTo(
-      nextRevision: Revision): Session[Option[Timeline]] =
+  protected def priorTimeline(): Session[Option[Timeline]] =
     if (World.initialRevision < nextRevision) {
       val trancheIds = timelineTrancheIdStorage(nextRevision - 1)._2
       for (timeline <- retrieveTimeline(trancheIds))
         yield Some(timeline)
     } else none[Timeline].pure[Session]
 
+  private def retrieveBlobStorage(trancheIds: Vector[TrancheId]) =
+    immutableObjectStorage
+      .retrieve[Timeline.BlobStorage](trancheIds(2))
+      .map(
+        _.asInstanceOf[BlobStorageOnH2]
+          .reconnectTo(connectionPool)
+          .h2Timeslices())
+
   override protected def blobStoragePriorTo(
       nextRevision: Revision): Session[Option[Timeline.BlobStorage]] =
     if (World.initialRevision < nextRevision) {
       val trancheIds = timelineTrancheIdStorage(nextRevision - 1)._2
       for (blobStorage <- retrieveBlobStorage(trancheIds))
-        yield
-          Some(
-            blobStorage
-              .asInstanceOf[BlobStorageOnH2]
-              .reconnectTo(connectionPool))
+        yield Some(blobStorage)
     } else none[Timeline.BlobStorage].pure[Session]
 
-  override protected def allTimelinesPriorTo(
+  protected def allTimelinesPriorTo(
       nextRevision: Revision): Session[Array[(Instant, Timeline)]] =
     timelineTrancheIdStorage
       .take(nextRevision)

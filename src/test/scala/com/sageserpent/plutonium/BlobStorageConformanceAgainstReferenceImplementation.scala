@@ -4,6 +4,7 @@ import java.time.Instant
 import java.util.UUID
 
 import cats.effect.{IO, Resource}
+import com.sageserpent.plutonium
 import com.sageserpent.plutonium.curium.ConnectionPoolResource
 import org.scalacheck.ScalacheckShapeless._
 import org.scalacheck.{Arbitrary, Gen}
@@ -54,7 +55,8 @@ object BlobStorageConformanceAgainstReferenceImplementation
   case class Querying(
       when: ItemStateUpdateTime,
       itemSpecification: Either[UniqueItemSpecification, Class[_]],
-      inclusive: Boolean)
+      inclusive: Boolean,
+      useH2ForTimeslices: Boolean)
       extends Operation
 
   val operationGenerator: Gen[Operation] = {
@@ -194,8 +196,14 @@ trait BlobStorageConformanceAgainstReferenceImplementation
 
                   case Querying(when,
                                 Left(uniqueItemSpecification),
-                                inclusive) =>
-                    val traineeTimeslice  = trainee.timeSlice(when, inclusive)
+                                inclusive,
+                                useH2ForTimeslices) =>
+                    val traineeTimeslice =
+                      (if (useH2ForTimeslices)
+                         trainee
+                           .asInstanceOf[plutonium.BlobStorageOnH2]
+                           .h2Timeslices()
+                       else trainee).timeSlice(when, inclusive)
                     val exemplarTimeslice = exemplar.timeSlice(when, inclusive)
                     val (traineeResult, exemplarResult) = traineeTimeslice
                       .uniqueItemQueriesFor(uniqueItemSpecification) -> exemplarTimeslice
@@ -208,8 +216,16 @@ trait BlobStorageConformanceAgainstReferenceImplementation
                     pairsOfTraineeAndExemplarImplementations.enqueue(
                       trainee -> exemplar)
 
-                  case Querying(when, Right(clazz), inclusive) =>
-                    val traineeTimeslice  = trainee.timeSlice(when, inclusive)
+                  case Querying(when,
+                                Right(clazz),
+                                inclusive,
+                                useH2ForTimeslices) =>
+                    val traineeTimeslice =
+                      (if (useH2ForTimeslices)
+                         trainee
+                           .asInstanceOf[plutonium.BlobStorageOnH2]
+                           .h2Timeslices()
+                       else trainee).timeSlice(when, inclusive)
                     val exemplarTimeslice = exemplar.timeSlice(when, inclusive)
                     val (traineeResult, exemplarResult) = traineeTimeslice
                       .uniqueItemQueriesFor(clazz)

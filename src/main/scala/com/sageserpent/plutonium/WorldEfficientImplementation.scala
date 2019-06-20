@@ -11,9 +11,10 @@ abstract class WorldEfficientImplementation[F[_]: Monad]
     extends WorldImplementationCodeFactoring {
   // TODO - one subclass prefers 'Array', other 'Vector'. Sort this out...
 
+  protected def priorTimeline(): F[Option[Timeline]]
+
   protected def blobStoragePriorTo(
       nextRevision: Revision): F[Option[Timeline.BlobStorage]]
-protected def timelinePriorTo(nextRevision: Revision): F[Option[Timeline]]
 
   protected def allTimelinesPriorTo(
       nextRevision: Revision): F[Array[(Instant, Timeline)]]
@@ -34,7 +35,7 @@ protected def timelinePriorTo(nextRevision: Revision): F[Option[Timeline]]
              asOf: Instant): Revision = {
     val resultCapturedBeforeMutation = nextRevision
 
-    val computation: F[Timeline] = timelinePriorTo(nextRevision)
+    val computation: F[Timeline] = priorTimeline()
       .map(_.getOrElse(emptyTimeline()))
       .map(_.revise(events))
 
