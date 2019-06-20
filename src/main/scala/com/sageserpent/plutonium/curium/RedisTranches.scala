@@ -51,16 +51,16 @@ class RedisTranches(redisClient: RedisClient, executor: Executor)
       Await.result(
         for {
           _ <- redisCommandsApi
-            .hset(tranchesKey, trancheId.toString, tranche)
+            .hsetnx(tranchesKey, trancheId.toString, tranche)
             .toScala
           _ <- Future.sequence(
-            for (objectReferenceId <- objectReferenceIds)
-              yield
+            objectReferenceIds.map(
+              objectReferenceId =>
                 redisCommandsApi
-                  .hset(objectReferenceIdsKey,
-                        objectReferenceId.toString,
-                        trancheId)
-                  .toScala)
+                  .hsetnx(objectReferenceIdsKey,
+                          objectReferenceId.toString,
+                          trancheId)
+                  .toScala))
         } yield trancheId,
         Duration.Inf
       )
@@ -69,9 +69,15 @@ class RedisTranches(redisClient: RedisClient, executor: Executor)
   override def objectReferenceIdOffsetForNewTranche
     : EitherThrowableOr[ObjectReferenceId] =
     Try {
-      Await.result(
-        redisCommandsApi.hlen(objectReferenceIdsKey).toScala.map(1 + _.toInt),
-        Duration.Inf)
+      Await.result(redisCommandsApi
+                     .hkeys(objectReferenceIdsKey)
+                     .toScala
+                     .map(
+                       _.asScala
+                         .map(Integer.parseInt)
+                         .reduceOption(_ max _)
+                         .fold(0)(1 + _)),
+                   Duration.Inf)
     }.toEither
 
   override def retrieveTranche(trancheId: TrancheId)
