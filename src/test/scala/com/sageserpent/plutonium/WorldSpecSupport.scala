@@ -2,19 +2,16 @@ package com.sageserpent.plutonium
 
 import java.time.Instant
 import java.util.UUID
-import java.util.concurrent.Executors
+import java.util.concurrent.{ExecutorService, Executors}
 
-import cats.implicits._
 import cats.effect.{IO, Resource}
+import cats.implicits._
 import com.sageserpent.americium
 import com.sageserpent.americium._
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.seqEnrichment._
 import com.sageserpent.plutonium.World._
-import com.sageserpent.plutonium.curium.{
-  H2ViaScalikeJdbcDatabaseSetupResource,
-  H2ViaDoobieResource
-}
+import com.sageserpent.plutonium.curium.H2ViaScalikeJdbcDatabaseSetupResource
 import io.lettuce.core.{RedisClient, RedisURI}
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.Assertions
@@ -939,24 +936,33 @@ trait WorldH2StorageImplementationResource
       }))
 }
 
+trait RedisClientResource extends RedisServerFixture {
+  val redisClientResource: Resource[IO, RedisClient] = for {
+    redisClient <- Resource.make(IO {
+      RedisClient.create(
+        RedisURI.Builder.redis("localhost", redisServerPort).build())
+    })(redisClient =>
+      IO {
+        redisClient.shutdown()
+    })
+  } yield redisClient
+
+  val executionServiceResource: Resource[IO, ExecutorService] =
+    Resource.make(IO {
+      Executors.newFixedThreadPool(20)
+    })(executionService =>
+      IO {
+        executionService.shutdown
+    })
+}
+
 trait WorldRedisBasedImplementationResource
     extends WorldResource
-    with RedisServerFixture {
+    with RedisClientResource {
   val worldResource: Resource[IO, World] =
     for {
-      executionService <- Resource.make(IO {
-        Executors.newFixedThreadPool(20)
-      })(executionService =>
-        IO {
-          executionService.shutdown
-      })
-      redisClient <- Resource.make(IO {
-        RedisClient.create(
-          RedisURI.Builder.redis("localhost", redisServerPort).build())
-      })(redisClient =>
-        IO {
-          redisClient.shutdown()
-      })
+      redisClient      <- redisClientResource
+      executionService <- executionServiceResource
       worldResource <- Resource.fromAutoCloseable(IO {
         new WorldRedisBasedImplementation(redisClient,
                                           UUID.randomUUID().toString,
