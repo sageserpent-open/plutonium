@@ -216,7 +216,11 @@ trait RedisTranchesResource
   override val tranchesResource: Resource[IO, Tranches[TrancheId]] = for {
     redisClient      <- redisClientResource
     executionService <- executionServiceResource
-  } yield new RedisTranches(redisClient, executionService)
+    redisTranches <- Resource.fromAutoCloseable(IO {
+      new RedisTranches(redisClient, executionService)
+      with TranchesContracts[RedisTranchesResource.TrancheId]
+    })
+  } yield redisTranches
 }
 
 class RedisTranchesSpec
