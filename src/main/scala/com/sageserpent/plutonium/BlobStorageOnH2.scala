@@ -72,28 +72,29 @@ object BlobStorageOnH2 {
       """.update.apply()
 
               sql"""
-              CREATE INDEX ON Snapshot(Time, LineageId, Revision)
+              CREATE TABLE TimeRevision(
+                Time                        ARRAY                     NOT NULL,
+                LineageId                   BIGINT                    REFERENCES Lineage(LineageId),
+                Revision                    INTEGER                   NOT NULL,
+				        PRIMARY KEY (Time, LineageId, Revision)
+              )
       """.update.apply()
 
               sql"""
-              CREATE INDEX ON Snapshot(LineageId, Revision, Time)
+              CREATE INDEX TLR ON Snapshot(Time, LineageId, Revision)
       """.update.apply()
 
               sql"""
-              CREATE INDEX ON Snapshot(LineageId, Revision)
-      """.update.apply()
-
-              sql"""
-              CREATE INDEX ON Snapshot(ItemId, ItemClass, Time)
+              CREATE INDEX IIT ON Snapshot(ItemId, ItemClass, Time)
       """.update.apply()
           }
       })
 
   def lessThanOrEqualTo(when: ItemStateUpdateTime): SQLSyntax =
-    sqls"""(Snapshot.Time <= ${unpack(when)})"""
+    sqls"""(TimeRevision.Time <= ${unpack(when)})"""
 
   def lessThan(when: ItemStateUpdateTime): SQLSyntax =
-    sqls"""(Snapshot.Time < ${unpack(when)})"""
+    sqls"""(TimeRevision.Time < ${unpack(when)})"""
 
   def itemSql(
       uniqueItemSpecification: Option[UniqueItemSpecification]): SQLSyntax =
@@ -146,8 +147,8 @@ object BlobStorageOnH2 {
               if (Ordering[ItemStateUpdateTime].gt(when, cutoffTime))
                 lessThanOrEqualTo(cutoffTime)
               else lessThan(when))}
-        AND Snapshot.LineageId = $lineageId
-        AND Snapshot.Revision <= $revision"""
+        AND TimeRevision.LineageId = $lineageId
+        AND TimeRevision.Revision <= $revision"""
 
         foldedCutoff -> (conditionSql :: cumulativeResult)
     }._2.reduce((left, right) => sqls"""$left OR $right""")})"""
@@ -183,15 +184,15 @@ object BlobStorageOnH2 {
           RelevantItem.Time,
           Payload
       FROM RelevantItem
-      JOIN (SELECT DISTINCT ON(Snapshot.Time)
-              Snapshot.Time,
-              Snapshot.LineageId,
-              Snapshot.Revision
-            FROM Snapshot JOIN RelevantItem
-            ON Snapshot.Time = RelevantItem.Time
+      JOIN (SELECT DISTINCT ON(TimeRevision.Time)
+              TimeRevision.Time,
+              TimeRevision.LineageId,
+              TimeRevision.Revision
+            FROM TimeRevision JOIN RelevantItem
+            ON TimeRevision.Time = RelevantItem.Time
             WHERE $lineageAndTimeSelectionSql
-            ORDER BY LineageId DESC,
-                     Revision DESC) AS DominantRevisionInLineage
+            ORDER BY TimeRevision.LineageId DESC,
+                     TimeRevision.Revision DESC) AS DominantRevisionInLineage
       ON RelevantItem.Time = DominantRevisionInLineage.Time
          AND RelevantItem.LineageId = DominantRevisionInLineage.LineageId
          AND RelevantItem.Revision = DominantRevisionInLineage.Revision
@@ -323,6 +324,12 @@ case class BlobStorageOnH2(
                           ${snapshotSql(None)}
                          """.update().apply()
                   }
+
+                  sql"""
+                          INSERT INTO TimeRevision SET
+                          ${whenSql(when)},
+                          ${lineageSql(newOrReusedLineageId, newRevision)}
+                         """.update().apply()
                 }
 
                 assert(
