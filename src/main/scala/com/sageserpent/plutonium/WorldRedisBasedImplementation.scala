@@ -55,8 +55,8 @@ object WorldRedisBasedImplementation {
 // client side processing that should be done by a Redis script. It is tolerated as a demonstration,
 // and should not be considered fit for anything else.
 class WorldRedisBasedImplementation(redisClient: RedisClient,
-                                    identityGuid: String,
-                                    executor: Executor)
+                                    executor: Executor,
+                                    identityGuid: String)
     extends WorldInefficientImplementationCodeFactoring {
   parentWorld =>
 
@@ -110,9 +110,9 @@ class WorldRedisBasedImplementation(redisClient: RedisClient,
   override def forkExperimentalWorld(scope: javaApi.Scope): World =
     new WorldRedisBasedImplementation(
       redisClient = parentWorld.redisClient,
+      executor,
       identityGuid =
-        s"${parentWorld.identityGuid}-experimental-${UUID.randomUUID()}",
-      executor) {
+        s"${parentWorld.identityGuid}-experimental-${UUID.randomUUID()}") {
       val baseWorld                            = parentWorld
       val numberOfRevisionsInCommon            = scope.nextRevision
       val cutoffWhenAfterWhichHistoriesDiverge = scope.when

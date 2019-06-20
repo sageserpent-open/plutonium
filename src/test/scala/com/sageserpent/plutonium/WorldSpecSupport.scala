@@ -965,8 +965,9 @@ trait WorldRedisBasedImplementationResource
       executionService <- executionServiceResource
       worldResource <- Resource.fromAutoCloseable(IO {
         new WorldRedisBasedImplementation(redisClient,
-                                          UUID.randomUUID().toString,
-                                          executionService) with WorldContracts
+                                          executionService,
+                                          UUID.randomUUID().toString)
+        with WorldContracts
       })
     } yield worldResource
 }

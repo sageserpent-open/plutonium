@@ -33,8 +33,8 @@ public class DeliveringPackages {
         try (World world = justADemo ?
                 new WorldEfficientInMemoryImplementation() :
                 new WorldRedisBasedImplementation(redisClient,
-                        "TheBigStoreOfDataOwnedByTheDispatchLineOfBusiness",
-                        executor)) {
+                        executor, "TheBigStoreOfDataOwnedByTheDispatchLineOfBusiness"
+                )) {
 
 
             {

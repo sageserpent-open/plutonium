@@ -527,8 +527,8 @@ class WorldStateSharingSpecUsingWorldRedisBasedImplementation
       // Use a named function to workaround a bug in Scalafmt.
       def worldFactory() = {
         val world = new WorldRedisBasedImplementation(redisClient,
-                                                      sharedGuid,
-                                                      executionService)
+                                                      executionService,
+                                                      sharedGuid)
         worldSet += world
         world
       }

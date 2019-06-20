@@ -246,10 +246,10 @@ trait BlobStorageOnRedisResource
     BlobStorageOnRedis.empty(redisClient, executionService) // TODO - do we need to use the auto-close API here?
 }
 
-class BlobStorageOnRedisSpec
+/*class BlobStorageOnRedisSpec
     extends BlobStorageConformanceAgainstReferenceImplementation
     with BlobStorageOnRedisResource {
   override val redisServerPort: Int = 6457
 
   "blob storage on Redis" should behave like suite
-}
+}*/

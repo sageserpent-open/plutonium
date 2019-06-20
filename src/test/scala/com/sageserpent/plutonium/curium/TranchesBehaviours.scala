@@ -1,5 +1,7 @@
 package com.sageserpent.plutonium.curium
 
+import java.util.UUID
+
 import ImmutableObjectStorage.{
   ObjectReferenceId,
   TrancheOfData,
@@ -217,7 +219,9 @@ trait RedisTranchesResource
     redisClient      <- redisClientResource
     executionService <- executionServiceResource
     redisTranches <- Resource.fromAutoCloseable(IO {
-      new RedisTranches(redisClient, executionService)
+      new RedisTranches(redisClient,
+                        executionService,
+                        UUID.randomUUID().toString)
       with TranchesContracts[RedisTranchesResource.TrancheId]
     })
   } yield redisTranches
