@@ -1272,12 +1272,15 @@ class WorldEfficientInMemoryImplementationBugs
 class WorldRedisBasedImplementationBugs
     extends Bugs
     with WorldRedisBasedImplementationResource {
-  "a world (using the world Redis-based implementation)" should behave like suite
   override val redisServerPort: Int = 6456
+
+  "a world (using the world Redis-based implementation)" should behave like suite
 }
 
 class WorldH2StorageImplementationBugs
     extends Bugs
     with WorldH2StorageImplementationResource {
+  override val redisServerPort: Int = 6555
+
   "a world (using the world H2 storage implementation)" should behave like suite
 }

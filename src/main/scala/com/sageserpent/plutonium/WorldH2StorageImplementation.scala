@@ -1,6 +1,7 @@
 package com.sageserpent.plutonium
 
 import java.time.Instant
+import java.util.concurrent.Executor
 
 import cats.implicits._
 import com.sageserpent.americium.Unbounded
@@ -13,14 +14,16 @@ import com.sageserpent.plutonium.WorldH2StorageImplementation.{
 import com.sageserpent.plutonium.curium.ImmutableObjectStorage._
 import com.sageserpent.plutonium.curium.{
   H2ViaScalikeJdbcTranches,
-  ImmutableObjectStorage
+  ImmutableObjectStorage,
+  RedisTranches
 }
 import de.sciss.fingertree.{FingerTree, RangedSeq}
+import io.lettuce.core.RedisClient
 import scalikejdbc.ConnectionPool
 
 object WorldH2StorageImplementation {
 
-  type TrancheId = H2ViaScalikeJdbcTranches#TrancheId
+  type TrancheId = RedisTranches#TrancheId
 
   object immutableObjectStorage extends ImmutableObjectStorage[TrancheId] {
     private val notToBeProxied =
@@ -55,16 +58,15 @@ object WorldH2StorageImplementation {
 }
 
 class WorldH2StorageImplementation(
-    val tranches: H2ViaScalikeJdbcTranches,
-    val emptyBlobStorage: BlobStorageOnH2,
+    tranches: Tranches[TrancheId],
+    emptyBlobStorage: BlobStorageOnH2,
     var timelineTrancheIdStorage: Array[(Instant, Vector[TrancheId])],
     var numberOfTimelines: Int,
-    val connectionPool: ConnectionPool)
+    connectionPool: ConnectionPool)
     extends WorldEfficientImplementation[Session] {
-  def this(connectionPool: ConnectionPool) =
+  def this(tranches: Tranches[TrancheId], connectionPool: ConnectionPool) =
     this(
-      new H2ViaScalikeJdbcTranches(connectionPool)
-      with TranchesContracts[TrancheId],
+      tranches,
       BlobStorageOnH2.empty(connectionPool),
       Array.empty[(Instant, Vector[TrancheId])],
       World.initialRevision,

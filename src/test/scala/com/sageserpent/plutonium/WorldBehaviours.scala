@@ -3738,6 +3738,8 @@ class WorldSpecUsingWorldEfficientInMemoryImplementation
 class WorldSpecUsingWorldH2StorageImplementation
     extends WorldBehaviours
     with WorldH2StorageImplementationResource {
+  override val redisServerPort: Int = 6551
+
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
     PropertyCheckConfig(maxSize = 10, minSuccessful = 7)
 
@@ -3904,7 +3906,9 @@ class AllTheWorlds
       extends WorldEfficientInMemoryImplementationResource
 
   object worldH2StorageImplementationResource
-      extends WorldH2StorageImplementationResource
+      extends WorldH2StorageImplementationResource {
+    override val redisServerPort: Int = 6557
+  }
 
   "all the world implementations" should "agree" in {
     val testCaseGenerator = for {

@@ -878,6 +878,8 @@ class BitemporalSpecUsingWorldRedisBasedImplementation
 class BitemporalSpecUsingWorldH2StorageImplementation
     extends BitemporalBehaviours
     with WorldH2StorageImplementationResource {
+  override val redisServerPort: Int = 6550
+
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
     PropertyCheckConfig(maxSize = 30, minSuccessful = 5)
 

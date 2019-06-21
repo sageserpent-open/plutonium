@@ -702,6 +702,8 @@ class ExperimentalWorldSpecUsingWorldRedisBasedImplementation
 class ExperimentalWorldSpecUsingWorldH2StorageImplementation
     extends ExperimentalWorldBehaviours
     with WorldH2StorageImplementationResource {
+  override val redisServerPort: Int = 6556
+
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
     PropertyCheckConfig(maxSize = 20, minSuccessful = 10)
 

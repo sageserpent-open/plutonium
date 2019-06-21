@@ -7,7 +7,7 @@ import cats.effect.{Resource, IO}
 trait RedisServerFixture extends TestSuite {
   val redisServerPort: Int
 
-  private def withRedisServerRunning[Result](block: => Result): Result =
+  protected def withRedisServerRunning[Result](block: => Result): Result =
     Resource
       .make(IO {
         val redisServer = new RedisServer(redisServerPort)

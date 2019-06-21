@@ -7,6 +7,8 @@ import org.scalameter.picklers.noPickler._
 import scala.collection.immutable.SortedMap
 
 object CountBenchmark extends Bench.Forked[Map[String, Long]] with Benchmark {
+  override val redisServerPort: Int = 6552
+
   val sizes = Gen.range("Number of bookings")(1750, 2500, 50)
 
   lazy val classRegex =

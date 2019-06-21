@@ -4,6 +4,8 @@ import org.scalameter.api.{Aggregator, Bench, Context, Executor, Gen, exec}
 import org.scalameter.picklers.noPickler._
 
 object MemoryBenchmark extends Bench.Forked[Double] with Benchmark {
+  override val redisServerPort: Int = 6553
+
   val sizes = Gen.range("Number of bookings")(0, 4000, 100)
 
   override def measurer = new Executor.Measurer.MemoryFootprint
