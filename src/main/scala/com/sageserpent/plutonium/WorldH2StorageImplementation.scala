@@ -1,12 +1,14 @@
 package com.sageserpent.plutonium
 
 import java.time.Instant
+import java.util.UUID
 
 import cats.implicits._
 import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.Timeline.ItemStateUpdatesDag
 import com.sageserpent.plutonium.World.Revision
 import com.sageserpent.plutonium.WorldH2StorageImplementation.{
+  FakeTranches,
   TrancheId,
   immutableObjectStorage
 }
@@ -18,10 +20,76 @@ import com.sageserpent.plutonium.curium.{
 import de.sciss.fingertree.{FingerTree, RangedSeq}
 import scalikejdbc.ConnectionPool
 
+import scala.collection.mutable.{
+  Map => MutableMap,
+  SortedMap => MutableSortedMap
+}
+import scala.util.Try
+
 object WorldH2StorageImplementation {
 
-  type TrancheId = H2ViaScalikeJdbcTranches#TrancheId
+  class FakeTranches extends Tranches[UUID] {
+    val tranchesById: MutableMap[TrancheId, TrancheOfData] =
+      MutableMap.empty
+    val objectReferenceIdsToAssociatedTrancheIdMap
+      : MutableSortedMap[ObjectReferenceId, TrancheId]           = MutableSortedMap.empty
+    var _objectReferenceIdOffsetForNewTranche: ObjectReferenceId = 0
 
+    def purgeTranche(trancheId: TrancheId): Unit = {
+      val objectReferenceIdsToRemove =
+        objectReferenceIdsToAssociatedTrancheIdMap.collect {
+          case (objectReferenceId, associatedTrancheId)
+              if trancheId == associatedTrancheId =>
+            objectReferenceId
+        }
+
+      objectReferenceIdsToAssociatedTrancheIdMap --= objectReferenceIdsToRemove
+
+      tranchesById -= trancheId
+    }
+
+    override def createTrancheInStorage(
+        payload: Array[Byte],
+        objectReferenceIdOffset: ObjectReferenceId,
+        objectReferenceIds: Set[ObjectReferenceId])
+      : EitherThrowableOr[TrancheId] =
+      Try {
+        val trancheId = UUID.randomUUID()
+
+        tranchesById(trancheId) =
+          TrancheOfData(payload, objectReferenceIdOffset)
+
+        for (objectReferenceId <- objectReferenceIds) {
+          objectReferenceIdsToAssociatedTrancheIdMap(objectReferenceId) =
+            trancheId
+        }
+
+        val alignmentMultipleForObjectReferenceIdsInSeparateTranches = 100
+
+        objectReferenceIds.reduceOption(_ max _).foreach {
+          maximumObjectReferenceId =>
+            _objectReferenceIdOffsetForNewTranche =
+              (1 + maximumObjectReferenceId / alignmentMultipleForObjectReferenceIdsInSeparateTranches) *
+                alignmentMultipleForObjectReferenceIdsInSeparateTranches
+        }
+
+        trancheId
+      }.toEither
+
+    override def retrieveTranche(
+        trancheId: TrancheId): scala.Either[scala.Throwable, TrancheOfData] =
+      Try { tranchesById(trancheId) }.toEither
+
+    override def retrieveTrancheId(objectReferenceId: ObjectReferenceId)
+      : scala.Either[scala.Throwable, TrancheId] =
+      Try { objectReferenceIdsToAssociatedTrancheIdMap(objectReferenceId) }.toEither
+
+    override def objectReferenceIdOffsetForNewTranche
+      : EitherThrowableOr[ObjectReferenceId] =
+      _objectReferenceIdOffsetForNewTranche.pure[EitherThrowableOr]
+  }
+
+  type TrancheId = FakeTranches#TrancheId
   object immutableObjectStorage extends ImmutableObjectStorage[TrancheId] {
     private val notToBeProxied =
       Set(classOf[(_, _)],
@@ -55,7 +123,7 @@ object WorldH2StorageImplementation {
 }
 
 class WorldH2StorageImplementation(
-    val tranches: H2ViaScalikeJdbcTranches,
+    val tranches: FakeTranches,
     val emptyBlobStorage: BlobStorageOnH2,
     var timelineTrancheIdStorage: Array[(Instant, Vector[TrancheId])],
     var numberOfTimelines: Int,
@@ -63,8 +131,7 @@ class WorldH2StorageImplementation(
     extends WorldEfficientImplementation[Session] {
   def this(connectionPool: ConnectionPool) =
     this(
-      new H2ViaScalikeJdbcTranches(connectionPool)
-      with TranchesContracts[TrancheId],
+      new FakeTranches with TranchesContracts[TrancheId],
       BlobStorageOnH2.empty(connectionPool),
       Array.empty[(Instant, Vector[TrancheId])],
       World.initialRevision,
