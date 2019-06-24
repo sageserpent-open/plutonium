@@ -9,12 +9,17 @@ import ImmutableObjectStorage.{
   TranchesContracts
 }
 import cats.effect.{IO, Resource}
-import com.sageserpent.plutonium.RedisClientResource
+import com.sageserpent.plutonium.{
+  HBaseConnectionResource,
+  HBaseFixture,
+  RedisClientResource
+}
 import com.sageserpent.plutonium.curium.ImmutableObjectStorageSpec.FakeTranches
-import com.sageserpent.plutonium.curium.RedisTranchesResource.TrancheId
+import com.sageserpent.plutonium.curium.HBaseTranchesResource.TrancheId
+import org.apache.hadoop.hbase.HBaseTestingUtility
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
-import org.scalatest.{FlatSpec, Matchers}
+import org.scalatest.{FlatSpec, Matchers, Outcome, TestSuite}
 
 import scala.collection.mutable.{Map => MutableMap, Set => MutableSet}
 
@@ -233,4 +238,27 @@ class RedisTranchesSpec
   override val redisServerPort: ObjectReferenceId = 6458
 
   "Redis tranches" should behave like tranchesBehaviour
+}
+
+object HBaseTranchesResource {
+  type TrancheId = HBaseTranches#TrancheId
+}
+
+trait HBaseTranchesResource
+    extends TranchesResource[HBaseTranchesResource.TrancheId]
+    with HBaseConnectionResource {
+  override val tranchesResource: Resource[IO, Tranches[TrancheId]] = for {
+    connection <- connectionResource
+    tranches <- Resource
+      .fromAutoCloseable(IO {
+        new HBaseTranches(UUID.randomUUID().toString, connection)
+        with TranchesContracts[HBaseTranchesResource.TrancheId]
+      })
+  } yield tranches
+}
+
+class HBaseTranchesSpec
+    extends TranchesBehaviours[HBaseTranchesResource.TrancheId]
+    with HBaseTranchesResource {
+  "HBase tranches" should behave like tranchesBehaviour
 }

@@ -62,13 +62,14 @@ class RedisTranches(redisClient: RedisClient,
           _ <- redisCommandsApi
             .hsetnx(tranchesKey, trancheId.toString, tranche)
             .toScala
-          _ <- Future.sequence(objectReferenceIds.map ( objectReferenceId =>
-            redisCommandsApi
-              .zadd(objectReferenceIdsKey,
-                    objectReferenceId.toDouble,
-                    objectReferenceId -> trancheId)
-              .toScala
-          ))
+          _ <- Future.sequence(
+            objectReferenceIds.map(
+              objectReferenceId =>
+                redisCommandsApi
+                  .zadd(objectReferenceIdsKey,
+                        objectReferenceId.toDouble,
+                        objectReferenceId -> trancheId)
+                  .toScala))
         } yield trancheId,
         Duration.Inf
       )
