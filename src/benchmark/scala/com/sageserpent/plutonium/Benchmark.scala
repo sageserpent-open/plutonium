@@ -13,7 +13,7 @@ trait Benchmark
     extends H2ViaScalikeJdbcDatabaseSetupResource
     with BlobStorageOnH2DatabaseSetupResource {
   implicit class Enhancement(randomBehaviour: Random) {
-    def chooseOneOfRange(range: Range): Int =
+    def chooseOneOfRange(range: IndexedSeq[Int]): Int =
       range(randomBehaviour.chooseAnyNumberFromZeroToOneLessThan(range.size))
   }
 
@@ -22,7 +22,7 @@ trait Benchmark
 
     val eventIds: Range = 0 until 1 + (size / 10)
 
-    val idSet: Range = 0 until 1 + (size / 500)
+    val idSet: Range = 0 until 1000
 
     val startTime = Deadline.now
 
@@ -32,8 +32,8 @@ trait Benchmark
           val world = new WorldEfficientInMemoryImplementation() // new WorldH2StorageImplementation(connectionPool)
 
           for (step <- 0 until size) {
-            val eventId = 0 max (step - randomBehaviour
-              .chooseAnyNumberFromZeroToOneLessThan(20)) //randomBehaviour.chooseOneOfRange(eventIds)
+            val eventId = step - randomBehaviour
+              .chooseAnyNumberFromZeroToOneLessThan(20) //randomBehaviour.chooseOneOfRange(eventIds)
 
             val probabilityOfNotBackdatingAnEvent = 0 < randomBehaviour
               .chooseAnyNumberFromZeroToOneLessThan(3)
@@ -42,15 +42,17 @@ trait Benchmark
               if (probabilityOfNotBackdatingAnEvent) step
               else
                 step - randomBehaviour
-                  .chooseAnyNumberFromOneTo(step / 3 min 20)
+                  .chooseAnyNumberFromOneTo(20)
 
             val probabilityOfBookingANewOrCorrectingEvent = 0 < randomBehaviour
               .chooseAnyNumberFromZeroToOneLessThan(5)
 
             if (true /*probabilityOfBookingANewOrCorrectingEvent*/ ) {
-              val oneId = randomBehaviour.chooseOneOfRange(idSet)
+              val oneId =
+                randomBehaviour.chooseOneOfRange(idSet.map(_ + step / 20))
 
-              val anotherId = randomBehaviour.chooseOneOfRange(idSet)
+              val anotherId =
+                randomBehaviour.chooseOneOfRange(idSet.map(_ + step / 20))
 
               Timer.withCategory("REVISING") {
                 world.revise(
