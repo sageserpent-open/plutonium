@@ -77,7 +77,9 @@ trait Benchmark
               randomBehaviour.chooseAnyNumberFromZeroToOneLessThan(
                 1 + world.nextRevision)
 
-            val queryTime = Instant.ofEpochSecond(3600L * step)
+            val queryTime = Instant.ofEpochSecond(
+              3600L * randomBehaviour.chooseAnyNumberFromZeroToOneLessThan(
+                1 + theHourFromTheStart))
 
             val transitiveClosureSize = Timer.withCategory("QUERYING") {
               val scope = world.scopeFor(queryTime, onePastQueryRevision)
