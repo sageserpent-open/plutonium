@@ -259,7 +259,9 @@ case class Timeline(
         val RecalculationStep(_,
                               itemStateUpdatesDagForNewTimeline,
                               blobStorageForNewTimeline) =
-          initialState.afterRecalculations
+          Timer.timed(category = "Incremental recalculation") {
+            initialState.afterRecalculations
+          }
 
         Timeline(
           allEvents = allEventsForNewTimeline,
