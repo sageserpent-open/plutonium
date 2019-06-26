@@ -29,10 +29,11 @@ trait Benchmark
     val world: IO[World] =
       connectionPoolResource.use(connectionPool =>
         IO {
-          val world = new WorldH2StorageImplementation(connectionPool)
+          val world = new WorldEfficientInMemoryImplementation() // new WorldH2StorageImplementation(connectionPool)
 
           for (step <- 0 until size) {
-            val eventId = randomBehaviour.chooseOneOfRange(eventIds)
+            val eventId = 0 max (step - randomBehaviour
+              .chooseAnyNumberFromZeroToOneLessThan(20)) //randomBehaviour.chooseOneOfRange(eventIds)
 
             val probabilityOfNotBackdatingAnEvent = 0 < randomBehaviour
               .chooseAnyNumberFromZeroToOneLessThan(3)
@@ -46,7 +47,7 @@ trait Benchmark
             val probabilityOfBookingANewOrCorrectingEvent = 0 < randomBehaviour
               .chooseAnyNumberFromZeroToOneLessThan(5)
 
-            if (probabilityOfBookingANewOrCorrectingEvent) {
+            if (true /*probabilityOfBookingANewOrCorrectingEvent*/ ) {
               val oneId = randomBehaviour.chooseOneOfRange(idSet)
 
               val anotherId = randomBehaviour.chooseOneOfRange(idSet)
