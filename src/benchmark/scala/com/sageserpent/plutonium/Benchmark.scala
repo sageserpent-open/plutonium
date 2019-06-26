@@ -29,7 +29,7 @@ trait Benchmark
     val world: IO[World] =
       connectionPoolResource.use(connectionPool =>
         IO {
-          val world = new WorldEfficientInMemoryImplementation() // new WorldH2StorageImplementation(connectionPool)
+          val world = new WorldH2StorageImplementation(connectionPool)
 
           for (step <- 0 until size) {
             val eventId = step - randomBehaviour
@@ -47,7 +47,7 @@ trait Benchmark
             val probabilityOfBookingANewOrCorrectingEvent = 0 < randomBehaviour
               .chooseAnyNumberFromZeroToOneLessThan(5)
 
-            if (true /*probabilityOfBookingANewOrCorrectingEvent*/ ) {
+            if (probabilityOfBookingANewOrCorrectingEvent) {
               val oneId =
                 randomBehaviour.chooseOneOfRange(idSet.map(_ + step / 20))
 
