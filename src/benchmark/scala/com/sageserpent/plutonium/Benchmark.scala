@@ -20,8 +20,6 @@ trait Benchmark
   def activity(size: Int): World = {
     val randomBehaviour = new scala.util.Random(1368234L)
 
-    val eventIds: Range = 0 until 1 + (size / 10)
-
     val idSet: Range = 0 until 1000
 
     val startTime = Deadline.now
@@ -33,7 +31,7 @@ trait Benchmark
 
           for (step <- 0 until size) {
             val eventId = step - randomBehaviour
-              .chooseAnyNumberFromZeroToOneLessThan(20) //randomBehaviour.chooseOneOfRange(eventIds)
+              .chooseAnyNumberFromZeroToOneLessThan(20)
 
             val probabilityOfNotBackdatingAnEvent = 0 < randomBehaviour
               .chooseAnyNumberFromZeroToOneLessThan(3)
@@ -54,24 +52,21 @@ trait Benchmark
               val anotherId =
                 randomBehaviour.chooseOneOfRange(idSet.map(_ + step / 20))
 
-              Timer.withCategory("REVISING") {
-                world.revise(
-                  eventId,
-                  Change.forTwoItems[Thing, Thing](
-                    Instant.ofEpochSecond(3600L * theHourFromTheStart))(
-                    oneId,
-                    anotherId,
-                    (oneThing, anotherThing) => {
-                      oneThing.property1 = step
-                      oneThing.referTo(anotherThing)
-                    }),
-                  Instant.now()
-                )
-              }
-            } else
-              Timer.withCategory("ANNULLING") {
-                world.annul(eventId, Instant.now())
-              }
+              world.revise(
+                eventId,
+                Change.forTwoItems[Thing, Thing](
+                  Instant.ofEpochSecond(3600L * theHourFromTheStart))(
+                  oneId,
+                  anotherId,
+                  (oneThing, anotherThing) => {
+                    oneThing.property1 = step
+                    oneThing.referTo(anotherThing)
+                  }),
+                Instant.now()
+              )
+            } else {
+              world.annul(eventId, Instant.now())
+            }
 
             val onePastQueryRevision =
               randomBehaviour.chooseAnyNumberFromZeroToOneLessThan(
@@ -81,7 +76,7 @@ trait Benchmark
               3600L * randomBehaviour.chooseAnyNumberFromZeroToOneLessThan(
                 1 + theHourFromTheStart))
 
-            val transitiveClosureSize = Timer.withCategory("QUERYING") {
+            val transitiveClosureSize = {
               val scope = world.scopeFor(queryTime, onePastQueryRevision)
 
               val queryId = randomBehaviour.chooseOneOfRange(idSet)
@@ -93,7 +88,14 @@ trait Benchmark
                 .fold(0)(_.transitiveClosure)
             }
 
-            if (0 == step % 50) Timer.sampleAndPrintResults(s"$step")
+            if (step % 50 == 0) {
+              val currentTime = Deadline.now
+
+              val duration = currentTime - startTime
+
+              println(
+                s"Step: $step, duration: ${duration.toMillis} milliseconds, transitive closure size: $transitiveClosureSize")
+            }
           }
 
           world // NASTY HACK - allow the world to escape the resource scope, so that memory footprints can be taken.
