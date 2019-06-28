@@ -395,173 +395,177 @@ object AllEventsImplementation {
 
     def itemStateUpdates(lifecyclesById: LifecyclesById,
                          bestPatchSelection: BestPatchSelection)
-      : Set[(ItemStateUpdateKey, ItemStateUpdate)] = {
-      type ResultsWriter[X] =
-        Writer[Set[(ItemStateUpdateKey, ItemStateUpdate)], X]
+      : Set[(ItemStateUpdateKey, ItemStateUpdate)] =
+      Timer.timed(category = "itemStateUpdates") {
+        type ResultsWriter[X] =
+          Writer[Set[(ItemStateUpdateKey, ItemStateUpdate)], X]
 
-      class PatchAccumulationState(
-          accumulatedPatchesByExemplarMethod: Map[Method,
-                                                  List[(AbstractPatch,
-                                                        ItemStateUpdateKey)]] =
-            Map.empty) {
-        def recordChangePatch(
-            itemStateUpdateKey: ItemStateUpdateKey,
-            patch: AbstractPatch): ResultsWriter[PatchAccumulationState] =
-          for {
-            patchAccumulationStateWithChangePatch <- this
-              .recordMeasurementPatch(itemStateUpdateKey, patch)
-            patchAccumulationStateAfterFlushing <- patchAccumulationStateWithChangePatch
-              .writeBestPatch(patch.method)
-          } yield patchAccumulationStateAfterFlushing
+        class PatchAccumulationState(
+            accumulatedPatchesByExemplarMethod: Map[
+              Method,
+              List[(AbstractPatch, ItemStateUpdateKey)]] = Map.empty) {
+          def recordChangePatch(
+              itemStateUpdateKey: ItemStateUpdateKey,
+              patch: AbstractPatch): ResultsWriter[PatchAccumulationState] =
+            for {
+              patchAccumulationStateWithChangePatch <- this
+                .recordMeasurementPatch(itemStateUpdateKey, patch)
+              patchAccumulationStateAfterFlushing <- patchAccumulationStateWithChangePatch
+                .writeBestPatch(patch.method)
+            } yield patchAccumulationStateAfterFlushing
 
-        def recordMeasurementPatch(
-            itemStateUpdateKey: ItemStateUpdateKey,
-            patch: AbstractPatch): ResultsWriter[PatchAccumulationState] = {
-          val (exemplarMethod, associatedPatches) =
-            exemplarMethodAndPatchesFor(patch.method)
-              .getOrElse(patch.method -> List.empty)
+          def recordMeasurementPatch(
+              itemStateUpdateKey: ItemStateUpdateKey,
+              patch: AbstractPatch): ResultsWriter[PatchAccumulationState] = {
+            val (exemplarMethod, associatedPatches) =
+              exemplarMethodAndPatchesFor(patch.method)
+                .getOrElse(patch.method -> List.empty)
 
-          val updatedCandidatePatches = (patch, itemStateUpdateKey) :: associatedPatches
+            val updatedCandidatePatches = (patch, itemStateUpdateKey) :: associatedPatches
 
-          val updatedAccumulatedPatchesByExemplarMethod =
-            if (WorldImplementationCodeFactoring
-                  .firstMethodIsOverrideCompatibleWithSecond(exemplarMethod,
-                                                             patch.method))
-              accumulatedPatchesByExemplarMethod - exemplarMethod + (patch.method -> updatedCandidatePatches)
-            else
-              accumulatedPatchesByExemplarMethod + (exemplarMethod -> updatedCandidatePatches)
-
-          new PatchAccumulationState(
-            accumulatedPatchesByExemplarMethod =
-              updatedAccumulatedPatchesByExemplarMethod)
-            .pure[ResultsWriter]
-        }
-
-        def recordAnnihilation(
-            itemStateUpdateKey: ItemStateUpdateKey,
-            annihilation: Annihilation): ResultsWriter[PatchAccumulationState] =
-          for {
-            _ <- Set(
-              itemStateUpdateKey -> (ItemStateAnnihilation(annihilation
-                .rewriteItemClass(lowerBoundClazz)): ItemStateUpdate)).tell
-          } yield
-            this // We can get away with this (ha-ha) because an annihilation must be the latest event, so comes *first*, so there will be no patches to select from.
-
-        def writeBestPatch(
-            method: Method): Writer[Set[(ItemStateUpdateKey, ItemStateUpdate)],
-                                    PatchAccumulationState] = {
-          val Some((exemplarMethod, candidatePatches)) =
-            exemplarMethodAndPatchesFor(method)
-
-          val (bestPatch, itemStateUpdateKeyForBestPatch) = bestPatchSelection(
-            candidatePatches)
-
-          val (_, itemStateUpdateKeyForAnchorPatchRepresentingTheEvent) =
-            candidatePatches.head
-
-          val relatedItems: Seq[UniqueItemSpecification] =
-            bestPatch.argumentItemSpecifications
-
-          val lifecyclesForRelatedItemsFromThePerspectiveOfTheBestPatch
-            : Set[Lifecycle] = relatedItems
-            .map(
-              uniqueItemSpecification =>
-                Lifecycle.lifecycleFor(itemStateUpdateKeyForBestPatch,
-                                       uniqueItemSpecification,
-                                       lifecyclesById))
-            .toSet
-
-          val lifecyclesForRelatedItemsFromThePerspectiveOfTheAnchorPatch
-            : Set[Lifecycle] = relatedItems
-            .map(
-              uniqueItemSpecification =>
-                Lifecycle.lifecycleFor(
-                  itemStateUpdateKeyForAnchorPatchRepresentingTheEvent,
-                  uniqueItemSpecification,
-                  lifecyclesById))
-            .toSet
-
-          val lifecyclesStartingAfterTheAnchorPatch = lifecyclesForRelatedItemsFromThePerspectiveOfTheBestPatch diff lifecyclesForRelatedItemsFromThePerspectiveOfTheAnchorPatch
-
-          if (lifecyclesStartingAfterTheAnchorPatch.nonEmpty) {
-            throw new RuntimeException(
-              s"Attempt to execute patch involving items: '$id': '${lifecyclesStartingAfterTheAnchorPatch map (_.uniqueItemSpecification)}' whose lifecycles start later than: $itemStateUpdateKeyForBestPatch.")
-          }
-
-          new PatchAccumulationState(
-            accumulatedPatchesByExemplarMethod = accumulatedPatchesByExemplarMethod - exemplarMethod)
-            .writer(
-              Set(
-                itemStateUpdateKeyForAnchorPatchRepresentingTheEvent -> ItemStatePatch(
-                  bestPatch)))
-        }
-
-        def writeBestPatches: Writer[Set[(ItemStateUpdateKey, ItemStateUpdate)],
-                                     PatchAccumulationState] =
-          Foldable[Iterable]
-            .foldLeftM(accumulatedPatchesByExemplarMethod.keys, this) {
-              case (patchAccumulationState: PatchAccumulationState,
-                    method: Method) =>
-                patchAccumulationState.writeBestPatch(method)
-            }
-
-        private def exemplarMethodAndPatchesFor(method: Method)
-          : Option[(Method, List[(AbstractPatch, ItemStateUpdateKey)])] =
-          accumulatedPatchesByExemplarMethod.get(method) map (method -> _) orElse {
-            accumulatedPatchesByExemplarMethod.find {
-              case (exemplarMethod, _) =>
-                WorldImplementationCodeFactoring
-                  .firstMethodIsOverrideCompatibleWithSecond(method,
-                                                             exemplarMethod) ||
-                  WorldImplementationCodeFactoring
+            val updatedAccumulatedPatchesByExemplarMethod =
+              if (WorldImplementationCodeFactoring
                     .firstMethodIsOverrideCompatibleWithSecond(exemplarMethod,
-                                                               method)
-            }
+                                                               patch.method))
+                accumulatedPatchesByExemplarMethod - exemplarMethod + (patch.method -> updatedCandidatePatches)
+              else
+                accumulatedPatchesByExemplarMethod + (exemplarMethod -> updatedCandidatePatches)
+
+            new PatchAccumulationState(
+              accumulatedPatchesByExemplarMethod =
+                updatedAccumulatedPatchesByExemplarMethod)
+              .pure[ResultsWriter]
           }
+
+          def recordAnnihilation(itemStateUpdateKey: ItemStateUpdateKey,
+                                 annihilation: Annihilation)
+            : ResultsWriter[PatchAccumulationState] =
+            for {
+              _ <- Set(
+                itemStateUpdateKey -> (ItemStateAnnihilation(annihilation
+                  .rewriteItemClass(lowerBoundClazz)): ItemStateUpdate)).tell
+            } yield
+              this // We can get away with this (ha-ha) because an annihilation must be the latest event, so comes *first*, so there will be no patches to select from.
+
+          def writeBestPatch(method: Method)
+            : Writer[Set[(ItemStateUpdateKey, ItemStateUpdate)],
+                     PatchAccumulationState] = {
+            val Some((exemplarMethod, candidatePatches)) =
+              exemplarMethodAndPatchesFor(method)
+
+            val (bestPatch, itemStateUpdateKeyForBestPatch) =
+              bestPatchSelection(candidatePatches)
+
+            val (_, itemStateUpdateKeyForAnchorPatchRepresentingTheEvent) =
+              candidatePatches.head
+
+            val relatedItems: Seq[UniqueItemSpecification] =
+              bestPatch.argumentItemSpecifications
+
+            val lifecyclesForRelatedItemsFromThePerspectiveOfTheBestPatch
+              : Set[Lifecycle] = relatedItems
+              .map(
+                uniqueItemSpecification =>
+                  Lifecycle.lifecycleFor(itemStateUpdateKeyForBestPatch,
+                                         uniqueItemSpecification,
+                                         lifecyclesById))
+              .toSet
+
+            val lifecyclesForRelatedItemsFromThePerspectiveOfTheAnchorPatch
+              : Set[Lifecycle] = relatedItems
+              .map(
+                uniqueItemSpecification =>
+                  Lifecycle.lifecycleFor(
+                    itemStateUpdateKeyForAnchorPatchRepresentingTheEvent,
+                    uniqueItemSpecification,
+                    lifecyclesById))
+              .toSet
+
+            val lifecyclesStartingAfterTheAnchorPatch = lifecyclesForRelatedItemsFromThePerspectiveOfTheBestPatch diff lifecyclesForRelatedItemsFromThePerspectiveOfTheAnchorPatch
+
+            if (lifecyclesStartingAfterTheAnchorPatch.nonEmpty) {
+              throw new RuntimeException(
+                s"Attempt to execute patch involving items: '$id': '${lifecyclesStartingAfterTheAnchorPatch map (_.uniqueItemSpecification)}' whose lifecycles start later than: $itemStateUpdateKeyForBestPatch.")
+            }
+
+            new PatchAccumulationState(
+              accumulatedPatchesByExemplarMethod = accumulatedPatchesByExemplarMethod - exemplarMethod)
+              .writer(
+                Set(
+                  itemStateUpdateKeyForAnchorPatchRepresentingTheEvent -> ItemStatePatch(
+                    bestPatch)))
+          }
+
+          def writeBestPatches
+            : Writer[Set[(ItemStateUpdateKey, ItemStateUpdate)],
+                     PatchAccumulationState] =
+            Foldable[Iterable]
+              .foldLeftM(accumulatedPatchesByExemplarMethod.keys, this) {
+                case (patchAccumulationState: PatchAccumulationState,
+                      method: Method) =>
+                  patchAccumulationState.writeBestPatch(method)
+              }
+
+          private def exemplarMethodAndPatchesFor(method: Method)
+            : Option[(Method, List[(AbstractPatch, ItemStateUpdateKey)])] =
+            accumulatedPatchesByExemplarMethod.get(method) map (method -> _) orElse {
+              accumulatedPatchesByExemplarMethod.find {
+                case (exemplarMethod, _) =>
+                  WorldImplementationCodeFactoring
+                    .firstMethodIsOverrideCompatibleWithSecond(
+                      method,
+                      exemplarMethod) ||
+                    WorldImplementationCodeFactoring
+                      .firstMethodIsOverrideCompatibleWithSecond(exemplarMethod,
+                                                                 method)
+              }
+            }
+        }
+
+        val writtenState: ResultsWriter[PatchAccumulationState] =
+          Foldable[Iterable].foldLeftM(
+            eventsArrangedInReverseTimeOrder,
+            new PatchAccumulationState(): PatchAccumulationState) {
+            case (patchAccumulationState: PatchAccumulationState,
+                  (itemStateUpdateKey: ItemStateUpdateKey,
+                   indivisibleEvent: IndivisibleEvent)) =>
+              indivisibleEvent match {
+                case _: ArgumentReference =>
+                  patchAccumulationState.pure[ResultsWriter]
+                case IndivisibleChange(patch) =>
+                  patchAccumulationState.recordChangePatch(
+                    itemStateUpdateKey,
+                    patch.rewriteItemClazzes(
+                      refineClazzFor(itemStateUpdateKey, _, lifecyclesById)))
+                case IndivisibleMeasurement(patch) =>
+                  patchAccumulationState.recordMeasurementPatch(
+                    itemStateUpdateKey,
+                    patch.rewriteItemClazzes(
+                      refineClazzFor(itemStateUpdateKey, _, lifecyclesById)))
+                case EndOfLifecycle(annihilation) =>
+                  require(endTime == itemStateUpdateKey)
+                  patchAccumulationState.recordAnnihilation(itemStateUpdateKey,
+                                                            annihilation)
+              }
+          }
+
+        val writtenStateWithFinalBestPatchesWritten =
+          writtenState.flatMap(_.writeBestPatches)
+
+        writtenStateWithFinalBestPatchesWritten.run._1
       }
 
-      val writtenState: ResultsWriter[PatchAccumulationState] =
-        Foldable[Iterable].foldLeftM(
-          eventsArrangedInReverseTimeOrder,
-          new PatchAccumulationState(): PatchAccumulationState) {
-          case (patchAccumulationState: PatchAccumulationState,
-                (itemStateUpdateKey: ItemStateUpdateKey,
-                 indivisibleEvent: IndivisibleEvent)) =>
-            indivisibleEvent match {
-              case _: ArgumentReference =>
-                patchAccumulationState.pure[ResultsWriter]
-              case IndivisibleChange(patch) =>
-                patchAccumulationState.recordChangePatch(
-                  itemStateUpdateKey,
-                  patch.rewriteItemClazzes(
-                    refineClazzFor(itemStateUpdateKey, _, lifecyclesById)))
-              case IndivisibleMeasurement(patch) =>
-                patchAccumulationState.recordMeasurementPatch(
-                  itemStateUpdateKey,
-                  patch.rewriteItemClazzes(
-                    refineClazzFor(itemStateUpdateKey, _, lifecyclesById)))
-              case EndOfLifecycle(annihilation) =>
-                require(endTime == itemStateUpdateKey)
-                patchAccumulationState.recordAnnihilation(itemStateUpdateKey,
-                                                          annihilation)
-            }
-        }
-
-      val writtenStateWithFinalBestPatchesWritten =
-        writtenState.flatMap(_.writeBestPatches)
-
-      writtenStateWithFinalBestPatchesWritten.run._1
-    }
-
     def referencingLifecycles(lifecyclesById: LifecyclesById): Set[Lifecycle] =
-      eventsArrangedInReverseTimeOrder.collect {
-        case (itemStateUpdateTime,
-              ArgumentReference(_, targetUniqueItemSpecification))
-            if targetUniqueItemSpecification != uniqueItemSpecification =>
-          lifecycleFor(itemStateUpdateTime,
-                       targetUniqueItemSpecification,
-                       lifecyclesById)
-      }.toSet
+      Timer.timed(category = "referencingLifecycles") {
+        eventsArrangedInReverseTimeOrder.collect {
+          case (itemStateUpdateTime,
+                ArgumentReference(_, targetUniqueItemSpecification))
+              if targetUniqueItemSpecification != uniqueItemSpecification =>
+            lifecycleFor(itemStateUpdateTime,
+                         targetUniqueItemSpecification,
+                         lifecyclesById)
+        }.toSet
+      }
 
     private def overlapsWith(another: Lifecycle): Boolean =
       Ordering[ItemStateUpdateTime]
@@ -895,12 +899,16 @@ class AllEventsImplementation(
         }
 
       val itemStateUpdateKeysThatNeedToBeRevoked: Set[ItemStateUpdateKey] =
-        (itemStateUpdatesFromDefunctLifecycles -- itemStateUpdatesFromNewOrModifiedLifecycles)
-          .map(_._1)
+        Timer.timed(category = "itemStateUpdateKeysThatNeedToBeRevoked") {
+          (itemStateUpdatesFromDefunctLifecycles -- itemStateUpdatesFromNewOrModifiedLifecycles)
+            .map(_._1)
+        }
 
       val newOrModifiedItemStateUpdates
         : Map[ItemStateUpdateKey, ItemStateUpdate] =
-        (itemStateUpdatesFromNewOrModifiedLifecycles -- itemStateUpdatesFromDefunctLifecycles).toMap
+        Timer.timed(category = "newOrModifiedItemStateUpdates") {
+          (itemStateUpdatesFromNewOrModifiedLifecycles -- itemStateUpdatesFromDefunctLifecycles).toMap
+        }
 
       val allEventIdsBookedIn: Set[EventId] =
         events.keySet.asInstanceOf[Set[EventId]]
