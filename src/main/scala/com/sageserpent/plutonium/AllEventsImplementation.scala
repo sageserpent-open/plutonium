@@ -830,119 +830,120 @@ class AllEventsImplementation(
   override type AllEventsType = AllEventsImplementation
 
   override def revise(events: Map[_ <: EventId, Option[Event]])
-    : ItemStateUpdatesDelta[AllEventsType] = {
-    val initialCalculationState =
-      CalculationState(defunctLifecycles = Set.empty,
-                       newLifecycles = Set.empty,
-                       lifecyclesById = lifecyclesById)
+    : ItemStateUpdatesDelta[AllEventsType] =
+    Timer.timed(category = "AllEventsImplementation.revise") {
+      val initialCalculationState =
+        CalculationState(defunctLifecycles = Set.empty,
+                         newLifecycles = Set.empty,
+                         lifecyclesById = lifecyclesById)
 
-    val eventIdsToRevoke = events.keys
+      val eventIdsToRevoke = events.keys
 
-    val calculationStateAfterAnnulments =
-      (initialCalculationState /: eventIdsToRevoke) {
-        case (calculationState, eventId) =>
-          calculationState.flatMap(annul(_, eventId))
+      val calculationStateAfterAnnulments =
+        (initialCalculationState /: eventIdsToRevoke) {
+          case (calculationState, eventId) =>
+            calculationState.flatMap(annul(_, eventId))
+        }
+
+      val newAndModifiedEvents: Seq[(EventId, Event)] = events.toSeq.collect {
+        case (eventId, Some(event)) => eventId -> event
       }
 
-    val newAndModifiedEvents: Seq[(EventId, Event)] = events.toSeq.collect {
-      case (eventId, Some(event)) => eventId -> event
-    }
+      val simpleLifecyclesForNewAndModifiedEvents =
+        buildSimpleLifecyclesFrom(newAndModifiedEvents)
 
-    val simpleLifecyclesForNewAndModifiedEvents =
-      buildSimpleLifecyclesFrom(newAndModifiedEvents)
+      def addLifecycle(lifecyclesById: LifecyclesById,
+                       lifecycle: Lifecycle): LifecyclesById =
+        lifecyclesById.updated(
+          lifecycle.id,
+          lifecyclesById.getOrElse(lifecycle.id, noLifecycles) + lifecycle)
 
-    def addLifecycle(lifecyclesById: LifecyclesById,
-                     lifecycle: Lifecycle): LifecyclesById =
-      lifecyclesById.updated(
-        lifecycle.id,
-        lifecyclesById.getOrElse(lifecycle.id, noLifecycles) + lifecycle)
+      val calculationStateWithSimpleLifecyclesAddedIn =
+        calculationStateAfterAnnulments.flatMap(
+          lifecyclesById =>
+            CalculationState(
+              defunctLifecycles = Set.empty,
+              newLifecycles = simpleLifecyclesForNewAndModifiedEvents.toSet,
+              lifecyclesById =
+                (lifecyclesById /: simpleLifecyclesForNewAndModifiedEvents)(
+                  addLifecycle)
+          ))
 
-    val calculationStateWithSimpleLifecyclesAddedIn =
-      calculationStateAfterAnnulments.flatMap(
-        lifecyclesById =>
-          CalculationState(
-            defunctLifecycles = Set.empty,
-            newLifecycles = simpleLifecyclesForNewAndModifiedEvents.toSet,
-            lifecyclesById =
-              (lifecyclesById /: simpleLifecyclesForNewAndModifiedEvents)(
-                addLifecycle)
-        ))
+      val CalculationState(finalDefunctLifecycles,
+                           finalNewLifecycles,
+                           finalLifecyclesById) =
+        calculationStateWithSimpleLifecyclesAddedIn.fuseLifecycles()
 
-    val CalculationState(finalDefunctLifecycles,
-                         finalNewLifecycles,
-                         finalLifecyclesById) =
-      calculationStateWithSimpleLifecyclesAddedIn.fuseLifecycles()
+      // NOTE: is it really valid to use *'lifecycleById'* with 'finalDefunctLifecycles'? Yes, because any lifecycle *not* in 'lifecycleById'
+      // either makes it all the way through in the above code to 'finalLifecyclesById', or is made defunct itself and thrown away by the
+      // balancing done when flat-mapping a 'CalculationState'.
+      val itemStateUpdatesFromDefunctLifecycles
+        : Set[(ItemStateUpdateKey, ItemStateUpdate)] =
+        (finalDefunctLifecycles ++ finalDefunctLifecycles.flatMap(
+          _.referencingLifecycles(lifecyclesById)))
+          .flatMap(_.itemStateUpdates(lifecyclesById, bestPatchSelection))
 
-    // NOTE: is it really valid to use *'lifecycleById'* with 'finalDefunctLifecycles'? Yes, because any lifecycle *not* in 'lifecycleById'
-    // either makes it all the way through in the above code to 'finalLifecyclesById', or is made defunct itself and thrown away by the
-    // balancing done when flat-mapping a 'CalculationState'.
-    val itemStateUpdatesFromDefunctLifecycles
-      : Set[(ItemStateUpdateKey, ItemStateUpdate)] =
-      (finalDefunctLifecycles ++ finalDefunctLifecycles.flatMap(
-        _.referencingLifecycles(lifecyclesById)))
-        .flatMap(_.itemStateUpdates(lifecyclesById, bestPatchSelection))
+      val itemStateUpdatesFromNewOrModifiedLifecycles
+        : Set[(ItemStateUpdateKey, ItemStateUpdate)] =
+        (finalNewLifecycles ++ finalNewLifecycles.flatMap(
+          _.referencingLifecycles(finalLifecyclesById)))
+          .flatMap(_.itemStateUpdates(finalLifecyclesById, bestPatchSelection))
 
-    val itemStateUpdatesFromNewOrModifiedLifecycles
-      : Set[(ItemStateUpdateKey, ItemStateUpdate)] =
-      (finalNewLifecycles ++ finalNewLifecycles.flatMap(
-        _.referencingLifecycles(finalLifecyclesById)))
-        .flatMap(_.itemStateUpdates(finalLifecyclesById, bestPatchSelection))
+      val itemStateUpdateKeysThatNeedToBeRevoked: Set[ItemStateUpdateKey] =
+        (itemStateUpdatesFromDefunctLifecycles -- itemStateUpdatesFromNewOrModifiedLifecycles)
+          .map(_._1)
 
-    val itemStateUpdateKeysThatNeedToBeRevoked: Set[ItemStateUpdateKey] =
-      (itemStateUpdatesFromDefunctLifecycles -- itemStateUpdatesFromNewOrModifiedLifecycles)
-        .map(_._1)
+      val newOrModifiedItemStateUpdates
+        : Map[ItemStateUpdateKey, ItemStateUpdate] =
+        (itemStateUpdatesFromNewOrModifiedLifecycles -- itemStateUpdatesFromDefunctLifecycles).toMap
 
-    val newOrModifiedItemStateUpdates
-      : Map[ItemStateUpdateKey, ItemStateUpdate] =
-      (itemStateUpdatesFromNewOrModifiedLifecycles -- itemStateUpdatesFromDefunctLifecycles).toMap
+      val allEventIdsBookedIn: Set[EventId] =
+        events.keySet.asInstanceOf[Set[EventId]]
 
-    val allEventIdsBookedIn: Set[EventId] =
-      events.keySet.asInstanceOf[Set[EventId]]
-
-    def eventFootprintFrom(event: Event): EventFootprint = event match {
-      case Change(when, patches) =>
-        EventFootprint(
-          when = when,
-          itemIds = patches
-            .flatMap(patch =>
-              patch.targetItemSpecification.id +: patch.argumentItemSpecifications
-                .map(_.id))
-            .toSet)
-      case Measurement(when, patches) =>
-        EventFootprint(
-          when = when,
-          itemIds = patches
-            .flatMap(patch =>
-              patch.targetItemSpecification.id +: patch.argumentItemSpecifications
-                .map(_.id))
-            .toSet)
-      case Annihilation(when, uniqueItemSpecification) =>
-        EventFootprint(when = Finite(when),
-                       itemIds = Set(uniqueItemSpecification.id))
-    }
-
-    val lifecycleFootprintPerEventWithoutEventIdsForThisRevisionBooking: Map[
-      EventId,
-      AllEventsImplementation.EventFootprint] = lifecycleFootprintPerEvent -- allEventIdsBookedIn
-
-    val finalLifecycleFootprintPerEvent =
-      (lifecycleFootprintPerEventWithoutEventIdsForThisRevisionBooking /: newAndModifiedEvents) {
-        case (lifecycleFootprintPerEvent, (eventId, event)) =>
-          lifecycleFootprintPerEvent + (eventId -> eventFootprintFrom(event))
+      def eventFootprintFrom(event: Event): EventFootprint = event match {
+        case Change(when, patches) =>
+          EventFootprint(
+            when = when,
+            itemIds = patches
+              .flatMap(patch =>
+                patch.targetItemSpecification.id +: patch.argumentItemSpecifications
+                  .map(_.id))
+              .toSet)
+        case Measurement(when, patches) =>
+          EventFootprint(
+            when = when,
+            itemIds = patches
+              .flatMap(patch =>
+                patch.targetItemSpecification.id +: patch.argumentItemSpecifications
+                  .map(_.id))
+              .toSet)
+        case Annihilation(when, uniqueItemSpecification) =>
+          EventFootprint(when = Finite(when),
+                         itemIds = Set(uniqueItemSpecification.id))
       }
 
-    ItemStateUpdatesDelta(
-      allEvents = new AllEventsImplementation(
-        nextRevision = 1 + this.nextRevision,
-        lifecycleFootprintPerEvent = finalLifecycleFootprintPerEvent,
-        lifecyclesById = finalLifecyclesById,
-        bestPatchSelection = this.bestPatchSelection
-      ),
-      itemStateUpdateKeysThatNeedToBeRevoked =
-        itemStateUpdateKeysThatNeedToBeRevoked,
-      newOrModifiedItemStateUpdates = newOrModifiedItemStateUpdates
-    )
-  }
+      val lifecycleFootprintPerEventWithoutEventIdsForThisRevisionBooking: Map[
+        EventId,
+        AllEventsImplementation.EventFootprint] = lifecycleFootprintPerEvent -- allEventIdsBookedIn
+
+      val finalLifecycleFootprintPerEvent =
+        (lifecycleFootprintPerEventWithoutEventIdsForThisRevisionBooking /: newAndModifiedEvents) {
+          case (lifecycleFootprintPerEvent, (eventId, event)) =>
+            lifecycleFootprintPerEvent + (eventId -> eventFootprintFrom(event))
+        }
+
+      ItemStateUpdatesDelta(
+        allEvents = new AllEventsImplementation(
+          nextRevision = 1 + this.nextRevision,
+          lifecycleFootprintPerEvent = finalLifecycleFootprintPerEvent,
+          lifecyclesById = finalLifecyclesById,
+          bestPatchSelection = this.bestPatchSelection
+        ),
+        itemStateUpdateKeysThatNeedToBeRevoked =
+          itemStateUpdateKeysThatNeedToBeRevoked,
+        newOrModifiedItemStateUpdates = newOrModifiedItemStateUpdates
+      )
+    }
 
   override def retainUpTo(when: Unbounded[Instant]): AllEvents = {
     val cutoff = UpperBoundOfTimeslice(when)

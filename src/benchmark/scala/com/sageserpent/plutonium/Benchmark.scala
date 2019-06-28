@@ -52,21 +52,24 @@ trait Benchmark
               val anotherId =
                 randomBehaviour.chooseOneOfRange(idSet.map(_ + step / 20))
 
-              world.revise(
-                eventId,
-                Change.forTwoItems[Thing, Thing](
-                  Instant.ofEpochSecond(3600L * theHourFromTheStart))(
-                  oneId,
-                  anotherId,
-                  (oneThing, anotherThing) => {
-                    oneThing.property1 = step
-                    oneThing.referTo(anotherThing)
-                  }),
-                Instant.now()
-              )
-            } else {
-              world.annul(eventId, Instant.now())
-            }
+              Timer.withCategory("REVISING") {
+                world.revise(
+                  eventId,
+                  Change.forTwoItems[Thing, Thing](
+                    Instant.ofEpochSecond(3600L * theHourFromTheStart))(
+                    oneId,
+                    anotherId,
+                    (oneThing, anotherThing) => {
+                      oneThing.property1 = step
+                      oneThing.referTo(anotherThing)
+                    }),
+                  Instant.now()
+                )
+              }
+            } else
+              Timer.withCategory("ANNULLING") {
+                world.annul(eventId, Instant.now())
+              }
 
             val onePastQueryRevision =
               randomBehaviour.chooseAnyNumberFromZeroToOneLessThan(
@@ -76,7 +79,7 @@ trait Benchmark
               3600L * randomBehaviour.chooseAnyNumberFromZeroToOneLessThan(
                 1 + theHourFromTheStart))
 
-            val transitiveClosureSize = {
+            val transitiveClosureSize = Timer.withCategory("QUERYING") {
               val scope = world.scopeFor(queryTime, onePastQueryRevision)
 
               val queryId = randomBehaviour.chooseOneOfRange(idSet)
@@ -88,14 +91,7 @@ trait Benchmark
                 .fold(0)(_.transitiveClosure)
             }
 
-            if (step % 50 == 0) {
-              val currentTime = Deadline.now
-
-              val duration = currentTime - startTime
-
-              println(
-                s"Step: $step, duration: ${duration.toMillis} milliseconds, transitive closure size: $transitiveClosureSize")
-            }
+            if (0 == step % 50) Timer.sampleAndPrintResults(s"$step")
           }
 
           world // NASTY HACK - allow the world to escape the resource scope, so that memory footprints can be taken.
