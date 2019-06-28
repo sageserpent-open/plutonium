@@ -447,9 +447,8 @@ object AllEventsImplementation {
             } yield
               this // We can get away with this (ha-ha) because an annihilation must be the latest event, so comes *first*, so there will be no patches to select from.
 
-          def writeBestPatch(method: Method)
-            : Writer[Set[(ItemStateUpdateKey, ItemStateUpdate)],
-                     PatchAccumulationState] = {
+          def writeBestPatch(
+              method: Method): ResultsWriter[PatchAccumulationState] = {
             val Some((exemplarMethod, candidatePatches)) =
               exemplarMethodAndPatchesFor(method)
 
@@ -496,9 +495,7 @@ object AllEventsImplementation {
                     bestPatch)))
           }
 
-          def writeBestPatches
-            : Writer[Set[(ItemStateUpdateKey, ItemStateUpdate)],
-                     PatchAccumulationState] =
+          def writeBestPatches: ResultsWriter[PatchAccumulationState] =
             Foldable[Iterable]
               .foldLeftM(accumulatedPatchesByExemplarMethod.keys, this) {
                 case (patchAccumulationState: PatchAccumulationState,
