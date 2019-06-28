@@ -879,15 +879,20 @@ class AllEventsImplementation(
       // balancing done when flat-mapping a 'CalculationState'.
       val itemStateUpdatesFromDefunctLifecycles
         : Set[(ItemStateUpdateKey, ItemStateUpdate)] =
-        (finalDefunctLifecycles ++ finalDefunctLifecycles.flatMap(
-          _.referencingLifecycles(lifecyclesById)))
-          .flatMap(_.itemStateUpdates(lifecyclesById, bestPatchSelection))
+        Timer.timed(category = "itemStateUpdatesFromDefunctLifecycles") {
+          (finalDefunctLifecycles ++ finalDefunctLifecycles.flatMap(
+            _.referencingLifecycles(lifecyclesById)))
+            .flatMap(_.itemStateUpdates(lifecyclesById, bestPatchSelection))
+        }
 
       val itemStateUpdatesFromNewOrModifiedLifecycles
         : Set[(ItemStateUpdateKey, ItemStateUpdate)] =
-        (finalNewLifecycles ++ finalNewLifecycles.flatMap(
-          _.referencingLifecycles(finalLifecyclesById)))
-          .flatMap(_.itemStateUpdates(finalLifecyclesById, bestPatchSelection))
+        Timer.timed(category = "itemStateUpdatesFromNewOrModifiedLifecycles") {
+          (finalNewLifecycles ++ finalNewLifecycles.flatMap(
+            _.referencingLifecycles(finalLifecyclesById)))
+            .flatMap(
+              _.itemStateUpdates(finalLifecyclesById, bestPatchSelection))
+        }
 
       val itemStateUpdateKeysThatNeedToBeRevoked: Set[ItemStateUpdateKey] =
         (itemStateUpdatesFromDefunctLifecycles -- itemStateUpdatesFromNewOrModifiedLifecycles)
