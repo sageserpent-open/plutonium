@@ -5,7 +5,7 @@ import scala.concurrent.duration.Deadline
 import scala.util.DynamicVariable
 
 object Timer {
-  val cumulativeDurations = mutable.Map.empty[Seq[String], (Int, Long)]
+  val cumulativeDurations = mutable.Map.empty[Seq[String], Long]
 
   val categories: DynamicVariable[Seq[String]] = new DynamicVariable(Seq.empty)
 
@@ -14,15 +14,13 @@ object Timer {
   }
 
   def sampleAndPrintResults(prefix: String): Unit = {
-    for ((description, (count, cumulativeDuration)) <- cumulativeDurations
+    for ((description, cumulativeDuration) <- cumulativeDurations
            .map {
              case (categories, value) => categories.mkString(">") -> value
            }
            .toSeq
            .sortBy(_._1)) {
-      val meanDuration = cumulativeDuration / count
-
-      println(s"$prefix $description $meanDuration")
+      println(s"$prefix $description $cumulativeDuration")
     }
 
     cumulativeDurations.clear()
@@ -35,9 +33,9 @@ object Timer {
       block
     } finally {
       val duration = (Deadline.now - startTime).toMillis
-      cumulativeDurations.getOrElse(categories.value, 0 -> 0L) match {
-        case (count, cumulativeDuration) =>
-          cumulativeDurations(categories.value) = (1 + count) -> (duration + cumulativeDuration)
+      cumulativeDurations.getOrElse(categories.value, 0L) match {
+        case cumulativeDuration =>
+          cumulativeDurations(categories.value) = duration + cumulativeDuration
       }
     }
   }
