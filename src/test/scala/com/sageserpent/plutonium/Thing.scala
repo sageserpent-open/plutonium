@@ -1,6 +1,14 @@
 package com.sageserpent.plutonium
 
+object Thing {
+  type Id = Int
+}
+
 abstract class Thing {
+  import Thing.Id
+
+  def id: Id
+
   var property1: Int = 0
 
   var property2: String = ""
@@ -8,17 +16,17 @@ abstract class Thing {
   def referTo(referred: Thing): Unit = {
     reference = Some(referred)
   }
-  def transitiveClosure: Int = {
-    def visitTransitiveClosure(thing: Thing, visited: Set[Thing]): Set[Thing] =
-      if (visited.contains(thing)) visited
+  def transitiveClosure: Set[Id] = {
+    def visitTransitiveClosure(thing: Thing, visited: Set[Id]): Set[Id] =
+      if (visited.contains(thing.id)) visited
       else {
-        val visitedWithThis = visited + thing
+        val visitedWithThis = visited + thing.id
 
         reference.fold(visitedWithThis)(
           visitTransitiveClosure(_, visitedWithThis))
       }
 
-    visitTransitiveClosure(this, Set.empty).size
+    visitTransitiveClosure(this, Set.empty)
   }
 
   var reference: Option[Thing] = None
