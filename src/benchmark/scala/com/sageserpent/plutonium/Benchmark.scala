@@ -86,7 +86,7 @@ trait Benchmark {
         val duration = currentTime - startTime
 
         println(
-          s"Step: $step, duration: ${duration.toMillis} milliseconds, transitive closure: $transitiveClosure")
+          s"Step: $step, duration: ${duration.toMillis} milliseconds, transitive closure size: ${transitiveClosure.size}")
       }
     }
 
