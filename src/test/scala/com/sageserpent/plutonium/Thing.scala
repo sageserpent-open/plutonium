@@ -16,18 +16,15 @@ abstract class Thing {
   def referTo(referred: Thing): Unit = {
     reference = Some(referred)
   }
-  def transitiveClosure: Set[Id] = {
-    def visitTransitiveClosure(thing: Thing, visited: Set[Id]): Set[Id] =
-      if (visited.contains(thing.id)) visited
-      else {
-        val visitedWithThis = visited + thing.id
+  def transitiveClosure: Set[Id] = visitTransitiveClosure(Set.empty)
 
-        reference.fold(visitedWithThis)(
-          visitTransitiveClosure(_, visitedWithThis))
-      }
+  private def visitTransitiveClosure(visited: Set[Id]): Set[Id] =
+    if (visited.contains(id)) visited
+    else {
+      val visitedWithThis = visited + id
 
-    visitTransitiveClosure(this, Set.empty)
-  }
+      reference.fold(visitedWithThis)(_.visitTransitiveClosure(visitedWithThis))
+    }
 
   var reference: Option[Thing] = None
 }
