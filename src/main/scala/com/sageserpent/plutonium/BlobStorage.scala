@@ -24,9 +24,12 @@ object BlobStorage {
         1 >= uniqueItemSpecifications.size,
         s"The item specification: '$uniqueItemSpecification', should pick out a unique item, these match it: ${uniqueItemSpecifications.toList}."
       )
+      cumulativeBlobStorageFetches += 1
       super.snapshotBlobFor(uniqueItemSpecification)
     }
   }
+
+  var cumulativeBlobStorageFetches: Long = 0
 }
 
 trait BlobStorage[Time, SnapshotBlob] { blobStorage =>

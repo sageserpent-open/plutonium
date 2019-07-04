@@ -94,7 +94,7 @@ trait Benchmark
               val duration = currentTime - startTime
 
               println(
-                s"Step: $step, duration: ${duration.toMillis} milliseconds, cumulative recalculation steps: ${Timeline.cumulativeRecalculationSteps}, transitive closure size: ${transitiveClosure.size}")
+                s"Step: $step, duration: ${duration.toMillis} milliseconds, cumulative blob storage fetches: ${BlobStorage.cumulativeBlobStorageFetches}, cumulative recalculation steps: ${Timeline.cumulativeRecalculationSteps}, transitive closure size: ${transitiveClosure.size}")
             }
           }
 
