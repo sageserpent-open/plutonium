@@ -94,20 +94,19 @@ trait ItemStateStorage { itemStateStorageObject =>
             .underlyingSerializerFor(itemType)
             .asInstanceOf[Serializer[ItemSuperType]]
             .read(kryo, input, itemType)
-        else
-          Timer.timed(category = "DeserialisingNonTopLevelObject") {
-            val (uniqueItemSpecification, lifecycleUUID): (UniqueItemSpecification,
-                                                           UUID) =
-              kryo
-                .readClassAndObject(input)
-                .asInstanceOf[(UniqueItemSpecification, UUID)]
+        else {
+          val (uniqueItemSpecification, lifecycleUUID): (UniqueItemSpecification,
+                                                         UUID) =
+            kryo
+              .readClassAndObject(input)
+              .asInstanceOf[(UniqueItemSpecification, UUID)]
 
-            val instance: ItemSuperType =
-              relatedItemFor[ItemSuperType](uniqueItemSpecification,
-                                            lifecycleUUID)
-            kryo.reference(instance)
-            instance
-          }
+          val instance: ItemSuperType =
+            relatedItemFor[ItemSuperType](uniqueItemSpecification,
+                                          lifecycleUUID)
+          kryo.reference(instance)
+          instance
+        }
 
       override def write(kryo: Kryo,
                          output: Output,
@@ -265,7 +264,9 @@ trait ItemStateStorage { itemStateStorageObject =>
                           (uniqueItemSpecification,
                            lifecycleUUID,
                            itemStateUpdateKey))) {
-                        kryoPool.fromBytes(payload)
+                        Timer.timed("deserialisation") {
+                          kryoPool.fromBytes(payload)
+                        }
                       }
                   case _ => fallbackItemFor[Item](uniqueItemSpecification)
                 }
@@ -333,7 +334,9 @@ trait ItemStateStorage { itemStateStorageObject =>
                               Some((uniqueItemSpecification,
                                     lifecycleUUID,
                                     itemStateUpdateKey))) {
-                              kryoPool.fromBytes(payload)
+                              Timer.timed("deserialisation") {
+                                kryoPool.fromBytes(payload)
+                              }
                             }
                       }
                     }
