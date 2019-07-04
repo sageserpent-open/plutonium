@@ -15,6 +15,7 @@ abstract class Thing {
 
   def referTo(referred: Thing): Unit = {
     reference = Some(referred)
+    val _ = transitiveClosure // NASTY HACK: work around ghost bug.
   }
   def transitiveClosure: Set[Id] = visitTransitiveClosure(Set.empty)
 
