@@ -20,7 +20,9 @@ trait Benchmark
   def activity(size: Int): World = {
     val randomBehaviour = new scala.util.Random(1368234L)
 
-    val idSet: Range = 0 until 1000
+    val idWindowSize = 1000
+
+    val idSet: Range = 0 until idWindowSize
 
     val startTime = Deadline.now
 
@@ -46,11 +48,13 @@ trait Benchmark
               .chooseAnyNumberFromZeroToOneLessThan(5)
 
             if (probabilityOfBookingANewOrCorrectingEvent) {
+              val idOffset = (step / idWindowSize) * idWindowSize
+
               val oneId =
-                randomBehaviour.chooseOneOfRange(idSet.map(_ + step / 20))
+                randomBehaviour.chooseOneOfRange(idSet.map(_ + idOffset))
 
               val anotherId =
-                randomBehaviour.chooseOneOfRange(idSet.map(_ + step / 20))
+                randomBehaviour.chooseOneOfRange(idSet.map(_ + idOffset))
 
               world.revise(
                 eventId,
