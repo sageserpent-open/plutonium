@@ -72,11 +72,13 @@ trait Benchmark {
 
       val queryId = randomBehaviour.chooseOneOfRange(idSet)
 
-      val transitiveClosureSize = scope
-        .render(Bitemporal.withId[Thing](queryId))
-        .force
-        .headOption
-        .fold(0)(_.transitiveClosure)
+      val transitiveClosure = {
+        scope
+          .render(Bitemporal.withId[Thing](queryId))
+          .force
+          .headOption
+          .fold(Set.empty[Thing.Id])(_.transitiveClosure)
+      }
 
       if (step % 50 == 0) {
         val currentTime = Deadline.now
@@ -84,7 +86,7 @@ trait Benchmark {
         val duration = currentTime - startTime
 
         println(
-          s"Step: $step, duration: ${duration.toMillis} milliseconds, transitive closure size: $transitiveClosureSize")
+          s"Step: $step, duration: ${duration.toMillis} milliseconds, transitive closure: $transitiveClosure")
       }
     }
 
@@ -94,6 +96,6 @@ trait Benchmark {
 
 object benchmarkApplication extends Benchmark {
   def main(args: Array[String]): Unit = {
-    activity(100000)
+    activity(500000)
   }
 }
