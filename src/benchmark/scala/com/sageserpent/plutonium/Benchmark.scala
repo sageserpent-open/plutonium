@@ -27,7 +27,7 @@ trait Benchmark
     val world: IO[World] =
       connectionPoolResource.use(connectionPool =>
         IO {
-          val world = new WorldH2StorageImplementation(connectionPool)
+          val world = new WorldEfficientInMemoryImplementation() //new WorldH2StorageImplementation(connectionPool)
 
           for (step <- 0 until size) {
             val eventId = step - randomBehaviour
@@ -94,7 +94,7 @@ trait Benchmark
               val duration = currentTime - startTime
 
               println(
-                s"Step: $step, duration: ${duration.toMillis} milliseconds, transitive closure size: ${transitiveClosure.size}")
+                s"Step: $step, duration: ${duration.toMillis} milliseconds, cumulative recalculation steps: ${Timeline.cumulativeRecalculationSteps}, transitive closure size: ${transitiveClosure.size}")
             }
           }
 

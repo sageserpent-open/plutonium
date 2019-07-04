@@ -28,6 +28,8 @@ object Timeline {
 
   type BlobStorage =
     com.sageserpent.plutonium.BlobStorage[ItemStateUpdateTime, SnapshotBlob]
+
+  var cumulativeRecalculationSteps: Long = 0
 }
 
 case class Timeline(
@@ -54,6 +56,8 @@ case class Timeline(
               (PriorityQueueKey(itemStateUpdateKey,
                                 isAlreadyReferencedAsADependencyInTheDag),
                _)) =>
+            Timeline.cumulativeRecalculationSteps += 1
+
             val itemStateUpdate =
               itemStateUpdatesDag.label(itemStateUpdateKey).get
 
