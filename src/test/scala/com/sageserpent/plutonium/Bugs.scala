@@ -1261,16 +1261,24 @@ trait Bugs
 
       val eventIdToBeCorrected = 0
 
-      val thisIdShouldNotReferToAGhost = 999
+      val bothReferringAndReferredToId = 10
 
-      val bothReferrerAndReferredToId = -10
+      val anotherBothReferringAndReferredToId = 999
+
+      val shouldNotReferToAGhostId = -2
 
       val events =
         Seq(
-          Booking(eventIdToBeCorrected, 1, thisIdShouldNotReferToAGhost),
-          Booking(1, bothReferrerAndReferredToId, thisIdShouldNotReferToAGhost),
-          Booking(2, thisIdShouldNotReferToAGhost, 2),
-          Booking(eventIdToBeCorrected, 3, bothReferrerAndReferredToId)
+          Booking(eventIdToBeCorrected,
+                  -1,
+                  anotherBothReferringAndReferredToId),
+          Booking(1,
+                  bothReferringAndReferredToId,
+                  anotherBothReferringAndReferredToId),
+          Booking(2,
+                  anotherBothReferringAndReferredToId,
+                  shouldNotReferToAGhostId),
+          Booking(eventIdToBeCorrected, -3, bothReferringAndReferredToId)
         )
 
       val sharedAsOf = Instant.ofEpochSecond(0)
