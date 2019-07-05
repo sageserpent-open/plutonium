@@ -1267,10 +1267,10 @@ trait Bugs
 
       val events =
         Seq(
-          Booking(eventIdToBeCorrected, 10, thisIdShouldNotReferToAGhost),
+          Booking(eventIdToBeCorrected, 1, thisIdShouldNotReferToAGhost),
           Booking(1, bothReferrerAndReferredToId, thisIdShouldNotReferToAGhost),
-          Booking(2, thisIdShouldNotReferToAGhost, 20),
-          Booking(eventIdToBeCorrected, 15, bothReferrerAndReferredToId)
+          Booking(2, thisIdShouldNotReferToAGhost, 2),
+          Booking(eventIdToBeCorrected, 3, bothReferrerAndReferredToId)
         )
 
       val sharedAsOf = Instant.ofEpochSecond(0)
