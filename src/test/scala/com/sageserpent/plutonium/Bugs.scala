@@ -1282,16 +1282,14 @@ trait Bugs
               world.revise(
                 eventId,
                 Change
-                  .forTwoItems(Instant.ofEpochSecond(0L))(referrerId,
-                                                          referredId, {
-                                                            (referrer: Thing,
-                                                             referred: Thing) =>
-                                                              referrer.property1 =
-                                                                step
-                                                              referrer
-                                                                .referTo(
-                                                                  referred)
-                                                          }),
+                  .forTwoItems(Instant.ofEpochSecond(0L))(
+                    referrerId,
+                    referredId, { (referrer: Thing, referred: Thing) =>
+                      referrer
+                        .referTo(referred)
+                      referrer.property1 = step // NOTE: this mutation really is necessary, it can either before or after the call to 'referTo'.
+                    }
+                  ),
                 sharedAsOf
               )
 
