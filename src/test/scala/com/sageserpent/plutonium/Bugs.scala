@@ -1259,24 +1259,22 @@ trait Bugs
 
       val eventIdToBeCorrected = 0
 
-      val bothReferringAndReferredToId = 10
+      val headOfChainId = 10
 
-      val anotherBothReferringAndReferredToId = 999
+      val secondInChainId = 20
 
-      val shouldNotReferToAGhostId = -2
+      val thirdInChainId = 30
+
+      val endOfChainId = 40
+
+      val bystanderId = -1
 
       val events =
         Seq(
-          Booking(eventIdToBeCorrected,
-                  -1,
-                  anotherBothReferringAndReferredToId),
-          Booking(1,
-                  bothReferringAndReferredToId,
-                  anotherBothReferringAndReferredToId),
-          Booking(2,
-                  anotherBothReferringAndReferredToId,
-                  shouldNotReferToAGhostId),
-          Booking(eventIdToBeCorrected, -3, bothReferringAndReferredToId)
+          Booking(eventIdToBeCorrected, bystanderId, thirdInChainId),
+          Booking(1, secondInChainId, thirdInChainId),
+          Booking(2, thirdInChainId, endOfChainId),
+          Booking(eventIdToBeCorrected, headOfChainId, secondInChainId)
         )
 
       val sharedAsOf = Instant.ofEpochSecond(0)
@@ -1312,6 +1310,25 @@ trait Bugs
 
               referrerTransitiveClosure should contain(referred.id)
             }
+
+            val scope =
+              world.scopeFor(PositiveInfinity[Instant](), world.nextRevision)
+
+            val Seq(referrerTransitiveClosure) = scope
+              .render(Bitemporal.withId[Thing](headOfChainId))
+              .map(_.transitiveClosure)
+
+            referrerTransitiveClosure should contain theSameElementsAs Seq(
+              headOfChainId,
+              secondInChainId,
+              thirdInChainId,
+              endOfChainId)
+
+            forAll(
+              scope
+                .render(Bitemporal.wildcard[Thing]())
+                .map(_.asInstanceOf[ItemExtensionApi])
+                .head)(!_.isGhost)
         })
         .unsafeRunSync
     }
