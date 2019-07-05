@@ -76,7 +76,7 @@ trait Benchmark
               3600L * randomBehaviour.chooseAnyNumberFromZeroToOneLessThan(
                 1 + theHourFromTheStart))
 
-            val transitiveClosure = {
+            val property1 = {
               val scope = world.scopeFor(queryTime, onePastQueryRevision)
 
               val queryId = randomBehaviour.chooseOneOfRange(idSet)
@@ -85,7 +85,7 @@ trait Benchmark
                 .render(Bitemporal.withId[Thing](queryId))
                 .force
                 .headOption
-                .fold(Set.empty[Thing.Id])(_.transitiveClosure)
+                .fold(-1)(_.property1)
             }
 
             if (step % 50 == 0) {
@@ -94,7 +94,7 @@ trait Benchmark
               val duration = currentTime - startTime
 
               println(
-                s"Step: $step, duration: ${duration.toMillis} milliseconds, transitive closure size: ${transitiveClosure.size}")
+                s"Step: $step, duration: ${duration.toMillis} milliseconds, property1: $property1")
             }
           }
 
