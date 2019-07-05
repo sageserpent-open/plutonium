@@ -1259,22 +1259,19 @@ trait Bugs
 
       case class Booking(eventId: Int, referrerId: Int, referredId: Int)
 
-      val eventAndTwoIdsGenerator = for {
-        eventId    <- Gen.chooseNum(0, 5)
-        referrerId <- idGenerator
-        referredId <- idGenerator
-      } yield Booking(eventId, referrerId, referredId)
+      val eventIdToBeCorrected = 0
 
-      val eventsGenerator = for {
-        numberOfStepsGenerator <- Gen.chooseNum(1, 20)
-        events                 <- Gen.listOfN(numberOfStepsGenerator, eventAndTwoIdsGenerator)
-      } yield events
+      val thisIdShouldNotReferToAGhost = 999
+
+      val bothReferrerAndReferredToId = -10
 
       val events =
-        Seq(Booking(5, 10, 17),
-            Booking(3, 18, 17),
-            Booking(2, 17, 20),
-            Booking(5, 10, 18))
+        Seq(
+          Booking(eventIdToBeCorrected, 10, thisIdShouldNotReferToAGhost),
+          Booking(1, bothReferrerAndReferredToId, thisIdShouldNotReferToAGhost),
+          Booking(2, thisIdShouldNotReferToAGhost, 20),
+          Booking(eventIdToBeCorrected, 15, bothReferrerAndReferredToId)
+        )
 
       val sharedAsOf = Instant.ofEpochSecond(0)
 
