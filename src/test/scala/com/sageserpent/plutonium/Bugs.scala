@@ -1254,6 +1254,66 @@ trait Bugs
       }
     }
 
+    "using related items without any annihilations" should "not reference any ghosts" in {
+      val idGenerator = Gen.chooseNum(10, 20)
+
+      case class Booking(eventId: Int, referrerId: Int, referredId: Int)
+
+      val eventAndTwoIdsGenerator = for {
+        eventId    <- Gen.chooseNum(0, 5)
+        referrerId <- idGenerator
+        referredId <- idGenerator
+      } yield Booking(eventId, referrerId, referredId)
+
+      val eventsGenerator = for {
+        numberOfStepsGenerator <- Gen.chooseNum(1, 20)
+        events                 <- Gen.listOfN(numberOfStepsGenerator, eventAndTwoIdsGenerator)
+      } yield events
+
+      val events =
+        Seq(Booking(5, 10, 17),
+            Booking(3, 18, 17),
+            Booking(2, 17, 20),
+            Booking(5, 10, 18))
+
+      val sharedAsOf = Instant.ofEpochSecond(0)
+
+      worldResource
+        .use(world =>
+          IO {
+            for ((Booking(eventId, referrerId, referredId), step) <- events.zipWithIndex) {
+              world.revise(
+                eventId,
+                Change
+                  .forTwoItems(Instant.ofEpochSecond(0L))(referrerId,
+                                                          referredId, {
+                                                            (referrer: Thing,
+                                                             referred: Thing) =>
+                                                              referrer.property1 =
+                                                                step
+                                                              referrer
+                                                                .referTo(
+                                                                  referred)
+                                                          }),
+                sharedAsOf
+              )
+
+              val scope =
+                world.scopeFor(PositiveInfinity[Instant](), world.nextRevision)
+
+              val Seq((referrerTransitiveClosure, referred)) = scope
+                .render(
+                  (Bitemporal
+                     .withId[Thing](referrerId)
+                     .map(_.transitiveClosure),
+                   Bitemporal
+                     .withId[Thing](referredId)).mapN((_, _)))
+
+              referrerTransitiveClosure should contain(referred.id)
+            }
+        })
+        .unsafeRunSync
+    }
   }
 }
 
