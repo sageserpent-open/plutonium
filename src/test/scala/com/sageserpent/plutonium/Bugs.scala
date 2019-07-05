@@ -1255,8 +1255,6 @@ trait Bugs
     }
 
     "using related items without any annihilations" should "not reference any ghosts" in {
-      val idGenerator = Gen.chooseNum(10, 20)
-
       case class Booking(eventId: Int, referrerId: Int, referredId: Int)
 
       val eventIdToBeCorrected = 0
