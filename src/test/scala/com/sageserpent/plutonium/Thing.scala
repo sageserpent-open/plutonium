@@ -9,7 +9,7 @@ abstract class Thing {
 
   def id: Id
 
-  var property1: Int = 0
+  var property1: Int = -1
 
   var property2: String = ""
 

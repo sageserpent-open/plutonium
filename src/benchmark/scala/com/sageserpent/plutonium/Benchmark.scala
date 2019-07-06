@@ -43,13 +43,13 @@ trait Benchmark
               else
                 step - randomBehaviour
                   .chooseAnyNumberFromOneTo(20)
+				  
+            val idOffset = (step / idWindowSize) * idWindowSize				  
 
             val probabilityOfBookingANewOrCorrectingEvent = 0 < randomBehaviour
               .chooseAnyNumberFromZeroToOneLessThan(5)
 
             if (probabilityOfBookingANewOrCorrectingEvent) {
-              val idOffset = (step / idWindowSize) * idWindowSize
-
               val oneId =
                 randomBehaviour.chooseOneOfRange(idSet.map(_ + idOffset))
 
@@ -83,13 +83,13 @@ trait Benchmark
             val property1 = {
               val scope = world.scopeFor(queryTime, onePastQueryRevision)
 
-              val queryId = randomBehaviour.chooseOneOfRange(idSet)
+              val queryId = randomBehaviour.chooseOneOfRange(0 until (idOffset + idWindowSize))
 
               scope
                 .render(Bitemporal.withId[Thing](queryId))
                 .force
                 .headOption
-                .fold(-1)(_.property1)
+                .fold(-2)(_.property1)
             }
 
             if (step % 50 == 0) {
@@ -111,6 +111,6 @@ trait Benchmark
 
 object benchmarkApplication extends Benchmark {
   def main(args: Array[String]): Unit = {
-    activity(500000)
+    activity(1000000)
   }
 }
