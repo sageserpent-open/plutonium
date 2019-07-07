@@ -1288,10 +1288,14 @@ trait Bugs
                 Change
                   .forTwoItems(Instant.ofEpochSecond(0L))(
                     referrerId,
-                    referredId, { (referrer: Thing, referred: Thing) =>
-                      referrer
-                        .referTo(referred)
-                      referrer.property1 = step // NOTE: this mutation really is necessary, it can either before or after the call to 'referTo'.
+                    referredId, {
+                      (referrer: Thing, referred: Thing) =>
+                        referrer
+                          .referTo(referred)
+                        // NOTE: the following mutation really is necessary, it can either come before
+                        // or after the call to 'referTo', but its position affected which item became
+                        // a ghost when this test was failing.
+                        referrer.property1 = step
                     }
                   ),
                 sharedAsOf
