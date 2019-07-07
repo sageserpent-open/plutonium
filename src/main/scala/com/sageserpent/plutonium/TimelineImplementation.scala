@@ -135,12 +135,16 @@ class TimelineImplementation(allEvents: AllEvents = noEvents,
                                          case (snapshot, _) => Some(snapshot)
                                        })
 
+                val previousItemStateUpdates = mutatedItemSnapshots.collect {
+                  case (_, (_, Some(ancestorItemStateUpdateKey))) =>
+                    ancestorItemStateUpdateKey
+                }.toSet
+
                 val itemStateUpdatesDagWithUpdatedDependencies =
                   itemStateUpdatesDag.decomp(itemStateUpdateKey) match {
                     case Decomp(Some(context), remainder) =>
-                      context.copy(
-                        inAdj =
-                          discoveredReadDependencies map (() -> _) toVector) & remainder
+                      context.copy(inAdj =
+                        (previousItemStateUpdates union discoveredReadDependencies) map (() -> _) toVector) & remainder
                   }
 
                 val successorsAccordingToPreviousRevision
@@ -149,14 +153,15 @@ class TimelineImplementation(allEvents: AllEvents = noEvents,
 
                 val successorsTakenOverFromAPreviousItemStateUpdate
                   : Set[ItemStateUpdateKey] =
-                  ((mutatedItemSnapshots collect {
-                    case (_, (_, Some(ancestorItemStateUpdateKey))) =>
-                      successorsOf(ancestorItemStateUpdateKey)
-                        .filter(
-                          successorOfAncestor =>
-                            Ordering[ItemStateUpdateKey].gt(successorOfAncestor,
-                                                            itemStateUpdateKey))
-                  }) flatten) toSet
+                  (previousItemStateUpdates
+                    .map(
+                      ancestorItemStateUpdateKey =>
+                        successorsOf(ancestorItemStateUpdateKey)
+                          .filter(
+                            successorOfAncestor =>
+                              Ordering[ItemStateUpdateKey].gt(
+                                successorOfAncestor,
+                                itemStateUpdateKey)))) flatten
 
                 val itemsNotStartingLifecyclesDueToThisPatch = mutatedItemSnapshots collect {
                   case (uniqueItemIdentifier, (_, Some(_))) =>
@@ -244,8 +249,11 @@ class TimelineImplementation(allEvents: AllEvents = noEvents,
     val itemStateUpdatesToApply
       : PriorityMap[PriorityQueueKey, ItemStateUpdateKey] =
       PriorityMap(
-        descendantsOfRevokedItemStateUpdates ++ newAndModifiedItemStateUpdates
-          .map(_._1) map (
+        descendantsOfRevokedItemStateUpdates.map(key =>
+          PriorityQueueKey(
+            itemStateUpdateKey = key,
+            isAlreadyReferencedAsADependencyInTheDag = true) -> key) ++ newAndModifiedItemStateUpdates.keys
+          .map(
             key =>
               PriorityQueueKey(
                 itemStateUpdateKey = key,
