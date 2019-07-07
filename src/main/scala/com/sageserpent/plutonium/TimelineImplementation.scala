@@ -135,7 +135,7 @@ class TimelineImplementation(allEvents: AllEvents = noEvents,
                                          case (snapshot, _) => Some(snapshot)
                                        })
 
-                val previousItemStateUpdates = mutatedItemSnapshots.collect {
+                val ancestorItemStateUpdates = mutatedItemSnapshots.collect {
                   case (_, (_, Some(ancestorItemStateUpdateKey))) =>
                     ancestorItemStateUpdateKey
                 }.toSet
@@ -144,16 +144,16 @@ class TimelineImplementation(allEvents: AllEvents = noEvents,
                   itemStateUpdatesDag.decomp(itemStateUpdateKey) match {
                     case Decomp(Some(context), remainder) =>
                       context.copy(inAdj =
-                        (previousItemStateUpdates union discoveredReadDependencies) map (() -> _) toVector) & remainder
+                        (ancestorItemStateUpdates union discoveredReadDependencies) map (() -> _) toVector) & remainder
                   }
 
                 val successorsAccordingToPreviousRevision
                   : Set[ItemStateUpdateKey] =
                   successorsOf(itemStateUpdateKey)
 
-                val successorsTakenOverFromAPreviousItemStateUpdate
+                val successorsTakenOverFromAnAncestorItemStateUpdate
                   : Set[ItemStateUpdateKey] =
-                  (previousItemStateUpdates
+                  (ancestorItemStateUpdates
                     .map(
                       ancestorItemStateUpdateKey =>
                         successorsOf(ancestorItemStateUpdateKey)
@@ -183,7 +183,7 @@ class TimelineImplementation(allEvents: AllEvents = noEvents,
 
                 val itemStateUpdateKeysToScheduleForRecalculation =
                   successorsAccordingToPreviousRevision ++
-                    successorsTakenOverFromAPreviousItemStateUpdate ++
+                    successorsTakenOverFromAnAncestorItemStateUpdate ++
                     keysStartingLifecyclesAccordingToPreviousRevisionIfThisPatchIsNotAlreadyADependencyInTheDag
 
                 itemStateUpdateKeysToScheduleForRecalculation.foreach(
