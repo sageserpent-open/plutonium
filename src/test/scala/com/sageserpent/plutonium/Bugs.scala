@@ -1296,19 +1296,6 @@ trait Bugs
                   ),
                 sharedAsOf
               )
-
-              val scope =
-                world.scopeFor(PositiveInfinity[Instant](), world.nextRevision)
-
-              val Seq((referrerTransitiveClosure, referred)) = scope
-                .render(
-                  (Bitemporal
-                     .withId[Thing](referrerId)
-                     .map(_.transitiveClosure),
-                   Bitemporal
-                     .withId[Thing](referredId)).mapN((_, _)))
-
-              referrerTransitiveClosure should contain(referred.id)
             }
 
             val scope =
