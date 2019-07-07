@@ -1254,6 +1254,75 @@ trait Bugs
       }
     }
 
+    "using related items without any annihilations" should "not reference any ghosts" in {
+      case class Booking(eventId: Int, referrerId: Int, referredId: Int)
+
+      val eventIdToBeCorrected = 0
+
+      val headOfChainId = 10
+
+      val secondInChainId = 20
+
+      val thirdInChainId = 30
+
+      val endOfChainId = 40
+
+      val bystanderId = -1
+
+      val events =
+        Seq(
+          Booking(eventIdToBeCorrected, bystanderId, thirdInChainId),
+          Booking(1, secondInChainId, thirdInChainId),
+          Booking(2, thirdInChainId, endOfChainId),
+          Booking(eventIdToBeCorrected, headOfChainId, secondInChainId)
+        )
+
+      val sharedAsOf = Instant.ofEpochSecond(0)
+
+      worldResource
+        .use(world =>
+          IO {
+            for ((Booking(eventId, referrerId, referredId), step) <- events.zipWithIndex) {
+              world.revise(
+                eventId,
+                Change
+                  .forTwoItems(Instant.ofEpochSecond(0L))(
+                    referrerId,
+                    referredId, {
+                      (referrer: Thing, referred: Thing) =>
+                        referrer
+                          .referTo(referred)
+                        // NOTE: the following mutation really is necessary, it can either come before
+                        // or after the call to 'referTo', but its position affected which item became
+                        // a ghost when this test was failing.
+                        referrer.property1 = step
+                    }
+                  ),
+                sharedAsOf
+              )
+            }
+
+            val scope =
+              world.scopeFor(PositiveInfinity[Instant](), world.nextRevision)
+
+            val Seq(referrerTransitiveClosure) = scope
+              .render(Bitemporal.withId[Thing](headOfChainId))
+              .map(_.transitiveClosure)
+
+            referrerTransitiveClosure should contain theSameElementsAs Seq(
+              headOfChainId,
+              secondInChainId,
+              thirdInChainId,
+              endOfChainId)
+
+            forAll(
+              scope
+                .render(Bitemporal.wildcard[Thing]())
+                .map(_.asInstanceOf[ItemExtensionApi])
+                .head)(!_.isGhost)
+        })
+        .unsafeRunSync
+    }
   }
 }
 
