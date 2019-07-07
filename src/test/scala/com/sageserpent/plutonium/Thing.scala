@@ -15,7 +15,14 @@ abstract class Thing {
 
   def referTo(referred: Thing): Unit = {
     reference = Some(referred)
+
+    // Refer down the chain of inter-item dependencies to make sure
+    // that all state is examined, this was introduced to flush out
+    // a bug involving spurious ghosts being introduced by incremental
+    // recalculation.
+    val _ = transitiveClosure
   }
+
   def transitiveClosure: Set[Id] = visitTransitiveClosure(Set.empty)
 
   private def visitTransitiveClosure(visited: Set[Id]): Set[Id] =
