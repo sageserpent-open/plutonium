@@ -22,7 +22,7 @@ trait Bugs
     with WorldSpecSupport
     with WorldResource {
   def suite() = {
-    "events that should have been revised" should "no longer contribute history to an item, even when the revised event refers to another item" in {
+    "events that have been revised" should "no longer contribute history to an item, even when the revised event refers to another item" in {
       val firstItemId = "Number One"
 
       val secondItemId = "Number Two"
@@ -82,7 +82,7 @@ trait Bugs
         .unsafeRunSync
     }
 
-    "events that should have been revised" should "no longer contribute history to an item, even when the revised event refers to another item - with a twist" in {
+    "events that have been revised" should "no longer contribute history to an item, even when the revised event refers to another item - with a twist" in {
       val firstItemId = "Number One"
 
       val secondItemId = "Number Two"

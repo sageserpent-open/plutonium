@@ -9,7 +9,7 @@ abstract class Thing {
 
   def id: Id
 
-  var property1: Int = 0
+  var property1: Int = -1
 
   var property2: String = ""
 
@@ -22,6 +22,7 @@ abstract class Thing {
     // recalculation.
     val _ = transitiveClosure
   }
+
   def transitiveClosure: Set[Id] = visitTransitiveClosure(Set.empty)
 
   private def visitTransitiveClosure(visited: Set[Id]): Set[Id] =

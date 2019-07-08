@@ -53,7 +53,7 @@ object ItemStateUpdateKey {
 case class ItemStateUpdateKey(eventOrderingKey: EventOrderingKey,
                               intraEventIndex: IntraEventIndex)
     extends ItemStateUpdateTime {
-  def when = eventOrderingKey._1
+  def when: Unbounded[Instant] = eventOrderingKey._1
 }
 
 case class LowerBoundOfTimeslice(when: Unbounded[Instant])

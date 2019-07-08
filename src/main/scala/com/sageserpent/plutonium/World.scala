@@ -53,8 +53,8 @@ trait World extends javaApi.World {
 
 trait WorldContracts extends World {
   def checkInvariant: Unit = {
-    require(revisionAsOfs.size == nextRevision)
-    require(
+    assert(revisionAsOfs.size == nextRevision)
+    assert(
       revisionAsOfs.isEmpty || (revisionAsOfs zip revisionAsOfs.tail forall {
         case (first, second) => !second.isBefore(first)
       }))
@@ -68,9 +68,9 @@ trait WorldContracts extends World {
     val nextRevisionBeforehand  = nextRevision
     try {
       val result = super.revise(events, asOf)
-      require(revisionAsOfs sameElements (revisionAsOfsBeforehand :+ asOf))
-      require(result == nextRevisionBeforehand)
-      require(nextRevision == 1 + result)
+      assert(revisionAsOfs sameElements (revisionAsOfsBeforehand :+ asOf))
+      assert(result == nextRevisionBeforehand)
+      assert(nextRevision == 1 + result)
       result
     } finally checkInvariant
   }
@@ -80,8 +80,8 @@ trait WorldContracts extends World {
                                  nextRevision: Revision): Scope = {
     require(nextRevision <= this.nextRevision)
     val result = super.scopeFor(when, nextRevision)
-    require(result.nextRevision == nextRevision)
-    require(result.nextRevision == 0 && result.asOf == NegativeInfinity() ||
+    assert(result.nextRevision == nextRevision)
+    assert(result.nextRevision == 0 && result.asOf == NegativeInfinity() ||
       result.nextRevision > revisionAsOfs
         .count(Finite(_) < result.asOf) && result.nextRevision <= revisionAsOfs
         .count(Finite(_) <= result.asOf))
@@ -92,9 +92,8 @@ trait WorldContracts extends World {
   abstract override def scopeFor(when: Unbounded[Instant],
                                  asOf: Instant): Scope = {
     val result = super.scopeFor(when, asOf)
-    require(result.asOf == Finite(asOf))
-    require(
-      result.nextRevision == revisionAsOfs.count(Finite(_) <= result.asOf))
+    assert(result.asOf == Finite(asOf))
+    assert(result.nextRevision == revisionAsOfs.count(Finite(_) <= result.asOf))
     result
   }
 

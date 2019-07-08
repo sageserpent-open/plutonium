@@ -39,22 +39,22 @@ trait WorldBehaviours
 
   def worldWithNoHistoryBehaviour = {
     it should "not contain any identifiables" in {
-      val scopeGenerator = for {
-        when <- unboundedInstantGenerator
-        asOf <- instantGenerator
+      worldResource
+        .use(world =>
+          IO {
+            val scopeGenerator = for {
+              when <- unboundedInstantGenerator
+              asOf <- instantGenerator
 
-      } yield
-        worldResource
-          .use(world =>
-            IO {
-              world.scopeFor(when = when, asOf = asOf)
-          })
-          .unsafeRunSync
-      check(Prop.forAllNoShrink(scopeGenerator)((scope: Scope) => {
-        val exampleBitemporal = Bitemporal.wildcard[NonExistentHistory]()
+            } yield world.scopeFor(when = when, asOf = asOf)
 
-        scope.render(exampleBitemporal).isEmpty
-      }))
+            check(Prop.forAllNoShrink(scopeGenerator)((scope: Scope) => {
+              val exampleBitemporal = Bitemporal.wildcard[NonExistentHistory]()
+
+              scope.render(exampleBitemporal).isEmpty
+            }))
+        })
+        .unsafeRunSync
     }
 
     it should "have no current revision" in {

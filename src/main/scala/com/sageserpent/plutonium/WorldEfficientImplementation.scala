@@ -4,13 +4,16 @@ import java.time.Instant
 import cats.Monad
 import cats.implicits._
 import com.sageserpent.americium.Unbounded
+import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
 import com.sageserpent.plutonium.World.Revision
 
 abstract class WorldEfficientImplementation[F[_]: Monad]
     extends WorldImplementationCodeFactoring {
   // TODO - one subclass prefers 'Array', other 'Vector'. Sort this out...
 
-  protected def timelinePriorTo(nextRevision: Revision): F[Option[Timeline]]
+  protected def blobStoragePriorTo(
+      nextRevision: Revision): F[Option[Timeline.BlobStorage]]
+protected def timelinePriorTo(nextRevision: Revision): F[Option[Timeline]]
 
   protected def allTimelinesPriorTo(
       nextRevision: Revision): F[Array[(Instant, Timeline)]]
@@ -25,8 +28,10 @@ abstract class WorldEfficientImplementation[F[_]: Monad]
 
   override def close(): Unit = {}
 
-  override def revise(events: Map[_ <: EventId, Option[Event]],
-                      asOf: Instant): Revision = {
+  protected def emptyTimeline(): Timeline
+
+  def revise(events: Map[_ <: EventId, Option[Event]],
+             asOf: Instant): Revision = {
     val resultCapturedBeforeMutation = nextRevision
 
     val computation: F[Timeline] = timelinePriorTo(nextRevision)
@@ -50,9 +55,12 @@ abstract class WorldEfficientImplementation[F[_]: Monad]
 
   trait ScopeUsingStorage extends com.sageserpent.plutonium.Scope {
     lazy val itemCache: ItemCache = {
-      val computation: F[ItemCache] = timelinePriorTo(nextRevision)
-        .map(_.getOrElse(emptyTimeline()))
-        .map(_.itemCacheAt(when))
+      val computation: F[ItemCache] = blobStoragePriorTo(nextRevision)
+        .map(
+          _.getOrElse(
+            BlobStorageInMemory.empty[ItemStateUpdateTime, SnapshotBlob]))
+        .map(blobStorage =>
+          ItemCacheUsingBlobStorage.itemCacheAt(when, blobStorage))
 
       itemCacheOf(computation)
     }
