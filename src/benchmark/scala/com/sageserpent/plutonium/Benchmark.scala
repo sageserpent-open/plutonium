@@ -89,9 +89,9 @@ trait Benchmark
 
               println(
                 s"Step: $step, duration: ${duration.toMillis} milliseconds, objectToReferenceIdCache: ${tranches.objectToReferenceIdCache
-                  .estimatedSize()}, referenceIdToProxyCache: ${tranches.referenceIdToProxyCache
-                  .estimatedSize()}, trancheIdToCompletedOperationCache: ${tranches.trancheIdToCompletedOperationCache
-                  .estimatedSize()}")
+                  .size()}, referenceIdToProxyCache: ${tranches.referenceIdToProxyCache
+                  .size()}, trancheIdToCompletedOperationCache: ${tranches.trancheIdToCompletedOperationCache
+                  .size()}")
             }
           }
 

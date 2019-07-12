@@ -71,16 +71,6 @@ class WorldH2StorageImplementation(
       connectionPool
     )
 
-  override def revise(eventId: EventId,
-                      event: Event,
-                      asOf: Instant): Revision = {
-    if (0 == numberOfTimelines % 500) {
-      tranches.clearCaches()
-    }
-
-    super.revise(eventId, event, asOf)
-  }
-
   private def retrieveTimeline(trancheIds: Vector[TrancheId]) =
     (immutableObjectStorage.retrieve[AllEvents](trancheIds(0)),
      immutableObjectStorage.retrieve[ItemStateUpdatesDag](trancheIds(1)),
