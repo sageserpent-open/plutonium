@@ -43,8 +43,8 @@ trait Benchmark
               else
                 step - randomBehaviour
                   .chooseAnyNumberFromOneTo(20)
-				  
-            val idOffset = (step / idWindowSize) * idWindowSize				  
+
+            val idOffset = (step / idWindowSize) * idWindowSize
 
             val probabilityOfBookingANewOrCorrectingEvent = 0 < randomBehaviour
               .chooseAnyNumberFromZeroToOneLessThan(5)
@@ -80,17 +80,7 @@ trait Benchmark
               3600L * randomBehaviour.chooseAnyNumberFromZeroToOneLessThan(
                 1 + theHourFromTheStart))
 
-            val property1 = {
-              val scope = world.scopeFor(queryTime, onePastQueryRevision)
-
-              val queryId = randomBehaviour.chooseOneOfRange(0 until (idOffset + idWindowSize))
-
-              scope
-                .render(Bitemporal.withId[Thing](queryId))
-                .force
-                .headOption
-                .fold(-2)(_.property1)
-            }
+            val tranches = world.tranches
 
             if (step % 50 == 0) {
               val currentTime = Deadline.now
@@ -98,7 +88,10 @@ trait Benchmark
               val duration = currentTime - startTime
 
               println(
-                s"Step: $step, duration: ${duration.toMillis} milliseconds, property1: $property1")
+                s"Step: $step, duration: ${duration.toMillis} milliseconds, objectToReferenceIdCache: ${tranches.objectToReferenceIdCache
+                  .estimatedSize()}, referenceIdToProxyCache: ${tranches.referenceIdToProxyCache
+                  .estimatedSize()}, trancheIdToCompletedOperationCache: ${tranches.trancheIdToCompletedOperationCache
+                  .estimatedSize()}")
             }
           }
 

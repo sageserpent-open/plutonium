@@ -13,7 +13,7 @@ abstract class WorldEfficientImplementation[F[_]: Monad]
 
   protected def blobStoragePriorTo(
       nextRevision: Revision): F[Option[Timeline.BlobStorage]]
-protected def timelinePriorTo(nextRevision: Revision): F[Option[Timeline]]
+  protected def timelinePriorTo(nextRevision: Revision): F[Option[Timeline]]
 
   protected def allTimelinesPriorTo(
       nextRevision: Revision): F[Array[(Instant, Timeline)]]
