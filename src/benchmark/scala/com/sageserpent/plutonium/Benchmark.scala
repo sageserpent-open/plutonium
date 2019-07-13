@@ -80,7 +80,7 @@ trait Benchmark
               3600L * randomBehaviour.chooseAnyNumberFromZeroToOneLessThan(
                 1 + theHourFromTheStart))
 
-            val tranches = world.tranches
+            val intersessionState = world.intersessionState
 
             if (step % 50 == 0) {
               val currentTime = Deadline.now
@@ -88,9 +88,9 @@ trait Benchmark
               val duration = currentTime - startTime
 
               println(
-                s"Step: $step, duration: ${duration.toMillis} milliseconds, objectToReferenceIdCache: ${tranches.objectToReferenceIdCache
-                  .size()}, referenceIdToProxyCache: ${tranches.referenceIdToProxyCache
-                  .size()}, trancheIdToCompletedOperationCache: ${tranches.trancheIdToCompletedOperationCache
+                s"Step: $step, duration: ${duration.toMillis} milliseconds, objectToReferenceIdCache: ${intersessionState.objectToReferenceIdCache
+                  .size()}, referenceIdToProxyCache: ${intersessionState.referenceIdToProxyCache
+                  .size()}, trancheIdToCompletedOperationCache: ${intersessionState.trancheIdToCompletedOperationCache
                   .size()}")
             }
           }

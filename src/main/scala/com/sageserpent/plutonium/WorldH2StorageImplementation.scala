@@ -61,6 +61,8 @@ class WorldH2StorageImplementation(
     var numberOfTimelines: Int,
     val connectionPool: ConnectionPool)
     extends WorldEfficientImplementation[Session] {
+  val intersessionState: IntersessionState[TrancheId] = new IntersessionState
+
   def this(connectionPool: ConnectionPool) =
     this(
       new H2ViaScalikeJdbcTranches(connectionPool)
@@ -127,7 +129,8 @@ class WorldH2StorageImplementation(
                                             asOf: Instant): Unit = {
     val Right(trancheIds) =
       immutableObjectStorage.runToYieldTrancheIds(
-        newTimeline.flatMap(storeTimeline))(tranches)
+        newTimeline.flatMap(storeTimeline),
+        intersessionState)(tranches)
 
     if (nextRevision == timelineTrancheIdStorage.length) {
       val sourceOfCopy = timelineTrancheIdStorage
@@ -150,7 +153,8 @@ class WorldH2StorageImplementation(
           case (asOf, timeline) =>
             storeTimeline(timeline)
               .map(trancheId => asOf -> trancheId)
-        })
+        }),
+      intersessionState
     )(tranches)
 
     new WorldH2StorageImplementation(tranches,
@@ -161,7 +165,10 @@ class WorldH2StorageImplementation(
   }
 
   override protected def itemCacheOf(itemCache: Session[ItemCache]): ItemCache =
-    immutableObjectStorage.unsafeRun(itemCache)(tranches).right.get
+    immutableObjectStorage
+      .unsafeRun(itemCache, intersessionState)(tranches)
+      .right
+      .get
 
   override protected def emptyTimeline(): Timeline =
     new Timeline(blobStorage = emptyBlobStorage)
