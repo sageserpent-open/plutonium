@@ -17,6 +17,7 @@ import com.sageserpent.plutonium.AllEvents.ItemStateUpdatesDelta
 import com.sageserpent.plutonium.AllEventsImplementation.Lifecycle._
 import com.sageserpent.plutonium.AllEventsImplementation._
 import com.sageserpent.plutonium.World.{Revision, initialRevision}
+import com.sageserpent.plutonium.curium.TwoStageMap
 import de.sciss.fingertree.RangedSeq
 import de.ummels.prioritymap.PriorityMap
 
@@ -803,8 +804,8 @@ class AllEventsImplementation(
     nextRevision: Revision = initialRevision,
     lifecycleFootprintPerEvent: Map[EventId,
                                     AllEventsImplementation.EventFootprint] =
-      Map.empty,
-    lifecyclesById: LifecyclesById = Map.empty,
+      TwoStageMap.empty,
+    lifecyclesById: LifecyclesById = TwoStageMap.empty,
     bestPatchSelection: BestPatchSelection = bestPatchSelection)
     extends AllEvents {
   val sampleLifecyclesById = lifecyclesById.take(maxNumberOfIdsToSample)
