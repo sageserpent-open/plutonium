@@ -22,6 +22,8 @@ import scala.util.DynamicVariable
 import scala.util.hashing.MurmurHash3
 
 object ItemStateStorage {
+  var cumulativeSavedSnapshotSize: Long = 0L
+
   case class SnapshotBlob(payload: Array[Byte],
                           lifecycleUUID: UUID,
                           itemStateUpdateKey: Option[ItemStateUpdateKey]) {
@@ -185,8 +187,10 @@ trait ItemStateStorage { itemStateStorageObject =>
 
   def snapshotFor(item: Any): SnapshotBlob = {
     val itemAsSupertype = item.asInstanceOf[ItemSuperType]
+    val payload         = kryoPool.toBytesWithClass(item)
+    cumulativeSavedSnapshotSize += payload.size
     SnapshotBlob(
-      payload = kryoPool.toBytesWithClass(item),
+      payload = payload,
       lifecycleUUID = lifecycleUUID(itemAsSupertype),
       itemStateUpdateKey = itemStateUpdateKey(itemAsSupertype)
     )

@@ -4,7 +4,10 @@ import java.time.Instant
 
 import cats.effect.IO
 import com.sageserpent.americium.randomEnrichment._
-import com.sageserpent.plutonium.curium.H2ViaScalikeJdbcDatabaseSetupResource
+import com.sageserpent.plutonium.curium.{
+  H2ViaScalikeJdbcDatabaseSetupResource,
+  ImmutableObjectStorage
+}
 
 import scala.concurrent.duration._
 import scala.util.Random
@@ -88,10 +91,7 @@ trait Benchmark
               val duration = currentTime - startTime
 
               println(
-                s"Step: $step, duration: ${duration.toMillis} milliseconds, objectToReferenceIdCache: ${intersessionState.objectToReferenceIdCache
-                  .size()}, referenceIdToProxyCache: ${intersessionState.referenceIdToProxyCache
-                  .size()}, trancheIdToCompletedOperationCache: ${intersessionState.trancheIdToCompletedOperationCache
-                  .size()}")
+                s"Step: $step, duration: ${duration.toMillis} milliseconds, cumulative tranche load size: ${ImmutableObjectStorage.cumulativeTrancheLoadSize}, cumulative saved snapshot size: ${ItemStateStorage.cumulativeSavedSnapshotSize}")
             }
           }
 
