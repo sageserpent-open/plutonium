@@ -1,11 +1,15 @@
 package com.sageserpent.plutonium.curium
 
+import cats.Foldable
 import org.scalatest.{FlatSpec, Matchers}
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalacheck.ScalacheckShapeless._
 import org.scalacheck.{Arbitrary, Gen, ShrinkLowPriority}
 
 import scala.collection.immutable.HashMap
+import cats.implicits._
+import cats.data.Writer
+import alleycats.std.iterable._
 
 object TwoStageMapConformanceAgainstReferenceImplementation {
   type Key   = Int
@@ -39,21 +43,34 @@ class TwoStageMapConformanceAgainstReferenceImplementation
         val (emptyReferenceMap, emptyTwoStageMap) = HashMap
           .empty[Key, Value] -> TwoStageMap.empty[Key, Value]
 
-        def applyOperations(map: Map[Key, Value]): Map[Key, Value] =
-          (map /: operations) {
-            case (map, operation) =>
-              operation match {
-                case Addition(key, value) => map + (key -> value)
-                case Removal(key)         => map - key
-                case Querying(key)        => map
-              }
-          }
+        def applyOperations(
+            map: Map[Key, Value]): (Vector[Option[Value]], Map[Key, Value]) = {
+          type QueryResultsWriter[X] = Writer[Vector[Option[Value]], X]
 
-        val finalReferenceMap = applyOperations(emptyReferenceMap)
+          val almostThere: QueryResultsWriter[Map[Key, Value]] =
+            Foldable[Iterable].foldLeftM(operations, map) {
+              case (map, operation) =>
+                operation match {
+                  case Addition(key, value) =>
+                    (map + (key -> value)).pure[QueryResultsWriter]
+                  case Removal(key) => (map - key).pure[QueryResultsWriter]
+                  case Querying(key) =>
+                    map.pure[QueryResultsWriter].tell(Vector(map.get(key)))
+                }
+            }
 
-        val finalTwoStageMap = applyOperations(emptyTwoStageMap)
+          almostThere.run
+        }
 
-        finalReferenceMap.toSeq should contain theSameElementsAs finalTwoStageMap.toSeq
+        val (referenceMapQueryResults, finalReferenceMap) =
+          applyOperations(emptyReferenceMap)
+
+        val (twoStageMapQueryResults, finalTwoStageMap) =
+          applyOperations(emptyTwoStageMap)
+
+        finalTwoStageMap.toSeq should contain theSameElementsAs finalReferenceMap.toSeq
+
+        twoStageMapQueryResults should contain theSameElementsAs referenceMapQueryResults
     }
   }
 }
