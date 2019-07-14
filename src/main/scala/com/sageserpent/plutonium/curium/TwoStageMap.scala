@@ -30,7 +30,7 @@ case class TwoStageMap[Key, Value] private (firstStage: Map[Key, Value],
 
   override def iterator: Iterator[(Key, Value)] =
     firstStage.iterator ++ secondStage.iterator.filterNot {
-      case (key, _) => obsoleteKeys.contains(key)
+      case (key, _) => obsoleteKeys.contains(key) || firstStage.contains(key)
     }
 
   override def -(key: Key): Map[Key, Value] =
