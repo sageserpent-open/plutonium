@@ -1,14 +1,16 @@
 package com.sageserpent.plutonium.curium
 
+import scala.collection.immutable.HashMap
+
 object TwoStageMap {
   def empty[Key, Value]: TwoStageMap[Key, Value] =
-    TwoStageMap(Map.empty, Map.empty, Set.empty)
+    TwoStageMap(HashMap.empty, HashMap.empty, Set.empty)
 
   val maximumFirstStageSize = 500
 }
 
-case class TwoStageMap[Key, Value] private (firstStage: Map[Key, Value],
-                                            secondStage: Map[Key, Value],
+case class TwoStageMap[Key, Value] private (firstStage: HashMap[Key, Value],
+                                            secondStage: HashMap[Key, Value],
                                             obsoleteKeys: Set[Key])
     extends Map[Key, Value] {
   // NOTE: the second stage can end up containing obsolete key-value pairs whose keys
@@ -19,9 +21,13 @@ case class TwoStageMap[Key, Value] private (firstStage: Map[Key, Value],
     if (TwoStageMap.maximumFirstStageSize > firstStage.size) {
       copy(firstStage = firstStage + kv)
     } else
-      TwoStageMap(firstStage = Map.empty + kv,
-                  secondStage = secondStage -- obsoleteKeys ++ firstStage,
-                  obsoleteKeys = obsoleteKeys.empty)
+      TwoStageMap(
+        firstStage = HashMap.empty + kv,
+        secondStage =
+          firstStage.merged(secondStage -- obsoleteKeys)((fromFirstStage, _) =>
+            fromFirstStage),
+        obsoleteKeys = obsoleteKeys.empty
+      )
 
   override def get(key: Key): Option[Value] =
     firstStage
