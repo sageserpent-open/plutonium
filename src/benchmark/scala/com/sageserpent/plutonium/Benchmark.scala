@@ -85,13 +85,26 @@ trait Benchmark
 
             val intersessionState = world.intersessionState
 
+            val property1 = {
+              val scope = world.scopeFor(queryTime, onePastQueryRevision)
+
+              val queryId = randomBehaviour.chooseOneOfRange(
+                0 until (idOffset + idWindowSize))
+
+              scope
+                .render(Bitemporal.withId[Thing](queryId))
+                .force
+                .headOption
+                .fold(-2)(_.property1)
+            }
+
             if (step % 50 == 0) {
               val currentTime = Deadline.now
 
               val duration = currentTime - startTime
 
               println(
-                s"Step: $step, duration: ${duration.toMillis} milliseconds.")
+                s"Step: $step, duration: ${duration.toMillis} milliseconds, property1: $property1")
             }
           }
 
