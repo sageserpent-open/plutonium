@@ -4,7 +4,10 @@ import java.time.Instant
 
 import cats.effect.IO
 import com.sageserpent.americium.randomEnrichment._
-import com.sageserpent.plutonium.curium.H2ViaScalikeJdbcDatabaseSetupResource
+import com.sageserpent.plutonium.curium.{
+  H2ViaScalikeJdbcDatabaseSetupResource,
+  ImmutableObjectStorage
+}
 
 import scala.concurrent.duration._
 import scala.util.Random
@@ -43,8 +46,8 @@ trait Benchmark
               else
                 step - randomBehaviour
                   .chooseAnyNumberFromOneTo(20)
-				  
-            val idOffset = (step / idWindowSize) * idWindowSize				  
+
+            val idOffset = (step / idWindowSize) * idWindowSize
 
             val probabilityOfBookingANewOrCorrectingEvent = 0 < randomBehaviour
               .chooseAnyNumberFromZeroToOneLessThan(5)
@@ -80,10 +83,13 @@ trait Benchmark
               3600L * randomBehaviour.chooseAnyNumberFromZeroToOneLessThan(
                 1 + theHourFromTheStart))
 
+            val intersessionState = world.intersessionState
+
             val property1 = {
               val scope = world.scopeFor(queryTime, onePastQueryRevision)
 
-              val queryId = randomBehaviour.chooseOneOfRange(0 until (idOffset + idWindowSize))
+              val queryId = randomBehaviour.chooseOneOfRange(
+                0 until (idOffset + idWindowSize))
 
               scope
                 .render(Bitemporal.withId[Thing](queryId))
