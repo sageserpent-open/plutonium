@@ -1,6 +1,6 @@
 package com.sageserpent.plutonium
 
-import com.google.common.cache.{Cache, CacheBuilder}
+import com.github.benmanes.caffeine.cache.Cache
 
 import scala.reflect.runtime.{currentMirror, universe}
 import universe.typeOf
@@ -8,11 +8,11 @@ import universe.typeOf
 object classFromType {
 
   val clazzCache: Cache[universe.Type, Class[_]] =
-    CacheBuilder.newBuilder().build()
+    caffeineBuilder().build()
 
   def apply[Item](reflectedType: universe.Type): Class[Item] =
     clazzCache
-      .get(reflectedType, { () =>
+      .get(reflectedType, { reflectedType =>
         if (typeOf[Any] =:= reflectedType) classOf[Any]
         else
           currentMirror

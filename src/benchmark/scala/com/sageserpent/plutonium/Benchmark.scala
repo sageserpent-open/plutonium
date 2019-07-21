@@ -103,8 +103,10 @@ trait Benchmark
 
               val duration = currentTime - startTime
 
-              println(
-                s"Step: $step, duration: ${duration.toMillis} milliseconds, property1: $property1")
+              println(s"Step: $step, duration: ${duration.toMillis} milliseconds, objectToReferenceIdCache: ${intersessionState.objectToReferenceIdCache
+                .estimatedSize()}, referenceIdToProxyCache: ${intersessionState.referenceIdToProxyCache
+                .estimatedSize()}, trancheIdToCompletedOperationCache: ${intersessionState.trancheIdToCompletedOperationCache
+                .estimatedSize()}")
             }
           }
 
