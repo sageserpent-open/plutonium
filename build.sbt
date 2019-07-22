@@ -25,6 +25,7 @@ lazy val settings = Seq(
   libraryDependencies += "de.ummels"                     %% "scala-prioritymap"            % "1.0.0",
   libraryDependencies += "de.sciss"                      %% "fingertree"                   % "1.5.4",
   libraryDependencies += "com.google.guava"              % "guava"                         % "28.0-jre",
+  libraryDependencies += "com.github.ben-manes.caffeine" % "caffeine"                      % "2.7.0",
   libraryDependencies += "org.tpolecat"                  %% "doobie-core"                  % "0.7.0-M3",
   libraryDependencies += "org.tpolecat"                  %% "doobie-h2"                    % "0.7.0-M3",
   libraryDependencies += "org.scalikejdbc"               %% "scalikejdbc"                  % "2.5.2",
