@@ -129,7 +129,7 @@ trait ProxyFactory {
     nonMutableMembersThatCanAlwaysBeReadFrom.exists(exclusionMethod => {
       WorldImplementationCodeFactoring
         .firstMethodIsOverrideCompatibleWithSecond(method, exclusionMethod)
-    })
+    }) || method.getReceiverType.getTypeName.contains("PyObject")
 
   object id {
     @RuntimeType

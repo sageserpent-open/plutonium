@@ -2,6 +2,8 @@ import sbt.Configurations.config
 import sbt.Defaults.testSettings
 import sbt.Keys.libraryDependencies
 
+
+
 lazy val settings = Seq(
   organization := "com.sageserpent",
   name := "plutonium",
@@ -53,7 +55,13 @@ lazy val settings = Seq(
   Compile / doc / sources := Seq.empty,
   Compile / packageDoc / publishArtifact := false,
   fork in run := true,
-  javaOptions in run += "-Xmx500M"
+  javaOptions in run += "-Xmx500M",
+  test in assembly := {},
+  assemblyJarName in assembly := "GrandeBouffe.jar",
+  assemblyMergeStrategy in assembly := {
+    case fileName if fileName.toUpperCase contains ("META-INF") => MergeStrategy.discard
+    case _ => MergeStrategy.deduplicate
+  }
 )
 
 lazy val Benchmark = config("benchmark") extend Test
