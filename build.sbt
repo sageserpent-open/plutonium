@@ -53,7 +53,7 @@ lazy val settings = Seq(
   Compile / doc / sources := Seq.empty,
   Compile / packageDoc / publishArtifact := false,
   fork in run := true,
-  javaOptions in run += "-Xmx10G"
+  javaOptions in run += "-Xmx500M"
 )
 
 lazy val Benchmark = config("benchmark") extend Test
