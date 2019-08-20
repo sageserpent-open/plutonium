@@ -11,7 +11,7 @@ import com.sageserpent.americium._
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.seqEnrichment._
 import com.sageserpent.plutonium.World._
-import com.sageserpent.plutonium.curium.H2ViaScalikeJdbcDatabaseSetupResource
+import com.sageserpent.curium.H2ViaScalikeJdbcDatabaseSetupResource
 import io.lettuce.core.{RedisClient, RedisURI}
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.Assertions

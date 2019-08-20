@@ -4,7 +4,7 @@ import java.time.Instant
 
 import cats.effect.IO
 import com.sageserpent.americium.randomEnrichment._
-import com.sageserpent.plutonium.curium.{
+import com.sageserpent.curium.{
   H2ViaScalikeJdbcDatabaseSetupResource,
   ImmutableObjectStorage
 }

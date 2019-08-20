@@ -12,7 +12,7 @@ import com.sageserpent.americium.{
 }
 import com.sageserpent.plutonium.BlobStorage.TimesliceContracts
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
-import com.sageserpent.plutonium.curium.DBResource
+import com.sageserpent.curium.DBResource
 import com.twitter.chill.{KryoPool, KryoSerializer}
 import scalikejdbc._
 

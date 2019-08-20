@@ -10,11 +10,8 @@ import com.sageserpent.plutonium.WorldH2StorageImplementation.{
   TrancheId,
   immutableObjectStorage
 }
-import com.sageserpent.plutonium.curium.ImmutableObjectStorage._
-import com.sageserpent.plutonium.curium.{
-  H2ViaScalikeJdbcTranches,
-  ImmutableObjectStorage
-}
+import com.sageserpent.curium.ImmutableObjectStorage._
+import com.sageserpent.curium.{H2ViaScalikeJdbcTranches, ImmutableObjectStorage}
 import de.sciss.fingertree.{FingerTree, RangedSeq}
 import scalikejdbc.ConnectionPool
 

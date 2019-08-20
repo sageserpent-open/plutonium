@@ -4,7 +4,7 @@ import java.time.Instant
 import java.util.UUID
 
 import cats.effect.{IO, Resource}
-import com.sageserpent.plutonium.curium.ConnectionPoolResource
+import com.sageserpent.curium.ConnectionPoolResource
 import org.scalacheck.ScalacheckShapeless._
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
