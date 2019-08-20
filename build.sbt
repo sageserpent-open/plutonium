@@ -63,9 +63,9 @@ lazy val plutonium = (project in file("."))
   .settings(settings ++ inConfig(Benchmark)(testSettings): _*)
   .dependsOn(curium)
 
-resolvers += Resolver.jcenterRepo
+resolvers in ThisBuild += Resolver.jcenterRepo
 
-resolvers += "Sonatype OSS Snapshots" at
+resolvers in ThisBuild += "Sonatype OSS Snapshots" at
   "https://oss.sonatype.org/content/repositories/releases"
 
 lazy val curium = (project in file("curium"))
