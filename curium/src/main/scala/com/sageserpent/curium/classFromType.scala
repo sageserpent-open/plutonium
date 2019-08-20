@@ -1,13 +1,11 @@
-package com.sageserpent.plutonium
+package com.sageserpent.curium
 
 import com.github.benmanes.caffeine.cache.Cache
-import com.sageserpent.curium.caffeineBuilder
 
+import scala.reflect.runtime.universe.typeOf
 import scala.reflect.runtime.{currentMirror, universe}
-import universe.typeOf
 
 object classFromType {
-
   val clazzCache: Cache[universe.Type, Class[_]] =
     caffeineBuilder().build()
 

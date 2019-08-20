@@ -1,4 +1,4 @@
-package com.sageserpent.plutonium
+package com.sageserpent.curium
 
 import com.github.benmanes.caffeine.cache.Caffeine
 

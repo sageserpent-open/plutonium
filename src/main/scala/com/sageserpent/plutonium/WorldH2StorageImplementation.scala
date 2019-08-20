@@ -4,14 +4,14 @@ import java.time.Instant
 
 import cats.implicits._
 import com.sageserpent.americium.Unbounded
+import com.sageserpent.curium.ImmutableObjectStorage._
+import com.sageserpent.curium.{H2ViaScalikeJdbcTranches, ImmutableObjectStorage}
 import com.sageserpent.plutonium.Timeline.ItemStateUpdatesDag
 import com.sageserpent.plutonium.World.Revision
 import com.sageserpent.plutonium.WorldH2StorageImplementation.{
   TrancheId,
   immutableObjectStorage
 }
-import com.sageserpent.curium.ImmutableObjectStorage._
-import com.sageserpent.curium.{H2ViaScalikeJdbcTranches, ImmutableObjectStorage}
 import de.sciss.fingertree.{FingerTree, RangedSeq}
 import scalikejdbc.ConnectionPool
 
