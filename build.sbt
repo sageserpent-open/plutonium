@@ -61,7 +61,7 @@ lazy val Benchmark = config("benchmark") extend Test
 lazy val plutonium = (project in file("."))
   .configs(Benchmark)
   .settings(settings ++ inConfig(Benchmark)(testSettings): _*)
-  .dependsOn(curium % "test->test")
+  .dependsOn(curium % "compile->compile;test->test")
 
 resolvers in ThisBuild += Resolver.jcenterRepo
 
