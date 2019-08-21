@@ -1,4 +1,4 @@
-package com.sageserpent.curium
+package com.sageserpent.plutonium
 
 import java.io.IOException
 import java.nio.file.attribute.BasicFileAttributes
@@ -6,8 +6,8 @@ import java.nio.file.{FileVisitResult, FileVisitor, Files, Path}
 import java.util.UUID
 
 import cats.effect.{IO, Resource}
+import com.sageserpent.curium.{DBResource, H2ViaScalikeJdbcTranches}
 import com.zaxxer.hikari.HikariDataSource
-
 import scalikejdbc._
 
 trait ConnectionPoolResource {

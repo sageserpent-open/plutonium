@@ -4,10 +4,6 @@ import java.time.Instant
 
 import cats.effect.IO
 import com.sageserpent.americium.randomEnrichment._
-import com.sageserpent.curium.{
-  H2ViaScalikeJdbcDatabaseSetupResource,
-  ImmutableObjectStorage
-}
 
 import scala.concurrent.duration._
 import scala.util.Random
