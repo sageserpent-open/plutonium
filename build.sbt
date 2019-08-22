@@ -63,7 +63,9 @@ lazy val plutonium = (project in file("."))
   .configs(Benchmark)
   .settings(settings ++ inConfig(Benchmark)(testSettings): _*)
 
-resolvers in ThisBuild += Resolver.jcenterRepo
+resolvers += Resolver.jcenterRepo
 
-resolvers in ThisBuild += "Sonatype OSS Snapshots" at
+resolvers += "Sonatype OSS Snapshots" at
   "https://oss.sonatype.org/content/repositories/releases"
+
+resolvers += Resolver.bintrayRepo("sageserpent-open", "maven")
