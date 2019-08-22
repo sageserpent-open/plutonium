@@ -68,4 +68,5 @@ resolvers += Resolver.jcenterRepo
 resolvers += "Sonatype OSS Snapshots" at
   "https://oss.sonatype.org/content/repositories/releases"
 
+// TODO: remove this once the JCenter integration issue for Curium is fixed.
 resolvers += Resolver.bintrayRepo("sageserpent-open", "maven")
