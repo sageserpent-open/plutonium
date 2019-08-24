@@ -1,4 +1,4 @@
-# Plutonium - **_bitemporal CQRS for Plain Old Java Objects (and Scala too)_** [![Build Status](https://travis-ci.org/sageserpent-open/open-plutonium.svg?branch=master)](https://travis-ci.org/sageserpent-open/open-plutonium)
+# Plutonium - **_bitemporal CQRS for Plain Old Java Objects (and Scala too)_** [![Build Status](https://travis-ci.org/sageserpent-open/plutonium.svg?branch=master)](https://travis-ci.org/sageserpent-open/plutonium)
 
 ## Pardon? ##
 No, you are not about to be invited to purchase some fissile material of any isotopic constitution whatsover.
@@ -30,7 +30,7 @@ Add this to your _build.sbt_:
 
     resolvers += Resolver.jcenterRepo
 
-    libraryDependencies += "com.sageserpent" %% "open-plutonium" % "1.3.0"
+    libraryDependencies += "com.sageserpent" %% "plutonium" % "1.3.0"
     
 #### Gradle ####
 Add this to your _build.gradle_:
@@ -40,10 +40,10 @@ Add this to your _build.gradle_:
     }
 
     dependencies {
-        compile 'com.sageserpent:open-plutonium_2.12:1.3.0'
+        compile 'com.sageserpent:plutonium_2.12:1.3.0'
     }
     
-[release history here](https://github.com/sageserpent-open/open-plutonium/blob/master/releaseHistory.md)
+[release history here](https://github.com/sageserpent-open/plutonium/blob/master/releaseHistory.md)
     
 ## Show me... ##
 
@@ -81,7 +81,7 @@ jshell> /reload
 NegativeInfinity()
 5.0
 ```
-![Revision Zero](https://github.com/sageserpent-open/open-plutonium/blob/master/Revision%20Zero.png)
+![Revision Zero](https://github.com/sageserpent-open/plutonium/blob/master/Revision%20Zero.png)
 ```java
 -: Instant toStartWith = Instant.ofEpochSecond(0);
 -: int rememberThisEventId = 1;
@@ -106,7 +106,7 @@ NegativeInfinity()
 1970-01-01T00:00:00Z
 3.8
 ```
-![Revision One](https://github.com/sageserpent-open/open-plutonium/blob/master/Revision%20One.png)
+![Revision One](https://github.com/sageserpent-open/plutonium/blob/master/Revision%20One.png)
 ```java
 -: Instant oneHourLater = toStartWith.plusSeconds(3600L);
 -: {
@@ -132,7 +132,7 @@ NegativeInfinity()
 1970-01-01T01:00:00Z
 6.7
 ```
-![Revision Two](https://github.com/sageserpent-open/open-plutonium/blob/master/Revision%20Two.png)
+![Revision Two](https://github.com/sageserpent-open/plutonium/blob/master/Revision%20Two.png)
 ```java
 -: Instant twoHoursLater = oneHourLater.plusSeconds(3600L);
 -: {
@@ -150,7 +150,7 @@ NegativeInfinity()
 4
 1970-01-01T02:00:00Z
 ```
-![Revision Three (annihilation)](https://github.com/sageserpent-open/open-plutonium/blob/master/Revision%20Three%20(annihilation).png)
+![Revision Three (annihilation)](https://github.com/sageserpent-open/plutonium/blob/master/Revision%20Three%20(annihilation).png)
 ```java
 -: {
        final Instant asOf = Instant.now();
@@ -167,7 +167,7 @@ NegativeInfinity()
 5
 1970-01-01T00:00:00Z
 ```
-![Revision Four (correct an event)](https://github.com/sageserpent-open/open-plutonium/blob/master/Revision%20Four%20(correct%20an%20event).png)
+![Revision Four (correct an event)](https://github.com/sageserpent-open/plutonium/blob/master/Revision%20Four%20(correct%20an%20event).png)
 ```java
 -: {
        final int followingRevision = 0;
@@ -182,7 +182,7 @@ NegativeInfinity()
 1970-01-01T02:00:00Z
 true
 ```
-![Empty World](https://github.com/sageserpent-open/open-plutonium/blob/master/Empty%20World.png)
+![Empty World](https://github.com/sageserpent-open/plutonium/blob/master/Empty%20World.png)
 ```java
 -: {
        int followingRevision = 1;
@@ -199,7 +199,7 @@ true
 NegativeInfinity()
 5.0
 ```
-![Revision Zero Revisited](https://github.com/sageserpent-open/open-plutonium/blob/master/Revision%20Zero%20Revisited.png)
+![Revision Zero Revisited](https://github.com/sageserpent-open/plutonium/blob/master/Revision%20Zero%20Revisited.png)
 ```java
 -: {
        final int followingRevision = 2;
@@ -216,7 +216,7 @@ NegativeInfinity()
 NegativeInfinity()
 5.0
 ```
-![Revision One Revisited](https://github.com/sageserpent-open/open-plutonium/blob/master/Revision%20One%20Revisited.png)
+![Revision One Revisited](https://github.com/sageserpent-open/plutonium/blob/master/Revision%20One%20Revisited.png)
 ```java
 -: {
        int followingRevision = 3;
@@ -248,7 +248,7 @@ NegativeInfinity()
 1970-01-01T02:00:00Z
 6.7
 ```
-![Revision Two Revisited](https://github.com/sageserpent-open/open-plutonium/blob/master/Revision%20Two%20Revisited.png)
+![Revision Two Revisited](https://github.com/sageserpent-open/plutonium/blob/master/Revision%20Two%20Revisited.png)
 ```java
 -: {
        int followingRevision = 4;
@@ -265,7 +265,7 @@ NegativeInfinity()
 1970-01-01T02:00:00Z
 false
 ```
-![Revision Three Revisited](https://github.com/sageserpent-open/open-plutonium/blob/master/Revision%20Three%20Revisited.png)
+![Revision Three Revisited](https://github.com/sageserpent-open/plutonium/blob/master/Revision%20Three%20Revisited.png)
 ```java
 -: {
        final int followingRevision = 5;
@@ -282,8 +282,8 @@ false
 1970-01-01T00:00:00Z
 3.0
 ```
-![Revision Four Revisited](https://github.com/sageserpent-open/open-plutonium/blob/master/Revision%20Four%20Revisited.png)
+![Revision Four Revisited](https://github.com/sageserpent-open/plutonium/blob/master/Revision%20Four%20Revisited.png)
 
 ## How? ##
 
-See the [example and following discussion here](https://github.com/sageserpent-open/open-plutonium/blob/master/example.md)
+See the [example and following discussion here](https://github.com/sageserpent-open/plutonium/blob/master/example.md)
