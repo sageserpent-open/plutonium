@@ -68,4 +68,4 @@ resolvers += Resolver.jcenterRepo
 resolvers += "Sonatype OSS Snapshots" at
   "https://oss.sonatype.org/content/repositories/releases"
 
-resolvers += Resolver.bintrayRepo("sageserpent-open", "maven")
+resolvers += Resolver.jcenterRepo
