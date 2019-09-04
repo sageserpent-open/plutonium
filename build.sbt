@@ -69,3 +69,9 @@ resolvers += "Sonatype OSS Snapshots" at
   "https://oss.sonatype.org/content/repositories/releases"
 
 resolvers += Resolver.jcenterRepo
+
+lazy val protactiniumSettings = Seq(  organization := "com.sageserpent",
+  name := "protactinium",
+  scalaVersion := "2.12.8")
+
+lazy val protactinium = (project in file("protactinium")).settings(protactiniumSettings).dependsOn(plutonium)
