@@ -3965,8 +3965,8 @@ class AllTheWorlds
 
           ((worldReferenceImplementationResults == worldEfficientInMemoryImplementationResults) :| s"Should have agreement between reference implementation and efficient in-memory implementation.") &&
           ((worldEfficientInMemoryImplementationResults == redisBasedImplementationResults) :| s"Should have agreement between efficient in-memory implementation and Redis based implementation.") &&
-          ((redisBasedImplementationResults == worldH2StorageImplementationResults) :| s"Should have agreement between Redis based implementation and questionable backend based implementation.") &&
-          ((worldH2StorageImplementationResults == worldReferenceImplementationResults) :| s"Should have agreement between questionable backend based implementation and reference implementation.")
+          ((redisBasedImplementationResults == worldH2StorageImplementationResults) :| s"Should have agreement between Redis based implementation and H2 backend based implementation.") &&
+          ((worldH2StorageImplementationResults == worldReferenceImplementationResults) :| s"Should have agreement between H2 backend based implementation and reference implementation.")
         }
 
         checks.use(result => IO { result }).unsafeRunSync
