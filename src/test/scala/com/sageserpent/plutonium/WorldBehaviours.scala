@@ -3737,7 +3737,7 @@ class WorldSpecUsingWorldEfficientInMemoryImplementation
 
 class WorldSpecUsingWorldPersistentStorageImplementation
     extends WorldBehaviours
-    with WorldH2StorageImplementationResource {
+    with WorldPersistentStorageImplementationResource {
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
     PropertyCheckConfig(maxSize = 10, minSuccessful = 7)
 
@@ -3903,8 +3903,8 @@ class AllTheWorlds
   object worldEfficientInMemoryImplementationResource
       extends WorldEfficientInMemoryImplementationResource
 
-  object worldH2StorageImplementationResource
-      extends WorldH2StorageImplementationResource
+  object worldPersistentStorageImplementationResource$
+      extends WorldPersistentStorageImplementationResource
 
   "all the world implementations" should "agree" in {
     val testCaseGenerator = for {
@@ -3952,7 +3952,7 @@ class AllTheWorlds
           worldReferenceImplementation         <- worldReferenceImplementationResource.worldResource
           worldEfficientInMemoryImplementation <- worldEfficientInMemoryImplementationResource.worldResource
           worldRedisBasedImplementation        <- worldResource
-          worldH2StorageImplementation         <- worldH2StorageImplementationResource.worldResource
+          worldH2StorageImplementation         <- worldPersistentStorageImplementationResource$.worldResource
         } yield {
           val worldReferenceImplementationResults =
             resultsFrom(worldReferenceImplementation)

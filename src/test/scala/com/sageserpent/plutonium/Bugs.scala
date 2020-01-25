@@ -1347,6 +1347,6 @@ class WorldRedisBasedImplementationBugs
 
 class WorldPersistentStorageImplementationBugs
     extends Bugs
-    with WorldH2StorageImplementationResource {
+    with WorldPersistentStorageImplementationResource {
   "a world (using the world H2 storage implementation)" should behave like suite
 }

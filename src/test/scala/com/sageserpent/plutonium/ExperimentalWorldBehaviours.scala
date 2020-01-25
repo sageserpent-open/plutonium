@@ -701,7 +701,7 @@ class ExperimentalWorldSpecUsingWorldRedisBasedImplementation
 
 class ExperimentalWorldSpecUsingWorldPersistentStorageImplementation
     extends ExperimentalWorldBehaviours
-    with WorldH2StorageImplementationResource {
+    with WorldPersistentStorageImplementationResource {
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
     PropertyCheckConfig(maxSize = 20, minSuccessful = 10)
 

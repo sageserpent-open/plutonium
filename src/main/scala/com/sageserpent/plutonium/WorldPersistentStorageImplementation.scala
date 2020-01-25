@@ -4,22 +4,17 @@ import java.time.Instant
 
 import cats.implicits._
 import com.sageserpent.americium.Unbounded
+import com.sageserpent.curium.ImmutableObjectStorage
 import com.sageserpent.curium.ImmutableObjectStorage._
-import com.sageserpent.curium.{H2ViaScalikeJdbcTranches, ImmutableObjectStorage}
 import com.sageserpent.plutonium.Timeline.ItemStateUpdatesDag
 import com.sageserpent.plutonium.World.Revision
-import com.sageserpent.plutonium.WorldPersistentStorageImplementation.{
-  TrancheId,
-  immutableObjectStorage
-}
 import de.sciss.fingertree.{FingerTree, RangedSeq}
 import scalikejdbc.ConnectionPool
 
 object WorldPersistentStorageImplementation {
 
-  type TrancheId = H2ViaScalikeJdbcTranches#TrancheId
-
-  object immutableObjectStorage extends ImmutableObjectStorage[TrancheId] {
+  trait ImmutableObjectStorage[TrancheId]
+      extends com.sageserpent.curium.ImmutableObjectStorage[TrancheId] {
     private val notToBeProxied =
       Set(classOf[(_, _)],
           classOf[(_, _, _)],
@@ -45,14 +40,12 @@ object WorldPersistentStorageImplementation {
         classOf[RangedSeq[_, _]].isAssignableFrom(clazz) || clazz.getName
         .contains("One") || clazz.getName.contains("Two") || clazz.getName
         .contains("Three")
-
-    override protected val tranchesImplementationName: String =
-      classOf[H2ViaScalikeJdbcTranches].getSimpleName
   }
 }
 
-class WorldPersistentStorageImplementation(
-    val tranches: H2ViaScalikeJdbcTranches,
+class WorldPersistentStorageImplementation[TrancheId](
+    val immutableObjectStorage: ImmutableObjectStorage[TrancheId],
+    val tranches: Tranches[TrancheId],
     val emptyBlobStorage: BlobStorageOnH2,
     var timelineTrancheIdStorage: Array[(Instant, Vector[TrancheId])],
     var numberOfTimelines: Int,
@@ -60,10 +53,12 @@ class WorldPersistentStorageImplementation(
     extends WorldEfficientImplementation[Session] {
   val intersessionState: IntersessionState[TrancheId] = new IntersessionState
 
-  def this(connectionPool: ConnectionPool) =
+  def this(immutableObjectStorage: ImmutableObjectStorage[TrancheId],
+           tranches: Tranches[TrancheId],
+           connectionPool: ConnectionPool) =
     this(
-      new H2ViaScalikeJdbcTranches(connectionPool)
-      with TranchesContracts[TrancheId],
+      immutableObjectStorage,
+      tranches,
       BlobStorageOnH2.empty(connectionPool),
       Array.empty[(Instant, Vector[TrancheId])],
       World.initialRevision,
@@ -154,7 +149,8 @@ class WorldPersistentStorageImplementation(
       intersessionState
     )(tranches)
 
-    new WorldPersistentStorageImplementation(tranches,
+    new WorldPersistentStorageImplementation(immutableObjectStorage,
+                                             tranches,
                                              emptyBlobStorage,
                                              timelineTrancheIds.toArray,
                                              numberOfTimelines,

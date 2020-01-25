@@ -10,7 +10,9 @@ import com.sageserpent.americium
 import com.sageserpent.americium._
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.seqEnrichment._
+import com.sageserpent.curium.RocksDbTranches
 import com.sageserpent.plutonium.World._
+import com.sageserpent.plutonium.WorldPersistentStorageImplementation.ImmutableObjectStorage
 import io.lettuce.core.{RedisClient, RedisURI}
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.Assertions
@@ -924,16 +926,34 @@ trait WorldEfficientInMemoryImplementationResource extends WorldResource {
     })
 }
 
-trait WorldH2StorageImplementationResource
+object WorldPersistentStorageImplementationResource {
+  object immutableObjectStorage
+      extends ImmutableObjectStorage[RocksDbTranches#TrancheId] {
+    override protected val tranchesImplementationName: String =
+      classOf[RocksDbTranches#TrancheId].getSimpleName
+  }
+}
+
+trait WorldPersistentStorageImplementationResource
     extends WorldResource
     with H2ViaScalikeJdbcDatabaseSetupResource
-    with BlobStorageOnH2DatabaseSetupResource {
+    with BlobStorageOnH2DatabaseSetupResource
+    with RocksDbTranchesResource {
+  import WorldPersistentStorageImplementationResource.immutableObjectStorage
+
   val worldResource: Resource[IO, World] =
-    connectionPoolResource.flatMap(connectionPool =>
-      Resource.fromAutoCloseable(IO {
-        new WorldPersistentStorageImplementation(connectionPool)
-        with WorldContracts
-      }))
+    for {
+      connectionPool <- connectionPoolResource
+      tranches       <- tranchesResource
+      world <- Resource.fromAutoCloseable(IO {
+        new WorldPersistentStorageImplementation(
+          immutableObjectStorage,
+          tranches,
+          connectionPool
+        ) with WorldContracts
+      })
+    } yield world
+
 }
 
 trait RedisClientResource extends RedisServerFixture {
