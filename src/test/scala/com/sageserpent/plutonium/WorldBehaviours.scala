@@ -3741,13 +3741,13 @@ class WorldSpecUsingWorldPersistentStorageImplementation
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
     PropertyCheckConfig(maxSize = 10, minSuccessful = 7)
 
-  "A world with no history (using the world H2 storage implementation)" should behave like worldWithNoHistoryBehaviour
+  "A world with no history (using the world persistent storage implementation)" should behave like worldWithNoHistoryBehaviour
 
-  "A world with history added in order of increasing event time (using the world H2 storage implementation)" should behave like worldWithHistoryAddedInOrderOfIncreasingEventTimeBehaviour
+  "A world with history added in order of increasing event time (using the world persistent storage implementation)" should behave like worldWithHistoryAddedInOrderOfIncreasingEventTimeBehaviour
 
-  "A world (using the world H2 storage implementation)" should behave like worldBehaviour
+  "A world (using the world persistent storage implementation)" should behave like worldBehaviour
 
-  "A world with events that have since been corrected (using the world H2 storage implementation)" should behave like worldWithEventsThatHaveSinceBeenCorrectedBehaviour
+  "A world with events that have since been corrected (using the world persistent storage implementation)" should behave like worldWithEventsThatHaveSinceBeenCorrectedBehaviour
 }
 
 abstract class HistoryWhoseIdWontSerialize extends History {
@@ -3965,8 +3965,8 @@ class AllTheWorlds
 
           ((worldReferenceImplementationResults == worldEfficientInMemoryImplementationResults) :| s"Should have agreement between reference implementation and efficient in-memory implementation.") &&
           ((worldEfficientInMemoryImplementationResults == redisBasedImplementationResults) :| s"Should have agreement between efficient in-memory implementation and Redis based implementation.") &&
-          ((redisBasedImplementationResults == worldH2StorageImplementationResults) :| s"Should have agreement between Redis based implementation and H2 backend based implementation.") &&
-          ((worldH2StorageImplementationResults == worldReferenceImplementationResults) :| s"Should have agreement between H2 backend based implementation and reference implementation.")
+          ((redisBasedImplementationResults == worldH2StorageImplementationResults) :| s"Should have agreement between Redis based implementation and persistent backend based implementation.") &&
+          ((worldH2StorageImplementationResults == worldReferenceImplementationResults) :| s"Should have agreement between persistent backend based implementation and reference implementation.")
         }
 
         checks.use(result => IO { result }).unsafeRunSync
