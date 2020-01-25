@@ -3735,7 +3735,7 @@ class WorldSpecUsingWorldEfficientInMemoryImplementation
   }
 }
 
-class WorldSpecUsingWorldH2StorageImplementation
+class WorldSpecUsingWorldPersistentStorageImplementation
     extends WorldBehaviours
     with WorldH2StorageImplementationResource {
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =

@@ -28,7 +28,7 @@ trait Benchmark
     val world: IO[World] =
       connectionPoolResource.use(connectionPool =>
         IO {
-          val world = new WorldH2StorageImplementation(connectionPool)
+          val world = new WorldPersistentStorageImplementation(connectionPool)
 
           for (step <- 0 until size) {
             val eventId = step - randomBehaviour

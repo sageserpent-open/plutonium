@@ -699,7 +699,7 @@ class ExperimentalWorldSpecUsingWorldRedisBasedImplementation
   }
 }
 
-class ExperimentalWorldSpecUsingWorldH2StorageImplementation
+class ExperimentalWorldSpecUsingWorldPersistentStorageImplementation
     extends ExperimentalWorldBehaviours
     with WorldH2StorageImplementationResource {
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =

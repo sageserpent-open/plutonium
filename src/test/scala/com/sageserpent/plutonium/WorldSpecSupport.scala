@@ -931,7 +931,8 @@ trait WorldH2StorageImplementationResource
   val worldResource: Resource[IO, World] =
     connectionPoolResource.flatMap(connectionPool =>
       Resource.fromAutoCloseable(IO {
-        new WorldH2StorageImplementation(connectionPool) with WorldContracts
+        new WorldPersistentStorageImplementation(connectionPool)
+        with WorldContracts
       }))
 }
 

@@ -875,7 +875,7 @@ class BitemporalSpecUsingWorldRedisBasedImplementation
   }
 }
 
-class BitemporalSpecUsingWorldH2StorageImplementation
+class BitemporalSpecUsingWorldPersistentStorageImplementation
     extends BitemporalBehaviours
     with WorldH2StorageImplementationResource {
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =

@@ -8,14 +8,14 @@ import com.sageserpent.curium.ImmutableObjectStorage._
 import com.sageserpent.curium.{H2ViaScalikeJdbcTranches, ImmutableObjectStorage}
 import com.sageserpent.plutonium.Timeline.ItemStateUpdatesDag
 import com.sageserpent.plutonium.World.Revision
-import com.sageserpent.plutonium.WorldH2StorageImplementation.{
+import com.sageserpent.plutonium.WorldPersistentStorageImplementation.{
   TrancheId,
   immutableObjectStorage
 }
 import de.sciss.fingertree.{FingerTree, RangedSeq}
 import scalikejdbc.ConnectionPool
 
-object WorldH2StorageImplementation {
+object WorldPersistentStorageImplementation {
 
   type TrancheId = H2ViaScalikeJdbcTranches#TrancheId
 
@@ -51,7 +51,7 @@ object WorldH2StorageImplementation {
   }
 }
 
-class WorldH2StorageImplementation(
+class WorldPersistentStorageImplementation(
     val tranches: H2ViaScalikeJdbcTranches,
     val emptyBlobStorage: BlobStorageOnH2,
     var timelineTrancheIdStorage: Array[(Instant, Vector[TrancheId])],
@@ -154,11 +154,11 @@ class WorldH2StorageImplementation(
       intersessionState
     )(tranches)
 
-    new WorldH2StorageImplementation(tranches,
-                                     emptyBlobStorage,
-                                     timelineTrancheIds.toArray,
-                                     numberOfTimelines,
-                                     connectionPool)
+    new WorldPersistentStorageImplementation(tranches,
+                                             emptyBlobStorage,
+                                             timelineTrancheIds.toArray,
+                                             numberOfTimelines,
+                                             connectionPool)
   }
 
   override protected def itemCacheOf(itemCache: Session[ItemCache]): ItemCache =
