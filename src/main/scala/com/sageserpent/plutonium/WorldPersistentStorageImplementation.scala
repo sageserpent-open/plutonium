@@ -16,11 +16,7 @@ object WorldPersistentStorageImplementation {
   trait ImmutableObjectStorage[TrancheId]
       extends com.sageserpent.curium.ImmutableObjectStorage[TrancheId] {
     private val notToBeProxied =
-      Set(classOf[(_, _)],
-          classOf[(_, _, _)],
-          classOf[ItemStateUpdateTime],
-          classOf[Split[_]],
-          classOf[Unbounded[_]])
+      Set(classOf[ItemStateUpdateTime], classOf[Unbounded[_]])
 
     override protected def isExcludedFromBeingProxied(
         clazz: Class[_]): Boolean =
