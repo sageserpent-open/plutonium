@@ -95,7 +95,6 @@ class WorldPersistentStorageImplementation[TrancheId](
       nextRevision: Revision): Session[Vector[(Instant, Timeline)]] =
     timelineTrancheIdStorage
       .take(nextRevision)
-      .toVector
       .traverse {
         case (asOf, trancheIds) =>
           retrieveTimeline(trancheIds) map (asOf -> _)
