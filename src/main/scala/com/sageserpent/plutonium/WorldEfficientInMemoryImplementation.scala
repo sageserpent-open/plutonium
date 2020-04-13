@@ -6,32 +6,22 @@ import cats.Id
 import com.sageserpent.plutonium.World.Revision
 
 class WorldEfficientInMemoryImplementation(
-    var timelineStorage: Array[(Instant, Timeline)],
-    var numberOfTimelines: Int)
+    var timelineStorage: Vector[(Instant, Timeline)])
     extends WorldEfficientImplementation[Id] {
   def this() =
-    this(Array.empty[(Instant, Timeline)], World.initialRevision)
+    this(Vector.empty)
 
   protected def allTimelinesPriorTo(
-      nextRevision: World.Revision): Id[Array[(Instant, Timeline)]] =
+      nextRevision: World.Revision): Id[Vector[(Instant, Timeline)]] =
     timelineStorage.take(nextRevision)
 
   protected def consumeNewTimeline(newTimeline: Id[Timeline],
                                    asOf: Instant): Unit = {
-    if (nextRevision == timelineStorage.length) {
-      val sourceOfCopy = timelineStorage
-      timelineStorage = Array.ofDim(4 max 2 * timelineStorage.length)
-      sourceOfCopy.copyToArray(timelineStorage)
-    }
-
-    timelineStorage(nextRevision) = asOf -> newTimeline
-
-    numberOfTimelines += 1
+    timelineStorage = timelineStorage :+ (asOf -> newTimeline)
   }
 
-  protected def forkWorld(timelines: Id[Array[(Instant, Timeline)]],
-                          numberOfTimelines: Int): World =
-    new WorldEfficientInMemoryImplementation(timelines, numberOfTimelines)
+  protected def forkWorld(timelines: Id[Vector[(Instant, Timeline)]]): World =
+    new WorldEfficientInMemoryImplementation(timelines)
 
   protected def timelinePriorTo(nextRevision: Revision): Id[Option[Timeline]] =
     if (World.initialRevision < nextRevision)
@@ -45,9 +35,9 @@ class WorldEfficientInMemoryImplementation(
     else None
 
   override def revisionAsOfs: Array[Instant] =
-    timelineStorage.slice(0, numberOfTimelines).map(_._1)
+    timelineStorage.map(_._1).toArray
 
-  override def nextRevision: Revision = numberOfTimelines
+  override def nextRevision: Revision = timelineStorage.size
 
   override protected def itemCacheOf(itemCache: Id[ItemCache]): ItemCache =
     itemCache

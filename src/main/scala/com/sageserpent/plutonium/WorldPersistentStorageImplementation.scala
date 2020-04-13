@@ -43,8 +43,7 @@ class WorldPersistentStorageImplementation[TrancheId](
     val immutableObjectStorage: ImmutableObjectStorage[TrancheId],
     val tranches: Tranches[TrancheId],
     val emptyBlobStorage: BlobStorageOnH2,
-    var timelineTrancheIdStorage: Array[(Instant, Vector[TrancheId])],
-    var numberOfTimelines: Int,
+    var timelineTrancheIdStorage: Vector[(Instant, Vector[TrancheId])],
     val connectionPool: ConnectionPool)
     extends WorldEfficientImplementation[Session] {
   val intersessionState: IntersessionState[TrancheId] = new IntersessionState
@@ -56,8 +55,7 @@ class WorldPersistentStorageImplementation[TrancheId](
       immutableObjectStorage,
       tranches,
       BlobStorageOnH2.empty(connectionPool),
-      Array.empty[(Instant, Vector[TrancheId])],
-      World.initialRevision,
+      Vector.empty,
       connectionPool
     )
 
@@ -94,7 +92,7 @@ class WorldPersistentStorageImplementation[TrancheId](
     } else none[Timeline.BlobStorage].pure[Session]
 
   override protected def allTimelinesPriorTo(
-      nextRevision: Revision): Session[Array[(Instant, Timeline)]] =
+      nextRevision: Revision): Session[Vector[(Instant, Timeline)]] =
     timelineTrancheIdStorage
       .take(nextRevision)
       .toVector
@@ -102,7 +100,6 @@ class WorldPersistentStorageImplementation[TrancheId](
         case (asOf, trancheIds) =>
           retrieveTimeline(trancheIds) map (asOf -> _)
       }
-      .map(_.toArray)
 
   private def storeTimeline(timeline: Timeline) = {
     Vector(
@@ -120,24 +117,14 @@ class WorldPersistentStorageImplementation[TrancheId](
         newTimeline.flatMap(storeTimeline),
         intersessionState)(tranches)
 
-    if (nextRevision == timelineTrancheIdStorage.length) {
-      val sourceOfCopy = timelineTrancheIdStorage
-      timelineTrancheIdStorage =
-        Array.ofDim(4 max 2 * timelineTrancheIdStorage.length)
-      sourceOfCopy.copyToArray(timelineTrancheIdStorage)
-    }
-
-    timelineTrancheIdStorage(nextRevision) = asOf -> trancheIds
-
-    numberOfTimelines += 1
+    timelineTrancheIdStorage = timelineTrancheIdStorage :+ (asOf -> trancheIds)
   }
 
   override protected def forkWorld(
-      timelines: Session[Array[(Instant, Timeline)]],
-      numberOfTimelines: Int): World = {
+      timelines: Session[Vector[(Instant, Timeline)]]): World = {
     val Right(timelineTrancheIds) = immutableObjectStorage.unsafeRun(
       timelines
-        .flatMap(_.toVector.traverse {
+        .flatMap(_.traverse {
           case (asOf, timeline) =>
             storeTimeline(timeline)
               .map(trancheId => asOf -> trancheId)
@@ -148,8 +135,7 @@ class WorldPersistentStorageImplementation[TrancheId](
     new WorldPersistentStorageImplementation(immutableObjectStorage,
                                              tranches,
                                              emptyBlobStorage,
-                                             timelineTrancheIds.toArray,
-                                             numberOfTimelines,
+                                             timelineTrancheIds,
                                              connectionPool)
   }
 
@@ -163,8 +149,8 @@ class WorldPersistentStorageImplementation[TrancheId](
     new Timeline(blobStorage = emptyBlobStorage)
 
   override def nextRevision: Revision =
-    numberOfTimelines
+    timelineTrancheIdStorage.size
 
   override def revisionAsOfs: Array[Instant] =
-    timelineTrancheIdStorage.slice(0, numberOfTimelines).map(_._1)
+    timelineTrancheIdStorage.map(_._1).toArray
 }
