@@ -20,7 +20,6 @@ lazy val settings = Seq(
   libraryDependencies += "io.netty"                      % "netty-transport-native-epoll"  % "4.1.50.Final" classifier "linux-x86_64",
   libraryDependencies += "io.netty"                      % "netty-transport-native-kqueue" % "4.1.50.Final" classifier "osx-x86_64",
   libraryDependencies += "org.scala-lang.modules"        %% "scala-java8-compat"           % "0.9.0",
-  libraryDependencies += "io.github.nicolasstucki"       %% "multisets"                    % "0.4",
   libraryDependencies += "com.twitter"                   %% "chill"                        % "0.9.3",
   libraryDependencies += "io.verizon.quiver"             %% "core"                         % "7.0.19",
   libraryDependencies += "de.ummels"                     %% "scala-prioritymap"            % "1.0.0",

@@ -7,12 +7,7 @@ import alleycats.std.iterable._
 import cats.Foldable
 import cats.data.Writer
 import cats.implicits._
-import com.sageserpent.americium.{
-  Finite,
-  NegativeInfinity,
-  PositiveInfinity,
-  Unbounded
-}
+import com.sageserpent.americium.{Finite, NegativeInfinity, PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.AllEvents.ItemStateUpdatesDelta
 import com.sageserpent.plutonium.AllEventsImplementation.Lifecycle._
 import com.sageserpent.plutonium.AllEventsImplementation._
@@ -22,13 +17,7 @@ import de.ummels.prioritymap.PriorityMap
 
 import scala.annotation.tailrec
 import scala.collection.IterableView
-import scala.collection.immutable.{
-  Bag,
-  HashedBagConfiguration,
-  Map,
-  Set,
-  SortedMap
-}
+import scala.collection.immutable.{Map, Set, SortedMap}
 
 object AllEventsImplementation {
   val maxNumberOfIdsToSample = 100
@@ -44,14 +33,21 @@ object AllEventsImplementation {
     Split.alignedWith(lifecycle.startTime: ItemStateUpdateTime) -> Split
       .upperBoundOf(lifecycle.endTime)
 
-  object Lifecycle {
-    implicit val bagConfiguration = HashedBagConfiguration.compact[Class[_]]
+  private def removeClazzForEvent(clazzes: Map[Class[_], Revision],
+                                  annulledEvent: IndivisibleEvent) = {
+    val clazz = annulledEvent.uniqueItemSpecification.clazz
+    clazzes
+      .get(clazz)
+      .collect { case count if 1 < count => count - 1 }
+      .fold(clazzes - clazz)(count => clazzes + (clazz -> count))
+  }
 
+  object Lifecycle {
     def apply(eventId: EventId,
               itemStateUpdateKey: ItemStateUpdateKey,
               indivisibleEvent: IndivisibleEvent): Lifecycle =
       new LifecycleImplementation(
-        clazzes = Bag(indivisibleEvent.uniqueItemSpecification.clazz),
+        clazzes = Map(indivisibleEvent.uniqueItemSpecification.clazz -> 1),
         eventsArrangedInReverseTimeOrder =
           SortedMap(itemStateUpdateKey -> indivisibleEvent)(
             Ordering[ItemStateUpdateKey].reverse),
@@ -153,7 +149,7 @@ object AllEventsImplementation {
     }
 
     def fuse(firstLifecycle: Lifecycle, secondLifecycle: Lifecycle) = {
-      val fusedClazzes = firstLifecycle.clazzes ++ secondLifecycle.clazzes
+      val fusedClazzes = firstLifecycle.clazzes |+| secondLifecycle.clazzes
 
       val fusedEventsArrangedInReverseTimeOrder: SortedMap[
         ItemStateUpdateKey,
@@ -179,12 +175,12 @@ object AllEventsImplementation {
     def apply(
         retainedEvents: SortedMap[ItemStateUpdateKey, IndivisibleEvent],
         trimmedEvents: SortedMap[ItemStateUpdateKey, IndivisibleEvent],
-        clazzes: Bag[Class[_]],
+        clazzes: Map[Class[_], Int],
         itemStateUpdateTimesByEventId: Map[EventId, Set[ItemStateUpdateKey]])
       : Lifecycle = {
       val retainedClazzes = (clazzes /: trimmedEvents) {
-        case (clazzes, (_, trimmedEvent)) =>
-          clazzes - trimmedEvent.uniqueItemSpecification.clazz
+        case (clazzes, (_, annulledEvent)) =>
+          removeClazzForEvent(clazzes, annulledEvent)
       }
 
       new LifecycleImplementation(
@@ -230,7 +226,7 @@ object AllEventsImplementation {
 
     def referencingLifecycles(lifecyclesById: LifecyclesById): Set[Lifecycle]
 
-    val clazzes: Bag[Class[_]]
+    val clazzes: Map[Class[_], Int]
 
     val eventsArrangedInReverseTimeOrder: SortedMap[ItemStateUpdateKey,
                                                     IndivisibleEvent]
@@ -240,7 +236,7 @@ object AllEventsImplementation {
   }
 
   case class LifecycleImplementation(
-      clazzes: Bag[Class[_]],
+      clazzes: Map[Class[_], Int],
       eventsArrangedInReverseTimeOrder: SortedMap[ItemStateUpdateKey,
                                                   IndivisibleEvent],
       itemStateUpdateTimesByEventId: Map[EventId, Set[ItemStateUpdateKey]])
@@ -262,12 +258,12 @@ object AllEventsImplementation {
     def id: Any =
       eventsArrangedInReverseTimeOrder.head._2.uniqueItemSpecification.id
 
-    def lowerBoundClazz: Class[_] = clazzes.reduce[Class[_]] {
+    def lowerBoundClazz: Class[_] = clazzes.keys.reduce[Class[_]] {
       case (first, second) =>
         if (second.isAssignableFrom(first)) first else second
     }
 
-    def upperBoundClazz: Class[_] = clazzes.reduce[Class[_]] {
+    def upperBoundClazz: Class[_] = clazzes.keys.reduce[Class[_]] {
       case (first, second) =>
         if (second.isAssignableFrom(first)) second else first
     }
@@ -278,11 +274,8 @@ object AllEventsImplementation {
       val preservedEvents =
         (eventsArrangedInReverseTimeOrder /: itemStateUpdateTimes)(_ - _)
       if (preservedEvents.nonEmpty) {
-        val annulledEvents = itemStateUpdateTimes map eventsArrangedInReverseTimeOrder.apply
-        val preservedClazzes = (clazzes /: annulledEvents) {
-          case (clazzes, annulledEvent) =>
-            clazzes - annulledEvent.uniqueItemSpecification.clazz
-        }
+        val annulledEvents                         = itemStateUpdateTimes map eventsArrangedInReverseTimeOrder.apply
+        val preservedClazzes                       = (clazzes /: annulledEvents)(removeClazzForEvent)
         val preservedItemStateUpdateTimesByEventId = itemStateUpdateTimesByEventId - eventId
         Some(
           new LifecycleImplementation(
