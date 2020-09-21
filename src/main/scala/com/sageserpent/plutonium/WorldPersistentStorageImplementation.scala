@@ -4,28 +4,19 @@ import java.time.Instant
 
 import cats.implicits._
 import com.sageserpent.americium.Unbounded
+import com.sageserpent.curium.ImmutableObjectStorage
 import com.sageserpent.curium.ImmutableObjectStorage._
-import com.sageserpent.curium.{H2ViaScalikeJdbcTranches, ImmutableObjectStorage}
 import com.sageserpent.plutonium.Timeline.ItemStateUpdatesDag
 import com.sageserpent.plutonium.World.Revision
-import com.sageserpent.plutonium.WorldH2StorageImplementation.{
-  TrancheId,
-  immutableObjectStorage
-}
 import de.sciss.fingertree.{FingerTree, RangedSeq}
 import scalikejdbc.ConnectionPool
 
-object WorldH2StorageImplementation {
+object WorldPersistentStorageImplementation {
 
-  type TrancheId = H2ViaScalikeJdbcTranches#TrancheId
-
-  object immutableObjectStorage extends ImmutableObjectStorage[TrancheId] {
+  trait ImmutableObjectStorage[TrancheId]
+      extends com.sageserpent.curium.ImmutableObjectStorage[TrancheId] {
     private val notToBeProxied =
-      Set(classOf[(_, _)],
-          classOf[(_, _, _)],
-          classOf[ItemStateUpdateTime],
-          classOf[Split[_]],
-          classOf[Unbounded[_]])
+      Set(classOf[ItemStateUpdateTime], classOf[Unbounded[_]])
 
     override protected def isExcludedFromBeingProxied(
         clazz: Class[_]): Boolean =
@@ -45,28 +36,26 @@ object WorldH2StorageImplementation {
         classOf[RangedSeq[_, _]].isAssignableFrom(clazz) || clazz.getName
         .contains("One") || clazz.getName.contains("Two") || clazz.getName
         .contains("Three")
-
-    override protected val tranchesImplementationName: String =
-      classOf[H2ViaScalikeJdbcTranches].getSimpleName
   }
 }
 
-class WorldH2StorageImplementation(
-    val tranches: H2ViaScalikeJdbcTranches,
+class WorldPersistentStorageImplementation[TrancheId](
+    val immutableObjectStorage: ImmutableObjectStorage[TrancheId],
+    val tranches: Tranches[TrancheId],
     val emptyBlobStorage: BlobStorageOnH2,
-    var timelineTrancheIdStorage: Array[(Instant, Vector[TrancheId])],
-    var numberOfTimelines: Int,
+    var timelineTrancheIdStorage: Vector[(Instant, Vector[TrancheId])],
     val connectionPool: ConnectionPool)
     extends WorldEfficientImplementation[Session] {
   val intersessionState: IntersessionState[TrancheId] = new IntersessionState
 
-  def this(connectionPool: ConnectionPool) =
+  def this(immutableObjectStorage: ImmutableObjectStorage[TrancheId],
+           tranches: Tranches[TrancheId],
+           connectionPool: ConnectionPool) =
     this(
-      new H2ViaScalikeJdbcTranches(connectionPool)
-      with TranchesContracts[TrancheId],
+      immutableObjectStorage,
+      tranches,
       BlobStorageOnH2.empty(connectionPool),
-      Array.empty[(Instant, Vector[TrancheId])],
-      World.initialRevision,
+      Vector.empty,
       connectionPool
     )
 
@@ -103,15 +92,13 @@ class WorldH2StorageImplementation(
     } else none[Timeline.BlobStorage].pure[Session]
 
   override protected def allTimelinesPriorTo(
-      nextRevision: Revision): Session[Array[(Instant, Timeline)]] =
+      nextRevision: Revision): Session[Vector[(Instant, Timeline)]] =
     timelineTrancheIdStorage
       .take(nextRevision)
-      .toVector
       .traverse {
         case (asOf, trancheIds) =>
           retrieveTimeline(trancheIds) map (asOf -> _)
       }
-      .map(_.toArray)
 
   private def storeTimeline(timeline: Timeline) = {
     Vector(
@@ -129,24 +116,14 @@ class WorldH2StorageImplementation(
         newTimeline.flatMap(storeTimeline),
         intersessionState)(tranches)
 
-    if (nextRevision == timelineTrancheIdStorage.length) {
-      val sourceOfCopy = timelineTrancheIdStorage
-      timelineTrancheIdStorage =
-        Array.ofDim(4 max 2 * timelineTrancheIdStorage.length)
-      sourceOfCopy.copyToArray(timelineTrancheIdStorage)
-    }
-
-    timelineTrancheIdStorage(nextRevision) = asOf -> trancheIds
-
-    numberOfTimelines += 1
+    timelineTrancheIdStorage = timelineTrancheIdStorage :+ (asOf -> trancheIds)
   }
 
   override protected def forkWorld(
-      timelines: Session[Array[(Instant, Timeline)]],
-      numberOfTimelines: Int): World = {
+      timelines: Session[Vector[(Instant, Timeline)]]): World = {
     val Right(timelineTrancheIds) = immutableObjectStorage.unsafeRun(
       timelines
-        .flatMap(_.toVector.traverse {
+        .flatMap(_.traverse {
           case (asOf, timeline) =>
             storeTimeline(timeline)
               .map(trancheId => asOf -> trancheId)
@@ -154,11 +131,11 @@ class WorldH2StorageImplementation(
       intersessionState
     )(tranches)
 
-    new WorldH2StorageImplementation(tranches,
-                                     emptyBlobStorage,
-                                     timelineTrancheIds.toArray,
-                                     numberOfTimelines,
-                                     connectionPool)
+    new WorldPersistentStorageImplementation(immutableObjectStorage,
+                                             tranches,
+                                             emptyBlobStorage,
+                                             timelineTrancheIds,
+                                             connectionPool)
   }
 
   override protected def itemCacheOf(itemCache: Session[ItemCache]): ItemCache =
@@ -171,8 +148,8 @@ class WorldH2StorageImplementation(
     new Timeline(blobStorage = emptyBlobStorage)
 
   override def nextRevision: Revision =
-    numberOfTimelines
+    timelineTrancheIdStorage.size
 
   override def revisionAsOfs: Array[Instant] =
-    timelineTrancheIdStorage.slice(0, numberOfTimelines).map(_._1)
+    timelineTrancheIdStorage.map(_._1).toArray
 }

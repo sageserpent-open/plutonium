@@ -1345,8 +1345,8 @@ class WorldRedisBasedImplementationBugs
   override val redisServerPort: Int = 6456
 }
 
-class WorldH2StorageImplementationBugs
+class WorldPersistentStorageImplementationBugs
     extends Bugs
-    with WorldH2StorageImplementationResource {
-  "a world (using the world H2 storage implementation)" should behave like suite
+    with WorldPersistentStorageImplementationResource {
+  "a world (using the world persistent storage implementation)" should behave like suite
 }

@@ -9,20 +9,17 @@ import com.sageserpent.plutonium.World.Revision
 
 abstract class WorldEfficientImplementation[F[_]: Monad]
     extends WorldImplementationCodeFactoring {
-  // TODO - one subclass prefers 'Array', other 'Vector'. Sort this out...
-
   protected def blobStoragePriorTo(
       nextRevision: Revision): F[Option[Timeline.BlobStorage]]
   protected def timelinePriorTo(nextRevision: Revision): F[Option[Timeline]]
 
   protected def allTimelinesPriorTo(
-      nextRevision: Revision): F[Array[(Instant, Timeline)]]
+      nextRevision: Revision): F[Vector[(Instant, Timeline)]]
 
   protected def consumeNewTimeline(newTimeline: F[Timeline],
                                    asOf: Instant): Unit
 
-  protected def forkWorld(timelines: F[Array[(Instant, Timeline)]],
-                          numberOfTimelines: Int): World
+  protected def forkWorld(timelines: F[Vector[(Instant, Timeline)]]): World
 
   protected def itemCacheOf(itemCache: F[ItemCache]): ItemCache
 
@@ -44,13 +41,13 @@ abstract class WorldEfficientImplementation[F[_]: Monad]
   }
 
   override def forkExperimentalWorld(scope: javaApi.Scope): World = {
-    val computation: F[Array[(Instant, Timeline)]] =
+    val computation: F[Vector[(Instant, Timeline)]] =
       allTimelinesPriorTo(scope.nextRevision)
         .map(_.map {
           case (asOf, timeline) => asOf -> timeline.retainUpTo(scope.when)
         })
 
-    forkWorld(computation, scope.nextRevision)
+    forkWorld(computation)
   }
 
   trait ScopeUsingStorage extends com.sageserpent.plutonium.Scope {

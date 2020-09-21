@@ -14,7 +14,7 @@ lazy val settings = Seq(
   libraryDependencies += "org.typelevel"                 %% "cats-effect"                  % "1.2.0",
   libraryDependencies += "net.bytebuddy"                 % "byte-buddy"                    % "1.10.10",
   libraryDependencies += "com.sageserpent"               %% "americium"                    % "0.1.5",
-  libraryDependencies += "com.sageserpent"               %% "curium"                       % "0.1.0",
+  libraryDependencies += "com.sageserpent"               %% "curium"                       % "0.1.1",
   libraryDependencies += "org.scala-lang"                % "scala-reflect"                 % "2.12.8",
   libraryDependencies += "io.lettuce"                    % "lettuce-core"                  % "5.1.3.RELEASE",
   libraryDependencies += "io.netty"                      % "netty-transport-native-epoll"  % "4.1.50.Final" classifier "linux-x86_64",
@@ -66,5 +66,3 @@ resolvers += Resolver.jcenterRepo
 
 resolvers += "Sonatype OSS Snapshots" at
   "https://oss.sonatype.org/content/repositories/releases"
-
-resolvers += Resolver.jcenterRepo

@@ -8,9 +8,7 @@ import com.sageserpent.americium.randomEnrichment._
 import scala.concurrent.duration._
 import scala.util.Random
 
-trait Benchmark
-    extends H2ViaScalikeJdbcDatabaseSetupResource
-    with BlobStorageOnH2DatabaseSetupResource {
+trait Benchmark extends WorldPersistentStorageImplementationResource {
   implicit class Enhancement(randomBehaviour: Random) {
     def chooseOneOfRange(range: IndexedSeq[Int]): Int =
       range(randomBehaviour.chooseAnyNumberFromZeroToOneLessThan(range.size))
@@ -26,10 +24,8 @@ trait Benchmark
     val startTime = Deadline.now
 
     val world: IO[World] =
-      connectionPoolResource.use(connectionPool =>
+      worldResource.use(world =>
         IO {
-          val world = new WorldH2StorageImplementation(connectionPool)
-
           for (step <- 0 until size) {
             val eventId = step - randomBehaviour
               .chooseAnyNumberFromZeroToOneLessThan(20)
@@ -78,8 +74,6 @@ trait Benchmark
             val queryTime = Instant.ofEpochSecond(
               3600L * randomBehaviour.chooseAnyNumberFromZeroToOneLessThan(
                 1 + theHourFromTheStart))
-
-            val intersessionState = world.intersessionState
 
             val property1 = {
               val scope = world.scopeFor(queryTime, onePastQueryRevision)
