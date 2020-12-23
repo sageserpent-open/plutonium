@@ -1,7 +1,5 @@
 package com.sageserpent.plutonium
 
-import java.time.Instant
-
 import com.sageserpent.americium.{
   Finite,
   NegativeInfinity,
@@ -9,6 +7,8 @@ import com.sageserpent.americium.{
   Unbounded
 }
 import org.scalacheck.{Arbitrary, Gen}
+
+import java.time.Instant
 
 trait SharedGenerators {
   val seedGenerator = Arbitrary.arbitrary[Long]
@@ -20,7 +20,7 @@ trait SharedGenerators {
     10 -> (instantGenerator map Finite.apply))
 
   val changeWhenGenerator: Gen[Unbounded[Instant]] = Gen.frequency(
-    1  -> Gen.oneOf(Seq(NegativeInfinity[Instant])),
+    1  -> Gen.const(NegativeInfinity[Instant]),
     10 -> (instantGenerator map (Finite(_))))
 
   val stringIdGenerator = Gen.chooseNum(50, 100) map ("Name: " + _.toString)

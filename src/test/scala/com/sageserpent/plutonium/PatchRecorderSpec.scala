@@ -1,18 +1,17 @@
 package com.sageserpent.plutonium
 
-import java.lang.reflect.Method
-import java.time.Instant
-
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.{Finite, Unbounded}
 import com.sageserpent.plutonium
 import com.sageserpent.plutonium.PatchRecorder.UpdateConsumer
 import org.scalacheck.Prop.BooleanOperators
-import org.scalacheck.{Gen, Prop, Test}
+import org.scalacheck.{Arbitrary, Gen, Prop, Test}
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.prop.Checkers
 import org.scalatest.{FlatSpec, Matchers}
 
+import java.lang.reflect.Method
+import java.time.Instant
 import scala.util.Random
 
 class PatchRecorderSpec
@@ -74,7 +73,7 @@ class PatchRecorderSpec
             : Gen[PatchesOfTheSameKindForAnId] =
             for {
               patches                         <- Gen.nonEmptyListOf(patchGenerator(id))
-              initialPatchInLifecycleIsChange <- Gen.oneOf(false, true)
+              initialPatchInLifecycleIsChange <- Arbitrary.arbBool.arbitrary
             } yield {
               val randomBehaviour = new Random(seed)
               val clumpsOfPatches =
