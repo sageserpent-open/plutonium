@@ -5,7 +5,6 @@ import java.time.Instant
 import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.AllEvents.ItemStateUpdatesDelta
 
-import scala.collection.immutable.Map
 
 object AllEvents {
   case class ItemStateUpdatesDelta[AllEventsType <: AllEvents](

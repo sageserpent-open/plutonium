@@ -2,17 +2,27 @@ import sbt.Configurations.config
 import sbt.Defaults.testSettings
 import sbt.Keys.libraryDependencies
 
+lazy val openSesames = Seq(
+  "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
+  "--add-opens=java.base/java.util=ALL-UNNAMED"
+)
+
+lazy val javaVersion = "8"
+
+ThisBuild / scalaVersion := "2.12.20"
+
+ThisBuild / javacOptions ++= Seq("-source", javaVersion, "-target", javaVersion)
+
+ThisBuild / scalacOptions ++= Seq(s"--release:$javaVersion",
+                                  "-Ypartial-unification")
+
 lazy val settings = Seq(
   organization := "com.sageserpent",
   name := "plutonium",
-  scalaVersion := "2.12.11",
-  scalacOptions ++= Seq("-Xexperimental",
-                        "-target:jvm-1.8",
-                        "-Ypartial-unification"),
   libraryDependencies += "org.typelevel"                 %% "cats-core"                    % "1.6.0",
   libraryDependencies += "org.typelevel"                 %% "alleycats-core"               % "1.6.0",
   libraryDependencies += "org.typelevel"                 %% "cats-effect"                  % "1.2.0",
-  libraryDependencies += "net.bytebuddy"                 % "byte-buddy"                    % "1.10.10",
+  libraryDependencies += "net.bytebuddy"                 % "byte-buddy"                    % "1.17.5",
   libraryDependencies += "com.sageserpent"               %% "americium"                    % "0.1.5",
   libraryDependencies += "org.scala-lang"                % "scala-reflect"                 % "2.12.8",
   libraryDependencies += "com.twitter"                   %% "chill"                        % "0.9.3",
@@ -37,17 +47,16 @@ lazy val settings = Seq(
   libraryDependencies += "org.typelevel"                 %% "cats-testkit"                 % "1.6.0" % "test",
   libraryDependencies += "com.github.alexarchambault"    %% "scalacheck-shapeless_1.14"    % "1.2.0-1" % "test",
   libraryDependencies += "com.storm-enroute"             %% "scalameter"                   % "0.8.2" % "benchmark",
-  testFrameworks in Benchmark += new TestFramework(
+  Benchmark / testFrameworks += new TestFramework(
     "org.scalameter.ScalaMeterFramework"),
   publishMavenStyle := true,
-  bintrayReleaseOnPublish in ThisBuild := false,
   licenses += ("MIT", url("http://opensource.org/licenses/MIT")),
   bintrayVcsUrl := Some("git@github.com:sageserpent-open/plutonium.git"),
-  parallelExecution in Test := false,
-  Compile / doc / sources := Seq.empty,
-  Compile / packageDoc / publishArtifact := false,
-  fork in run := true,
-  javaOptions in run += "-Xmx500M"
+  Test / parallelExecution := false,
+  Test / fork := true,
+  Test / javaOptions ++= openSesames,
+  Benchmark / fork := true,
+  Benchmark / javaOptions ++= openSesames,
 )
 
 lazy val Benchmark = config("benchmark") extend Test
