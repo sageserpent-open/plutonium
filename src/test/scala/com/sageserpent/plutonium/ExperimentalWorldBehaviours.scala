@@ -1,16 +1,15 @@
 package com.sageserpent.plutonium
 
-import java.time.Instant
-
-import cats.effect.{Resource, IO}
+import cats.effect.{IO, Resource}
+import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.{Finite, PositiveInfinity, Unbounded}
+import org.scalacheck.Prop.BooleanOperators
 import org.scalacheck.{Gen, Prop}
 import org.scalatest.prop.Checkers
 import org.scalatest.{FlatSpec, Matchers}
 
+import java.time.Instant
 import scala.util.Random
-import org.scalacheck.Prop.BooleanOperators
-import com.sageserpent.americium.randomEnrichment._
 
 trait ExperimentalWorldBehaviours
     extends FlatSpec
@@ -669,9 +668,7 @@ class ExperimentalWorldSpecUsingWorldReferenceImplementation
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
     PropertyCheckConfig(maxSize = 20)
 
-  if ("true" != System.getenv("TRAVIS")) {
-    "An experimental world (using the world reference implementation)" should behave like experimentalWorldBehaviour
-  }
+  "An experimental world (using the world reference implementation)" should behave like experimentalWorldBehaviour
 }
 
 class ExperimentalWorldSpecUsingWorldEfficientInMemoryImplementation
@@ -680,8 +677,6 @@ class ExperimentalWorldSpecUsingWorldEfficientInMemoryImplementation
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
     PropertyCheckConfig(maxSize = 20)
 
-  if ("true" != System.getenv("TRAVIS")) {
-    "An experimental world (using the world efficient in-memory implementation)" should behave like experimentalWorldBehaviour
-  }
+  "An experimental world (using the world efficient in-memory implementation)" should behave like experimentalWorldBehaviour
 }
 

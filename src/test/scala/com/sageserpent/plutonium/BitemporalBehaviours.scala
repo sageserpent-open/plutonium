@@ -1,6 +1,9 @@
 package com.sageserpent.plutonium
 
 import cats.effect.IO
+import cats.kernel.laws.discipline.MonoidTests
+import cats.laws.discipline.ApplicativeTests
+import cats.syntax.apply._
 import cats.{Applicative, Eq}
 import org.scalacheck.Prop.BooleanOperators
 import org.scalacheck.{Arbitrary, Gen, Prop, Properties}
@@ -9,9 +12,6 @@ import org.scalatest.prop.Checkers
 
 import scala.reflect.runtime.universe._
 import scala.util.Random
-import cats.laws.discipline.ApplicativeTests
-import cats.kernel.laws.discipline.MonoidTests
-import cats.syntax.apply._
 
 trait BitemporalBehaviours
     extends FlatSpec
@@ -816,19 +816,17 @@ class BitemporalSpecUsingWorldReferenceImplementation
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
     PropertyCheckConfig(maxSize = 30)
 
-  if ("true" != System.getenv("TRAVIS")) {
-    "The class Bitemporal (using the world reference implementation)" should behave like bitemporalBehaviour
+  "The class Bitemporal (using the world reference implementation)" should behave like bitemporalBehaviour
 
-    "A bitemporal wildcard (using the world reference implementation)" should behave like bitemporalWildcardBehaviour
+  "A bitemporal wildcard (using the world reference implementation)" should behave like bitemporalWildcardBehaviour
 
-    "A bitemporal query using an id (using the world reference implementation)" should behave like bitemporalQueryUsingAnIdBehaviour
+  "A bitemporal query using an id (using the world reference implementation)" should behave like bitemporalQueryUsingAnIdBehaviour
 
-    "The bitemporal 'numberOf' (using the world reference implementation)" should behave like bitemporalNumberOfBehaviour
+  "The bitemporal 'numberOf' (using the world reference implementation)" should behave like bitemporalNumberOfBehaviour
 
-    "The bitemporal 'none' (using the world reference implementation)" should behave like bitemporalNoneBehaviour
+  "The bitemporal 'none' (using the world reference implementation)" should behave like bitemporalNoneBehaviour
 
-    "A bitemporal query (using the world reference implementation)" should behave like bitemporalQueryBehaviour
-  }
+  "A bitemporal query (using the world reference implementation)" should behave like bitemporalQueryBehaviour
 }
 
 class BitemporalSpecUsingWorldEfficientInMemoryImplementation
@@ -837,18 +835,17 @@ class BitemporalSpecUsingWorldEfficientInMemoryImplementation
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
     PropertyCheckConfig(maxSize = 30, minSuccessful = 30)
 
-  if ("true" != System.getenv("TRAVIS")) {
-    "The class Bitemporal (using the world efficient in-memory implementation)" should behave like bitemporalBehaviour
+  "The class Bitemporal (using the world efficient in-memory implementation)" should behave like bitemporalBehaviour
 
-    "A bitemporal wildcard (using the world efficient in-memory implementation)" should behave like bitemporalWildcardBehaviour
+  "A bitemporal wildcard (using the world efficient in-memory implementation)" should behave like bitemporalWildcardBehaviour
 
-    "A bitemporal query using an id (using the world efficient in-memory implementation)" should behave like bitemporalQueryUsingAnIdBehaviour
+  "A bitemporal query using an id (using the world efficient in-memory implementation)" should behave like bitemporalQueryUsingAnIdBehaviour
 
-    "The bitemporal 'numberOf' (using the world efficient in-memory implementation)" should behave like bitemporalNumberOfBehaviour
+  "The bitemporal 'numberOf' (using the world efficient in-memory implementation)" should behave like bitemporalNumberOfBehaviour
 
-    "The bitemporal 'none' (using the world efficient in-memory implementation)" should behave like bitemporalNoneBehaviour
+  "The bitemporal 'none' (using the world efficient in-memory implementation)" should behave like bitemporalNoneBehaviour
 
-    "A bitemporal query (using the world efficient in-memory implementation)" should behave like bitemporalQueryBehaviour
-  }
+  "A bitemporal query (using the world efficient in-memory implementation)" should behave like bitemporalQueryBehaviour
+
 }
 

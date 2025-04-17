@@ -3502,15 +3502,13 @@ class WorldSpecUsingWorldReferenceImplementation
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
     PropertyCheckConfig(maxSize = 22, minSuccessful = 50)
 
-  if ("true" != System.getenv("TRAVIS")) {
-    "A world with no history (using the world reference implementation)" should behave like worldWithNoHistoryBehaviour
+  "A world with no history (using the world reference implementation)" should behave like worldWithNoHistoryBehaviour
 
-    "A world with history added in order of increasing event time (using the world reference implementation)" should behave like worldWithHistoryAddedInOrderOfIncreasingEventTimeBehaviour
+  "A world with history added in order of increasing event time (using the world reference implementation)" should behave like worldWithHistoryAddedInOrderOfIncreasingEventTimeBehaviour
 
-    "A world (using the world reference implementation)" should behave like worldBehaviour
+  "A world (using the world reference implementation)" should behave like worldBehaviour
 
-    "A world with events that have since been corrected (using the world reference implementation)" should behave like worldWithEventsThatHaveSinceBeenCorrectedBehaviour
-  }
+  "A world with events that have since been corrected (using the world reference implementation)" should behave like worldWithEventsThatHaveSinceBeenCorrectedBehaviour
 }
 
 class WorldSpecUsingWorldEfficientInMemoryImplementation
@@ -3519,14 +3517,12 @@ class WorldSpecUsingWorldEfficientInMemoryImplementation
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
     PropertyCheckConfig(maxSize = 24, minSuccessful = 50)
 
-  if ("true" != System.getenv("TRAVIS")) {
-    "A world with no history (using the world efficient in-memory implementation)" should behave like worldWithNoHistoryBehaviour
+  "A world with no history (using the world efficient in-memory implementation)" should behave like worldWithNoHistoryBehaviour
 
-    "A world with history added in order of increasing event time (using the world efficient in-memory implementation)" should behave like worldWithHistoryAddedInOrderOfIncreasingEventTimeBehaviour
+  "A world with history added in order of increasing event time (using the world efficient in-memory implementation)" should behave like worldWithHistoryAddedInOrderOfIncreasingEventTimeBehaviour
 
-    "A world (using the world efficient in-memory implementation)" should behave like worldBehaviour
+  "A world (using the world efficient in-memory implementation)" should behave like worldBehaviour
 
-    "A world with events that have since been corrected (using the world efficient in-memory implementation)" should behave like worldWithEventsThatHaveSinceBeenCorrectedBehaviour
-  }
+  "A world with events that have since been corrected (using the world efficient in-memory implementation)" should behave like worldWithEventsThatHaveSinceBeenCorrectedBehaviour
 }
 

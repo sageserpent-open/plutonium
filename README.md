@@ -1,4 +1,4 @@
-# Plutonium - **_bitemporal CQRS for Plain Old Java Objects (and Scala too)_** [![Build Status](https://travis-ci.org/sageserpent-open/plutonium.svg?branch=master)](https://travis-ci.org/sageserpent-open/plutonium)
+# Plutonium - **_bitemporal CQRS for Plain Old Java Objects (and Scala too)_**
 
 ## Pardon? ##
 No, you are not about to be invited to purchase some fissile material of any isotopic constitution whatsover.
