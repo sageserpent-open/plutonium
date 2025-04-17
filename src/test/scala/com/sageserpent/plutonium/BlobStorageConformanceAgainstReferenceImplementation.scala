@@ -1,8 +1,5 @@
 package com.sageserpent.plutonium
 
-import java.time.Instant
-import java.util.UUID
-
 import cats.effect.{IO, Resource}
 import org.scalacheck.ScalacheckShapeless._
 import org.scalacheck.{Arbitrary, Gen}
@@ -10,6 +7,8 @@ import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{FlatSpec, Matchers}
 import scalikejdbc.ConnectionPool
 
+import java.time.Instant
+import java.util.UUID
 import scala.collection.mutable
 import scala.util.Try
 
@@ -81,7 +80,7 @@ trait BlobStorageConformanceAgainstReferenceImplementation
 
   def suite: Unit = {
 
-    "blob storage on H2" should "behave the same way as blob storage in memory" in {
+    "a conforming blob storage implementation" should "behave the same way as blob storage in memory" in {
       var counter = 0
 
       forAll(operationsGenerator, MinSuccessful(200)) { operations =>
