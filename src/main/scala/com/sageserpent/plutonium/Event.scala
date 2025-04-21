@@ -41,7 +41,7 @@ sealed trait Event {
   require(when < PositiveInfinity())
 }
 
-object capturePatches {
+private[plutonium] object capturePatches {
 
   /** @param update
     *   A lambda that requests recording proxies corresponding to one or several
@@ -143,7 +143,7 @@ object capturePatches {
       def capturePatch(patch: AbstractPatch): Unit
     }
 
-    object mutation {
+    private[plutonium] object mutation {
       @RuntimeType
       def apply(
           @Origin method: Method,
@@ -152,7 +152,7 @@ object capturePatches {
           @FieldValue(
             "acquiredState"
           ) acquiredState: RecordingProxyAcquiredState
-      ) = {
+      ): Null = {
         val item = target.asInstanceOf[Recorder]
         // Remember, the outer context is making a proxy of type 'Item'.
         acquiredState.capturePatch(Patch(item, method, arguments))
@@ -160,25 +160,25 @@ object capturePatches {
       }
     }
 
-    object uniqueItemSpecification {
+    private[plutonium] object uniqueItemSpecification {
       @RuntimeType
       def apply(
           @FieldValue(
             "acquiredState"
           ) acquiredState: RecordingProxyAcquiredState
-      ) =
+      ): UniqueItemSpecification =
         acquiredState.uniqueItemSpecification
     }
 
-    object forbiddenAbstractReadAccess {
+    private[plutonium] object forbiddenAbstractReadAccess {
       @RuntimeType
-      def apply(@Origin method: Method, @This target: AnyRef) =
+      def apply(@Origin method: Method, @This target: AnyRef): Nothing =
         throw new UnsupportedOperationException(
           s"Attempt to call abstract method: '$method' with a non-unit return type on a recorder proxy: '$target' while capturing a change or measurement."
         )
     }
 
-    object forbiddenReadAccess {
+    private[plutonium] object forbiddenReadAccess {
       @RuntimeType
       def apply(
           @Origin method: Method,
@@ -187,7 +187,7 @@ object capturePatches {
           @FieldValue(
             "acquiredState"
           ) acquiredState: RecordingProxyAcquiredState
-      ) =
+      ): Any =
         if (!acquiredState.unlockFullReadAccess) {
           throw new UnsupportedOperationException(
             s"Attempt to call method: '$method' with a non-unit return type on a recorder proxy: '$target' while capturing a change or measurement."
@@ -195,14 +195,14 @@ object capturePatches {
         } else superCall.call()
     }
 
-    object permittedReadAccess {
+    private[plutonium] object permittedReadAccess {
       @RuntimeType
       def apply(
           @SuperCall superCall: Callable[_],
           @FieldValue(
             "acquiredState"
           ) acquiredState: RecordingProxyAcquiredState
-      ) =
+      ): Any =
         if (!acquiredState.unlockFullReadAccess)
           Resource
             .make(IO {
@@ -238,6 +238,9 @@ object Change {
   )(id: Any, update: Item => Unit): Change =
     forOneItem(Finite(when))(id, update)
 
+  def forOneItem[Item: TypeTag](id: Any, update: Item => Unit): Change =
+    forOneItem(americium.NegativeInfinity[Instant]())(id, update)
+
   def forOneItem[Item: TypeTag](
       when: Unbounded[Instant]
   )(id: Any, update: Item => Unit): Change = {
@@ -251,13 +254,17 @@ object Change {
     )
   }
 
-  def forOneItem[Item: TypeTag](id: Any, update: Item => Unit): Change =
-    forOneItem(americium.NegativeInfinity[Instant]())(id, update)
-
   def forTwoItems[Item1: TypeTag, Item2: TypeTag](
       when: Instant
   )(id1: Any, id2: Any, update: (Item1, Item2) => Unit): Change =
     forTwoItems(Finite(when))(id1, id2, update)
+
+  def forTwoItems[Item1: TypeTag, Item2: TypeTag](
+      id1: Any,
+      id2: Any,
+      update: (Item1, Item2) => Unit
+  ): Change =
+    forTwoItems(americium.NegativeInfinity[Instant]())(id1, id2, update)
 
   def forTwoItems[Item1: TypeTag, Item2: TypeTag](
       when: Unbounded[Instant]
@@ -271,22 +278,27 @@ object Change {
       update(recorder1, recorder2)
     })
   )
-
-  def forTwoItems[Item1: TypeTag, Item2: TypeTag](
-      id1: Any,
-      id2: Any,
-      update: (Item1, Item2) => Unit
-  ): Change =
-    forTwoItems(americium.NegativeInfinity[Instant]())(id1, id2, update)
 }
 
-// NOTE: creation is implied by the first change, so we don't bother with an explicit case class for that.
-// NOTE: annihilation has to happen at some definite time.
-// NOTE: an annihilation can only be booked in as part of a revision if the id is refers has already been defined by some
-// earlier event and is not already annihilated - this is checked as a precondition on 'World.revise'.
-// NOTE: it is OK to have annihilations and other events occurring at the same time: the documentation of 'World.revise'
-// covers how coincident events are resolved. So an item referred to by an id may be changed, then annihilated, then
-// recreated and so on all at the same time.
+/** An event where an item ceases to exist. In contrast to a [[Change]], each
+  * annihilated item constitutes a separate event.
+  *
+  * @param definiteWhen
+  *   When the item ceased to exist in the real world. An annihilation has to
+  *   take place at a definite time.
+  * @param uniqueItemSpecification
+  *   The item being annihilated.
+  * @note
+  *   An annihilation can only be booked in as part of a revision if the id it
+  *   refers to has already been defined by some earlier event and is not
+  *   already annihilated - this is checked as a precondition on
+  *   [[World.revise]].
+  * @note
+  *   It is OK to have annihilations and other events occurring at the same
+  *   time: the documentation of [[World.revise]] covers how coincident events
+  *   are resolved. So an item referred to by an id may be changed, then
+  *   annihilated, then recreated and so on all at the same time.
+  */
 case class Annihilation(
     definiteWhen: Instant,
     uniqueItemSpecification: UniqueItemSpecification
@@ -296,12 +308,14 @@ case class Annihilation(
   override def toString: String =
     s"Annihilation of: $uniqueItemSpecification at: $definiteWhen"
 
-  def rewriteItemClass(clazz: Class[_]): Annihilation =
+  private[plutonium] def rewriteItemClass(clazz: Class[_]): Annihilation =
     copy(uniqueItemSpecification =
       uniqueItemSpecification.copy(clazz = clazz)
     ) // TODO: lenses, I know.
 
-  def apply(identifiedItemAccess: IdentifiedItemAccess): Unit = {
+  private[plutonium] def apply(
+      identifiedItemAccess: IdentifiedItemAccess
+  ): Unit = {
     identifiedItemAccess.noteAnnihilation(uniqueItemSpecification)
   }
 }

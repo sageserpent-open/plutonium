@@ -1,7 +1,5 @@
 package com.sageserpent.plutonium
 
-import java.lang.reflect.Modifier
-
 import net.bytebuddy.description.`type`.TypeDescription
 import net.bytebuddy.description.method.MethodDescription
 import net.bytebuddy.dynamic.DynamicType.Builder
@@ -9,27 +7,27 @@ import net.bytebuddy.dynamic.loading.ClassLoadingStrategy
 import net.bytebuddy.dynamic.scaffold.subclass.ConstructorStrategy
 import net.bytebuddy.implementation.bind.annotation._
 import net.bytebuddy.implementation.{FieldAccessor, MethodDelegation}
-import net.bytebuddy.matcher.{ElementMatcher, ElementMatchers}
+import net.bytebuddy.matcher.ElementMatchers
 import net.bytebuddy.{ByteBuddy, NamingStrategy}
 
-import scala.collection.JavaConversions._
+import java.lang.reflect.Modifier
+import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.reflect.runtime.universe
-import scala.reflect.runtime.universe.{Super => _, This => _, _}
+import scala.reflect.runtime.universe.{Super => _, This => _}
 
-object ProxyFactory {
-  private[plutonium] trait StateAcquisition[AcquiredState] {
-    def acquire(acquiredState: AcquiredState): Unit
-  }
-
-  val byteBuddy = new ByteBuddy()
+private[plutonium] object ProxyFactory {
+  private val byteBuddy = new ByteBuddy()
 
   trait AcquiredState {
     val uniqueItemSpecification: UniqueItemSpecification
   }
+
+  private[plutonium] trait StateAcquisition[AcquiredState] {
+    def acquire(acquiredState: AcquiredState): Unit
+  }
 }
 
-trait ProxyFactory {
+private[plutonium] trait ProxyFactory {
   import ProxyFactory._
 
   type AcquiredState <: ProxyFactory.AcquiredState
@@ -39,6 +37,67 @@ trait ProxyFactory {
   val acquiredStateClazz: Class[_ <: AcquiredState]
 
   val proxySuffix: String
+  val uniqueItemSpecificationPropertyForRecording =
+    new MethodDescription.ForLoadedMethod(
+      classOf[Recorder].getMethod("uniqueItemSpecification")
+    )
+  private val cachedProxyClasses
+      : scala.collection.mutable.Map[Class[_], Class[_]] =
+    mutable.Map.empty
+  private val nonMutableMembersThatCanAlwaysBeReadFrom =
+    (classOf[ItemExtensionApi].getMethods ++ classOf[
+      AnyRef
+    ].getMethods) map (new MethodDescription.ForLoadedMethod(_))
+
+  def constructFrom[Item](stateToBeAcquiredByProxy: AcquiredState): Item = {
+    // NOTE: this returns items that are proxies to 'Item' rather than direct
+    // instances of 'Item' itself. Depending on the
+    // context (using a scope created by a client from a world, as opposed to
+    // while building up that scope from patches),
+    // the items may forbid certain operations on them - e.g. for rendering from
+    // a client's scope, the items should be
+    // read-only.
+
+    val uniqueItemSpecification =
+      stateToBeAcquiredByProxy.uniqueItemSpecification
+
+    val proxyClazz = proxyClassFor(uniqueItemSpecification)
+
+    val clazz = proxyClazz.getSuperclass
+
+    if (
+      !isForRecordingOnly && clazz.getMethods.exists(method =>
+        // TODO - cleanup.
+        "id" != method.getName && Modifier.isAbstract(method.getModifiers)
+      )
+    ) {
+      throw new UnsupportedOperationException(
+        s"Attempt to create an instance of an abstract class '$clazz' for id: '${uniqueItemSpecification.id}'."
+      )
+    }
+    val proxy = proxyClazz.newInstance().asInstanceOf[Item]
+
+    proxy
+      .asInstanceOf[StateAcquisition[AcquiredState]]
+      .acquire(stateToBeAcquiredByProxy)
+
+    proxy
+  }
+
+  private def proxyClassFor(
+      uniqueItemSpecification: UniqueItemSpecification
+  ): Class[_] = // NOTE: using 'synchronized' is rather hokey, but there are subtle issues with
+    // using the likes of 'TrieMap.getOrElseUpdate' due to the initialiser block
+    // being executed
+    // more than once, even though the map is indeed thread safe. Let's keep it
+    // simple for now...
+    synchronized {
+      cachedProxyClasses.getOrElseUpdate(
+        uniqueItemSpecification.clazz, {
+          createProxyClass(uniqueItemSpecification.clazz)
+        }
+      )
+    }
 
   private def createProxyClass(clazz: Class[_]): Class[_] = {
     val builder = byteBuddy
@@ -47,7 +106,7 @@ trait ProxyFactory {
           s"${superClass.getSimpleName}_$proxySuffix"
       })
       .subclass(clazz, ConstructorStrategy.Default.DEFAULT_CONSTRUCTOR)
-      .implement(additionalInterfaces.toSeq)
+      .implement(additionalInterfaces.toSeq.asJava)
       .ignoreAlso(ElementMatchers.named[MethodDescription]("_isGhost"))
       .defineField("acquiredState", acquiredStateClazz)
       .annotateField(DoNotSerializeAnnotation.annotation)
@@ -55,7 +114,8 @@ trait ProxyFactory {
     val stateAcquisitionTypeBuilder =
       TypeDescription.Generic.Builder.parameterizedType(
         classOf[StateAcquisition[AcquiredState]],
-        Seq(acquiredStateClazz))
+        Seq(acquiredStateClazz).asJava
+      )
 
     val builderWithInterceptions = configureInterceptions(builder)
       .implement(stateAcquisitionTypeBuilder.build)
@@ -70,70 +130,19 @@ trait ProxyFactory {
       .getLoaded
   }
 
-  protected def configureInterceptions(builder: Builder[_]): Builder[_]
-
-  def constructFrom[Item](stateToBeAcquiredByProxy: AcquiredState): Item = {
-    // NOTE: this returns items that are proxies to 'Item' rather than direct instances of 'Item' itself. Depending on the
-    // context (using a scope created by a client from a world, as opposed to while building up that scope from patches),
-    // the items may forbid certain operations on them - e.g. for rendering from a client's scope, the items should be
-    // read-only.
-
-    val uniqueItemSpecification =
-      stateToBeAcquiredByProxy.uniqueItemSpecification
-
-    val proxyClazz = proxyClassFor[Item](uniqueItemSpecification)
-
-    val clazz = proxyClazz.getSuperclass
-
-    if (!isForRecordingOnly && clazz.getMethods.exists(method =>
-          // TODO - cleanup.
-          "id" != method.getName && Modifier.isAbstract(method.getModifiers))) {
-      throw new UnsupportedOperationException(
-        s"Attempt to create an instance of an abstract class '$clazz' for id: '${uniqueItemSpecification.id}'.")
-    }
-    val proxy = proxyClazz.newInstance().asInstanceOf[Item]
-
-    proxy
-      .asInstanceOf[StateAcquisition[AcquiredState]]
-      .acquire(stateToBeAcquiredByProxy)
-
-    proxy
-  }
-
-  def proxyClassFor[Item](uniqueItemSpecification: UniqueItemSpecification)
-    : Class[_] = // NOTE: using 'synchronized' is rather hokey, but there are subtle issues with
-    // using the likes of 'TrieMap.getOrElseUpdate' due to the initialiser block being executed
-    // more than once, even though the map is indeed thread safe. Let's keep it simple for now...
-    synchronized {
-      cachedProxyClasses.getOrElseUpdate(uniqueItemSpecification.clazz, {
-        createProxyClass(uniqueItemSpecification.clazz)
-      })
-    }
-
-  protected def additionalInterfaces: Array[Class[_]]
-  protected val cachedProxyClasses
-    : scala.collection.mutable.Map[Class[_], Class[_]] =
-    mutable.Map.empty
-
-  val matchGetClass: ElementMatcher[MethodDescription] =
-    ElementMatchers.is(classOf[AnyRef].getMethod("getClass"))
-
-  val nonMutableMembersThatCanAlwaysBeReadFrom = (classOf[ItemExtensionApi].getMethods ++ classOf[
-    AnyRef].getMethods) map (new MethodDescription.ForLoadedMethod(_))
-
-  val uniqueItemSpecificationPropertyForRecording =
-    new MethodDescription.ForLoadedMethod(
-      classOf[Recorder].getMethod("uniqueItemSpecification"))
-
-  def alwaysAllowsReadAccessTo(method: MethodDescription) =
+  def alwaysAllowsReadAccessTo(method: MethodDescription): Boolean =
     nonMutableMembersThatCanAlwaysBeReadFrom.exists(exclusionMethod => {
       WorldImplementationCodeFactoring
         .firstMethodIsOverrideCompatibleWithSecond(method, exclusionMethod)
     })
 
-  object id {
+  protected def configureInterceptions(builder: Builder[_]): Builder[_]
+
+  protected def additionalInterfaces: Array[Class[_]]
+
+  private[plutonium] object id {
     @RuntimeType
-    def apply(@FieldValue("acquiredState") acquiredState: AcquiredState) =
+    def apply(@FieldValue("acquiredState") acquiredState: AcquiredState): Any =
       acquiredState.uniqueItemSpecification.id
   }
 }
