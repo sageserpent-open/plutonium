@@ -49,6 +49,17 @@ private[plutonium] trait ProxyFactory {
       AnyRef
     ].getMethods) map (new MethodDescription.ForLoadedMethod(_))
 
+  /** Creates proxies to [[Item]].<p> Depending on the context (using a scope
+    * created by a client from a world, as opposed to while building up that
+    * scope from patches), the items may forbid certain operations on them -
+    * e.g. for rendering from a client's scope, the items should be read-only.
+    *
+    * @param stateToBeAcquiredByProxy
+    *   Additional state required by the Plutonium implementation that is not
+    *   part of whatever API is furnished by [[Item]].
+    * @tparam Item
+    * @return
+    */
   def constructFrom[Item](stateToBeAcquiredByProxy: AcquiredState): Item = {
     // NOTE: this returns items that are proxies to 'Item' rather than direct
     // instances of 'Item' itself. Depending on the
@@ -86,11 +97,11 @@ private[plutonium] trait ProxyFactory {
 
   private def proxyClassFor(
       uniqueItemSpecification: UniqueItemSpecification
-  ): Class[_] = // NOTE: using 'synchronized' is rather hokey, but there are subtle issues with
-    // using the likes of 'TrieMap.getOrElseUpdate' due to the initialiser block
-    // being executed
-    // more than once, even though the map is indeed thread safe. Let's keep it
-    // simple for now...
+  ): Class[_] =
+    // NOTE: using 'synchronized' is rather hokey, but there are subtle issues
+    // with using the likes of 'TrieMap.getOrElseUpdate' due to the initializer
+    // block being executed more than once, even though the map is indeed thread
+    // safe. Let's keep it simple for now...
     synchronized {
       cachedProxyClasses.getOrElseUpdate(
         uniqueItemSpecification.clazz, {
@@ -130,7 +141,7 @@ private[plutonium] trait ProxyFactory {
       .getLoaded
   }
 
-  def alwaysAllowsReadAccessTo(method: MethodDescription): Boolean =
+  protected def alwaysAllowsReadAccessTo(method: MethodDescription): Boolean =
     nonMutableMembersThatCanAlwaysBeReadFrom.exists(exclusionMethod => {
       WorldImplementationCodeFactoring
         .firstMethodIsOverrideCompatibleWithSecond(method, exclusionMethod)
