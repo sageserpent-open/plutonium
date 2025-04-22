@@ -65,6 +65,9 @@ trait World extends WorldConstants with AutoCloseable {
     *   The time of the <i>revision</i> itself - this may be later than, earlier
     *   than or the same as the time of the latest event in either the latest
     *   revision's timeline or any of {@code events}.
+    * @return
+    *   The new revision's number, which will be the same as [[nextRevision]]
+    *   <b>prior</b> to the call.
     * @note
     *   The {@code asOf} must be no earlier than the maximum yielded by
     *   [[revisionAsOfs]].
@@ -109,8 +112,34 @@ trait World extends WorldConstants with AutoCloseable {
       asOf: Instant
   ): Int
 
+  /** Convenience overload to book in a single event.
+    * @param eventId
+    *   Event id used to define a new event, or amend a previously booked one.
+    * @param event
+    * @param asOf
+    *   The time of the <i>revision</i> itself - this may be later than, earlier
+    *   than or the same as the time of the latest event in either the latest
+    *   revision's timeline or any of {@code events}.
+    * @return
+    *   The new revision's number, which will be the same as [[nextRevision]]
+    *   <b>prior</b> to the call.
+    */
   def revise(eventId: EventId, event: Event, asOf: Instant): Int
 
+  /** @param eventId
+    *   Event id used to annul a previously booked one, if such an event exists.
+    * @param asOf
+    *   The time of the <i>revision</i> itself - this may be later than, earlier
+    *   than or the same as the time of the latest event in either the latest
+    *   revision's timeline or any of {@code events}.
+    * @return
+    *   The new revision's number, which will be the same as [[nextRevision]]
+    *   <b>prior</b> to the call.
+    * @note
+    *   It is permitted to attempt to annul an event that has no previous
+    *   booking. This will still increment the revision number, even though the
+    *   new revision's timeline remains the same.
+    */
   def annul(eventId: EventId, asOf: Instant): Int
 
   // This produces a 'read-only' scope - objects that it renders from
