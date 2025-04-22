@@ -4,7 +4,7 @@ package com.sageserpent.plutonium
   * items denoted by [[UniqueItemSpecification]] instances. These recording
   * proxies capture [[AbstractPatch]] instances that represent mutation
   * operations made on them. This is done when defining changes or measurements;
-  * the mutation operations being made by lambdas that define what the change or
+  * the mutation operations are made by lambdas that define what the change or
   * measurement is.
   */
 trait RecorderFactory {

@@ -49,7 +49,7 @@ private[plutonium] object capturePatches {
     *   operations on them.
     * @return
     *   The [[AbstractPatch]] instances representing any mutation operations
-    *   performed in the execution of @code update.
+    *   performed in the execution of {@code update}.
     * @note
     *   If no recording proxies are requested, then no patches will be yielded
     *   at all.
@@ -227,7 +227,7 @@ private[plutonium] object capturePatches {
   *   change.
   * @note
   *   It is possible to have a trivial change where no items are mutated, this
-  *   is represented by @code patches being an empty sequence.
+  *   is represented by {@code patches} being an empty sequence.
   */
 case class Change(when: Unbounded[Instant], patches: Seq[AbstractPatch])
     extends Event
@@ -237,9 +237,6 @@ object Change {
       when: Instant
   )(id: Any, update: Item => Unit): Change =
     forOneItem(Finite(when))(id, update)
-
-  def forOneItem[Item: TypeTag](id: Any, update: Item => Unit): Change =
-    forOneItem(americium.NegativeInfinity[Instant]())(id, update)
 
   def forOneItem[Item: TypeTag](
       when: Unbounded[Instant]
@@ -254,17 +251,13 @@ object Change {
     )
   }
 
+  def forOneItem[Item: TypeTag](id: Any, update: Item => Unit): Change =
+    forOneItem(americium.NegativeInfinity[Instant]())(id, update)
+
   def forTwoItems[Item1: TypeTag, Item2: TypeTag](
       when: Instant
   )(id1: Any, id2: Any, update: (Item1, Item2) => Unit): Change =
     forTwoItems(Finite(when))(id1, id2, update)
-
-  def forTwoItems[Item1: TypeTag, Item2: TypeTag](
-      id1: Any,
-      id2: Any,
-      update: (Item1, Item2) => Unit
-  ): Change =
-    forTwoItems(americium.NegativeInfinity[Instant]())(id1, id2, update)
 
   def forTwoItems[Item1: TypeTag, Item2: TypeTag](
       when: Unbounded[Instant]
@@ -278,6 +271,13 @@ object Change {
       update(recorder1, recorder2)
     })
   )
+
+  def forTwoItems[Item1: TypeTag, Item2: TypeTag](
+      id1: Any,
+      id2: Any,
+      update: (Item1, Item2) => Unit
+  ): Change =
+    forTwoItems(americium.NegativeInfinity[Instant]())(id1, id2, update)
 }
 
 /** An event where an item ceases to exist. In contrast to a [[Change]], each
