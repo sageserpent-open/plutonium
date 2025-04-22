@@ -1,14 +1,29 @@
 package com.sageserpent.plutonium
 
-import scala.collection.JavaConverters._
+import com.sageserpent.americium.Unbounded
 
-trait Scope extends javaApi.Scope {
-  val nextRevision: World.Revision
+import java.time.Instant
 
-  def numberOf[Item](id: Any, clazz: Class[Item]): Int =
-    (this: javaApi.Scope).numberOf(javaApi.Bitemporal.withId(id, clazz))
+/** Extends [[ItemCache]], adding properties that express the selection criteria
+  * that define the scope.
+  */
+trait Scope extends ItemCache {
 
-  def renderAsIterable[Item](
-      bitemporal: Bitemporal[Item]): java.lang.Iterable[Item] =
-    render(bitemporal).asJava
+  /** @return
+    *   A point in time within some implied timeline that the items are rendered
+    *   at. Their existence and state reflects all the events leading up to and
+    *   including this time.
+    */
+  def when: Unbounded[Instant]
+
+  /** @return
+    *   One past the revision that defined the implied timeline.
+    */
+  def nextRevision: World.Revision
+
+  /** @return
+    *   The {@code asOf} used to define the revision that defined the implied
+    *   timeline.
+    */
+  def asOf: Unbounded[Instant]
 }

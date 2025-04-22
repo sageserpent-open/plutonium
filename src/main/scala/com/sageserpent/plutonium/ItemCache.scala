@@ -1,23 +1,43 @@
 package com.sageserpent.plutonium
 
+import scala.collection.JavaConverters._
+
+/** Provides access to items selected by instances of [[Bitemporal]].
+  */
 trait ItemCache {
-  // Why a stream for the result type? - two reasons that overlap - we may have no instance in force for the scope, or we might have several that share the same id, albeit with
-  // different runtime subtypes of 'Item'. What's more, if 'bitemporal' was cooked using 'Bitemporal.wildcard', we'll have every single instance of a runtime subtype of 'Item'.
+
+  /** @param bitemporal
+    *   Specifies what item or items to retrieve.
+    * @tparam Item
+    * @return
+    *   A stream of matching items, which may be empty.
+    */
   def render[Item](bitemporal: Bitemporal[Item]): Stream[Item]
 
+  def renderAsIterable[Item](
+      bitemporal: Bitemporal[Item]
+  ): java.lang.Iterable[Item] =
+    render(bitemporal).asJava
+
+  /** @param bitemporal
+    *   Specifies what items to count.
+    * @tparam Item
+    * @return
+    *   The number of the matching items, which may be zero.
+    */
   def numberOf[Item](bitemporal: Bitemporal[Item]): Int
+
+  def numberOf[Item](id: Any, clazz: Class[Item]): Int =
+    numberOf(Bitemporal.withId(id, clazz))
 }
 
-trait ItemCacheImplementation extends ItemCache {
-  protected def itemsFor[Item](
-      uniqueItemSpecification: UniqueItemSpecification): Stream[Item]
-
-  protected def allItems[Item](clazz: Class[Item]): Stream[Item]
-
+protected[plutonium] trait ItemCacheImplementation extends ItemCache {
   def render[Item](bitemporal: Bitemporal[Item]): Stream[Item] = {
     bitemporal match {
-      case ApBitemporalResult(preceedingContext,
-                              stage: (Bitemporal[(_) => Item])) =>
+      case ApBitemporalResult(
+            preceedingContext,
+            stage: (Bitemporal[(_) => Item])
+          ) =>
         for {
           preceedingContext <- render(preceedingContext)
           stage             <- render(stage)
@@ -34,8 +54,10 @@ trait ItemCacheImplementation extends ItemCache {
 
   def numberOf[Item](bitemporal: Bitemporal[Item]): Int = {
     bitemporal match {
-      case ApBitemporalResult(preceedingContext,
-                              stage: (Bitemporal[(_) => Item])) =>
+      case ApBitemporalResult(
+            preceedingContext,
+            stage: (Bitemporal[(_) => Item])
+          ) =>
         numberOf(preceedingContext) * numberOf(stage)
       case PlusBitemporalResult(lhs, rhs) => numberOf(lhs) + numberOf(rhs)
       case PointBitemporalResult(item)    => 1
@@ -46,13 +68,10 @@ trait ItemCacheImplementation extends ItemCache {
         allItems(clazz).size
     }
   }
-}
 
-object emptyItemCache extends ItemCacheImplementation {
-  override def itemsFor[Item](
-      uniqueItemSpecification: UniqueItemSpecification): Stream[Item] =
-    Stream.empty
+  protected def itemsFor[Item](
+      uniqueItemSpecification: UniqueItemSpecification
+  ): Stream[Item]
 
-  override def allItems[Item](clazz: Class[Item]): Stream[Item] =
-    Stream.empty
+  protected def allItems[Item](clazz: Class[Item]): Stream[Item]
 }

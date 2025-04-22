@@ -39,7 +39,7 @@ class WorldEfficientInMemoryImplementation(
       Some(timelineStorage(nextRevision - 1)._2)
     else None
 
-  override def forkExperimentalWorld(scope: javaApi.Scope): World = {
+  override def forkExperimentalWorld(scope: Scope): World = {
     val timelines = timelineStorage
       .take(scope.nextRevision)
       .map { case (asOf, timeline) =>

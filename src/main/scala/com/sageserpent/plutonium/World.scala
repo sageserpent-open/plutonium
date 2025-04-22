@@ -31,14 +31,14 @@ trait World extends javaApi.World {
   def revise(eventId: EventId, event: Event, asOf: Instant): Revision =
     revise(Map(eventId -> Some(event)), asOf)
 
+  def annul(eventId: EventId, asOf: Instant): Revision =
+    revise(Map(eventId -> None), asOf)
+
   def revise(
       events: Map[_ <: EventId, Option[Event]],
       asOf: Instant
   ): Revision =
     revise_(events: collection.Map[_ <: EventId, Option[Event]], asOf)
-
-  def annul(eventId: EventId, asOf: Instant): Revision =
-    revise(Map(eventId -> None), asOf)
 
   def scopeFor(when: Unbounded[Instant], nextRevision: World.Revision): Scope
 
@@ -50,7 +50,7 @@ trait World extends javaApi.World {
   def scopeFor(when: Instant, asOf: Instant): Scope =
     scopeFor(Finite(when), asOf)
 
-  def forkExperimentalWorld(scope: javaApi.Scope): World
+  def forkExperimentalWorld(scope: Scope): World
 
   protected[plutonium] def revise_(
       events: collection.Map[_ <: EventId, Option[Event]],
@@ -120,7 +120,7 @@ trait WorldContracts extends World {
     result
   }
 
-  abstract override def forkExperimentalWorld(scope: javaApi.Scope): World = {
+  abstract override def forkExperimentalWorld(scope: Scope): World = {
     require(scope.nextRevision <= this.nextRevision)
     super.forkExperimentalWorld(scope)
   }

@@ -4,10 +4,10 @@ import com.google.common.collect.ImmutableMap;
 import com.sageserpent.americium.NegativeInfinity;
 import com.sageserpent.americium.PositiveInfinity;
 import com.sageserpent.plutonium.Event;
+import com.sageserpent.plutonium.Scope;
 import com.sageserpent.plutonium.WorldEfficientInMemoryImplementation;
 import com.sageserpent.plutonium.javaApi.Bitemporal;
 import com.sageserpent.plutonium.javaApi.Change;
-import com.sageserpent.plutonium.javaApi.Scope;
 import com.sageserpent.plutonium.javaApi.World;
 
 import java.time.Instant;
@@ -18,7 +18,7 @@ import java.util.concurrent.Executors;
 import java.util.stream.StreamSupport;
 
 public class DeliveringPackages {
-    private static String warehouseName = "BigDepot";
+    private static final String warehouseName = "BigDepot";
 
     public static void main(String[] arguments) {
         // Let's get hold of a world to model things in.
@@ -61,8 +61,8 @@ public class DeliveringPackages {
                                     .now() /*As-of time that picks out the
                                 revision.*/);
                     assert "Big warehouse by motorway".equals(scope.render(
-                            Bitemporal.withId(warehouseName,
-                                    PackageHolder.class)).head()
+                                    Bitemporal.withId(warehouseName,
+                                            PackageHolder.class)).head()
                             .getLocation());
                 }
             }
@@ -99,7 +99,7 @@ public class DeliveringPackages {
                                 warehouseName,
                                 PackageHolder.class)).head().getLocation());
                 assert "SuperTron HiPlasmatic Telly".equals(scope.render(
-                        Bitemporal.withId("Package #1", PackageItem.class))
+                                Bitemporal.withId("Package #1", PackageItem.class))
                         .head()
                         .getContents());
             }
@@ -207,7 +207,7 @@ public class DeliveringPackages {
                                 warehouseName,
                                 PackageHolder.class)).head().getLocation());
                 assert "Krasster kipper ties".equals(scope.render(
-                        Bitemporal.withId("Package #1", PackageItem.class))
+                                Bitemporal.withId("Package #1", PackageItem.class))
                         .head()
                         .getContents());
             }
@@ -293,7 +293,7 @@ public class DeliveringPackages {
                         Instant.now() /*As-of time that picks out the revision
                     .*/);
                 assert "JA10 PIE".equals(scope.render(
-                        Bitemporal.withId("Package #3", PackageItem.class))
+                                Bitemporal.withId("Package #3", PackageItem.class))
                         .head().holder().id());
             }
 
@@ -306,7 +306,7 @@ public class DeliveringPackages {
                         Instant.now() /*As-of time that picks out the revision
                     .*/);
                 assert warehouseName.equals(scope.render(
-                        Bitemporal.withId("Package #3", PackageItem.class))
+                                Bitemporal.withId("Package #3", PackageItem.class))
                         .head().holder().id());
             }
 

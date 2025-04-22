@@ -1,6 +1,6 @@
 package com.sageserpent.plutonium.javaApi
 import com.sageserpent.americium.Unbounded
-import com.sageserpent.plutonium.{Event, EventId, javaApi}
+import com.sageserpent.plutonium.{Event, EventId, Scope}
 
 import java.time.Instant
 import java.util.Optional
@@ -173,5 +173,5 @@ trait World extends WorldConstants with AutoCloseable {
   // experimental world can itself be revised
   // in just the same way as any other world, including the definition of events
   // beyond the defining scope's 'when'.
-  def forkExperimentalWorld(scope: javaApi.Scope): World
+  def forkExperimentalWorld(scope: Scope): World
 }

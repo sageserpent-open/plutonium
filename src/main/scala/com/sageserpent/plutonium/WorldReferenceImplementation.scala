@@ -248,7 +248,7 @@ class WorldReferenceImplementation(mutableState: MutableState)
 
   override def revisionAsOfs: Array[Instant] = mutableState.revisionAsOfs
 
-  override def forkExperimentalWorld(scope: javaApi.Scope): World = {
+  override def forkExperimentalWorld(scope: Scope): World = {
     val forkedMutableState = new MutableState {
       val baseMutableState                     = mutableState
       val numberOfRevisionsInCommon            = scope.nextRevision
