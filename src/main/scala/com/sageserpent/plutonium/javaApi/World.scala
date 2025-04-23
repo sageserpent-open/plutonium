@@ -24,7 +24,7 @@ import java.util.Optional
   * {@code asOf}.<p>However, there is nothing stopping an event from being
   * booked in speculatively at some time in advance of the
   * {@code asOf}.<p>Regardless of whether that a revision's {@code asOf} regards
-  * a previosly booked event as in the past or future, it can annul or amend
+  * a previously booked event as in the past or future, it can annul or amend
   * that event.<p>The items referred to by events can be queried for via a
   * [[Scope]]; the scope acts as a selector into the world, focussing on a
   * timeline at a specific revision and then slicing into the timeline at some
@@ -142,36 +142,78 @@ trait World extends WorldConstants with AutoCloseable {
     */
   def annul(eventId: EventId, asOf: Instant): Int
 
-  // This produces a 'read-only' scope - objects that it renders from
-  // bitemporals will fail at runtime if an attempt is made to mutate them,
-  // subject to what the proxies can enforce.
-  // I can imagine queries being set to 'the beginning of time' and 'past the
-  // latest event'...
-  // NOTE: precondition that 'nextRevision' <= 'this.nextRevision' - which
-  // implies that a scope makes a *snapshot* of the world when it is created -
-  // subsequent revisions to the world are disregarded.
+  /** @param when
+    *   A point in time within the timeline that items are rendered at. Their
+    *   existence and state reflects all the events leading up to and including
+    *   this time.
+    * @param nextRevision
+    *   One past the revision that defined the timeline.
+    * @return
+    *   A [[Scope]] allowing read-only access to items.
+    * @note
+    *   As the scope is read-only, any items accessed via it will throw an
+    *   exception if an attempt to call a mutation operation on them.
+    * @note
+    *   {@code nextRevision} must be no greater than the current value of
+    *   [[nextRevision]].
+    */
   def scopeFor(when: Unbounded[Instant], nextRevision: Int): Scope
 
+  /** @param when
+    *   A point in time within the timeline that items are rendered at. Their
+    *   existence and state reflects all the events leading up to and including
+    *   this time.
+    * @param nextRevision
+    *   One past the revision that defined the timeline.
+    * @return
+    *   A [[Scope]] allowing read-only access to items.
+    * @note
+    *   As the scope is read-only, any items accessed via it will throw an
+    *   exception if an attempt to call a mutation operation on them.
+    * @note
+    *   {@code nextRevision} must be no greater than the current value of
+    *   [[nextRevision]].
+    */
   def scopeFor(when: Instant, nextRevision: Int): Scope
 
-  // This produces a 'read-only' scope - objects that it renders from
-  // bitemporals will fail at runtime if an attempt is made to mutate them,
-  // subject to what the proxies can enforce.
-  // I can imagine queries being set to 'the beginning of time' and 'past the
-  // latest event'...
-  // NOTE: again, the scope makes a *snapshot*, so the 'asOf' is interpreted wrt
-  // the state of the world at the point of creation of the scope.
+  /** @param when
+    *   A point in time within the timeline that items are rendered at. Their
+    *   existence and state reflects all the events leading up to and including
+    *   this time.
+    * @param asOf
+    *   Picks out the latest revision whose own {@code asOf} is no greater than
+    *   this.
+    * @return
+    *   A [[Scope]] allowing read-only access to items.
+    * @note
+    *   As the scope is read-only, any items accessed via it will throw an
+    *   exception if an attempt to call a mutation operation on them.
+    */
   def scopeFor(when: Unbounded[Instant], asOf: Instant): Scope
 
+  /** @param when
+    *   A point in time within the timeline that items are rendered at. Their
+    *   existence and state reflects all the events leading up to and including
+    *   this time.
+    * @param asOf
+    *   Picks out the latest revision whose own {@code asOf} is no greater than
+    *   this.
+    * @return
+    *   A [[Scope]] allowing read-only access to items.
+    * @note
+    *   As the scope is read-only, any items accessed via it will throw an
+    *   exception if an attempt to call a mutation operation on them.
+    */
   def scopeFor(when: Instant, asOf: Instant): Scope
 
-  // This creates a fresh world instance anew whose revision history is the same
-  // as the receiver world, with the important
-  // differences that a) the revision history is truncated after the scope's
-  // revision and b) that only events coming no
-  // later than the scope's 'when' are included in each revision. Of course, the
-  // experimental world can itself be revised
-  // in just the same way as any other world, including the definition of events
-  // beyond the defining scope's 'when'.
+  /** Forks an independent instance of [[World]] that is truncated by a
+    * [[Scope]]. That instance may then be revised further without affecting or
+    * being affected by the parent [[World]] instance.<p>
+    * @param scope
+    *   Controls the number of revisions taken from the parent [[World]] via
+    *   [[Scope.nextRevision]], adapting each revision's timeline by truncating
+    *   event history after [[Scope.when]].
+    * @return
+    */
   def forkExperimentalWorld(scope: Scope): World
 }

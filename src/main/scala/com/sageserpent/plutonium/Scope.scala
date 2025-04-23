@@ -10,9 +10,9 @@ import java.time.Instant
 trait Scope extends ItemCache {
 
   /** @return
-    *   A point in time within some implied timeline that the items are rendered
-    *   at. Their existence and state reflects all the events leading up to and
-    *   including this time.
+    *   A point in time within some implied timeline that items are rendered at.
+    *   Their existence and state reflects all the events leading up to and
+    *   including this time, but no later.
     */
   def when: Unbounded[Instant]
 
