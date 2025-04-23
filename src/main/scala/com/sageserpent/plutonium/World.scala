@@ -46,7 +46,7 @@ object World {
   *   new one, all of them are available to make a [[Scope]].
   */
 
-trait World extends javaApi.World {
+trait World extends AutoCloseable {
 
   /** @return
     *   The number of revisions that have all been made via [[revise]].
@@ -141,6 +141,23 @@ trait World extends javaApi.World {
   def revise(eventId: EventId, event: Event, asOf: Instant): Revision =
     revise(Map(eventId -> Some(event)), asOf)
 
+  /** @param eventId
+    *   Event id used to annul a previously booked one, if such an event exists.
+    * @param asOf
+    *   The time of the <i>revision</i> itself - this may be later than, earlier
+    *   than or the same as the time of the latest event in either the latest
+    *   revision's timeline or any of {@code events}.
+    * @return
+    *   The new revision's number, which will be the same as [[nextRevision]]
+    *   <b>prior</b> to the call.
+    * @note
+    *   It is permitted to attempt to annul an event that has no previous
+    *   booking. This will still increment the revision number, even though the
+    *   new revision's timeline remains the same.
+    */
+  def annul(eventId: EventId, asOf: Instant): Revision =
+    revise(Map(eventId -> None), asOf)
+
   /** Define a new revision as the latest one. On success, a new revision is
     * defined and the value yielded by [[nextRevision]] is incremented. If an
     * exception is thrown, the world remains unchanged; no new revision is made.
@@ -199,23 +216,6 @@ trait World extends javaApi.World {
       asOf: Instant
   ): Revision =
     revise_(events: collection.Map[_ <: EventId, Option[Event]], asOf)
-
-  /** @param eventId
-    *   Event id used to annul a previously booked one, if such an event exists.
-    * @param asOf
-    *   The time of the <i>revision</i> itself - this may be later than, earlier
-    *   than or the same as the time of the latest event in either the latest
-    *   revision's timeline or any of {@code events}.
-    * @return
-    *   The new revision's number, which will be the same as [[nextRevision]]
-    *   <b>prior</b> to the call.
-    * @note
-    *   It is permitted to attempt to annul an event that has no previous
-    *   booking. This will still increment the revision number, even though the
-    *   new revision's timeline remains the same.
-    */
-  def annul(eventId: EventId, asOf: Instant): Revision =
-    revise(Map(eventId -> None), asOf)
 
   /** @param when
     *   A point in time within the timeline that items are rendered at. Their

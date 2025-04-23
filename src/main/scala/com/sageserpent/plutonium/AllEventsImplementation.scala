@@ -1019,8 +1019,8 @@ class AllEventsImplementation(
         : Map[ItemStateUpdateKey, ItemStateUpdate] =
       (itemStateUpdatesFromNewOrModifiedLifecycles -- itemStateUpdatesFromDefunctLifecycles).toMap
 
-    val allEventIdsBookedIn: Set[EventId] =
-      events.keySet.asInstanceOf[Set[EventId]]
+    val allEventIdsBookedIn: collection.Set[EventId] =
+      events.keySet.asInstanceOf[collection.Set[EventId]]
 
     def eventFootprintFrom(event: Event): EventFootprint = event match {
       case Change(when, patches) =>

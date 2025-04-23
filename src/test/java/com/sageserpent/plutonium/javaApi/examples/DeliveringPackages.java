@@ -5,10 +5,10 @@ import com.sageserpent.americium.NegativeInfinity;
 import com.sageserpent.americium.PositiveInfinity;
 import com.sageserpent.plutonium.Event;
 import com.sageserpent.plutonium.Scope;
+import com.sageserpent.plutonium.World;
 import com.sageserpent.plutonium.WorldEfficientInMemoryImplementation;
 import com.sageserpent.plutonium.javaApi.Bitemporal;
 import com.sageserpent.plutonium.javaApi.Change;
-import com.sageserpent.plutonium.javaApi.World;
 
 import java.time.Instant;
 import java.util.Map;
