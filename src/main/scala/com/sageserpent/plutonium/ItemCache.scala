@@ -10,10 +10,17 @@ trait ItemCache {
     *   Specifies what item or items to retrieve.
     * @tparam Item
     * @return
-    *   A stream of matching items, which may be empty.
+    *   A stream of matching items, there may be none.
     */
   def render[Item](bitemporal: Bitemporal[Item]): Stream[Item]
 
+  /** Alternative to [[render]] that yields a Java [[java.lang.Iterable]].
+    * @param bitemporal
+    *   Specifies what item or items to retrieve.
+    * @tparam Item
+    * @return
+    *   An iterable over matching items; there may be none.
+    */
   def renderAsIterable[Item](
       bitemporal: Bitemporal[Item]
   ): java.lang.Iterable[Item] =
