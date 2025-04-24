@@ -3,6 +3,9 @@ package com.sageserpent.plutonium
 import scala.collection.JavaConverters._
 
 /** Provides access to items selected by instances of [[Bitemporal]].
+  * @todo
+  *   Remove this, or make it package-private. Client code just wants to work
+  *   with [[Scope]].
   */
 trait ItemCache {
 

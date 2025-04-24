@@ -18,63 +18,76 @@ trait BitemporalBehaviours
     with Checkers
     with WorldSpecSupport { this: WorldResource =>
   def bitemporalBehaviour = {
-    // TODO - ignoring this for now; the equality check should be based purely
-    // on comparing bitemporal instances and should not require rendering, but this
-    // means that the implementation of applicative for a bitemporal needs to meet
-    // the Cats applicative laws that are fussy enough to break the current
-    // implementation. The way forward is to cutover the bitemporal type to being
-    // a proper free monad...
-    ignore should "be an applicative plus instance" in {
+    // TODO - the equality check should be based purely on comparing bitemporal
+    // instances and should not require rendering, but this means that the
+    // implementation of applicative for a bitemporal needs to meet the Cats
+    // applicative laws that are fussy enough to break the current
+    // implementation.
+    it should "be an applicative plus instance" in {
       val testCaseGenerator = for {
-        integerHistoryRecordingsGroupedById <- integerHistoryRecordingsGroupedByIdGenerator
-        obsoleteRecordingsGroupedById       <- nonConflictingRecordingsGroupedByIdGenerator
-        seed                                <- seedGenerator
+        integerHistoryRecordingsGroupedById <-
+          integerHistoryRecordingsGroupedByIdGenerator
+        obsoleteRecordingsGroupedById <-
+          nonConflictingRecordingsGroupedByIdGenerator
+        seed <- seedGenerator
         random = new Random(seed)
-        shuffledRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
-          random,
-          integerHistoryRecordingsGroupedById)
-        shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
-          random,
-          obsoleteRecordingsGroupedById)
+        shuffledRecordings =
+          shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+            random,
+            integerHistoryRecordingsGroupedById
+          )
+        shuffledObsoleteRecordings =
+          shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+            random,
+            obsoleteRecordingsGroupedById
+          )
         bigShuffledHistoryOverLotsOfThings = intersperseObsoleteEvents(
           random,
           shuffledRecordings,
-          shuffledObsoleteRecordings)
-        asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
-                             instantGenerator) map (_.sorted)
+          shuffledObsoleteRecordings
+        )
+        asOfs <- Gen.listOfN(
+          bigShuffledHistoryOverLotsOfThings.length,
+          instantGenerator
+        ) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
-      } yield
-        (integerHistoryRecordingsGroupedById,
-         bigShuffledHistoryOverLotsOfThings,
-         asOfs,
-         queryWhen)
+      } yield (
+        integerHistoryRecordingsGroupedById,
+        bigShuffledHistoryOverLotsOfThings,
+        asOfs,
+        queryWhen
+      )
       check(Prop.forAllNoShrink(testCaseGenerator) {
-        case (integerHistoryRecordingsGroupedById,
+        case (
+              integerHistoryRecordingsGroupedById,
               bigShuffledHistoryOverLotsOfThings,
               asOfs,
-              queryWhen) =>
+              queryWhen
+            ) =>
           worldResource
             .use(world =>
               IO {
-                recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
-                                    asOfs,
-                                    world)
+                recordEventsInWorld(
+                  bigShuffledHistoryOverLotsOfThings,
+                  asOfs,
+                  world
+                )
 
                 val scope = world.scopeFor(queryWhen, world.nextRevision)
 
                 val ids = integerHistoryRecordingsGroupedById map (_.historyId
                   .asInstanceOf[IntegerHistory#Id])
 
-                implicit def arbitraryGenericBitemporal[Item](
-                    implicit itemArbitrary: Arbitrary[Item])
-                  : Arbitrary[Bitemporal[Item]] = Arbitrary {
+                implicit def arbitraryGenericBitemporal[Item](implicit
+                    itemArbitrary: Arbitrary[Item]
+                ): Arbitrary[Bitemporal[Item]] = Arbitrary {
                   Arbitrary
                     .arbitrary[Item] map (Applicative[Bitemporal].point(_))
                 }
 
-                implicit def arbitraryBitemporalOfInt(
-                    implicit itemArbitrary: Arbitrary[Int])
-                  : Arbitrary[Bitemporal[Int]] = {
+                implicit def arbitraryBitemporalOfInt(implicit
+                    itemArbitrary: Arbitrary[Int]
+                ): Arbitrary[Bitemporal[Int]] = {
                   def intFrom(item: IntegerHistory) = item.datums.hashCode()
                   val generatorsThatAlwaysWork = Seq(
                     5 -> (Arbitrary
@@ -83,14 +96,17 @@ trait BitemporalBehaviours
                       .withId[IntegerHistory](_) map (_.integerProperty))),
                     10 -> (Gen.oneOf(ids) map (Bitemporal
                       .withId[IntegerHistory](_) map (_.integerProperty))),
-                    3 -> Gen.const(Bitemporal
-                      .wildcard[IntegerHistory] map (_.integerProperty)),
+                    3 -> Gen.const(
+                      Bitemporal
+                        .wildcard[IntegerHistory] map (_.integerProperty)
+                    ),
                     10 -> (Gen.oneOf(ids) map (Bitemporal
                       .withId[IntegerHistory](_) map intFrom)),
                     10 -> (Gen.oneOf(ids) map (Bitemporal
                       .withId[IntegerHistory](_) map intFrom)),
                     3 -> Gen.const(
-                      Bitemporal.wildcard[IntegerHistory] map intFrom),
+                      Bitemporal.wildcard[IntegerHistory] map intFrom
+                    ),
                     1 -> Gen.const(Bitemporal.none[Int])
                   )
                   Arbitrary(Gen.frequency(generatorsThatAlwaysWork: _*))
@@ -107,12 +123,14 @@ trait BitemporalBehaviours
                 val properties = new Properties("applicativeMonoid")
 
                 properties.include(
-                  ApplicativeTests[Bitemporal].applicative[Int, Int, Int].all)
+                  ApplicativeTests[Bitemporal].applicative[Int, Int, Int].all
+                )
 
                 properties.include(MonoidTests[Bitemporal[Int]].monoid.all)
 
                 Prop.all(properties.properties map (_._2): _*)
-            })
+              }
+            )
             .unsafeRunSync
       })
     }
@@ -122,45 +140,60 @@ trait BitemporalBehaviours
     it should "match all items of compatible type relevant to a scope" in {
       val testCaseGenerator = for {
         recordingsGroupedById <- recordingsGroupedByIdGenerator(
-          forbidAnnihilations = false)
-        obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
-        seed                          <- seedGenerator
+          forbidAnnihilations = false
+        )
+        obsoleteRecordingsGroupedById <-
+          nonConflictingRecordingsGroupedByIdGenerator
+        seed <- seedGenerator
         random = new Random(seed)
-        shuffledRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
-          random,
-          recordingsGroupedById)
-        shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
-          random,
-          obsoleteRecordingsGroupedById)
+        shuffledRecordings =
+          shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+            random,
+            recordingsGroupedById
+          )
+        shuffledObsoleteRecordings =
+          shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+            random,
+            obsoleteRecordingsGroupedById
+          )
         bigShuffledHistoryOverLotsOfThings = intersperseObsoleteEvents(
           random,
           shuffledRecordings,
-          shuffledObsoleteRecordings)
-        asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
-                             instantGenerator) map (_.sorted)
+          shuffledObsoleteRecordings
+        )
+        asOfs <- Gen.listOfN(
+          bigShuffledHistoryOverLotsOfThings.length,
+          instantGenerator
+        ) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
-      } yield
-        (recordingsGroupedById,
-         bigShuffledHistoryOverLotsOfThings,
-         asOfs,
-         queryWhen)
+      } yield (
+        recordingsGroupedById,
+        bigShuffledHistoryOverLotsOfThings,
+        asOfs,
+        queryWhen
+      )
       check(Prop.forAllNoShrink(testCaseGenerator) {
-        case (recordingsGroupedById,
+        case (
+              recordingsGroupedById,
               bigShuffledHistoryOverLotsOfThings,
               asOfs,
-              queryWhen) =>
+              queryWhen
+            ) =>
           worldResource
             .use(world =>
               IO {
-                recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
-                                    asOfs,
-                                    world)
+                recordEventsInWorld(
+                  bigShuffledHistoryOverLotsOfThings,
+                  asOfs,
+                  world
+                )
 
                 val scope = world.scopeFor(queryWhen, world.nextRevision)
 
                 val idsInExistence =
                   (recordingsGroupedById flatMap (_.thePartNoLaterThan(
-                    queryWhen)) map (_.historyId)) groupBy identity map {
+                    queryWhen
+                  )) map (_.historyId)) groupBy identity map {
                     case (id, group) => id -> group.size
                   } toSet
 
@@ -173,7 +206,8 @@ trait BitemporalBehaviours
                   } toSet
 
                 (idsFromWildcardQuery == idsInExistence) :| s"${idsFromWildcardQuery} should be ${idsInExistence}, the items are: $itemsFromWildcardQuery"
-            })
+              }
+            )
             .unsafeRunSync
       })
     }
@@ -181,22 +215,31 @@ trait BitemporalBehaviours
     it should "yield unique items" in {
       val testCaseGenerator = for {
         recordingsGroupedById <- recordingsGroupedByIdGenerator(
-          forbidAnnihilations = false)
-        obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
-        seed                          <- seedGenerator
+          forbidAnnihilations = false
+        )
+        obsoleteRecordingsGroupedById <-
+          nonConflictingRecordingsGroupedByIdGenerator
+        seed <- seedGenerator
         random = new Random(seed)
-        shuffledRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
-          random,
-          recordingsGroupedById)
-        shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
-          random,
-          obsoleteRecordingsGroupedById)
+        shuffledRecordings =
+          shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+            random,
+            recordingsGroupedById
+          )
+        shuffledObsoleteRecordings =
+          shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+            random,
+            obsoleteRecordingsGroupedById
+          )
         bigShuffledHistoryOverLotsOfThings = intersperseObsoleteEvents(
           random,
           shuffledRecordings,
-          shuffledObsoleteRecordings)
-        asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
-                             instantGenerator) map (_.sorted)
+          shuffledObsoleteRecordings
+        )
+        asOfs <- Gen.listOfN(
+          bigShuffledHistoryOverLotsOfThings.length,
+          instantGenerator
+        ) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
       } yield (bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
       check(Prop.forAllNoShrink(testCaseGenerator) {
@@ -204,9 +247,11 @@ trait BitemporalBehaviours
           worldResource
             .use(world =>
               IO {
-                recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
-                                    asOfs,
-                                    world)
+                recordEventsInWorld(
+                  bigShuffledHistoryOverLotsOfThings,
+                  asOfs,
+                  world
+                )
 
                 val scope = world.scopeFor(queryWhen, world.nextRevision)
 
@@ -216,11 +261,12 @@ trait BitemporalBehaviours
                 Prop.all(
                   itemsFromWildcardQuery
                     .groupBy(identity)
-                    .map {
-                      case (item, group) =>
-                        (1 == group.size) :| s"More than occurrence of item: ${item}} with id: ${item.id}."
-                  } toSeq: _*)
-            })
+                    .map { case (item, group) =>
+                      (1 == group.size) :| s"More than occurrence of item: ${item}} with id: ${item.id}."
+                    } toSeq: _*
+                )
+              }
+            )
             .unsafeRunSync
       })
     }
@@ -230,50 +276,70 @@ trait BitemporalBehaviours
     it should "match a subset of the corresponding wildcard query." in {
       val testCaseGenerator = for {
         recordingsGroupedById <- recordingsGroupedByIdGenerator(
-          forbidAnnihilations = false)
-        obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
-        seed                          <- seedGenerator
+          forbidAnnihilations = false
+        )
+        obsoleteRecordingsGroupedById <-
+          nonConflictingRecordingsGroupedByIdGenerator
+        seed <- seedGenerator
         random = new Random(seed)
-        shuffledRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
-          random,
-          recordingsGroupedById)
-        shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
-          random,
-          obsoleteRecordingsGroupedById)
+        shuffledRecordings =
+          shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+            random,
+            recordingsGroupedById
+          )
+        shuffledObsoleteRecordings =
+          shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+            random,
+            obsoleteRecordingsGroupedById
+          )
         bigShuffledHistoryOverLotsOfThings = intersperseObsoleteEvents(
           random,
           shuffledRecordings,
-          shuffledObsoleteRecordings)
-        asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
-                             instantGenerator) map (_.sorted)
+          shuffledObsoleteRecordings
+        )
+        asOfs <- Gen.listOfN(
+          bigShuffledHistoryOverLotsOfThings.length,
+          instantGenerator
+        ) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
-      } yield
-        (recordingsGroupedById,
-         bigShuffledHistoryOverLotsOfThings,
-         asOfs,
-         queryWhen)
+      } yield (
+        recordingsGroupedById,
+        bigShuffledHistoryOverLotsOfThings,
+        asOfs,
+        queryWhen
+      )
 
       check(Prop.forAllNoShrink(testCaseGenerator) {
-        case (recordingsGroupedById,
+        case (
+              recordingsGroupedById,
               bigShuffledHistoryOverLotsOfThings,
               asOfs,
-              queryWhen) =>
+              queryWhen
+            ) =>
           worldResource
             .use(world =>
               IO {
-                recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
-                                    asOfs,
-                                    world)
+                recordEventsInWorld(
+                  bigShuffledHistoryOverLotsOfThings,
+                  asOfs,
+                  world
+                )
 
                 val scope = world.scopeFor(queryWhen, world.nextRevision)
 
                 def holdsFor[AHistory <: History: TypeTag]: Prop = {
-                  // The filtering of ids here is hokey - disjoint history types can (actually, they do) share the same id type, so we'll
-                  // end up with ids that may be irrelevant to the flavour of 'AHistory' we are checking against. This doesn't matter, though,
-                  // because the queries we are cross checking allow the possibility that there are no items of the specific type to match them.
+                  // The filtering of ids here is hokey - disjoint history types
+                  // can (actually, they do) share the same id type, so we'll
+                  // end up with ids that may be irrelevant to the flavour of
+                  // 'AHistory' we are checking against. This doesn't matter,
+                  // though,
+                  // because the queries we are cross checking allow the
+                  // possibility that there are no items of the specific type to
+                  // match them.
                   val ids =
                     (recordingsGroupedById map (_.historyId) filter (_.isInstanceOf[
-                      AHistory#Id]) map (_.asInstanceOf[AHistory#Id])).toSet
+                      AHistory#Id
+                    ]) map (_.asInstanceOf[AHistory#Id])).toSet
 
                   val itemsFromWildcardQuery =
                     scope.render(Bitemporal.wildcard[AHistory]) toSet
@@ -282,20 +348,25 @@ trait BitemporalBehaviours
                     Prop.all(ids.toSeq map (id => {
                       val itemsFromSpecificQuery =
                         scope.render(Bitemporal.withId[AHistory](id)).toSet
-                      Prop(itemsFromSpecificQuery
-                        .subsetOf(itemsFromWildcardQuery)) :| s"${itemsFromSpecificQuery
-                        .map(_.asInstanceOf[ItemExtensionApi].uniqueItemSpecification)} should be a subset of: ${itemsFromWildcardQuery
-                        .map(_.asInstanceOf[ItemExtensionApi].uniqueItemSpecification)}"
+                      Prop(
+                        itemsFromSpecificQuery
+                          .subsetOf(itemsFromWildcardQuery)
+                      ) :| s"${itemsFromSpecificQuery
+                          .map(_.asInstanceOf[ItemExtensionApi].uniqueItemSpecification)} should be a subset of: ${itemsFromWildcardQuery
+                          .map(_.asInstanceOf[ItemExtensionApi].uniqueItemSpecification)}"
                     }): _*)
                   } else Prop.undecided
                 }
 
-                Prop.all(holdsFor[History],
-                         holdsFor[BarHistory],
-                         holdsFor[FooHistory],
-                         holdsFor[IntegerHistory],
-                         holdsFor[MoreSpecificFooHistory])
-            })
+                Prop.all(
+                  holdsFor[History],
+                  holdsFor[BarHistory],
+                  holdsFor[FooHistory],
+                  holdsFor[IntegerHistory],
+                  holdsFor[MoreSpecificFooHistory]
+                )
+              }
+            )
             .unsafeRunSync
       })
     }
@@ -303,68 +374,94 @@ trait BitemporalBehaviours
     it should "yield items whose id matches the query" in {
       val testCaseGenerator = for {
         recordingsGroupedById <- recordingsGroupedByIdGenerator(
-          forbidAnnihilations = false)
-        obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
-        seed                          <- seedGenerator
+          forbidAnnihilations = false
+        )
+        obsoleteRecordingsGroupedById <-
+          nonConflictingRecordingsGroupedByIdGenerator
+        seed <- seedGenerator
         random = new Random(seed)
-        shuffledRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
-          random,
-          recordingsGroupedById)
-        shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
-          random,
-          obsoleteRecordingsGroupedById)
+        shuffledRecordings =
+          shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+            random,
+            recordingsGroupedById
+          )
+        shuffledObsoleteRecordings =
+          shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+            random,
+            obsoleteRecordingsGroupedById
+          )
         bigShuffledHistoryOverLotsOfThings = intersperseObsoleteEvents(
           random,
           shuffledRecordings,
-          shuffledObsoleteRecordings)
-        asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
-                             instantGenerator) map (_.sorted)
+          shuffledObsoleteRecordings
+        )
+        asOfs <- Gen.listOfN(
+          bigShuffledHistoryOverLotsOfThings.length,
+          instantGenerator
+        ) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
-      } yield
-        (recordingsGroupedById,
-         bigShuffledHistoryOverLotsOfThings,
-         asOfs,
-         queryWhen)
+      } yield (
+        recordingsGroupedById,
+        bigShuffledHistoryOverLotsOfThings,
+        asOfs,
+        queryWhen
+      )
 
       check(Prop.forAllNoShrink(testCaseGenerator) {
-        case (recordingsGroupedById,
+        case (
+              recordingsGroupedById,
               bigShuffledHistoryOverLotsOfThings,
               asOfs,
-              queryWhen) =>
+              queryWhen
+            ) =>
           worldResource
             .use(world =>
               IO {
-                recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
-                                    asOfs,
-                                    world)
+                recordEventsInWorld(
+                  bigShuffledHistoryOverLotsOfThings,
+                  asOfs,
+                  world
+                )
 
                 val scope = world.scopeFor(queryWhen, world.nextRevision)
 
                 def holdsFor[AHistory <: History: TypeTag]: Prop = {
-                  // The filtering of idsInExistence here is hokey - disjoint history types can (actually, they do) share the same id type, so we'll
-                  // end up with idsInExistence that may be irrelevant to the flavour of 'AHistory' we are checking against. This doesn't matter, though,
-                  // because the queries we are checking allow the possibility that there are no items of the specific type to match them.
+                  // The filtering of idsInExistence here is hokey - disjoint
+                  // history types can (actually, they do) share the same id
+                  // type, so we'll
+                  // end up with idsInExistence that may be irrelevant to the
+                  // flavour of 'AHistory' we are checking against. This doesn't
+                  // matter, though,
+                  // because the queries we are checking allow the possibility
+                  // that there are no items of the specific type to match them.
                   val idsInExistence =
                     (recordingsGroupedById flatMap (_.thePartNoLaterThan(
-                      queryWhen)) map (_.historyId) filter (_.isInstanceOf[
-                      AHistory#Id]) map (_.asInstanceOf[AHistory#Id])).toSet
+                      queryWhen
+                    )) map (_.historyId) filter (_.isInstanceOf[
+                      AHistory#Id
+                    ]) map (_.asInstanceOf[AHistory#Id])).toSet
 
                   if (idsInExistence.nonEmpty) {
                     Prop.all(idsInExistence.toSeq map (id => {
                       val itemsFromSpecificQuery =
                         scope.render(Bitemporal.withId[AHistory](id)).toSet
                       val idsFromItems = itemsFromSpecificQuery map (_.id)
-                      Prop(idsFromItems.isEmpty || id == idsFromItems.head) :| s"idsFromItems.isEmpty || ${id} == idsFromItems.head"
+                      Prop(
+                        idsFromItems.isEmpty || id == idsFromItems.head
+                      ) :| s"idsFromItems.isEmpty || ${id} == idsFromItems.head"
                     }): _*)
                   } else Prop.undecided
                 }
 
-                Prop.all(holdsFor[History],
-                         holdsFor[BarHistory],
-                         holdsFor[FooHistory],
-                         holdsFor[IntegerHistory],
-                         holdsFor[MoreSpecificFooHistory])
-            })
+                Prop.all(
+                  holdsFor[History],
+                  holdsFor[BarHistory],
+                  holdsFor[FooHistory],
+                  holdsFor[IntegerHistory],
+                  holdsFor[MoreSpecificFooHistory]
+                )
+              }
+            )
             .unsafeRunSync
       })
     }
@@ -373,51 +470,72 @@ trait BitemporalBehaviours
       val testCaseGenerator = for {
 
         recordingsGroupedById <- recordingsGroupedByIdGenerator(
-          forbidAnnihilations = false)
-        obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
-        seed                          <- seedGenerator
+          forbidAnnihilations = false
+        )
+        obsoleteRecordingsGroupedById <-
+          nonConflictingRecordingsGroupedByIdGenerator
+        seed <- seedGenerator
         random = new Random(seed)
-        shuffledRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
-          random,
-          recordingsGroupedById)
-        shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
-          random,
-          obsoleteRecordingsGroupedById)
+        shuffledRecordings =
+          shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+            random,
+            recordingsGroupedById
+          )
+        shuffledObsoleteRecordings =
+          shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+            random,
+            obsoleteRecordingsGroupedById
+          )
         bigShuffledHistoryOverLotsOfThings = intersperseObsoleteEvents(
           random,
           shuffledRecordings,
-          shuffledObsoleteRecordings)
-        asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
-                             instantGenerator) map (_.sorted)
+          shuffledObsoleteRecordings
+        )
+        asOfs <- Gen.listOfN(
+          bigShuffledHistoryOverLotsOfThings.length,
+          instantGenerator
+        ) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
-      } yield
-        (recordingsGroupedById,
-         bigShuffledHistoryOverLotsOfThings,
-         asOfs,
-         queryWhen)
+      } yield (
+        recordingsGroupedById,
+        bigShuffledHistoryOverLotsOfThings,
+        asOfs,
+        queryWhen
+      )
 
       check(Prop.forAllNoShrink(testCaseGenerator) {
-        case (recordingsGroupedById,
+        case (
+              recordingsGroupedById,
               bigShuffledHistoryOverLotsOfThings,
               asOfs,
-              queryWhen) =>
+              queryWhen
+            ) =>
           worldResource
             .use(world =>
               IO {
-                recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
-                                    asOfs,
-                                    world)
+                recordEventsInWorld(
+                  bigShuffledHistoryOverLotsOfThings,
+                  asOfs,
+                  world
+                )
 
                 val scope = world.scopeFor(queryWhen, world.nextRevision)
 
                 def holdsFor[AHistory <: History: TypeTag]: Prop = {
-                  // The filtering of idsInExistence here is hokey - disjoint history types can (actually, they do) share the same id type, so we'll
-                  // end up with idsInExistence that may be irrelevant to the flavour of 'AHistory' we are checking against. This doesn't matter, though,
-                  // because the queries we are checking allow the possibility that there are no items of the specific type to match them.
+                  // The filtering of idsInExistence here is hokey - disjoint
+                  // history types can (actually, they do) share the same id
+                  // type, so we'll
+                  // end up with idsInExistence that may be irrelevant to the
+                  // flavour of 'AHistory' we are checking against. This doesn't
+                  // matter, though,
+                  // because the queries we are checking allow the possibility
+                  // that there are no items of the specific type to match them.
                   val idsInExistence =
                     (recordingsGroupedById flatMap (_.thePartNoLaterThan(
-                      queryWhen)) map (_.historyId) filter (_.isInstanceOf[
-                      AHistory#Id]) map (_.asInstanceOf[AHistory#Id])).toSet
+                      queryWhen
+                    )) map (_.historyId) filter (_.isInstanceOf[
+                      AHistory#Id
+                    ]) map (_.asInstanceOf[AHistory#Id])).toSet
 
                   if (idsInExistence.nonEmpty)
                     Prop.all(idsInExistence.toSeq flatMap (id => {
@@ -425,18 +543,23 @@ trait BitemporalBehaviours
                         scope.render(Bitemporal.withId[AHistory](id))
                       itemsFromSpecificQuery.groupBy(identity).map {
                         case (item, group) =>
-                          Prop(1 == group.size) :| s"More than occurrence of item: ${item} with id: ${item.id}."
+                          Prop(
+                            1 == group.size
+                          ) :| s"More than occurrence of item: ${item} with id: ${item.id}."
                       }
                     }): _*)
                   else Prop.undecided
                 }
 
-                Prop.all(holdsFor[History],
-                         holdsFor[BarHistory],
-                         holdsFor[FooHistory],
-                         holdsFor[IntegerHistory],
-                         holdsFor[MoreSpecificFooHistory])
-            })
+                Prop.all(
+                  holdsFor[History],
+                  holdsFor[BarHistory],
+                  holdsFor[FooHistory],
+                  holdsFor[IntegerHistory],
+                  holdsFor[MoreSpecificFooHistory]
+                )
+              }
+            )
             .unsafeRunSync
       })
     }
@@ -445,77 +568,103 @@ trait BitemporalBehaviours
       val testCaseGenerator = for {
 
         recordingsGroupedById <- recordingsGroupedByIdGenerator(
-          forbidAnnihilations = false)
-        obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
-        seed                          <- seedGenerator
+          forbidAnnihilations = false
+        )
+        obsoleteRecordingsGroupedById <-
+          nonConflictingRecordingsGroupedByIdGenerator
+        seed <- seedGenerator
         random = new Random(seed)
-        shuffledRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
-          random,
-          recordingsGroupedById)
-        shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
-          random,
-          obsoleteRecordingsGroupedById)
+        shuffledRecordings =
+          shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+            random,
+            recordingsGroupedById
+          )
+        shuffledObsoleteRecordings =
+          shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+            random,
+            obsoleteRecordingsGroupedById
+          )
         bigShuffledHistoryOverLotsOfThings = intersperseObsoleteEvents(
           random,
           shuffledRecordings,
-          shuffledObsoleteRecordings)
-        asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
-                             instantGenerator) map (_.sorted)
+          shuffledObsoleteRecordings
+        )
+        asOfs <- Gen.listOfN(
+          bigShuffledHistoryOverLotsOfThings.length,
+          instantGenerator
+        ) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
-      } yield
-        (recordingsGroupedById,
-         bigShuffledHistoryOverLotsOfThings,
-         asOfs,
-         queryWhen)
+      } yield (
+        recordingsGroupedById,
+        bigShuffledHistoryOverLotsOfThings,
+        asOfs,
+        queryWhen
+      )
 
       check(Prop.forAllNoShrink(testCaseGenerator) {
-        case (recordingsGroupedById,
+        case (
+              recordingsGroupedById,
               bigShuffledHistoryOverLotsOfThings,
               asOfs,
-              queryWhen) =>
+              queryWhen
+            ) =>
           worldResource
             .use(world =>
               IO {
-                recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
-                                    asOfs,
-                                    world)
+                recordEventsInWorld(
+                  bigShuffledHistoryOverLotsOfThings,
+                  asOfs,
+                  world
+                )
 
                 val scope = world.scopeFor(queryWhen, world.nextRevision)
 
                 def holdsFor[AHistory <: History: TypeTag]: Prop = {
-                  // The filtering of idsInExistence here is hokey - disjoint history types can (actually, they do) share the same id type, so we'll
-                  // end up with idsInExistence that may be irrelevant to the flavour of 'AHistory' we are checking against. This doesn't matter, though,
-                  // because the queries we are checking allow the possibility that there are no items of the specific type to match them.
+                  // The filtering of idsInExistence here is hokey - disjoint
+                  // history types can (actually, they do) share the same id
+                  // type, so we'll
+                  // end up with idsInExistence that may be irrelevant to the
+                  // flavour of 'AHistory' we are checking against. This doesn't
+                  // matter, though,
+                  // because the queries we are checking allow the possibility
+                  // that there are no items of the specific type to match them.
                   val idsInExistence =
                     (recordingsGroupedById flatMap (_.thePartNoLaterThan(
-                      queryWhen)) map (_.historyId) filter (_.isInstanceOf[
-                      AHistory#Id]) map (_.asInstanceOf[AHistory#Id])).toSet
+                      queryWhen
+                    )) map (_.historyId) filter (_.isInstanceOf[
+                      AHistory#Id
+                    ]) map (_.asInstanceOf[AHistory#Id])).toSet
 
                   if (idsInExistence.nonEmpty) {
                     Prop.all(idsInExistence.toSeq map (id => {
                       val bitemporalQueryOne = Bitemporal.withId[AHistory](id)
                       val bitemporalQueryTwo = Bitemporal.withId[AHistory](id)
                       val agglomeratedBitemporalQuery
-                        : Bitemporal[(AHistory, AHistory)] =
-                        (bitemporalQueryOne, bitemporalQueryTwo).mapN(
-                          (_: AHistory, _: AHistory))
+                          : Bitemporal[(AHistory, AHistory)] =
+                        (bitemporalQueryOne, bitemporalQueryTwo)
+                          .mapN((_: AHistory, _: AHistory))
                       val numberOfItems =
                         scope.numberOf(Bitemporal.withId[AHistory](id))
                       val itemsFromAgglomeratedQuery =
                         scope.render(agglomeratedBitemporalQuery).toSet
-                      val repeatedItemPairs
-                        : Set[(AHistory, AHistory)] = itemsFromAgglomeratedQuery filter ((_: AHistory) eq (_: AHistory)).tupled
-                      Prop(numberOfItems == repeatedItemPairs.size) :| s"Expected to have $numberOfItems pairs of the same item repeated, but got: '$repeatedItemPairs'."
+                      val repeatedItemPairs: Set[(AHistory, AHistory)] =
+                        itemsFromAgglomeratedQuery filter ((_: AHistory) eq (_: AHistory)).tupled
+                      Prop(
+                        numberOfItems == repeatedItemPairs.size
+                      ) :| s"Expected to have $numberOfItems pairs of the same item repeated, but got: '$repeatedItemPairs'."
                     }): _*)
                   } else Prop.undecided
                 }
 
-                Prop.all(holdsFor[History],
-                         holdsFor[BarHistory],
-                         holdsFor[FooHistory],
-                         holdsFor[IntegerHistory],
-                         holdsFor[MoreSpecificFooHistory])
-            })
+                Prop.all(
+                  holdsFor[History],
+                  holdsFor[BarHistory],
+                  holdsFor[FooHistory],
+                  holdsFor[IntegerHistory],
+                  holdsFor[MoreSpecificFooHistory]
+                )
+              }
+            )
             .unsafeRunSync
       })
     }
@@ -526,66 +675,92 @@ trait BitemporalBehaviours
       val testCaseGenerator = for {
 
         recordingsGroupedById <- recordingsGroupedByIdGenerator(
-          forbidAnnihilations = false)
-        obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
-        seed                          <- seedGenerator
+          forbidAnnihilations = false
+        )
+        obsoleteRecordingsGroupedById <-
+          nonConflictingRecordingsGroupedByIdGenerator
+        seed <- seedGenerator
         random = new Random(seed)
-        shuffledRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
-          random,
-          recordingsGroupedById)
-        shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
-          random,
-          obsoleteRecordingsGroupedById)
+        shuffledRecordings =
+          shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+            random,
+            recordingsGroupedById
+          )
+        shuffledObsoleteRecordings =
+          shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+            random,
+            obsoleteRecordingsGroupedById
+          )
         bigShuffledHistoryOverLotsOfThings = intersperseObsoleteEvents(
           random,
           shuffledRecordings,
-          shuffledObsoleteRecordings)
-        asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
-                             instantGenerator) map (_.sorted)
+          shuffledObsoleteRecordings
+        )
+        asOfs <- Gen.listOfN(
+          bigShuffledHistoryOverLotsOfThings.length,
+          instantGenerator
+        ) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
-      } yield
-        (recordingsGroupedById,
-         bigShuffledHistoryOverLotsOfThings,
-         asOfs,
-         queryWhen)
+      } yield (
+        recordingsGroupedById,
+        bigShuffledHistoryOverLotsOfThings,
+        asOfs,
+        queryWhen
+      )
       check(Prop.forAllNoShrink(testCaseGenerator) {
-        case (recordingsGroupedById,
+        case (
+              recordingsGroupedById,
               bigShuffledHistoryOverLotsOfThings,
               asOfs,
-              queryWhen) =>
+              queryWhen
+            ) =>
           worldResource
             .use(world =>
               IO {
-                recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
-                                    asOfs,
-                                    world)
+                recordEventsInWorld(
+                  bigShuffledHistoryOverLotsOfThings,
+                  asOfs,
+                  world
+                )
 
                 val scope = world.scopeFor(queryWhen, world.nextRevision)
 
                 def holdsFor[AHistory <: History: TypeTag]: Prop = {
-                  // The filtering of ids here is hokey - disjoint history types can (actually, they do) share the same id type, so we'll
-                  // end up with ids that may be irrelevant to the flavour of 'AHistory' we are checking against. This doesn't matter, though,
-                  // because the queries we are cross checking allow the possibility that there are no items of the specific type to match them.
+                  // The filtering of ids here is hokey - disjoint history types
+                  // can (actually, they do) share the same id type, so we'll
+                  // end up with ids that may be irrelevant to the flavour of
+                  // 'AHistory' we are checking against. This doesn't matter,
+                  // though,
+                  // because the queries we are cross checking allow the
+                  // possibility that there are no items of the specific type to
+                  // match them.
                   val ids =
                     (recordingsGroupedById map (_.historyId) filter (_.isInstanceOf[
-                      AHistory#Id]) map (_.asInstanceOf[AHistory#Id])).toSet
+                      AHistory#Id
+                    ]) map (_.asInstanceOf[AHistory#Id])).toSet
 
                   if (ids.nonEmpty) {
                     Prop.all(ids.toSeq map (id => {
                       val itemsFromGenericQueryById =
                         scope.render(Bitemporal.withId[History](id)).toSet
-                      Prop(itemsFromGenericQueryById.size == scope.numberOf(
-                        Bitemporal.withId[History](id))) :| s""
+                      Prop(
+                        itemsFromGenericQueryById.size == scope.numberOf(
+                          Bitemporal.withId[History](id)
+                        )
+                      ) :| s""
                     }): _*)
                   } else Prop.undecided
                 }
 
-                Prop.all(holdsFor[History],
-                         holdsFor[BarHistory],
-                         holdsFor[FooHistory],
-                         holdsFor[IntegerHistory],
-                         holdsFor[MoreSpecificFooHistory])
-            })
+                Prop.all(
+                  holdsFor[History],
+                  holdsFor[BarHistory],
+                  holdsFor[FooHistory],
+                  holdsFor[IntegerHistory],
+                  holdsFor[MoreSpecificFooHistory]
+                )
+              }
+            )
             .unsafeRunSync
       })
     }
@@ -595,43 +770,56 @@ trait BitemporalBehaviours
     it should "not match anything" in {
       val testCaseGenerator = for {
         recordingsGroupedById <- recordingsGroupedByIdGenerator(
-          forbidAnnihilations = false)
-        obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
-        seed                          <- seedGenerator
+          forbidAnnihilations = false
+        )
+        obsoleteRecordingsGroupedById <-
+          nonConflictingRecordingsGroupedByIdGenerator
+        seed <- seedGenerator
         random = new Random(seed)
-        shuffledRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
-          random,
-          recordingsGroupedById)
-        shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
-          random,
-          obsoleteRecordingsGroupedById)
+        shuffledRecordings =
+          shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+            random,
+            recordingsGroupedById
+          )
+        shuffledObsoleteRecordings =
+          shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+            random,
+            obsoleteRecordingsGroupedById
+          )
         bigShuffledHistoryOverLotsOfThings = intersperseObsoleteEvents(
           random,
           shuffledRecordings,
-          shuffledObsoleteRecordings)
-        asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
-                             instantGenerator) map (_.sorted)
+          shuffledObsoleteRecordings
+        )
+        asOfs <- Gen.listOfN(
+          bigShuffledHistoryOverLotsOfThings.length,
+          instantGenerator
+        ) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
-      } yield
-        (recordingsGroupedById,
-         bigShuffledHistoryOverLotsOfThings,
-         asOfs,
-         queryWhen)
+      } yield (
+        recordingsGroupedById,
+        bigShuffledHistoryOverLotsOfThings,
+        asOfs,
+        queryWhen
+      )
       check(Prop.forAllNoShrink(testCaseGenerator) {
         case (_, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
           worldResource
             .use(world =>
               IO {
-                recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
-                                    asOfs,
-                                    world)
+                recordEventsInWorld(
+                  bigShuffledHistoryOverLotsOfThings,
+                  asOfs,
+                  world
+                )
 
                 val scope = world.scopeFor(queryWhen, world.nextRevision)
 
                 scope
                   .render(Bitemporal.none)
                   .isEmpty :| "scope.render(Bitemporal.none).isEmpty"
-            })
+              }
+            )
             .unsafeRunSync
       })
     }
@@ -641,39 +829,53 @@ trait BitemporalBehaviours
     it should "include instances of subtypes" in {
       val testCaseGenerator = for {
         recordingsGroupedById <- recordingsGroupedByIdGenerator(
-          forbidAnnihilations = false)
-        obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
-        seed                          <- seedGenerator
+          forbidAnnihilations = false
+        )
+        obsoleteRecordingsGroupedById <-
+          nonConflictingRecordingsGroupedByIdGenerator
+        seed <- seedGenerator
         random = new Random(seed)
-        shuffledRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
-          random,
-          recordingsGroupedById)
-        shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
-          random,
-          obsoleteRecordingsGroupedById)
+        shuffledRecordings =
+          shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+            random,
+            recordingsGroupedById
+          )
+        shuffledObsoleteRecordings =
+          shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+            random,
+            obsoleteRecordingsGroupedById
+          )
         bigShuffledHistoryOverLotsOfThings = intersperseObsoleteEvents(
           random,
           shuffledRecordings,
-          shuffledObsoleteRecordings)
-        asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
-                             instantGenerator) map (_.sorted)
+          shuffledObsoleteRecordings
+        )
+        asOfs <- Gen.listOfN(
+          bigShuffledHistoryOverLotsOfThings.length,
+          instantGenerator
+        ) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
-      } yield
-        (recordingsGroupedById,
-         bigShuffledHistoryOverLotsOfThings,
-         asOfs,
-         queryWhen)
+      } yield (
+        recordingsGroupedById,
+        bigShuffledHistoryOverLotsOfThings,
+        asOfs,
+        queryWhen
+      )
       check(Prop.forAllNoShrink(testCaseGenerator) {
-        case (recordingsGroupedById,
+        case (
+              recordingsGroupedById,
               bigShuffledHistoryOverLotsOfThings,
               asOfs,
-              queryWhen) =>
+              queryWhen
+            ) =>
           worldResource
             .use(world =>
               IO {
-                recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
-                                    asOfs,
-                                    world)
+                recordEventsInWorld(
+                  bigShuffledHistoryOverLotsOfThings,
+                  asOfs,
+                  world
+                )
 
                 val scope = world.scopeFor(queryWhen, world.nextRevision)
 
@@ -682,49 +884,66 @@ trait BitemporalBehaviours
 
                 val ids =
                   (recordingsGroupedById map (_.historyId) filter (_.isInstanceOf[
-                    MoreSpecificFooHistory#Id]) map (_.asInstanceOf[
-                    MoreSpecificFooHistory#Id])).toSet
+                    MoreSpecificFooHistory#Id
+                  ]) map (_.asInstanceOf[MoreSpecificFooHistory#Id])).toSet
 
                 if (itemsFromWildcardQuery[History].nonEmpty || ids.nonEmpty) {
                   def subsetProperty[AHistory <: History](
                       itemSubset: Set[AHistory],
-                      itemSuperset: Set[AHistory]) =
-                    Prop(itemSubset
-                      .subsetOf(itemSuperset)) :| s"'$itemSubset' should be a subset of '$itemSuperset'."
+                      itemSuperset: Set[AHistory]
+                  ) =
+                    Prop(
+                      itemSubset
+                        .subsetOf(itemSuperset)
+                    ) :| s"'$itemSubset' should be a subset of '$itemSuperset'."
 
-                  val wildcardProperty = Prop.all(
-                    subsetProperty(itemsFromWildcardQuery[
-                                     MoreSpecificFooHistory] map (_.asInstanceOf[
-                                     FooHistory]),
-                                   itemsFromWildcardQuery[FooHistory]),
-                    subsetProperty(
-                      itemsFromWildcardQuery[FooHistory] map (_.asInstanceOf[
-                        History]),
-                      itemsFromWildcardQuery[History])
-                  )
+                  val wildcardProperty =
+                    Prop
+                      .all(
+                        subsetProperty(
+                          itemsFromWildcardQuery[
+                            MoreSpecificFooHistory
+                          ] map (_.asInstanceOf[FooHistory]),
+                          itemsFromWildcardQuery[FooHistory]
+                        ),
+                        subsetProperty(
+                          itemsFromWildcardQuery[
+                            FooHistory
+                          ] map (_.asInstanceOf[History]),
+                          itemsFromWildcardQuery[History]
+                        )
+                      )
 
                   val genericQueryByIdProperty = Prop.all(ids.toSeq map (id => {
                     def itemsFromGenericQueryById[
-                        AHistory >: MoreSpecificFooHistory <: History: TypeTag] =
+                        AHistory >: MoreSpecificFooHistory <: History: TypeTag
+                    ] =
                       scope
-                        .render(Bitemporal.withId[AHistory](
-                          id.asInstanceOf[AHistory#Id]))
+                        .render(
+                          Bitemporal
+                            .withId[AHistory](id.asInstanceOf[AHistory#Id])
+                        )
                         .toSet
                     Prop.all(
-                      subsetProperty(itemsFromGenericQueryById[
-                                       MoreSpecificFooHistory] map (_.asInstanceOf[
-                                       FooHistory]),
-                                     itemsFromGenericQueryById[FooHistory]),
                       subsetProperty(
-                        itemsFromGenericQueryById[FooHistory] map (_.asInstanceOf[
-                          History]),
-                        itemsFromGenericQueryById[History])
+                        itemsFromGenericQueryById[
+                          MoreSpecificFooHistory
+                        ] map (_.asInstanceOf[FooHistory]),
+                        itemsFromGenericQueryById[FooHistory]
+                      ),
+                      subsetProperty(
+                        itemsFromGenericQueryById[
+                          FooHistory
+                        ] map (_.asInstanceOf[History]),
+                        itemsFromGenericQueryById[History]
+                      )
                     )
                   }): _*)
 
                   Prop.all(wildcardProperty, genericQueryByIdProperty)
                 } else Prop.undecided
-            })
+              }
+            )
             .unsafeRunSync
       })
     }
@@ -733,39 +952,53 @@ trait BitemporalBehaviours
       val testCaseGenerator = for {
 
         recordingsGroupedById <- recordingsGroupedByIdGenerator(
-          forbidAnnihilations = false)
-        obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
-        seed                          <- seedGenerator
+          forbidAnnihilations = false
+        )
+        obsoleteRecordingsGroupedById <-
+          nonConflictingRecordingsGroupedByIdGenerator
+        seed <- seedGenerator
         random = new Random(seed)
-        shuffledRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
-          random,
-          recordingsGroupedById)
-        shuffledObsoleteRecordings = shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
-          random,
-          obsoleteRecordingsGroupedById)
+        shuffledRecordings =
+          shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+            random,
+            recordingsGroupedById
+          )
+        shuffledObsoleteRecordings =
+          shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+            random,
+            obsoleteRecordingsGroupedById
+          )
         bigShuffledHistoryOverLotsOfThings = intersperseObsoleteEvents(
           random,
           shuffledRecordings,
-          shuffledObsoleteRecordings)
-        asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
-                             instantGenerator) map (_.sorted)
+          shuffledObsoleteRecordings
+        )
+        asOfs <- Gen.listOfN(
+          bigShuffledHistoryOverLotsOfThings.length,
+          instantGenerator
+        ) map (_.sorted)
         queryWhen <- unboundedInstantGenerator
-      } yield
-        (recordingsGroupedById,
-         bigShuffledHistoryOverLotsOfThings,
-         asOfs,
-         queryWhen)
+      } yield (
+        recordingsGroupedById,
+        bigShuffledHistoryOverLotsOfThings,
+        asOfs,
+        queryWhen
+      )
       check(Prop.forAllNoShrink(testCaseGenerator) {
-        case (recordingsGroupedById,
+        case (
+              recordingsGroupedById,
               bigShuffledHistoryOverLotsOfThings,
               asOfs,
-              queryWhen) =>
+              queryWhen
+            ) =>
           worldResource
             .use(world =>
               IO {
-                recordEventsInWorld(bigShuffledHistoryOverLotsOfThings,
-                                    asOfs,
-                                    world)
+                recordEventsInWorld(
+                  bigShuffledHistoryOverLotsOfThings,
+                  asOfs,
+                  world
+                )
 
                 val scope = world.scopeFor(queryWhen, world.nextRevision)
 
@@ -779,13 +1012,13 @@ trait BitemporalBehaviours
                   intercept[UnsupportedOperationException] {
                     item.shouldBeUnchanged = false
                   }
-                  /*        intercept[UnsupportedOperationException]{
-                          item.propertyAllowingSecondOrderMutation :+ "Fred"
-                        }*/
+                  /* intercept[UnsupportedOperationException]{
+                   * item.propertyAllowingSecondOrderMutation :+ "Fred" } */
                   intercept[UnsupportedOperationException] {
                     item match {
                       case integerHistory: IntegerHistory =>
-                        integerHistory.integerProperty = integerHistory.integerProperty + 1
+                        integerHistory.integerProperty =
+                          integerHistory.integerProperty + 1
                       case fooHistory: FooHistory =>
                         fooHistory.property1 = "Prohibited"
                       case barHistory: BarHistory =>
@@ -801,9 +1034,11 @@ trait BitemporalBehaviours
                       id =>
                         val items = scope.render(Bitemporal.withId[History](id))
                         items map isReadonly
-                    }): _*)
+                    }): _*
+                  )
                 } else Prop.undecided
-            })
+              }
+            )
             .unsafeRunSync
       })
     }
