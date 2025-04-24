@@ -1,6 +1,7 @@
 package com.sageserpent.plutonium.javaApi;
 
 import com.sageserpent.americium.NegativeInfinity;
+import com.sageserpent.plutonium.Bitemporal;
 import com.sageserpent.plutonium.Scope;
 import com.sageserpent.plutonium.World;
 import com.sageserpent.plutonium.WorldEfficientInMemoryImplementation;
