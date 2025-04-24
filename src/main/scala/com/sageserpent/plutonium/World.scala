@@ -141,23 +141,6 @@ trait World extends AutoCloseable {
   def revise(eventId: EventId, event: Event, asOf: Instant): Revision =
     revise(Map(eventId -> Some(event)), asOf)
 
-  /** @param eventId
-    *   Event id used to annul a previously booked one, if such an event exists.
-    * @param asOf
-    *   The time of the <i>revision</i> itself - this may be later than, earlier
-    *   than or the same as the time of the latest event in either the latest
-    *   revision's timeline or any of {@code events}.
-    * @return
-    *   The new revision's number, which will be the same as [[nextRevision]]
-    *   <b>prior</b> to the call.
-    * @note
-    *   It is permitted to attempt to annul an event that has no previous
-    *   booking. This will still increment the revision number, even though the
-    *   new revision's timeline remains the same.
-    */
-  def annul(eventId: EventId, asOf: Instant): Revision =
-    revise(Map(eventId -> None), asOf)
-
   /** Define a new revision as the latest one. On success, a new revision is
     * defined and the value yielded by [[nextRevision]] is incremented. If an
     * exception is thrown, the world remains unchanged; no new revision is made.
@@ -216,6 +199,23 @@ trait World extends AutoCloseable {
       asOf: Instant
   ): Revision =
     revise_(events: collection.Map[_ <: EventId, Option[Event]], asOf)
+
+  /** @param eventId
+    *   Event id used to annul a previously booked one, if such an event exists.
+    * @param asOf
+    *   The time of the <i>revision</i> itself - this may be later than, earlier
+    *   than or the same as the time of the latest event in either the latest
+    *   revision's timeline or any of {@code events}.
+    * @return
+    *   The new revision's number, which will be the same as [[nextRevision]]
+    *   <b>prior</b> to the call.
+    * @note
+    *   It is permitted to attempt to annul an event that has no previous
+    *   booking. This will still increment the revision number, even though the
+    *   new revision's timeline remains the same.
+    */
+  def annul(eventId: EventId, asOf: Instant): Revision =
+    revise(Map(eventId -> None), asOf)
 
   /** @param when
     *   A point in time within the timeline that items are rendered at. Their
@@ -301,8 +301,6 @@ trait World extends AutoCloseable {
 }
 
 trait WorldContracts extends World {
-  // NOTE: this increments 'nextRevision' if it succeeds, associating the new
-  // revision with 'asOf'.
   abstract override def revise(
       events: Map[_ <: EventId, Option[Event]],
       asOf: Instant
@@ -316,11 +314,11 @@ trait WorldContracts extends World {
       assert(result == nextRevisionBeforehand)
       assert(nextRevision == 1 + result)
       result
-    } finally checkInvariant
+    } finally checkInvariant()
   }
 
-  def checkInvariant: Unit = {
-    assert(revisionAsOfs.size == nextRevision)
+  private def checkInvariant(): Unit = {
+    assert(revisionAsOfs.length == nextRevision)
     assert(
       revisionAsOfs.isEmpty || (revisionAsOfs zip revisionAsOfs.tail forall {
         case (first, second) => !second.isBefore(first)
@@ -328,9 +326,6 @@ trait WorldContracts extends World {
     )
   }
 
-  // This produces a 'read-only' scope - objects that it renders from
-  // bitemporals will fail at runtime if an attempt is made to mutate them,
-  // subject to what the proxies can enforce.
   abstract override def scopeFor(
       when: Unbounded[Instant],
       nextRevision: Revision
@@ -339,7 +334,7 @@ trait WorldContracts extends World {
     val result = super.scopeFor(when, nextRevision)
     assert(result.nextRevision == nextRevision)
     assert(
-      result.nextRevision == 0 && result.asOf == NegativeInfinity() ||
+      result.nextRevision == 0 && result.asOf == NegativeInfinity[Instant]() ||
         result.nextRevision > revisionAsOfs
           .count(
             Finite(_) < result.asOf
@@ -349,9 +344,6 @@ trait WorldContracts extends World {
     result
   }
 
-  // This produces a 'read-only' scope - objects that it renders from
-  // bitemporals will fail at runtime if an attempt is made to mutate them,
-  // subject to what the proxies can enforce.
   abstract override def scopeFor(
       when: Unbounded[Instant],
       asOf: Instant
