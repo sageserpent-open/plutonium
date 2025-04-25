@@ -1,5 +1,9 @@
 package com.sageserpent.plutonium
 
+import cats.Alternative
+import cats.implicits.{catsStdBitraverseForEither, catsStdInstancesForStream}
+
+import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 
 /** Provides access to items selected by instances of [[Bitemporal]].
@@ -44,14 +48,26 @@ trait ItemCache {
 protected[plutonium] trait ItemCacheImplementation extends ItemCache {
   def render[Item](bitemporal: Bitemporal[Item]): Stream[Item] = {
     bitemporal match {
-      case ApBitemporalResult(
-            preceedingContext,
-            stage: (Bitemporal[(_) => Item])
+      case FlatMapBitemporalResult(
+            precedingContext,
+            stage
           ) =>
-        for {
-          preceedingContext <- render(preceedingContext)
-          stage             <- render(stage)
-        } yield stage(preceedingContext)
+        render(precedingContext)
+          .flatMap(precedingContext => render(stage(precedingContext)))
+      case TailRecMResult(initialItem, stage) =>
+        @tailrec
+        def unroll(
+            intermediates: Stream[Any],
+            results: Stream[Item]
+        ): Stream[Item] = if (intermediates.nonEmpty) {
+          val (newIntermediates, newResults) = Alternative[Stream].separate(
+            intermediates.flatMap(intermediate => render(stage(intermediate)))
+          )
+
+          unroll(newIntermediates, results ++ newResults)
+        } else results
+
+        unroll(Stream(initialItem), Stream.empty)
       case PlusBitemporalResult(lhs, rhs) => render(lhs) ++ render(rhs)
       case PointBitemporalResult(item)    => Stream(item)
       case NoneBitemporalResult()         => Stream.empty
@@ -64,13 +80,27 @@ protected[plutonium] trait ItemCacheImplementation extends ItemCache {
 
   def numberOf[Item](bitemporal: Bitemporal[Item]): Int = {
     bitemporal match {
-      case ApBitemporalResult(
-            preceedingContext,
-            stage: (Bitemporal[(_) => Item])
+      case FlatMapBitemporalResult(
+            precedingContext,
+            stage
           ) =>
-        numberOf(preceedingContext) * numberOf(stage)
+        render(precedingContext).map(input => numberOf(stage(input))).sum
+      case TailRecMResult(initialItem, stage) =>
+        @tailrec
+        def unroll(
+            intermediates: Stream[Any],
+            count: Int
+        ): Int = if (intermediates.nonEmpty) {
+          val (newIntermediates, newResults) = Alternative[Stream].separate(
+            intermediates.flatMap(intermediate => render(stage(intermediate)))
+          )
+
+          unroll(newIntermediates, count + newResults.size)
+        } else count
+
+        unroll(Stream(initialItem), 0)
       case PlusBitemporalResult(lhs, rhs) => numberOf(lhs) + numberOf(rhs)
-      case PointBitemporalResult(item)    => 1
+      case PointBitemporalResult(_)       => 1
       case NoneBitemporalResult()         => 0
       case IdentifiedItemsBitemporalResult(uniqueItemSpecification) =>
         itemsFor(uniqueItemSpecification).size

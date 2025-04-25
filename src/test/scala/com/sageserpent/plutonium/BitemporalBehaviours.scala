@@ -2,7 +2,7 @@ package com.sageserpent.plutonium
 
 import cats.effect.IO
 import cats.kernel.laws.discipline.MonoidTests
-import cats.laws.discipline.ApplicativeTests
+import cats.laws.discipline.MonadTests
 import cats.syntax.apply._
 import cats.{Applicative, Eq}
 import org.scalacheck.Prop.BooleanOperators
@@ -18,12 +18,9 @@ trait BitemporalBehaviours
     with Checkers
     with WorldSpecSupport { this: WorldResource =>
   def bitemporalBehaviour = {
-    // TODO - the equality check should be based purely on comparing bitemporal
-    // instances and should not require rendering, but this means that the
-    // implementation of applicative for a bitemporal needs to meet the Cats
-    // applicative laws that are fussy enough to break the current
-    // implementation.
-    it should "be an applicative plus instance" in {
+    // TODO - should the equality check be based purely on comparing bitemporal
+    // instances and not require rendering?
+    it should "be a monad plus instance" in {
       val testCaseGenerator = for {
         integerHistoryRecordingsGroupedById <-
           integerHistoryRecordingsGroupedByIdGenerator
@@ -120,10 +117,13 @@ trait BitemporalBehaviours
                     areEqual
                 }
 
-                val properties = new Properties("applicativeMonoid")
+                val properties = new Properties("monadPlus")
+
+                implicit val integerEquality: Eq[Int] =
+                  cats.Eq.fromUniversalEquals[Int]
 
                 properties.include(
-                  ApplicativeTests[Bitemporal].applicative[Int, Int, Int].all
+                  MonadTests[Bitemporal].monad[Int, Int, Int].all
                 )
 
                 properties.include(MonoidTests[Bitemporal[Int]].monoid.all)

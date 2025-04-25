@@ -1,6 +1,6 @@
 package com.sageserpent.plutonium
 
-import cats.Applicative
+import cats.Monad
 
 import scala.reflect.runtime.universe._
 
@@ -12,19 +12,24 @@ import scala.reflect.runtime.universe._
   */
 sealed trait Bitemporal[Item] {
   def map[Item2]: (Item => Item2) => Bitemporal[Item2] =
-    implicitly[Applicative[Bitemporal]].map[Item, Item2](this)
+    implicitly[Monad[Bitemporal]].map[Item, Item2](this)
 
-  def ap[Item2](stage: Bitemporal[Item => Item2]): Bitemporal[Item2] =
-    ApBitemporalResult(precedingContext = this, stage = stage)
+  def flatMap[Item2](stage: Item => Bitemporal[Item2]): Bitemporal[Item2] =
+    FlatMapBitemporalResult(precedingContext = this, stage = stage)
 
   def plus(another: Bitemporal[Item]): Bitemporal[Item] =
     PlusBitemporalResult(lhs = this, rhs = another)
 }
 
-private case class ApBitemporalResult[ContextItem, Item](
+private case class FlatMapBitemporalResult[ContextItem, Item](
     precedingContext: Bitemporal[ContextItem],
-    stage: Bitemporal[ContextItem => Item]
+    stage: ContextItem => Bitemporal[Item]
 ) extends Bitemporal[Item]
+
+private case class TailRecMResult[InitialItem, FinalItem](
+    initialItem: InitialItem,
+    stage: InitialItem => Bitemporal[Either[InitialItem, FinalItem]]
+) extends Bitemporal[FinalItem]
 
 private case class PlusBitemporalResult[Item](
     lhs: Bitemporal[Item],
@@ -105,4 +110,8 @@ object Bitemporal {
 
   // TODO - something that takes a bitemporal and then makes a time-shifted
   // bitemporal from within the monad - for PnL.
+
+  private[plutonium] def tailRecM[Item, Item2](item: Item)(
+      stage: Item => Bitemporal[Either[Item, Item2]]
+  ): Bitemporal[Item2] = TailRecMResult(item, stage)
 }
