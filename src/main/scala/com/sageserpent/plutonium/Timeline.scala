@@ -97,7 +97,7 @@ case class Timeline(
                         .copy(inAdj = Vector(() -> ancestorKey)) & remainder
                   }
 
-                val keyStartingNewLifecycleIfThisAnnihilationIsNotAlreadyADependencyInTheDag
+                val keysStartingNewLifecycleIfThisAnnihilationIsNotAlreadyADependencyInTheDag
                     : Set[ItemStateUpdateKey] =
                   if (isAlreadyReferencedAsADependencyInTheDag)
                     Set.empty[ItemStateUpdateKey]
@@ -110,7 +110,7 @@ case class Timeline(
                       }
                     )
 
-                keyStartingNewLifecycleIfThisAnnihilationIsNotAlreadyADependencyInTheDag
+                keysStartingNewLifecycleIfThisAnnihilationIsNotAlreadyADependencyInTheDag
                   .foreach(key =>
                     assert(
                       Ordering[ItemStateUpdateKey].lt(itemStateUpdateKey, key),
@@ -123,7 +123,7 @@ case class Timeline(
                   itemStateUpdatesToApply
                     .drop(
                       1
-                    ) ++ keyStartingNewLifecycleIfThisAnnihilationIsNotAlreadyADependencyInTheDag
+                    ) ++ keysStartingNewLifecycleIfThisAnnihilationIsNotAlreadyADependencyInTheDag
                     .map(key =>
                       PriorityQueueKey(
                         itemStateUpdateKey = key,
