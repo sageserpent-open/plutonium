@@ -15,7 +15,6 @@ import com.sageserpent.plutonium.AllEventsImplementation.Lifecycle._
 import com.sageserpent.plutonium.AllEventsImplementation._
 import com.sageserpent.plutonium.World.{Revision, initialRevision}
 import de.sciss.fingertree.RangedSeq
-import de.ummels.prioritymap.PriorityMap
 
 import java.lang.reflect.Method
 import java.time.Instant
@@ -303,6 +302,24 @@ object AllEventsImplementation {
         .lteq(this.startTime, another.endTime) && Ordering[ItemStateUpdateTime]
         .lteq(another.startTime, this.endTime)
 
+    def isIsolatedAnnihilation: Boolean =
+      // Don't use sequence pattern matching here, it is too much overhead due
+      // to needing to build a sequence.
+      1 == eventsArrangedInReverseTimeOrder.size && PartialFunction.cond(
+        eventsArrangedInReverseTimeOrder.head
+      ) { case (_, EndOfLifecycle(_)) =>
+        true
+      }
+
+    def isRelevantTo(eventId: EventId): Boolean =
+      itemStateUpdateTimesByEventId
+        .get(eventId)
+        .fold(false)(_.exists(eventsArrangedInReverseTimeOrder.contains))
+
+    def typeBoundsAreInconsistentWith(another: Lifecycle): Boolean =
+      this.upperClazzIsConsistentWith(another) ^ this
+        .lowerClazzIsConsistentWith(another)
+
     private def lowerClazzIsConsistentWith(another: Lifecycle): Boolean =
       another.lowerBoundClazz.isAssignableFrom(
         this.lowerBoundClazz
@@ -323,24 +340,6 @@ object AllEventsImplementation {
       case (first, second) =>
         if (second.isAssignableFrom(first)) second else first
     }
-
-    def isIsolatedAnnihilation: Boolean =
-      // Don't use sequence pattern matching here, it is too much overhead due
-      // to needing to build a sequence.
-      1 == eventsArrangedInReverseTimeOrder.size && PartialFunction.cond(
-        eventsArrangedInReverseTimeOrder.head
-      ) { case (_, EndOfLifecycle(_)) =>
-        true
-      }
-
-    def isRelevantTo(eventId: EventId): Boolean =
-      itemStateUpdateTimesByEventId
-        .get(eventId)
-        .fold(false)(_.exists(eventsArrangedInReverseTimeOrder.contains))
-
-    def typeBoundsAreInconsistentWith(another: Lifecycle): Boolean =
-      this.upperClazzIsConsistentWith(another) ^ this
-        .lowerClazzIsConsistentWith(another)
 
     def itemStateUpdates(
         lifecyclesById: LifecyclesById
@@ -577,167 +576,163 @@ object AllEventsImplementation {
 
     @tailrec
     final def fuseLifecycles(
-        priorityQueueOfLifecyclesConsideredForFusionOrAddition: PriorityMap[
+        priorityQueueOfLifecyclesConsideredForFusionOrAddition: CheapKnockOffPriorityMap[
           Lifecycle,
           ItemStateUpdateTime
-        ] = PriorityMap[Lifecycle, ItemStateUpdateTime](
+        ] = CheapKnockOffPriorityMap[Lifecycle, ItemStateUpdateTime](
           newLifecycles.toSeq.map(lifecycle =>
             lifecycle -> lifecycle.startTime
           ): _*
         )
     ): CalculationState = {
-      if (priorityQueueOfLifecyclesConsideredForFusionOrAddition.nonEmpty) {
-        val (candidateForFusion, _) =
-          priorityQueueOfLifecyclesConsideredForFusionOrAddition.head
+      priorityQueueOfLifecyclesConsideredForFusionOrAddition
+        .popMinimum() match {
+        case Some((remaining, candidateForFusion)) =>
 
-        val itemId = candidateForFusion.id
+          val itemId = candidateForFusion.id
 
-        val overlappingLifecycles = lifecyclesById
-          .get(itemId)
-          .fold(Seq.empty[Lifecycle]) {
-            lifecycle => // NASTY HACK - the 'RangedSeq' API has a strange way of dealing with intervals - have to work around it here...
-              val startTime = Split.alignedWith(
-                candidateForFusion.startTime: ItemStateUpdateTime
-              )
-              val endTime = Split.alignedWith(candidateForFusion.endTime)
-              (lifecycle.filterOverlaps(candidateForFusion) ++ lifecycle
-                .filterIncludes(startTime -> startTime) ++ lifecycle
-                .filterIncludes(endTime -> endTime)).toSeq.distinct
-                .filterNot(
-                  priorityQueueOfLifecyclesConsideredForFusionOrAddition.contains
+          val overlappingLifecycles = lifecyclesById
+            .get(itemId)
+            .fold(Seq.empty[Lifecycle]) {
+              lifecycle => // NASTY HACK - the 'RangedSeq' API has a strange way of dealing with intervals - have to work around it here...
+                val startTime = Split.alignedWith(
+                  candidateForFusion.startTime: ItemStateUpdateTime
                 )
-          }
-          .toList
+                val endTime = Split.alignedWith(candidateForFusion.endTime)
+                (lifecycle.filterOverlaps(candidateForFusion) ++ lifecycle
+                  .filterIncludes(startTime -> startTime) ++ lifecycle
+                  .filterIncludes(endTime -> endTime)).toSeq.distinct
+                  .filterNot(
+                    priorityQueueOfLifecyclesConsideredForFusionOrAddition.contains
+                  )
+            }
+            .toList
 
-        val conflictingLifecycles = overlappingLifecycles.filter(
-          _.typeBoundsAreInconsistentWith(candidateForFusion)
-        )
-
-        if (conflictingLifecycles.nonEmpty) {
-          throw new RuntimeException(
-            s"There is at least one item of id: '${itemId}' that would be inconsistent with type: '${candidateForFusion.lowerBoundClazz}', these have types: '${conflictingLifecycles map (_.lowerBoundClazz)}'."
+          val conflictingLifecycles = overlappingLifecycles.filter(
+            _.typeBoundsAreInconsistentWith(candidateForFusion)
           )
-        }
 
-        val fusibleLifecycles =
-          overlappingLifecycles
-            .filter(_.isFusibleWith(candidateForFusion))
-
-        val fusibleLifecyclesThatAreNotOccludedByAnnihilations = {
-          def filterOccluded(
-              fusibleLifecycles: List[Lifecycle],
-              cutoff: ItemStateUpdateTime
-          ): List[Lifecycle] =
-            fusibleLifecycles match {
-              case Nil => Nil
-              case head :: tail
-                  if Ordering[ItemStateUpdateTime].lteq(
-                    head.startTime,
-                    cutoff
-                  ) =>
-                head :: filterOccluded(
-                  tail,
-                  Ordering[ItemStateUpdateTime].min(cutoff, head.endTime)
-                )
-              case _ => Nil
-            }
-          filterOccluded(fusibleLifecycles, candidateForFusion.endTime)
-        }
-
-        fusibleLifecyclesThatAreNotOccludedByAnnihilations match {
-          case Nil =>
-            this.fuseLifecycles(
-              priorityQueueOfLifecyclesConsideredForFusionOrAddition.drop(1)
+          if (conflictingLifecycles.nonEmpty) {
+            throw new RuntimeException(
+              s"There is at least one item of id: '${itemId}' that would be inconsistent with type: '${candidateForFusion.lowerBoundClazz}', these have types: '${conflictingLifecycles map (_.lowerBoundClazz)}'."
             )
-          case matchForFusion :: Nil =>
-            candidateForFusion.fuseWith(matchForFusion) match {
-              case LifecycleMerge(mergedLifecycle) =>
-                val nextState = this.flatMap(lifecyclesById =>
-                  CalculationState(
-                    defunctLifecycles = Set(candidateForFusion, matchForFusion),
-                    newLifecycles = Set(mergedLifecycle),
-                    lifecyclesById = lifecyclesById.updated(
-                      itemId,
-                      lifecyclesById(
-                        itemId
-                      ) - matchForFusion - candidateForFusion + mergedLifecycle
-                    )
+          }
+
+          val fusibleLifecycles =
+            overlappingLifecycles
+              .filter(_.isFusibleWith(candidateForFusion))
+
+          val fusibleLifecyclesThatAreNotOccludedByAnnihilations = {
+            def filterOccluded(
+                fusibleLifecycles: List[Lifecycle],
+                cutoff: ItemStateUpdateTime
+            ): List[Lifecycle] =
+              fusibleLifecycles match {
+                case Nil => Nil
+                case head :: tail
+                    if Ordering[ItemStateUpdateTime].lteq(
+                      head.startTime,
+                      cutoff
+                    ) =>
+                  head :: filterOccluded(
+                    tail,
+                    Ordering[ItemStateUpdateTime].min(cutoff, head.endTime)
                   )
-                )
+                case _ => Nil
+              }
+            filterOccluded(fusibleLifecycles, candidateForFusion.endTime)
+          }
 
-                nextState.fuseLifecycles(
-                  priorityQueueOfLifecyclesConsideredForFusionOrAddition
-                    .drop(1) + (mergedLifecycle -> mergedLifecycle.startTime)
-                )
-              case LifecycleSplit(firstLifecycle, secondLifecycle) =>
-                val nextState = this.flatMap(lifecyclesById =>
-                  CalculationState(
-                    defunctLifecycles = Set(candidateForFusion, matchForFusion),
-                    newLifecycles = Set(firstLifecycle, secondLifecycle),
-                    lifecyclesById = lifecyclesById.updated(
-                      itemId,
-                      lifecyclesById(
-                        itemId
-                      ) - matchForFusion - candidateForFusion + firstLifecycle + secondLifecycle
-                    )
-                  )
-                )
-
-                nextState.fuseLifecycles(
-                  priorityQueueOfLifecyclesConsideredForFusionOrAddition
-                    .drop(
-                      1
-                    ) + (firstLifecycle -> firstLifecycle.startTime) + (secondLifecycle -> secondLifecycle.startTime)
-                )
-            }
-
-          case matchesForFusion =>
-            if (candidateForFusion.isIsolatedAnnihilation) {
-              val eventId =
-                candidateForFusion.itemStateUpdateTimesByEventId.head._1
-              val (itemStateUpdateTime, endOfLifecycle: EndOfLifecycle) =
-                candidateForFusion.eventsArrangedInReverseTimeOrder.last
-              val candidatesForFusionWithRefinedLowerBound =
-                matchesForFusion.zipWithIndex.map {
-                  case (matchForFusion, intraEventIndex) =>
-                    Lifecycle(
-                      eventId = eventId,
-                      itemStateUpdateKey = itemStateUpdateTime.copy(
-                        intraEventIndex = intraEventIndex
-                      ),
-                      indivisibleEvent = endOfLifecycle.copy(
-                        annihilation = endOfLifecycle.annihilation
-                          .rewriteItemClass(matchForFusion.lowerBoundClazz)
+          fusibleLifecyclesThatAreNotOccludedByAnnihilations match {
+            case Nil =>
+              this.fuseLifecycles(remaining)
+            case matchForFusion :: Nil =>
+              candidateForFusion.fuseWith(matchForFusion) match {
+                case LifecycleMerge(mergedLifecycle) =>
+                  val nextState = this.flatMap(lifecyclesById =>
+                    CalculationState(
+                      defunctLifecycles =
+                        Set(candidateForFusion, matchForFusion),
+                      newLifecycles = Set(mergedLifecycle),
+                      lifecyclesById = lifecyclesById.updated(
+                        itemId,
+                        lifecyclesById(
+                          itemId
+                        ) - matchForFusion - candidateForFusion + mergedLifecycle
                       )
                     )
-                }.toSet
-              val nextState = this.flatMap(lifecyclesById =>
-                CalculationState(
-                  defunctLifecycles = Set(candidateForFusion),
-                  newLifecycles = candidatesForFusionWithRefinedLowerBound,
-                  lifecyclesById = lifecyclesById.updated(
-                    itemId,
-                    ((lifecyclesById(
-                      itemId
-                    ) - candidateForFusion) /: candidatesForFusionWithRefinedLowerBound)(
-                      _ + _
+                  )
+
+                  nextState.fuseLifecycles(
+                    remaining + (mergedLifecycle -> mergedLifecycle.startTime)
+                  )
+                case LifecycleSplit(firstLifecycle, secondLifecycle) =>
+                  val nextState = this.flatMap(lifecyclesById =>
+                    CalculationState(
+                      defunctLifecycles =
+                        Set(candidateForFusion, matchForFusion),
+                      newLifecycles = Set(firstLifecycle, secondLifecycle),
+                      lifecyclesById = lifecyclesById.updated(
+                        itemId,
+                        lifecyclesById(
+                          itemId
+                        ) - matchForFusion - candidateForFusion + firstLifecycle + secondLifecycle
+                      )
+                    )
+                  )
+
+                  nextState.fuseLifecycles(
+                    remaining + (firstLifecycle -> firstLifecycle.startTime) + (secondLifecycle -> secondLifecycle.startTime)
+                  )
+              }
+
+            case matchesForFusion =>
+              if (candidateForFusion.isIsolatedAnnihilation) {
+                val eventId =
+                  candidateForFusion.itemStateUpdateTimesByEventId.head._1
+                val (itemStateUpdateTime, endOfLifecycle: EndOfLifecycle) =
+                  candidateForFusion.eventsArrangedInReverseTimeOrder.last
+                val candidatesForFusionWithRefinedLowerBound =
+                  matchesForFusion.zipWithIndex.map {
+                    case (matchForFusion, intraEventIndex) =>
+                      Lifecycle(
+                        eventId = eventId,
+                        itemStateUpdateKey = itemStateUpdateTime.copy(
+                          intraEventIndex = intraEventIndex
+                        ),
+                        indivisibleEvent = endOfLifecycle.copy(
+                          annihilation = endOfLifecycle.annihilation
+                            .rewriteItemClass(matchForFusion.lowerBoundClazz)
+                        )
+                      )
+                  }.toSet
+                val nextState = this.flatMap(lifecyclesById =>
+                  CalculationState(
+                    defunctLifecycles = Set(candidateForFusion),
+                    newLifecycles = candidatesForFusionWithRefinedLowerBound,
+                    lifecyclesById = lifecyclesById.updated(
+                      itemId,
+                      ((lifecyclesById(
+                        itemId
+                      ) - candidateForFusion) /: candidatesForFusionWithRefinedLowerBound)(
+                        _ + _
+                      )
                     )
                   )
                 )
-              )
 
-              nextState.fuseLifecycles(
-                priorityQueueOfLifecyclesConsideredForFusionOrAddition
-                  .drop(1) ++ (candidatesForFusionWithRefinedLowerBound map (
-                  lifecycle => lifecycle -> lifecycle.startTime
-                ))
-              )
-            } else
-              throw new scala.RuntimeException(
-                s"There is more than one item of id: '${itemId}' compatible with type: '${candidateForFusion.lowerBoundClazz}', these have types: '${fusibleLifecycles map (_.lowerBoundClazz)}'."
-              )
-        }
-      } else this
+                nextState.fuseLifecycles(
+                  remaining ++ (candidatesForFusionWithRefinedLowerBound map (
+                    lifecycle => lifecycle -> lifecycle.startTime
+                  ))
+                )
+              } else
+                throw new scala.RuntimeException(
+                  s"There is more than one item of id: '${itemId}' compatible with type: '${candidateForFusion.lowerBoundClazz}', these have types: '${fusibleLifecycles map (_.lowerBoundClazz)}'."
+                )
+          }
+        case None => this
+      }
     }
   }
 
@@ -752,19 +747,6 @@ object AllEventsImplementation {
         itemStateUpdateKey = itemStateUpdateKey,
         indivisibleEvent = IndivisibleChange(patch)
       )
-
-    def apply(
-        eventId: EventId,
-        itemStateUpdateKey: ItemStateUpdateKey,
-        indivisibleEvent: IndivisibleEvent
-    ): Lifecycle =
-      new LifecycleImplementation(
-        clazzes = Map(indivisibleEvent.uniqueItemSpecification.clazz -> 1),
-        eventsArrangedInReverseTimeOrder = SortedMap(
-          itemStateUpdateKey -> indivisibleEvent
-        )(Ordering[ItemStateUpdateKey].reverse),
-        itemStateUpdateTimesByEventId = Map(eventId -> Set(itemStateUpdateKey))
-      ) with LifecycleContracts
 
     def fromAnnihilation(
         eventId: EventId,
@@ -792,6 +774,19 @@ object AllEventsImplementation {
         )
       )
     }
+
+    def apply(
+        eventId: EventId,
+        itemStateUpdateKey: ItemStateUpdateKey,
+        indivisibleEvent: IndivisibleEvent
+    ): Lifecycle =
+      new LifecycleImplementation(
+        clazzes = Map(indivisibleEvent.uniqueItemSpecification.clazz -> 1),
+        eventsArrangedInReverseTimeOrder = SortedMap(
+          itemStateUpdateKey -> indivisibleEvent
+        )(Ordering[ItemStateUpdateKey].reverse),
+        itemStateUpdateTimesByEventId = Map(eventId -> Set(itemStateUpdateKey))
+      ) with LifecycleContracts
 
     def refineClazzFor(
         itemStateUpdateTime: ItemStateUpdateTime,

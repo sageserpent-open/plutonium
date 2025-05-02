@@ -9,7 +9,6 @@ import com.sageserpent.plutonium.Timeline.{
   ItemStateUpdatesDag,
   PriorityQueueKey
 }
-import de.ummels.prioritymap.PriorityMap
 import quiver._
 
 import java.time.Instant
@@ -43,7 +42,7 @@ case class Timeline(
       allEvents.revise(events)
 
     case class RecalculationStep(
-        itemStateUpdatesToApply: PriorityMap[
+        itemStateUpdatesToApply: CheapKnockOffPriorityMap[
           PriorityQueueKey,
           ItemStateUpdateKey
         ],
@@ -52,14 +51,14 @@ case class Timeline(
     ) {
       @tailrec
       final def afterRecalculations: RecalculationStep = {
-        itemStateUpdatesToApply.headOption match {
+        itemStateUpdatesToApply.popMinimum() match {
           case Some(
                 (
+                  remaining,
                   PriorityQueueKey(
                     itemStateUpdateKey,
                     isAlreadyReferencedAsADependencyInTheDag
-                  ),
-                  _
+                  )
                 )
               ) =>
             val itemStateUpdate =
@@ -120,10 +119,7 @@ case class Timeline(
                   )
 
                 RecalculationStep(
-                  itemStateUpdatesToApply
-                    .drop(
-                      1
-                    ) ++ keysStartingNewLifecycleIfThisAnnihilationIsNotAlreadyADependencyInTheDag
+                  remaining ++ keysStartingNewLifecycleIfThisAnnihilationIsNotAlreadyADependencyInTheDag
                     .map(key =>
                       PriorityQueueKey(
                         itemStateUpdateKey = key,
@@ -210,10 +206,7 @@ case class Timeline(
                 )
 
                 RecalculationStep(
-                  itemStateUpdatesToApply
-                    .drop(
-                      1
-                    ) ++ (itemStateUpdateKeysToScheduleForRecalculation map (
+                  remaining ++ (itemStateUpdateKeysToScheduleForRecalculation map (
                     key =>
                       PriorityQueueKey(
                         itemStateUpdateKey = key,
@@ -269,8 +262,8 @@ case class Timeline(
       ) filterNot itemStateUpdateKeysThatNeedToBeRevoked.contains
 
     val itemStateUpdatesToApply
-        : PriorityMap[PriorityQueueKey, ItemStateUpdateKey] =
-      PriorityMap(
+        : CheapKnockOffPriorityMap[PriorityQueueKey, ItemStateUpdateKey] =
+      CheapKnockOffPriorityMap(
         descendantsOfRevokedItemStateUpdates.map(key =>
           PriorityQueueKey(
             itemStateUpdateKey = key,
