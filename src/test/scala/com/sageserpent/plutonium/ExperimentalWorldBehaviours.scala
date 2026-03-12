@@ -686,24 +686,3 @@ class ExperimentalWorldSpecUsingWorldEfficientInMemoryImplementation
   }
 }
 
-class ExperimentalWorldSpecUsingWorldRedisBasedImplementation
-    extends ExperimentalWorldBehaviours
-    with WorldRedisBasedImplementationResource {
-  val redisServerPort = 6452
-
-  implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
-    PropertyCheckConfig(maxSize = 10, minSuccessful = 25)
-
-  if ("true" != System.getenv("TRAVIS")) {
-    "An experimental world (using the world Redis-based implementation)" should behave like experimentalWorldBehaviour
-  }
-}
-
-class ExperimentalWorldSpecUsingWorldPersistentStorageImplementation
-    extends ExperimentalWorldBehaviours
-    with WorldPersistentStorageImplementationResource {
-  implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
-    PropertyCheckConfig(maxSize = 20, minSuccessful = 10)
-
-  "An experimental world (using the world persistent storage implementation)" should behave like experimentalWorldBehaviour
-}

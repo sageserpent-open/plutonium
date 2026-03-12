@@ -5,12 +5,10 @@ import com.sageserpent.americium.NegativeInfinity;
 import com.sageserpent.americium.PositiveInfinity;
 import com.sageserpent.plutonium.Event;
 import com.sageserpent.plutonium.WorldEfficientInMemoryImplementation;
-import com.sageserpent.plutonium.WorldRedisBasedImplementation;
 import com.sageserpent.plutonium.javaApi.Bitemporal;
 import com.sageserpent.plutonium.javaApi.Change;
 import com.sageserpent.plutonium.javaApi.Scope;
 import com.sageserpent.plutonium.javaApi.World;
-import io.lettuce.core.RedisClient;
 
 import java.time.Instant;
 import java.util.Map;
@@ -28,14 +26,7 @@ public class DeliveringPackages {
 
         Executor executor = Executors.newSingleThreadExecutor();
 
-        RedisClient redisClient = RedisClient.create();
-
-        try (World world = justADemo ?
-                new WorldEfficientInMemoryImplementation() :
-                new WorldRedisBasedImplementation(redisClient,
-                        "TheBigStoreOfDataOwnedByTheDispatchLineOfBusiness",
-                        executor)) {
-
+        try (World world = new WorldEfficientInMemoryImplementation()) {
 
             {
                 // Make a query at the end of time for any kind of thing that
@@ -379,8 +370,6 @@ public class DeliveringPackages {
             }
         } catch (Exception exception) {
             exception.printStackTrace();
-        } finally {
-            redisClient.shutdown();
         }
     }
 }

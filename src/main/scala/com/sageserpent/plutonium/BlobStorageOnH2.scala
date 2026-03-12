@@ -12,7 +12,7 @@ import com.sageserpent.americium.{
 }
 import com.sageserpent.plutonium.BlobStorage.TimesliceContracts
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
-import com.sageserpent.curium.DBResource
+import cats.effect.Resource
 import com.twitter.chill.{KryoPool, KryoSerializer}
 import scalikejdbc._
 
@@ -23,6 +23,9 @@ import scala.collection.mutable
 object BlobStorageOnH2 {
   type LineageId = Long
   type Revision  = Int
+
+  private def dbResource(connectionPool: ConnectionPool): Resource[IO, DB] =
+    Resource.make(IO { DB(connectionPool.borrow()) })(db => IO { db.close() })
 
   val kryoPool: KryoPool =
     KryoPool.withByteArrayOutputStream(40, KryoSerializer.registered)
@@ -44,7 +47,7 @@ object BlobStorageOnH2 {
                     TreeMap.empty)
 
   def setupDatabaseTables(connectionPool: ConnectionPool): IO[Unit] =
-    DBResource(connectionPool)
+    dbResource(connectionPool)
       .use(db =>
         IO {
           db localTx {
@@ -278,7 +281,7 @@ case class BlobStorageOnH2(
       }
 
       private def makeRevision(): IO[(LineageId, Revision)] =
-        DBResource(connectionPool).use(db =>
+        BlobStorageOnH2.dbResource(connectionPool).use(db =>
           IO {
             db localTx {
               implicit session: DBSession =>
@@ -372,7 +375,7 @@ case class BlobStorageOnH2(
           itemClazzUpperBound: Class[Item]): Stream[UniqueItemSpecification] = {
         val branchPoints = ancestralBranchpoints + (lineageId -> (revision -> None))
 
-        DBResource(connectionPool)
+        BlobStorageOnH2.dbResource(connectionPool)
           .use(
             db =>
               IO {
@@ -430,7 +433,7 @@ case class BlobStorageOnH2(
         : Option[SnapshotBlob] = {
         val branchPoints = ancestralBranchpoints + (lineageId -> (revision -> None))
 
-        DBResource(connectionPool)
+        BlobStorageOnH2.dbResource(connectionPool)
           .use(
             db =>
               IO {
@@ -469,7 +472,7 @@ case class BlobStorageOnH2(
 
   override def retainUpTo(when: ItemStateUpdateTime): Timeline.BlobStorage = {
     def makeRevision(): IO[(LineageId, Revision)] =
-      DBResource(connectionPool).use(db =>
+      BlobStorageOnH2.dbResource(connectionPool).use(db =>
         IO {
           db localTx {
             implicit session: DBSession =>

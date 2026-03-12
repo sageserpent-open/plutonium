@@ -110,7 +110,7 @@ class MutableState {
 }
 
 class WorldReferenceImplementation(mutableState: MutableState)
-    extends WorldInefficientImplementationCodeFactoring {
+    extends WorldImplementationCodeFactoring {
 
   import World._
   import WorldImplementationCodeFactoring._
@@ -118,6 +118,65 @@ class WorldReferenceImplementation(mutableState: MutableState)
   def this() = this(new MutableState)
 
   override def close(): Unit = {}
+
+  trait SelfPopulatedScope
+      extends com.sageserpent.plutonium.Scope
+      with ItemCacheImplementation {
+    val identifiedItemsScope = new IdentifiedItemsScope
+
+    override def itemsFor[Item](
+        uniqueItemSpecification: UniqueItemSpecification): Stream[Item] =
+      identifiedItemsScope.itemsFor(uniqueItemSpecification)
+
+    override def allItems[Item](clazz: Class[Item]): Stream[Item] =
+      identifiedItemsScope.allItems(clazz)
+
+    identifiedItemsScope.populate(when, eventTimeline(nextRevision))
+  }
+
+  override def scopeFor(when: Unbounded[Instant],
+                        nextRevision: Revision): Scope =
+    new ScopeBasedOnNextRevision(when, nextRevision) with SelfPopulatedScope {}
+
+  override def scopeFor(when: Unbounded[Instant], asOf: Instant): Scope =
+    new ScopeBasedOnAsOf(when, asOf) with SelfPopulatedScope
+
+  private def checkRevisionPrecondition(asOf: Instant,
+                                        revisionAsOfs: Seq[Instant]): Unit = {
+    if (revisionAsOfs.nonEmpty && revisionAsOfs.last.isAfter(asOf))
+      throw new IllegalArgumentException(
+        s"'asOf': ${asOf} should be no earlier than that of the last revision: ${revisionAsOfs.last}")
+  }
+
+  def revise(events: Map[_ <: EventId, Option[Event]],
+             asOf: Instant): Revision = {
+    def newEventDatumsFor(nextRevisionPriorToUpdate: Revision)
+      : Map[EventId, AbstractEventData] = {
+      events.zipWithIndex map {
+        case ((eventId, event), tiebreakerIndex) =>
+          eventId -> (event match {
+            case Some(event) =>
+              EventData(event, nextRevisionPriorToUpdate, tiebreakerIndex)
+            case None => AnnulledEventData(nextRevisionPriorToUpdate)
+          })
+      }
+    }
+
+    def buildAndValidateEventTimelineForProposedNewRevision(
+        newEventDatums: Seq[(EventId, AbstractEventData)],
+        pertinentEventDatumsExcludingTheNewRevision: Seq[
+          (EventId, AbstractEventData)]): Unit = {
+      val eventTimelineIncludingNewRevision = eventTimelineFrom(
+        pertinentEventDatumsExcludingTheNewRevision union newEventDatums)
+
+      (new IdentifiedItemsScope)
+        .populate(PositiveInfinity[Instant], eventTimelineIncludingNewRevision)
+    }
+
+    transactNewRevision(asOf,
+                        newEventDatumsFor,
+                        buildAndValidateEventTimelineForProposedNewRevision)
+  }
 
   override def nextRevision: Revision = mutableState.nextRevision
 
@@ -165,7 +224,7 @@ class WorldReferenceImplementation(mutableState: MutableState)
 
   override def revisionAsOfs: Array[Instant] = mutableState.revisionAsOfs
 
-  override protected def eventTimeline(
+  protected def eventTimeline(
       cutoffRevision: Revision): Seq[(Event, EventId)] = {
     val idOfThreadThatMostlyRecentlyStartedARevisionBeforehand =
       mutableState.synchronized {
@@ -183,7 +242,7 @@ class WorldReferenceImplementation(mutableState: MutableState)
     result
   }
 
-  override protected def transactNewRevision(
+  private def transactNewRevision(
       asOf: Instant,
       newEventDatumsFor: Revision => Map[EventId, AbstractEventData],
       buildAndValidateEventTimelineForProposedNewRevision: (

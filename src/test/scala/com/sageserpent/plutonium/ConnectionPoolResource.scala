@@ -6,7 +6,6 @@ import java.nio.file.{FileVisitResult, FileVisitor, Files, Path}
 import java.util.UUID
 
 import cats.effect.{IO, Resource}
-import com.sageserpent.curium.{DBResource, H2ViaScalikeJdbcTranches}
 import com.zaxxer.hikari.HikariDataSource
 import scalikejdbc._
 
@@ -31,7 +30,9 @@ trait ConnectionPoolResource {
 
   private def dropDatabaseTables(
       connectionPool: DataSourceConnectionPool): IO[Unit] = {
-    DBResource(connectionPool)
+    val dbResource: Resource[IO, DB] =
+      Resource.make(IO { DB(connectionPool.borrow()) })(db => IO { db.close() })
+    dbResource
       .use(db =>
         IO {
           db localTx { implicit session: DBSession =>
@@ -72,14 +73,4 @@ trait ConnectionPoolResource {
       )
     }
   }
-}
-
-trait H2ViaScalikeJdbcDatabaseSetupResource extends ConnectionPoolResource {
-  override def connectionPoolResource: Resource[IO, ConnectionPool] =
-    for {
-      connectionPool <- super.connectionPoolResource
-      _ <- Resource.make(
-        H2ViaScalikeJdbcTranches.setupDatabaseTables(connectionPool))(_ =>
-        IO {})
-    } yield connectionPool
 }

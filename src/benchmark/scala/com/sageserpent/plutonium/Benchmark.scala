@@ -8,7 +8,7 @@ import com.sageserpent.americium.randomEnrichment._
 import scala.concurrent.duration._
 import scala.util.Random
 
-trait Benchmark extends WorldPersistentStorageImplementationResource {
+trait Benchmark extends WorldEfficientInMemoryImplementationResource {
   implicit class Enhancement(randomBehaviour: Random) {
     def chooseOneOfRange(range: IndexedSeq[Int]): Int =
       range(randomBehaviour.chooseAnyNumberFromZeroToOneLessThan(range.size))

@@ -14,12 +14,7 @@ lazy val settings = Seq(
   libraryDependencies += "org.typelevel"                 %% "cats-effect"                  % "1.2.0",
   libraryDependencies += "net.bytebuddy"                 % "byte-buddy"                    % "1.10.10",
   libraryDependencies += "com.sageserpent"               %% "americium"                    % "0.1.5",
-  libraryDependencies += "com.sageserpent"               %% "curium"                       % "0.1.1",
   libraryDependencies += "org.scala-lang"                % "scala-reflect"                 % "2.12.8",
-  libraryDependencies += "io.lettuce"                    % "lettuce-core"                  % "5.1.3.RELEASE",
-  libraryDependencies += "io.netty"                      % "netty-transport-native-epoll"  % "4.1.50.Final" classifier "linux-x86_64",
-  libraryDependencies += "io.netty"                      % "netty-transport-native-kqueue" % "4.1.50.Final" classifier "osx-x86_64",
-  libraryDependencies += "org.scala-lang.modules"        %% "scala-java8-compat"           % "0.9.0",
   libraryDependencies += "com.twitter"                   %% "chill"                        % "0.9.3",
   libraryDependencies += "io.verizon.quiver"             %% "core"                         % "7.0.19",
   libraryDependencies += "de.ummels"                     %% "scala-prioritymap"            % "1.0.0",
@@ -36,7 +31,6 @@ lazy val settings = Seq(
   libraryDependencies += "org.scalatest"                 %% "scalatest"                    % "3.0.5" % "test",
   libraryDependencies += "org.scalacheck"                %% "scalacheck"                   % "1.13.5" % "test",
   libraryDependencies += "org.scalamock"                 %% "scalamock"                    % "4.1.0" % "test",
-  libraryDependencies += "it.ozimov"                     % "embedded-redis"                % "0.7.2" % "test",
   libraryDependencies += "junit"                         % "junit"                         % "4.12" % "test",
   libraryDependencies += "com.novocode"                  % "junit-interface"               % "0.11" % "test",
   libraryDependencies += "org.typelevel"                 %% "cats-laws"                    % "1.6.0" % "test",
@@ -66,4 +60,3 @@ resolvers += Resolver.jcenterRepo
 
 resolvers += "Sonatype OSS Snapshots" at
   "https://oss.sonatype.org/content/repositories/releases"
-// TODO: remove this once the JCenter integration issue for Curium is fixed.

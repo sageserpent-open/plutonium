@@ -1,7 +1,6 @@
 package com.sageserpent.plutonium
 
-import com.github.benmanes.caffeine.cache.Cache
-import com.sageserpent.curium.caffeineBuilder
+import com.github.benmanes.caffeine.cache.{Cache, Caffeine}
 
 import scala.reflect.runtime.{currentMirror, universe}
 import universe.typeOf
@@ -9,7 +8,7 @@ import universe.typeOf
 object classFromType {
 
   val clazzCache: Cache[universe.Type, Class[_]] =
-    caffeineBuilder().build()
+    Caffeine.newBuilder().build()
 
   def apply[Item](reflectedType: universe.Type): Class[Item] =
     clazzCache
