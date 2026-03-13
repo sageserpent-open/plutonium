@@ -141,8 +141,8 @@ class WorldReferenceImplementation(mutableState: MutableState)
   override def scopeFor(when: Unbounded[Instant], asOf: Instant): Scope =
     new ScopeBasedOnAsOf(when, asOf) with SelfPopulatedScope
 
-  private def checkRevisionPrecondition(asOf: Instant,
-                                        revisionAsOfs: Seq[Instant]): Unit = {
+  protected def checkRevisionPrecondition(asOf: Instant,
+                                          revisionAsOfs: Seq[Instant]): Unit = {
     if (revisionAsOfs.nonEmpty && revisionAsOfs.last.isAfter(asOf))
       throw new IllegalArgumentException(
         s"'asOf': ${asOf} should be no earlier than that of the last revision: ${revisionAsOfs.last}")

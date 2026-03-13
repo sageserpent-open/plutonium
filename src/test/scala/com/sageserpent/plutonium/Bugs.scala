@@ -328,94 +328,6 @@ trait Bugs
         .unsafeRunSync
     }
 
-    "booking in a change event affected by a measurement event that has already been booked in" should "not affect any earlier history" in {
-      val itemId = "Fred"
-
-      val sharedAsOf = Instant.ofEpochSecond(0)
-
-      val expectedHistory = Seq(11, 22)
-
-      worldResource
-        .use(world =>
-          IO {
-            world.revise(
-              0,
-              Measurement.forOneItem(Instant.ofEpochSecond(2L))(itemId, {
-                item: IntegerHistory =>
-                  item.integerProperty = 22
-              }),
-              sharedAsOf)
-
-            world.revise(1,
-                         Change.forOneItem(Instant.ofEpochSecond(1L))(itemId, {
-                           item: IntegerHistory =>
-                             item.integerProperty = -959764091
-                         }),
-                         sharedAsOf)
-
-            world.revise(2,
-                         Change.forOneItem(Instant.ofEpochSecond(0L))(itemId, {
-                           item: IntegerHistory =>
-                             item.integerProperty = 11
-                         }),
-                         sharedAsOf)
-
-            val scope =
-              world.scopeFor(PositiveInfinity[Instant](), world.nextRevision)
-
-            scope
-              .render(Bitemporal.withId[IntegerHistory](itemId))
-              .loneElement
-              .datums should contain theSameElementsInOrderAs expectedHistory
-        })
-        .unsafeRunSync
-    }
-
-    "annulling a change event that is affected by a measurement event" should "affect the earlier history due to another change event that becomes affected" in {
-      val itemId = "Fred"
-
-      val sharedAsOf = Instant.ofEpochSecond(0)
-
-      val expectedHistory = Seq(22)
-
-      worldResource
-        .use(world =>
-          IO {
-            world.revise(
-              0,
-              Measurement.forOneItem(Instant.ofEpochSecond(2L))(itemId, {
-                item: IntegerHistory =>
-                  item.integerProperty = 22
-              }),
-              sharedAsOf)
-
-            world.revise(1,
-                         Change.forOneItem(Instant.ofEpochSecond(1L))(itemId, {
-                           item: IntegerHistory =>
-                             item.integerProperty = -959764091
-                         }),
-                         sharedAsOf)
-
-            world.revise(2,
-                         Change.forOneItem(Instant.ofEpochSecond(0L))(itemId, {
-                           item: IntegerHistory =>
-                             item.integerProperty = 11
-                         }),
-                         sharedAsOf)
-
-            world.annul(1, sharedAsOf)
-
-            val scope =
-              world.scopeFor(PositiveInfinity[Instant](), world.nextRevision)
-
-            scope
-              .render(Bitemporal.withId[IntegerHistory](itemId))
-              .loneElement
-              .datums should contain theSameElementsInOrderAs expectedHistory
-        })
-        .unsafeRunSync
-    }
-
     "booking in simple changes in the same single revision" should "work" in {
       val fooId = "Name: 50"
 
@@ -460,49 +372,6 @@ trait Bugs
         .unsafeRunSync
     }
 
-    "booking in a measurement after a change event that becomes affected" should "also incorporate following history" in {
-      val itemId = "Fred"
-
-      val sharedAsOf = Instant.ofEpochSecond(0)
-
-      val expectedHistory = Seq("The Real Thing", true)
-
-      worldResource
-        .use(world =>
-          IO {
-            world.revise(0,
-                         Change.forOneItem(Instant.ofEpochSecond(0L))(itemId, {
-                           item: FooHistory =>
-                             item.property1 = "Strawman"
-                         }),
-                         sharedAsOf)
-
-            world.revise(1,
-                         Change.forOneItem(Instant.ofEpochSecond(1L))(itemId, {
-                           item: FooHistory =>
-                             item.property2 = true
-                         }),
-                         sharedAsOf)
-
-            world.revise(
-              2,
-              Measurement.forOneItem(Instant.ofEpochSecond(2L))(itemId, {
-                item: FooHistory =>
-                  item.property1 = "The Real Thing"
-              }),
-              sharedAsOf)
-
-            val scope =
-              world.scopeFor(PositiveInfinity[Instant](), world.nextRevision)
-
-            scope
-              .render(Bitemporal.withId[FooHistory](itemId))
-              .loneElement
-              .datums should contain theSameElementsInOrderAs expectedHistory
-        })
-        .unsafeRunSync
-    }
-
     "booking in events in reverse order of physical time" should "work" in {
       val itemId = "Fred"
 
@@ -522,7 +391,7 @@ trait Bugs
 
             world.revise(
               1,
-              Measurement.forOneItem(Instant.ofEpochSecond(0L))(itemId, {
+              Change.forOneItem(Instant.ofEpochSecond(0L))(itemId, {
                 item: FooHistory =>
                   item.property1 = "The Real Thing"
               }),

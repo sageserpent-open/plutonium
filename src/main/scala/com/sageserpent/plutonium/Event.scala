@@ -223,58 +223,7 @@ object Change {
     forTwoItems(americium.NegativeInfinity[Instant]())(id1, id2, update)
 }
 
-case class Measurement(when: Unbounded[Instant], patches: Seq[AbstractPatch])
-    extends Event
-
-object Measurement {
-  def forOneItem[Item: TypeTag](when: Unbounded[Instant])(
-      id: Any,
-      measurement: Item => Unit): Measurement = {
-    Measurement(
-      when,
-      capturePatches((recorderFactory: RecorderFactory) => {
-        val recorder =
-          recorderFactory[Item](UniqueItemSpecification(id, typeOf[Item]))
-        measurement(recorder)
-      })
-    )
-  }
-
-  def forOneItem[Item: TypeTag](
-      when: Instant)(id: Any, update: Item => Unit): Measurement =
-    forOneItem(Finite(when))(id, update)
-
-  def forOneItem[Item: TypeTag](id: Any, update: Item => Unit): Measurement =
-    forOneItem(americium.NegativeInfinity[Instant]())(id, update)
-
-  def forTwoItems[Item1: TypeTag, Item2: TypeTag](when: Unbounded[Instant])(
-      id1: Any,
-      id2: Any,
-      update: (Item1, Item2) => Unit): Measurement = Measurement(
-    when,
-    capturePatches((recorderFactory: RecorderFactory) => {
-      val recorder1 =
-        recorderFactory[Item1](UniqueItemSpecification(id1, typeOf[Item1]))
-      val recorder2 =
-        recorderFactory[Item2](UniqueItemSpecification(id2, typeOf[Item2]))
-      update(recorder1, recorder2)
-    })
-  )
-
-  def forTwoItems[Item1: TypeTag, Item2: TypeTag](when: Instant)(
-      id1: Any,
-      id2: Any,
-      update: (Item1, Item2) => Unit): Measurement =
-    forTwoItems(Finite(when))(id1, id2, update)
-
-  def forTwoItems[Item1: TypeTag, Item2: TypeTag](
-      id1: Any,
-      id2: Any,
-      update: (Item1, Item2) => Unit): Measurement =
-    forTwoItems(americium.NegativeInfinity[Instant]())(id1, id2, update)
-}
-
-// NOTE: creation is implied by the first change or measurement, so we don't bother with an explicit case class for that.
+// NOTE: creation is implied by the first change, so we don't bother with an explicit case class for that.
 // NOTE: annihilation has to happen at some definite time.
 // NOTE: an annihilation can only be booked in as part of a revision if the id is refers has already been defined by some
 // earlier event and is not already annihilated - this is checked as a precondition on 'World.revise'.

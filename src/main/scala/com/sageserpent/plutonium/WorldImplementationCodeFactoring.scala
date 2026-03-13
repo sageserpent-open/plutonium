@@ -54,11 +54,6 @@ object WorldImplementationCodeFactoring {
           patchRecorder.recordPatchFromChange(eventId, when, patch)
         }
 
-      case Measurement(when, patches) =>
-        for (patch <- patches) {
-          patchRecorder.recordPatchFromMeasurement(eventId, when, patch)
-        }
-
       case annihilation @ Annihilation(when, id) =>
         patchRecorder.recordAnnihilation(eventId, annihilation)
     }

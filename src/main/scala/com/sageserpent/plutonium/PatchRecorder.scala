@@ -49,10 +49,6 @@ trait PatchRecorder {
                             when: Unbounded[Instant],
                             patch: AbstractPatch): Unit
 
-  def recordPatchFromMeasurement(eventId: EventId,
-                                 when: Unbounded[Instant],
-                                 patch: AbstractPatch): Unit
-
   def recordAnnihilation(eventId: EventId, annihilation: Annihilation): Unit
 
   def noteThatThereAreNoFollowingRecordings(): Unit
@@ -68,17 +64,6 @@ trait PatchRecorderContracts extends PatchRecorder {
     require(whenEventPertainedToByLastRecordingTookPlace.fold(true)(when >= _))
     require(!allRecordingsAreCaptured)
     val result = super.recordPatchFromChange(eventId, when, patch)
-    assert(whenEventPertainedToByLastRecordingTookPlace == Some(when))
-    result
-  }
-
-  abstract override def recordPatchFromMeasurement(
-      eventId: EventId,
-      when: Unbounded[Instant],
-      patch: AbstractPatch): Unit = {
-    require(whenEventPertainedToByLastRecordingTookPlace.fold(true)(when >= _))
-    require(!allRecordingsAreCaptured)
-    val result = super.recordPatchFromMeasurement(eventId, when, patch)
     assert(whenEventPertainedToByLastRecordingTookPlace == Some(when))
     result
   }

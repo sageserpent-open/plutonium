@@ -40,32 +40,27 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
   val moreSpecificFooHistoryIdGenerator = fooHistoryIdGenerator // Just making a point that both kinds of bitemporal will use the same type of ids.
 
   def eventConstructorReferringToOneItem[AHistory <: History: TypeTag](
-      makeAChange: Boolean)(
       when: Unbounded[Instant]): (AHistory#Id, AHistory => Unit) => Event =
-    if (makeAChange) Change.forOneItem(when)(_, _)
-    else Measurement.forOneItem(when)(_, _)
+    Change.forOneItem(when)(_, _)
 
   def eventConstructorReferringToTwoItems[AHistory <: History: TypeTag,
                                           AnotherHistory <: History: TypeTag](
-      makeAChange: Boolean)(
       when: Unbounded[Instant]): (AHistory#Id,
                                   AnotherHistory#Id,
                                   (AHistory, AnotherHistory) => Unit) => Event =
-    if (makeAChange) Change.forTwoItems(when)(_, _, _)
-    else Measurement.forTwoItems(when)(_, _, _)
+    Change.forTwoItems(when)(_, _, _)
 
   def fooHistoryDataSampleGenerator1(faulty: Boolean) =
     for { data <- Arbitrary.arbitrary[String] } yield
       (data,
        (when: americium.Unbounded[Instant],
-        makeAChange: Boolean,
         fooHistoryId: FooHistory#Id) =>
          if (!faulty)
-           eventConstructorReferringToOneItem[FooHistory](makeAChange)(when)
+           eventConstructorReferringToOneItem[FooHistory](when)
              .apply(
                fooHistoryId,
                (fooHistory: FooHistory) => {
-                 // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
+                 // Changes are not allowed to read from the items they work on, with the exception of the 'id' property.
                  assert(fooHistoryId == fooHistory.id)
                  assertThrows[UnsupportedOperationException](fooHistory.datums)
                  assertThrows[UnsupportedOperationException](
@@ -77,11 +72,11 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
                }
              )
          else
-           eventConstructorReferringToOneItem[BadFooHistory](makeAChange)(when)
+           eventConstructorReferringToOneItem[BadFooHistory](when)
              .apply(
                fooHistoryId,
                (fooHistory: BadFooHistory) => {
-                 // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
+                 // Changes are not allowed to read from the items they work on, with the exception of the 'id' property.
                  assert(fooHistoryId == fooHistory.id)
                  assertThrows[UnsupportedOperationException](fooHistory.datums)
                  assertThrows[UnsupportedOperationException](
@@ -97,14 +92,13 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
     for { data <- Arbitrary.arbitrary[Boolean] } yield
       (data,
        (when: Unbounded[Instant],
-        makeAChange: Boolean,
         fooHistoryId: FooHistory#Id) =>
          if (!faulty)
-           eventConstructorReferringToOneItem[FooHistory](makeAChange)(when)
+           eventConstructorReferringToOneItem[FooHistory](when)
              .apply(
                fooHistoryId,
                (fooHistory: FooHistory) => {
-                 // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
+                 // Changes are not allowed to read from the items they work on, with the exception of the 'id' property.
                  assert(fooHistoryId == fooHistory.id)
                  assertThrows[UnsupportedOperationException](fooHistory.datums)
                  assertThrows[UnsupportedOperationException](
@@ -116,11 +110,11 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
                }
              )
          else
-           eventConstructorReferringToOneItem[BadFooHistory](makeAChange)(when)
+           eventConstructorReferringToOneItem[BadFooHistory](when)
              .apply(
                fooHistoryId,
                (fooHistory: BadFooHistory) => {
-                 // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
+                 // Changes are not allowed to read from the items they work on, with the exception of the 'id' property.
                  assert(fooHistoryId == fooHistory.id)
                  assertThrows[UnsupportedOperationException](fooHistory.datums)
                  assertThrows[UnsupportedOperationException](
@@ -136,15 +130,14 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
     for { data <- Arbitrary.arbitrary[Double] } yield
       (data,
        (when: Unbounded[Instant],
-        makeAChange: Boolean,
         barHistoryId: BarHistory#Id) =>
-         eventConstructorReferringToOneItem[BarHistory](makeAChange)(when)
+         eventConstructorReferringToOneItem[BarHistory](when)
            .apply(
              barHistoryId,
              (barHistory: BarHistory) => {
                if (faulty) barHistory.forceInvariantBreakage() // Modelling breakage of the bitemporal invariant.
 
-               // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
+               // Changes are not allowed to read from the items they work on, with the exception of the 'id' property.
                assert(barHistory.id == barHistoryId)
                assertThrows[UnsupportedOperationException](barHistory.datums)
                assertThrows[UnsupportedOperationException](barHistory.property1)
@@ -160,13 +153,12 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
     } yield
       (data1 -> data2,
        (when: americium.Unbounded[Instant],
-        makeAChange: Boolean,
         barHistoryId: BarHistory#Id) =>
-         eventConstructorReferringToOneItem[BarHistory](makeAChange)(when)
+         eventConstructorReferringToOneItem[BarHistory](when)
            .apply(
              barHistoryId,
              (barHistory: BarHistory) => {
-               // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
+               // Changes are not allowed to read from the items they work on, with the exception of the 'id' property.
                assert(barHistory.id == barHistoryId)
                assertThrows[UnsupportedOperationException](barHistory.datums)
                assertThrows[UnsupportedOperationException](barHistory.property1)
@@ -185,13 +177,12 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
     } yield
       ((data1, data2, data3),
        (when: Unbounded[Instant],
-        makeAChange: Boolean,
         barHistoryId: BarHistory#Id) =>
-         eventConstructorReferringToOneItem[BarHistory](makeAChange)(when)
+         eventConstructorReferringToOneItem[BarHistory](when)
            .apply(
              barHistoryId,
              (barHistory: BarHistory) => {
-               // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
+               // Changes are not allowed to read from the items they work on, with the exception of the 'id' property.
                assert(barHistory.id == barHistoryId)
                assertThrows[UnsupportedOperationException](barHistory.datums)
                assertThrows[UnsupportedOperationException](barHistory.property1)
@@ -206,13 +197,12 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
     for { data <- Arbitrary.arbitrary[Int] } yield
       (data,
        (when: americium.Unbounded[Instant],
-        makeAChange: Boolean,
         integerHistoryId: IntegerHistory#Id) =>
-         eventConstructorReferringToOneItem[IntegerHistory](makeAChange)(when)
+         eventConstructorReferringToOneItem[IntegerHistory](when)
            .apply(
              integerHistoryId,
              (integerHistory: IntegerHistory) => {
-               // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
+               // Changes are not allowed to read from the items they work on, with the exception of the 'id' property.
                assert(integerHistoryId == integerHistory.id)
                assertThrows[UnsupportedOperationException](
                  integerHistory.datums)
@@ -229,13 +219,12 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
     for { data <- Arbitrary.arbitrary[String] } yield
       (data,
        (when: americium.Unbounded[Instant],
-        makeAChange: Boolean,
         fooHistoryId: MoreSpecificFooHistory#Id) =>
-         eventConstructorReferringToOneItem[MoreSpecificFooHistory](
-           makeAChange)(when).apply(
+         eventConstructorReferringToOneItem[MoreSpecificFooHistory](when)
+           .apply(
            fooHistoryId,
            (fooHistory: MoreSpecificFooHistory) => {
-             // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
+             // Changes are not allowed to read from the items they work on, with the exception of the 'id' property.
              assert(fooHistoryId == fooHistory.id)
              assertThrows[UnsupportedOperationException](fooHistory.datums)
              assertThrows[UnsupportedOperationException](fooHistory.property1)
@@ -251,10 +240,9 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
     for { idToReferToAnotherItem <- Gen.oneOf(ReferringHistory.specialFooIds) } yield
       (idToReferToAnotherItem,
        (when: americium.Unbounded[Instant],
-        makeAChange: Boolean,
         referringHistoryId: ReferringHistory#Id) =>
-         eventConstructorReferringToTwoItems[ReferringHistory, FooHistory](
-           makeAChange)(when).apply(
+         eventConstructorReferringToTwoItems[ReferringHistory, FooHistory](when)
+           .apply(
            referringHistoryId,
            idToReferToAnotherItem,
            (referringHistory: ReferringHistory, referencedItem: FooHistory) => {
@@ -277,10 +265,9 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
     for { idToReferToAnotherItem <- Gen.oneOf(ReferringHistory.specialFooIds) } yield
       (idToReferToAnotherItem,
        (when: americium.Unbounded[Instant],
-        makeAChange: Boolean,
         referringHistoryId: ReferringHistory#Id) =>
-         eventConstructorReferringToTwoItems[ReferringHistory, FooHistory](
-           makeAChange)(when).apply(
+         eventConstructorReferringToTwoItems[ReferringHistory, FooHistory](when)
+           .apply(
            referringHistoryId,
            idToReferToAnotherItem,
            (referringHistory: ReferringHistory, referencedItem: FooHistory) => {
@@ -306,7 +293,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
   def dataSamplesForAnIdGenerator_[AHistory <: History: TypeTag](
       historyIdGenerator: Gen[AHistory#Id],
       dataSampleGenerators: Gen[
-        (_, (Unbounded[Instant], Boolean, AHistory#Id) => Event)]*) = {
+        (_, (Unbounded[Instant], AHistory#Id) => Event)]*) = {
     // It makes no sense to have an id without associated data samples - the act of
     // recording a data sample via a change is what introduces an id into the world.
     val dataSamplesGenerator =
@@ -326,32 +313,32 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
        for {
          (index,
           (data,
-           changeFor: ((Unbounded[Instant], Boolean,
+           changeFor: ((Unbounded[Instant],
            AHistory#Id) => Event))) <- dataSamples
        } yield
-         (index, data, changeFor(_: Unbounded[Instant], _: Boolean, historyId)),
+         (index, data, changeFor(_: Unbounded[Instant], historyId)),
        Annihilation(_: Instant, historyId),
        if (headsItIs)
          if (anotherRoundOfHeadsItIs)
            Change.forOneItem(_: Unbounded[Instant])(historyId,
                                                     (item: AHistory) => {
-                                                      // A useless event: nothing changes!
+                                                      // A useless change: nothing changes!
                                                     })
          else
            Change.forOneItem(_: Unbounded[Instant])(historyId,
                                                     (item: History) => {
-                                                      // A useless event: nothing changes - and the event refers to the item type abstractly to boot.
+                                                      // A useless change: nothing changes - and the event refers to the item type abstractly to boot.
                                                     })
        else if (anotherRoundOfHeadsItIs)
-         Measurement.forOneItem(_: Unbounded[Instant])(historyId,
-                                                       (item: AHistory) => {
-                                                         // A useless event: nothing is measured!
-                                                       })
+         Change.forOneItem(_: Unbounded[Instant])(historyId,
+                                                  (item: AHistory) => {
+                                                    // A useless change: nothing changes!
+                                                  })
        else
-         Measurement.forOneItem(_: Unbounded[Instant])(historyId,
-                                                       (item: History) => {
-                                                         // A useless event: nothing is measured - and the event refers to the item type abstractly to boot.
-                                                       }))
+         Change.forOneItem(_: Unbounded[Instant])(historyId,
+                                                  (item: History) => {
+                                                    // A useless change: nothing changes - and the event refers to the item type abstractly to boot.
+                                                  }))
   }
 
   trait RecordingsForAnId {
@@ -394,9 +381,8 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
       annihilationFor: Instant => Annihilation,
       ineffectiveEventFor: Unbounded[Instant] => Event,
       dataSamplesGroupedForLifespans: Stream[
-        Traversable[(Int, Any, (Unbounded[Instant], Boolean) => Event)]],
-      sampleWhensGroupedForLifespans: Stream[List[Unbounded[Instant]]],
-      forbidMeasurements: Boolean)
+        Traversable[(Int, Any, Unbounded[Instant] => Event)]],
+      sampleWhensGroupedForLifespans: Stream[List[Unbounded[Instant]]])
       extends RecordingsForAnId {
     require(
       dataSamplesGroupedForLifespans.size == sampleWhensGroupedForLifespans.size)
@@ -415,23 +401,15 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
           eventWhens.size <= 1 + dataSamples.size && eventWhens.size >= dataSamples.size
       })
 
-    private def decisionsToMakeAChange(numberOfDataSamples: Int) = {
-      val random = new Random(numberOfDataSamples)
-      List.fill(numberOfDataSamples) {
-        if (forbidMeasurements) true else random.nextBoolean()
-      }
-    }
-
     override def toString = {
       val body = (for {
         (dataSamples, eventWhens) <- dataSamplesGroupedForLifespans zip sampleWhensGroupedForLifespans
       } yield {
         val numberOfChanges = dataSamples.size
         // NOTE: we may have an extra event when - 'zip' will disregard this.
-        val data = dataSamples.toSeq zip decisionsToMakeAChange(
-          dataSamples.size) zip eventWhens map {
-          case (((_, dataSample, _), makeAChange), eventWhen) =>
-            (if (makeAChange) "Change: " else "Measurement: ") ++ dataSample.toString
+        val data = dataSamples.toSeq zip eventWhens map {
+          case ((_, dataSample, _), eventWhen) =>
+            s"Change: $dataSample"
         }
         eventWhens zip (if (numberOfChanges < eventWhens.size)
                           data :+ "Annihilation"
@@ -447,10 +425,9 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
     } yield {
       val numberOfChanges = dataSamples.size
       // NOTE: we may have an extra event when - 'zip' will disregard this.
-      val changes = dataSamples.toSeq zip decisionsToMakeAChange(
-        dataSamples.size) zip eventWhens map {
-        case (((_, _, changeFor), makeAChange), eventWhen) =>
-          changeFor(eventWhen, makeAChange)
+      val changes = dataSamples.toSeq zip eventWhens map {
+        case ((_, _, changeFor), eventWhen) =>
+          changeFor(eventWhen)
       }
       eventWhens zip (if (numberOfChanges < eventWhens.size)
                         changes :+ annihilationFor(eventWhens.last match {
@@ -498,44 +475,10 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
         when: Unbounded[Instant]): Option[RecordingsNoLaterThan] = {
       def thePartNoLaterThan(
           relevantGroupIndex: Int): Some[RecordingsNoLaterThan] = {
-        val dataSampleAndWhenPairsForALifespanWithIndices =
+        val dataSampleAndWhenPairs =
           dataSamplesGroupedForLifespans(relevantGroupIndex).toList.map {
-            case (classifier, dataSample, _) => classifier -> dataSample
-          } zip sampleWhensGroupedForLifespans(relevantGroupIndex) zipWithIndex
-
-        val dataSampleAndWhenPairsForALifespanWithIndicesAndWhetherToMakeChanges =
-          dataSampleAndWhenPairsForALifespanWithIndices zip decisionsToMakeAChange(
-            dataSampleAndWhenPairsForALifespanWithIndices.size)
-
-        def dataSampleAndWhenPairsForALifespanPickedFromRunsWithIndices(
-            dataSampleAndWhenPairsForALifespanWithIndicesAndWhetherToMakeChanges: List[
-              ((((Int, Any), Unbounded[Instant]), Int), Boolean)]) = {
-          def pickFromRunOfFollowingMeasurements(dataSamples: Seq[Any]) =
-            dataSamples.last // TODO - generalise this if and when measurements progress beyond the 'latest when wins' strategy.
-
-          val runsOfFollowingMeasurementsWithIndices
-            : List[Seq[(((Int, Any), Unbounded[Instant]), Int)]] =
-            dataSampleAndWhenPairsForALifespanWithIndicesAndWhetherToMakeChanges groupWhile {
-              case (_, (_, makeAChange)) => !makeAChange
-            } map
-              (_ map (_._1)) toList
-
-          runsOfFollowingMeasurementsWithIndices map {
-            runOfFollowingMeasurements =>
-              val ((_, whenForFirstEventInRun), indexForFirstEventInRun) =
-                runOfFollowingMeasurements.head
-              (pickFromRunOfFollowingMeasurements(
-                 runOfFollowingMeasurements map {
-                   case (((_, dataSample), _), _) => dataSample
-                 }) -> whenForFirstEventInRun,
-               indexForFirstEventInRun)
-          }
-        }
-
-        val dataSampleAndWhenPairsForALifespanPickedFromRuns = ((dataSampleAndWhenPairsForALifespanWithIndicesAndWhetherToMakeChanges groupBy {
-          case ((((classifier, _), _), _), _) => classifier
-        }).values flatMap
-          dataSampleAndWhenPairsForALifespanPickedFromRunsWithIndices).toList sortBy (_._2) map (_._1)
+            case (_, dataSample, _) => dataSample
+          } zip sampleWhensGroupedForLifespans(relevantGroupIndex)
 
         val whenAnnihilated =
           if (1 + relevantGroupIndex < sampleWhensGroupedForLifespans.size || lastLifespanIsLimited)
@@ -546,7 +489,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
           RecordingsNoLaterThan(
             historyId = historyId,
             historiesFrom = historiesFrom,
-            datums = dataSampleAndWhenPairsForALifespanPickedFromRuns takeWhile {
+            datums = dataSampleAndWhenPairs takeWhile {
               case (_, eventWhen) => eventWhen <= when
             },
             ineffectiveEventFor = ineffectiveEventFor,
@@ -608,11 +551,10 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
       dataSamplesForAnIdGenerator: Gen[
         (Any,
          ItemCache => Seq[History],
-         List[(Int, Any, (Unbounded[Instant], Boolean) => Event)],
+         List[(Int, Any, Unbounded[Instant] => Event)],
          Instant => Annihilation,
          Unbounded[Instant] => Event)],
-      forbidAnnihilations: Boolean = false,
-      forbidMeasurements: Boolean = false) = {
+      forbidAnnihilations: Boolean = false) = {
     val unconstrainedParametersGenerator = for {
       (historyId,
        historiesFrom,
@@ -629,7 +571,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
       numberOfEventsForLifespans = {
         def numberOfEventsForLimitedLifespans(
             dataSamplesGroupedForLimitedLifespans: Stream[Traversable[
-              (Int, Any, (Unbounded[Instant], Boolean) => Event)]]) = {
+              (Int, Any, (Unbounded[Instant]) => Event)]]) = {
           // Add an extra when for the annihilation at the end of the lifespan...
           dataSamplesGroupedForLimitedLifespans map (1 + _.size)
         }
@@ -672,8 +614,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
                                       annihilationFor,
                                       ineffectiveEventFor,
                                       dataSamplesGroupedForLifespans,
-                                      sampleWhensGroupedForLifespans,
-                                      forbidMeasurements)
+                                      sampleWhensGroupedForLifespans)
           with RecordingsForAnIdContracts
 
     def idsAreNotRepeated(recordingsForVariousIds: List[RecordingsForAnId]) = {
@@ -783,8 +724,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
 
   def mixedRecordingsGroupedByIdGenerator(
       faulty: Boolean = false,
-      forbidAnnihilations: Boolean,
-      forbidMeasurements: Boolean = false) = {
+      forbidAnnihilations: Boolean) = {
     val mixedDisjointLeftHandDataSamplesForAnIdGenerator = Gen.frequency(
       Seq(
         dataSamplesForAnIdGenerator_[FooHistory](
@@ -803,8 +743,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
     val disjointLeftHandRecordingsGroupedByIdGenerator =
       recordingsGroupedByIdGenerator_(
         disjointLeftHandDataSamplesForAnIdGenerator,
-        forbidAnnihilations = faulty || forbidAnnihilations,
-        forbidMeasurements = forbidMeasurements)
+        forbidAnnihilations = faulty || forbidAnnihilations)
 
     val mixedDisjointRightHandDataSamplesForAnIdGenerator = Gen.frequency(
       Seq(
@@ -823,8 +762,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
     val disjointRightHandRecordingsGroupedByIdGenerator =
       recordingsGroupedByIdGenerator_(
         disjointRightHandDataSamplesForAnIdGenerator,
-        forbidAnnihilations = faulty || forbidAnnihilations,
-        forbidMeasurements = forbidMeasurements)
+        forbidAnnihilations = faulty || forbidAnnihilations)
 
     val recordingsWithPotentialSharingOfIdsAcrossTheTwoDisjointHands = for {
       leftHandRecordingsGroupedById  <- disjointLeftHandRecordingsGroupedByIdGenerator
@@ -844,11 +782,8 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
   }
 
   def recordingsGroupedByIdGenerator(
-      forbidAnnihilations: Boolean,
-      forbidMeasurements: Boolean = false): Gen[List[RecordingsForAnId]] =
-    mixedRecordingsGroupedByIdGenerator(forbidAnnihilations =
-                                          forbidAnnihilations,
-                                        forbidMeasurements = forbidMeasurements)
+      forbidAnnihilations: Boolean): Gen[List[RecordingsForAnId]] =
+    mixedRecordingsGroupedByIdGenerator(forbidAnnihilations = forbidAnnihilations)
 
   // These recordings don't allow the possibility of the same id being shared by bitemporals of related (but different)
   // types when these are plugged into tests that use them to correct one world history into another. Note that we don't
@@ -885,10 +820,8 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
       referringHistoryIdGenerator,
       pertainingToAnotherItemDataSampleGenerator(faulty = false))
 
-  def referringHistoryRecordingsGroupedByIdGenerator(
-      forbidMeasurements: Boolean) =
-    recordingsGroupedByIdGenerator_(referenceToItemDataSamplesForAnIdGenerator,
-                                    forbidMeasurements = forbidMeasurements)
+  def referringHistoryRecordingsGroupedByIdGenerator() =
+    recordingsGroupedByIdGenerator_(referenceToItemDataSamplesForAnIdGenerator)
 
   val mixedRecordingsForReferencedIdGenerator =
     dataSamplesForAnIdGenerator_[FooHistory](

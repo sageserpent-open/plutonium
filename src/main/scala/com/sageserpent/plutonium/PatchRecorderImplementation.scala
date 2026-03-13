@@ -45,20 +45,6 @@ abstract class PatchRecorderImplementation(
     itemState.addPatch(when, patch, eventId, sequenceIndex)
   }
 
-  override def recordPatchFromMeasurement(eventId: EventId,
-                                          when: Unbounded[Instant],
-                                          patch: AbstractPatch): Unit = {
-    _whenEventPertainedToByLastRecordingTookPlace = Some(when)
-
-    val sequenceIndex: SequenceIndex = nextSequenceIndex()
-
-    refineRelevantItemStatesAndYieldTarget(patch, sequenceIndex).addPatch(
-      when,
-      patch,
-      eventId,
-      sequenceIndex)
-  }
-
   def annihilateItemFor_[SubclassOfItem <: Item, Item](
       when: Unbounded[Instant],
       annihilation: Annihilation,

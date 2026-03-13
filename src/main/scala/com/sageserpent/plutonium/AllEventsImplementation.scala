@@ -61,13 +61,6 @@ object AllEventsImplementation {
                 itemStateUpdateKey = itemStateUpdateKey,
                 indivisibleEvent = IndivisibleChange(patch))
 
-    def fromMeasurement(eventId: EventId,
-                        itemStateUpdateKey: ItemStateUpdateKey,
-                        patch: AbstractPatch): Lifecycle =
-      Lifecycle(eventId = eventId,
-                itemStateUpdateKey = itemStateUpdateKey,
-                indivisibleEvent = IndivisibleMeasurement(patch))
-
     def fromAnnihilation(eventId: EventId,
                          itemStateUpdateKey: ItemStateUpdateKey,
                          annihilation: Annihilation): Lifecycle =
@@ -110,12 +103,6 @@ object AllEventsImplementation {
         extends IndivisibleEvent {}
 
     case class IndivisibleChange(patch: AbstractPatch)
-        extends IndivisibleEvent {
-      override def uniqueItemSpecification: UniqueItemSpecification =
-        patch.targetItemSpecification
-    }
-
-    case class IndivisibleMeasurement(patch: AbstractPatch)
         extends IndivisibleEvent {
       override def uniqueItemSpecification: UniqueItemSpecification =
         patch.targetItemSpecification
@@ -397,17 +384,7 @@ object AllEventsImplementation {
                                                   List[(AbstractPatch,
                                                         ItemStateUpdateKey)]] =
             Map.empty) {
-        def recordChangePatch(
-            itemStateUpdateKey: ItemStateUpdateKey,
-            patch: AbstractPatch): ResultsWriter[PatchAccumulationState] =
-          for {
-            patchAccumulationStateWithChangePatch <- this
-              .recordMeasurementPatch(itemStateUpdateKey, patch)
-            patchAccumulationStateAfterFlushing <- patchAccumulationStateWithChangePatch
-              .writeBestPatch(patch.method)
-          } yield patchAccumulationStateAfterFlushing
-
-        def recordMeasurementPatch(
+        def recordPatch(
             itemStateUpdateKey: ItemStateUpdateKey,
             patch: AbstractPatch): ResultsWriter[PatchAccumulationState] = {
           val (exemplarMethod, associatedPatches) =
@@ -424,10 +401,13 @@ object AllEventsImplementation {
             else
               accumulatedPatchesByExemplarMethod + (exemplarMethod -> updatedCandidatePatches)
 
-          new PatchAccumulationState(
-            accumulatedPatchesByExemplarMethod =
-              updatedAccumulatedPatchesByExemplarMethod)
-            .pure[ResultsWriter]
+          for {
+            stateWithPatch <- new PatchAccumulationState(
+              accumulatedPatchesByExemplarMethod =
+                updatedAccumulatedPatchesByExemplarMethod)
+              .pure[ResultsWriter]
+            stateAfterFlush <- stateWithPatch.writeBestPatch(patch.method)
+          } yield stateAfterFlush
         }
 
         def recordAnnihilation(
@@ -522,12 +502,7 @@ object AllEventsImplementation {
               case _: ArgumentReference =>
                 patchAccumulationState.pure[ResultsWriter]
               case IndivisibleChange(patch) =>
-                patchAccumulationState.recordChangePatch(
-                  itemStateUpdateKey,
-                  patch.rewriteItemClazzes(
-                    refineClazzFor(itemStateUpdateKey, _, lifecyclesById)))
-              case IndivisibleMeasurement(patch) =>
-                patchAccumulationState.recordMeasurementPatch(
+                patchAccumulationState.recordPatch(
                   itemStateUpdateKey,
                   patch.rewriteItemClazzes(
                     refineClazzFor(itemStateUpdateKey, _, lifecyclesById)))
@@ -899,14 +874,6 @@ class AllEventsImplementation(
               patch.targetItemSpecification.id +: patch.argumentItemSpecifications
                 .map(_.id))
             .toSet)
-      case Measurement(when, patches) =>
-        EventFootprint(
-          when = when,
-          itemIds = patches
-            .flatMap(patch =>
-              patch.targetItemSpecification.id +: patch.argumentItemSpecifications
-                .map(_.id))
-            .toSet)
       case Annihilation(when, uniqueItemSpecification) =>
         EventFootprint(when = Finite(when),
                        itemIds = Set(uniqueItemSpecification.id))
@@ -1046,27 +1013,6 @@ class AllEventsImplementation(
                         patch.targetItemSpecification
                     )
                 }
-            }
-          case Measurement(when, patches) =>
-            patches.zipWithIndex.flatMap {
-              case (patch, intraEventIndex) =>
-                val eventOrderingKey =
-                  (when, nextRevision, eventOrderingTiebreakerIndex)
-                val itemStateUpdateKey =
-                  ItemStateUpdateKey(eventOrderingKey = eventOrderingKey,
-                                     intraEventIndex = intraEventIndex)
-                Lifecycle.fromMeasurement(
-                  eventId = eventId,
-                  itemStateUpdateKey,
-                  patch = patch) +: patch.argumentItemSpecifications.map(
-                  uniqueItemSpecification =>
-                    Lifecycle.fromArgumentTypeReference(
-                      eventId = eventId,
-                      itemStateUpdateKey = itemStateUpdateKey,
-                      uniqueItemSpecification = uniqueItemSpecification,
-                      targetUniqueItemSpecification =
-                        patch.targetItemSpecification
-                  ))
             }
           case annihilation @ Annihilation(when, _) =>
             val eventOrderingKey =

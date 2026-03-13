@@ -110,7 +110,7 @@ trait ExperimentalWorldBehaviours
       })
     }
 
-    it should "respond to scope queries in the same way as its base world as long as the scope for querying is contained within the defining scope, as long as no measurements are involved" in {
+    it should "respond to scope queries in the same way as its base world as long as the scope for querying is contained within the defining scope" in {
       val testCaseGenerator = for {
         forkAsOf <- instantGenerator
         forkWhen <- unboundedInstantGenerator
@@ -120,8 +120,7 @@ trait ExperimentalWorldBehaviours
         queryWhenNoLaterThanFork <- unboundedInstantGenerator
         if queryWhenNoLaterThanFork <= forkWhen
         recordingsGroupedById <- recordingsGroupedByIdGenerator(
-          forbidAnnihilations = false,
-          forbidMeasurements = true)
+          forbidAnnihilations = false)
         seed <- seedGenerator
         random = new Random(seed)
         bigShuffledHistoryOverLotsOfThings = random

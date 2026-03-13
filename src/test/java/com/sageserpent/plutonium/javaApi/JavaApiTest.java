@@ -29,7 +29,7 @@ public class JavaApiTest {
             {
                 final Instant asOf = Instant.now();
 
-                world.revise(rememberThisEventId, Measurement.forOneItem(toStartWith, "Fred", Account.class, accountItem -> {
+                world.revise(rememberThisEventId, Change.forOneItem(toStartWith, "Fred", Account.class, accountItem -> {
                     accountItem.setCash(3.8);
                 }), asOf);
             }

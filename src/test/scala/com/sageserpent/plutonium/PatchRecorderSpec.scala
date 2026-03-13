@@ -72,8 +72,7 @@ class PatchRecorderSpec
               patchGenerator: FooHistory#Id => Gen[AbstractPatch])
             : Gen[PatchesOfTheSameKindForAnId] =
             for {
-              patches                         <- Gen.nonEmptyListOf(patchGenerator(id))
-              initialPatchInLifecycleIsChange <- Arbitrary.arbBool.arbitrary
+              patches <- Gen.nonEmptyListOf(patchGenerator(id))
             } yield {
               val randomBehaviour = new Random(seed)
               val clumpsOfPatches =
@@ -103,12 +102,8 @@ class PatchRecorderSpec
                 }
               }
 
-              val changeInsteadOfMeasurementDecisionsInClumps = (initialPatchInLifecycleIsChange #:: Stream
-                .continually(false)) +: Stream.continually(
-                true #:: Stream.continually(false))
-
-              val recordingActionFactories = clumpsOfPatches zip bestPatches zip changeInsteadOfMeasurementDecisionsInClumps map {
-                case ((clumpOfPatches, bestPatch), decisions) =>
+              val recordingActionFactories = clumpsOfPatches zip bestPatches map {
+                case (clumpOfPatches, bestPatch) =>
                   val eventIdsForPatches: Array[plutonium.EventId] =
                     clumpOfPatches map (System.identityHashCode) toArray
 
@@ -116,8 +111,8 @@ class PatchRecorderSpec
                   var uglyWayOfCapturingStateAssociatedWithThePatchThatStandsInForTheBestPatch
                     : Option[(Boolean, Int, Instant)] = None
 
-                  (clumpOfPatches zip decisions).zipWithIndex map {
-                    case ((patch, makeAChange), patchIndex) =>
+                  clumpOfPatches.zipWithIndex map {
+                    case (patch, patchIndex) =>
                       def setupInteractionWithBestPatchApplication(
                           patch: AbstractPatch,
                           eventsHaveEffectNoLaterThan: Unbounded[Instant],
@@ -182,25 +177,7 @@ class PatchRecorderSpec
                           patch)
                       }
 
-                      def recordingMeasurement(patch: AbstractPatch)(
-                          when: Instant)(
-                          patchRecorder: PatchRecorder,
-                          masterSequenceIndex: Int,
-                          sequenceIndicesFromAppliedPatches: scala.collection.mutable.ListBuffer[
-                            Int]): Unit = {
-                        setupInteractionWithBestPatchApplication(
-                          patch,
-                          eventsHaveEffectNoLaterThan,
-                          when,
-                          masterSequenceIndex,
-                          sequenceIndicesFromAppliedPatches)
-                        patchRecorder.recordPatchFromMeasurement(
-                          eventIdsForPatches(patchIndex),
-                          Finite(when),
-                          patch)
-                      }
-                      if (makeAChange) recordingChange(patch) _
-                      else recordingMeasurement(patch) _
+                      recordingChange(patch) _
                   }
               }
 

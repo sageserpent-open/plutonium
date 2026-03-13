@@ -183,8 +183,7 @@ trait WorldBehaviours
   def worldBehaviour = {
     it should "not mysteriously fail to yield items" in {
       val testCaseGenerator = for {
-        referringHistoryRecordingsGroupedById <- referringHistoryRecordingsGroupedByIdGenerator(
-          forbidMeasurements = true)
+        referringHistoryRecordingsGroupedById <- referringHistoryRecordingsGroupedByIdGenerator()
         seed <- seedGenerator
         random = new Random(seed)
         bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(
@@ -852,8 +851,7 @@ trait WorldBehaviours
       val testCaseGenerator = for {
         referencedHistoryRecordingsGroupedById <- referencedHistoryRecordingsGroupedByIdGenerator(
           forbidAnnihilations = false)
-        referringHistoryRecordingsGroupedById <- referringHistoryRecordingsGroupedByIdGenerator(
-          forbidMeasurements = true)
+        referringHistoryRecordingsGroupedById <- referringHistoryRecordingsGroupedByIdGenerator()
         seed <- seedGenerator
         random = new Random(seed)
         bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(
@@ -939,8 +937,7 @@ trait WorldBehaviours
       val testCaseGenerator = for {
         referencedHistoryRecordingsGroupedById <- referencedHistoryRecordingsGroupedByIdGenerator(
           forbidAnnihilations = false)
-        referringHistoryRecordingsGroupedById <- referringHistoryRecordingsGroupedByIdGenerator(
-          forbidMeasurements = true)
+        referringHistoryRecordingsGroupedById <- referringHistoryRecordingsGroupedByIdGenerator()
         seed <- seedGenerator
         random = new Random(seed)
         bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(
@@ -1148,8 +1145,7 @@ trait WorldBehaviours
       val testCaseGenerator = for {
         referencedHistoryRecordingsGroupedById <- referencedHistoryRecordingsGroupedByIdGenerator(
           forbidAnnihilations = false)
-        referringHistoryRecordingsGroupedById <- referringHistoryRecordingsGroupedByIdGenerator(
-          forbidMeasurements = true)
+        referringHistoryRecordingsGroupedById <- referringHistoryRecordingsGroupedByIdGenerator()
         seed <- seedGenerator
         random = new Random(seed)
         bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(
@@ -1217,194 +1213,6 @@ trait WorldBehaviours
         minSuccessful(12),
         maxSize(5)
       )
-    }
-
-    it should "detect the application of measurements that would attempt to define a future item whose existence would overlap with and conflict with an existing item that is subsequently annihilated." in {
-      val testCaseGenerator = for {
-        referencedHistoryRecordingsGroupedById <- referencedHistoryRecordingsGroupedByIdGenerator(
-          forbidAnnihilations = false)
-        seed <- seedGenerator
-        random = new Random(seed)
-        bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(
-          shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
-            random,
-            referencedHistoryRecordingsGroupedById).zipWithIndex)
-        asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
-                             instantGenerator) map (_.sorted)
-        referencingEventWhen <- unboundedInstantGenerator
-      } yield
-        (referencedHistoryRecordingsGroupedById,
-         bigShuffledHistoryOverLotsOfThings,
-         asOfs,
-         referencingEventWhen)
-      check(Prop.forAllNoShrink(testCaseGenerator) {
-        case (referencedHistoryRecordingsGroupedById,
-              bigShuffledHistoryOverLotsOfThings,
-              asOfs,
-              referencingEventWhen) =>
-          worldResource
-            .use(world =>
-              IO {
-                recordEventsInWorld(
-                  liftRecordings(bigShuffledHistoryOverLotsOfThings),
-                  asOfs,
-                  world)
-
-                val checks = for {
-                  RecordingsNoLaterThan(
-                    referencedHistoryId: History#Id,
-                    _,
-                    _,
-                    _,
-                    whenAnnihilated) <- referencedHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(
-                    referencingEventWhen))
-                  whenTheReferencedItemIsAnnihilated <- whenAnnihilated.toList
-                } yield
-                  (referencedHistoryId, whenTheReferencedItemIsAnnihilated)
-
-                val theReferrerIdBase = "The Referrer"
-
-                val unimportantReferencedHistoryId = "Groucho"
-
-                if (checks.nonEmpty) {
-                  for (((referencedHistoryId,
-                         whenTheReferencedItemIsAnnihilated),
-                        index) <- checks zipWithIndex) {
-                    val theReferrerId = s"$theReferrerIdBase - $index"
-
-                    val change = Change.forTwoItems[ReferringHistory, History](
-                      referencingEventWhen)(
-                      theReferrerId,
-                      unimportantReferencedHistoryId.asInstanceOf[History#Id],
-                      (referringHistory: ReferringHistory,
-                       referencedItem: History) => {
-                        referringHistory.referTo(referencedItem)
-                      }
-                    )
-
-                    val measurement = Measurement
-                      .forTwoItems[ReferringHistory, MoreSpecificFooHistory](
-                        whenTheReferencedItemIsAnnihilated)(
-                        theReferrerId,
-                        referencedHistoryId
-                          .asInstanceOf[MoreSpecificFooHistory#Id],
-                        (referringHistory: ReferringHistory,
-                         referencedItem: MoreSpecificFooHistory) => {
-                          referringHistory.referTo(referencedItem)
-                        }
-                      )
-
-                    intercept[RuntimeException] {
-                      world.revise(Map(-1 - (2 * index)   -> Some(change),
-                                       -(2 * (index + 1)) -> Some(measurement)),
-                                   world.revisionAsOfs.last)
-                    }
-                  }
-
-                  Prop.proved
-                } else Prop.undecided
-            })
-            .unsafeRunSync
-      })
-    }
-
-    it should "detect the application of measurements that would attempt to define a future item whose existence would overlap with and conflict with an existing item that is subsequently annihilated - with a twist." in {
-      val testCaseGenerator = for {
-        referencedHistoryRecordingsGroupedById <- referencedHistoryRecordingsGroupedByIdGenerator(
-          forbidAnnihilations = false)
-        seed <- seedGenerator
-        random = new Random(seed)
-        bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(
-          shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
-            random,
-            referencedHistoryRecordingsGroupedById).zipWithIndex)
-        asOfs <- Gen.listOfN(bigShuffledHistoryOverLotsOfThings.length,
-                             instantGenerator) map (_.sorted)
-        probeWhen <- unboundedInstantGenerator
-      } yield
-        (referencedHistoryRecordingsGroupedById,
-         bigShuffledHistoryOverLotsOfThings,
-         asOfs,
-         probeWhen)
-      check(Prop.forAllNoShrink(testCaseGenerator) {
-        case (referencedHistoryRecordingsGroupedById,
-              bigShuffledHistoryOverLotsOfThings,
-              asOfs,
-              probeWhen) =>
-          worldResource
-            .use(world =>
-              IO {
-                val checks = for {
-                  RecordingsNoLaterThan(
-                    referencedHistoryId: History#Id,
-                    _,
-                    _,
-                    _,
-                    whenAnnihilated) <- referencedHistoryRecordingsGroupedById flatMap (_.thePartNoLaterThan(
-                    probeWhen))
-                  whenTheReferencedItemIsAnnihilated <- whenAnnihilated.toList
-                } yield
-                  (referencedHistoryId, whenTheReferencedItemIsAnnihilated)
-
-                val theReferrerIdBase = "The Referrer"
-
-                val unimportantReferencedHistoryId = "Groucho"
-
-                if (checks.nonEmpty) {
-                  for (((referencedHistoryId,
-                         whenTheReferencedItemIsAnnihilated),
-                        index) <- checks zipWithIndex) {
-                    val theReferrerId = s"$theReferrerIdBase - $index"
-
-                    val change =
-                      Change.forTwoItems[ReferringHistory, FooHistory](
-                        whenTheReferencedItemIsAnnihilated)(
-                        theReferrerId,
-                        unimportantReferencedHistoryId
-                          .asInstanceOf[FooHistory#Id],
-                        (referringHistory: ReferringHistory,
-                         referencedItem: FooHistory) => {
-                          referringHistory.referTo(referencedItem)
-                        }
-                      )
-
-                    world.revise(Map(-1 - (2 * index) -> Some(change)),
-                                 asOfs.head)
-                  }
-
-                  recordEventsInWorld(
-                    liftRecordings(bigShuffledHistoryOverLotsOfThings),
-                    asOfs,
-                    world)
-
-                  for (((referencedHistoryId,
-                         whenTheReferencedItemIsAnnihilated),
-                        index) <- checks zipWithIndex) {
-                    val theReferrerId = s"$theReferrerIdBase - $index"
-
-                    val measurement = Measurement
-                      .forTwoItems[ReferringHistory, MoreSpecificFooHistory](
-                        whenTheReferencedItemIsAnnihilated)(
-                        theReferrerId,
-                        referencedHistoryId
-                          .asInstanceOf[MoreSpecificFooHistory#Id],
-                        (referringHistory: ReferringHistory,
-                         referencedItem: MoreSpecificFooHistory) => {
-                          referringHistory.referTo(referencedItem)
-                        }
-                      )
-
-                    intercept[RuntimeException] {
-                      world.revise(Map(-(2 * (index + 1)) -> Some(measurement)),
-                                   asOfs.head)
-                    }
-                  }
-
-                  Prop.proved
-                } else Prop.undecided
-            })
-            .unsafeRunSync
-      })
     }
 
     it should "treat an annihilated item accessed via a reference to a related item as being a ghost" in {
@@ -2461,14 +2269,12 @@ trait WorldBehaviours
       for { data <- Gen.posNum[Int] } yield
         (data,
          (when: americium.Unbounded[Instant],
-          makeAChange: Boolean,
           abstractedHistoryId: AbstractedHistory#Id) =>
-           eventConstructorReferringToOneItem[AbstractedHistory](makeAChange)(
-             when)
+           eventConstructorReferringToOneItem[AbstractedHistory](when)
              .apply(
                abstractedHistoryId,
                (abstractedHistory: AbstractedHistory) => {
-                 // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
+                 // Changes are not allowed to read from the items they work on, with the exception of the 'id' property.
                  assert(abstractedHistoryId == abstractedHistory.id)
                  assertThrows[UnsupportedOperationException](
                    abstractedHistory.datums)
@@ -2485,14 +2291,12 @@ trait WorldBehaviours
       for { data <- Gen.negNum[Int] } yield
         (data,
          (when: americium.Unbounded[Instant],
-          makeAChange: Boolean,
           implementingHistoryId: ImplementingHistory#Id) =>
-           eventConstructorReferringToOneItem[ImplementingHistory](makeAChange)(
-             when)
+           eventConstructorReferringToOneItem[ImplementingHistory](when)
              .apply(
                implementingHistoryId,
                (implementingHistory: ImplementingHistory) => {
-                 // Neither changes nor measurements are allowed to read from the items they work on, with the exception of the 'id' property.
+                 // Changes are not allowed to read from the items they work on, with the exception of the 'id' property.
                  assert(implementingHistoryId == implementingHistory.id)
                  assertThrows[UnsupportedOperationException](
                    implementingHistory.datums)
@@ -2521,15 +2325,13 @@ trait WorldBehaviours
         val testCaseGenerator = for {
           recordingsForAbstractedHistoriesGroupedById <- recordingsGroupedByIdGenerator_(
             abstractedDataSamplesForAnIdGenerator,
-            forbidAnnihilations = true,
-            forbidMeasurements = false)
+            forbidAnnihilations = true)
           idsForAbstractedHistories = recordingsForAbstractedHistoriesGroupedById
             .map(_.historyId)
             .toSet
           recordingsForImplementingHistoriesGroupedById <- recordingsGroupedByIdGenerator_(
             implementingDataSamplesForAnIdGenerator,
-            forbidAnnihilations = true,
-            forbidMeasurements = true)
+            forbidAnnihilations = true)
           idsForImplementingHistories = recordingsForImplementingHistoriesGroupedById
             .map(_.historyId)
             .toSet
@@ -2580,15 +2382,13 @@ trait WorldBehaviours
         val testCaseGenerator = for {
           recordingsForAbstractedHistoriesGroupedById <- recordingsGroupedByIdGenerator_(
             abstractedDataSamplesForAnIdGenerator,
-            forbidAnnihilations = true,
-            forbidMeasurements = true)
+            forbidAnnihilations = true)
           idsForAbstractedHistories = recordingsForAbstractedHistoriesGroupedById
             .map(_.historyId)
             .toSet
           recordingsForImplementingHistoriesGroupedById <- recordingsGroupedByIdGenerator_(
             implementingDataSamplesForAnIdGenerator,
-            forbidAnnihilations = true,
-            forbidMeasurements = false)
+            forbidAnnihilations = true)
           idsForImplementingHistories = recordingsForImplementingHistoriesGroupedById
             .map(_.historyId)
             .toSet
@@ -2648,8 +2448,7 @@ trait WorldBehaviours
       val testCaseGenerator = for {
         recordingsGroupedById <- recordingsGroupedByIdGenerator_(
           mixedAbstractedAndImplementingDataSamplesForAnIdGenerator,
-          forbidAnnihilations = true,
-          forbidMeasurements = false)
+          forbidAnnihilations = true)
         obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
         seed                          <- seedGenerator
         random = new Random(seed)
@@ -2731,8 +2530,7 @@ trait WorldBehaviours
         val testCaseGenerator = for {
           recordingsForAbstractedHistoriesGroupedById <- recordingsGroupedByIdGenerator_(
             abstractedDataSamplesForAnIdGenerator,
-            forbidAnnihilations = true,
-            forbidMeasurements = false)
+            forbidAnnihilations = true)
           obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
           seed                          <- seedGenerator
           random = new Random(seed)
@@ -2780,8 +2578,7 @@ trait WorldBehaviours
         val testCaseGenerator = for {
           recordingsGroupedById <- recordingsGroupedByIdGenerator_(
             mixedAbstractedAndImplementingDataSamplesForAnIdGenerator,
-            forbidAnnihilations = true,
-            forbidMeasurements = false)
+            forbidAnnihilations = true)
           obsoleteRecordingsGroupedById <- nonConflictingRecordingsGroupedByIdGenerator
           seed                          <- seedGenerator
           random = new Random(seed)
