@@ -1,7 +1,5 @@
 package com.sageserpent.plutonium
 
-import java.time.Instant
-
 import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.AllEvents.{ItemStateUpdatesDelta, noEvents}
 import com.sageserpent.plutonium.BlobStorage.SnapshotRetrievalApi
@@ -14,20 +12,18 @@ import com.sageserpent.plutonium.Timeline.{
 import de.ummels.prioritymap.PriorityMap
 import quiver._
 
+import java.time.Instant
 import scala.annotation.tailrec
-import scala.collection.immutable.Map
 
 object Timeline {
   type ItemStateUpdatesDag =
     Graph[ItemStateUpdateKey, ItemStateUpdate, Unit]
+  type BlobStorage =
+    com.sageserpent.plutonium.BlobStorage[ItemStateUpdateTime, SnapshotBlob]
+  val emptyTimeline: Timeline = Timeline()
 
   case class PriorityQueueKey(itemStateUpdateKey: ItemStateUpdateKey,
                               isAlreadyReferencedAsADependencyInTheDag: Boolean)
-
-  val emptyTimeline: Timeline = Timeline()
-
-  type BlobStorage =
-    com.sageserpent.plutonium.BlobStorage[ItemStateUpdateTime, SnapshotBlob]
 }
 
 case class Timeline(
@@ -149,15 +145,12 @@ case class Timeline(
 
                 val successorsTakenOverFromAnAncestorItemStateUpdate
                   : Set[ItemStateUpdateKey] =
-                  (ancestorItemStateUpdates
-                    .map(
-                      ancestorItemStateUpdateKey =>
-                        successorsOf(ancestorItemStateUpdateKey)
-                          .filter(
-                            successorOfAncestor =>
-                              Ordering[ItemStateUpdateKey].gt(
-                                successorOfAncestor,
-                                itemStateUpdateKey)))) flatten
+                  ancestorItemStateUpdates.flatMap(
+                    ancestorItemStateUpdateKey =>
+                      successorsOf(ancestorItemStateUpdateKey)
+                        .filter(successorOfAncestor =>
+                          Ordering[ItemStateUpdateKey].gt(successorOfAncestor,
+                                                          itemStateUpdateKey)))
 
                 val itemsNotStartingLifecyclesDueToThisPatch = mutatedItemSnapshots collect {
                   case (uniqueItemIdentifier, (_, Some(_))) =>
