@@ -72,90 +72,41 @@ class PatchRecorderSpec
             for {
               patches <- Gen.nonEmptyListOf(patchGenerator(id))
             } yield {
-              val randomBehaviour = new Random(seed)
-              val clumpsOfPatches =
-                randomBehaviour.splitIntoNonEmptyPieces(patches).force
+              val recordingActionFactories = patches map { patch =>
+                val eventId: plutonium.EventId = System.identityHashCode(patch)
 
-              val recordingActionFactories = clumpsOfPatches map { clumpOfPatches =>
-                val bestPatch = clumpOfPatches.last
-                  val eventIdsForPatches: Array[plutonium.EventId] =
-                    clumpOfPatches map (System.identityHashCode) toArray
-
-                  // HACK: this next variable and how it is used is truly horrible...
-                  var uglyWayOfCapturingStateAssociatedWithThePatchThatStandsInForTheBestPatch
-                    : Option[(Boolean, Int, Instant)] = None
-
-                  clumpOfPatches.zipWithIndex map {
-                    case (patch, patchIndex) =>
-                      def setupInteractionWithBestPatchApplication(
-                          patch: AbstractPatch,
-                          eventsHaveEffectNoLaterThan: Unbounded[Instant],
-                          when: Instant,
-                          masterSequenceIndex: Int,
-                          sequenceIndicesFromAppliedPatches: scala.collection.mutable.ListBuffer[
-                            Int]): Unit = {
-                        if (0 == patchIndex) {
-                          uglyWayOfCapturingStateAssociatedWithThePatchThatStandsInForTheBestPatch =
-                            Some((Finite(when) <= eventsHaveEffectNoLaterThan),
-                                 masterSequenceIndex,
-                                 when)
-                        }
-
-                        uglyWayOfCapturingStateAssociatedWithThePatchThatStandsInForTheBestPatch match {
-                          case Some(
-                              (patchStandInIsNotForbiddenByEventTimeCutoff,
-                               sequenceIndexOfPatchStandIn,
-                               whenForStandIn)) =>
-                            if (patchStandInIsNotForbiddenByEventTimeCutoff && bestPatch == patch) {
-                              (patch.rewriteItemClazzes _)
-                                .expects(*)
-                                .onCall { (_: UniqueItemSpecification => Class[
-                                  _]) =>
-                                  patch
-                                }
-                                .once
-                              (updateConsumer.capturePatch _)
-                                .expects(Finite(whenForStandIn),
-                                         eventIdsForPatches.head,
-                                         patch)
-                                .onCall {
-                                  (_: Unbounded[Instant],
-                                   _: plutonium.EventId,
-                                   _: AbstractPatch) =>
-                                    sequenceIndicesFromAppliedPatches += sequenceIndexOfPatchStandIn: Unit
-                                }
-                                .once
-                            } else {
-                              (patch.rewriteItemClazzes _).expects(*).never
-                              (updateConsumer.capturePatch _)
-                                .expects(*, *, patch)
-                                .never
-                            }
-                        }
+                def recordingChange(patch: AbstractPatch)(when: Instant)(
+                    patchRecorder: PatchRecorder,
+                    masterSequenceIndex: Int,
+                    sequenceIndicesFromAppliedPatches: scala.collection.mutable.ListBuffer[
+                      Int]): Unit = {
+                  if (Finite(when) <= eventsHaveEffectNoLaterThan) {
+                    (patch.rewriteItemClazzes _)
+                      .expects(*)
+                      .onCall { (_: UniqueItemSpecification => Class[_]) =>
+                        patch
                       }
-
-                      def recordingChange(patch: AbstractPatch)(when: Instant)(
-                          patchRecorder: PatchRecorder,
-                          masterSequenceIndex: Int,
-                          sequenceIndicesFromAppliedPatches: scala.collection.mutable.ListBuffer[
-                            Int]): Unit = {
-                        setupInteractionWithBestPatchApplication(
-                          patch,
-                          eventsHaveEffectNoLaterThan,
-                          when,
-                          masterSequenceIndex,
-                          sequenceIndicesFromAppliedPatches)
-                        patchRecorder.recordPatchFromChange(
-                          eventIdsForPatches(patchIndex),
-                          Finite(when),
-                          patch)
+                      .once
+                    (updateConsumer.capturePatch _)
+                      .expects(Finite(when), eventId, patch)
+                      .onCall {
+                        (_: Unbounded[Instant],
+                         _: plutonium.EventId,
+                         _: AbstractPatch) =>
+                          sequenceIndicesFromAppliedPatches += masterSequenceIndex: Unit
                       }
-
-                      recordingChange(patch) _
+                      .once
+                  } else {
+                    (patch.rewriteItemClazzes _).expects(*).never
+                    (updateConsumer.capturePatch _).expects(*, *, patch).never
                   }
+                  patchRecorder.recordPatchFromChange(eventId, Finite(when), patch)
+                }
+
+                recordingChange(patch) _
               }
 
-              recordingActionFactories.flatten
+              recordingActionFactories
             }
 
           for {
