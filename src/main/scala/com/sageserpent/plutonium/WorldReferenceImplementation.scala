@@ -1,9 +1,8 @@
 package com.sageserpent.plutonium
 
-import java.time.Instant
-
 import com.sageserpent.americium.{PositiveInfinity, Unbounded}
 
+import java.time.Instant
 import scala.Ordering.Implicits._
 import scala.collection.Searching._
 import scala.collection.generic.IsSeqLike
@@ -21,15 +20,17 @@ object MutableState {
 
   implicit val isSeqLike = new IsSeqLike[SeqView[Revision, Seq[_]]] {
     type A = Revision
-    override val conversion
-      : SeqView[Revision, Seq[_]] => SeqLike[this.A,
-                                             SeqView[Revision, Seq[_]]] =
+    override val conversion: SeqView[Revision, Seq[_]] => SeqLike[
+      this.A,
+      SeqView[Revision, Seq[_]]
+    ] =
       identity
   }
 
   def numberOfEventCorrectionsPriorToCutoff(
       eventCorrections: EventCorrections,
-      cutoffRevision: Revision): EventOrderingTiebreakerIndex = {
+      cutoffRevision: Revision
+  ): EventOrderingTiebreakerIndex = {
     val revisionsView: SeqView[Revision, Seq[_]] =
       eventCorrections.view.map(_.introducedInRevision)
 
@@ -46,67 +47,75 @@ class MutableState {
   import World._
   import WorldImplementationCodeFactoring._
 
+  type EventIdInclusion = EventId => Boolean
   val readerThreadsThatHaveNotBeenBouncedByARevision: mutable.Set[Long] =
     mutable.Set.empty
   val writerThreadsThatHaveNotBeenBouncedByARevision: mutable.Set[Long] =
     mutable.Set.empty
-
   val eventIdToEventCorrectionsMap: EventIdToEventCorrectionsMap[EventId] =
     mutable.Map.empty
   val _revisionAsOfs: MutableList[Instant] = MutableList.empty
 
-  def revisionAsOfs: Array[Instant] = _revisionAsOfs.toArray
-
   def nextRevision: Revision = _revisionAsOfs.size
 
-  type EventIdInclusion = EventId => Boolean
+  def pertinentEventDatums(
+      cutoffRevision: Revision,
+      eventIds: Iterable[EventId]
+  ): Seq[(EventId, AbstractEventData)] = {
+    val eventIdsToBeExcluded = eventIds.toSet
+    pertinentEventDatums(
+      cutoffRevision,
+      PositiveInfinity(),
+      eventId => !eventIdsToBeExcluded.contains(eventId)
+    )
+  }
 
   def pertinentEventDatums(
       cutoffRevision: Revision,
       cutoffWhen: Unbounded[Instant],
-      eventIdInclusion: EventIdInclusion): Seq[(EventId, AbstractEventData)] =
+      eventIdInclusion: EventIdInclusion
+  ): Seq[(EventId, AbstractEventData)] =
     eventIdsAndTheirDatums(cutoffRevision, cutoffWhen, eventIdInclusion)
-      .filterNot(PartialFunction.cond(_) {
-        case (_, eventData: EventData) =>
-          eventData.serializableEvent.when > cutoffWhen
+      .filterNot(PartialFunction.cond(_) { case (_, eventData: EventData) =>
+        eventData.serializableEvent.when > cutoffWhen
       })
       .toStream
 
-  def eventIdsAndTheirDatums(cutoffRevision: Revision,
-                             cutoffWhen: Unbounded[Instant],
-                             eventIdInclusion: EventIdInclusion) = {
+  def eventIdsAndTheirDatums(
+      cutoffRevision: Revision,
+      cutoffWhen: Unbounded[Instant],
+      eventIdInclusion: EventIdInclusion
+  ) = {
     eventIdToEventCorrectionsMap collect {
       case (eventId, eventCorrections) if eventIdInclusion(eventId) =>
         val onePastIndexOfRelevantEventCorrection =
-          numberOfEventCorrectionsPriorToCutoff(eventCorrections,
-                                                cutoffRevision)
+          numberOfEventCorrectionsPriorToCutoff(
+            eventCorrections,
+            cutoffRevision
+          )
         if (0 < onePastIndexOfRelevantEventCorrection)
           Some(
             eventId -> eventCorrections(
-              onePastIndexOfRelevantEventCorrection - 1))
+              onePastIndexOfRelevantEventCorrection - 1
+            )
+          )
         else
           None
     } collect { case Some(idAndDataPair) => idAndDataPair }
   }
 
   def pertinentEventDatums(
-      cutoffRevision: Revision,
-      eventIds: Iterable[EventId]): Seq[(EventId, AbstractEventData)] = {
-    val eventIdsToBeExcluded = eventIds.toSet
-    pertinentEventDatums(cutoffRevision,
-                         PositiveInfinity(),
-                         eventId => !eventIdsToBeExcluded.contains(eventId))
-  }
-
-  def pertinentEventDatums(
-      cutoffRevision: Revision): Seq[(EventId, AbstractEventData)] =
+      cutoffRevision: Revision
+  ): Seq[(EventId, AbstractEventData)] =
     pertinentEventDatums(cutoffRevision, PositiveInfinity(), _ => true)
 
   def checkInvariant() = {
-    assert(revisionAsOfs zip revisionAsOfs.tail forall {
-      case (first, second) => first <= second
+    assert(revisionAsOfs zip revisionAsOfs.tail forall { case (first, second) =>
+      first <= second
     })
   }
+
+  def revisionAsOfs: Array[Instant] = _revisionAsOfs.toArray
 }
 
 class WorldReferenceImplementation(mutableState: MutableState)
@@ -119,162 +128,96 @@ class WorldReferenceImplementation(mutableState: MutableState)
 
   override def close(): Unit = {}
 
-  trait SelfPopulatedScope
-      extends com.sageserpent.plutonium.Scope
-      with ItemCacheImplementation {
-    val identifiedItemsScope = new IdentifiedItemsScope
-
-    override def itemsFor[Item](
-        uniqueItemSpecification: UniqueItemSpecification): Stream[Item] =
-      identifiedItemsScope.itemsFor(uniqueItemSpecification)
-
-    override def allItems[Item](clazz: Class[Item]): Stream[Item] =
-      identifiedItemsScope.allItems(clazz)
-
-    identifiedItemsScope.populate(when, eventTimeline(nextRevision))
-  }
-
-  override def scopeFor(when: Unbounded[Instant],
-                        nextRevision: Revision): Scope =
+  override def scopeFor(
+      when: Unbounded[Instant],
+      nextRevision: Revision
+  ): Scope =
     new ScopeBasedOnNextRevision(when, nextRevision) with SelfPopulatedScope {}
 
   override def scopeFor(when: Unbounded[Instant], asOf: Instant): Scope =
     new ScopeBasedOnAsOf(when, asOf) with SelfPopulatedScope
 
-  protected def checkRevisionPrecondition(asOf: Instant,
-                                          revisionAsOfs: Seq[Instant]): Unit = {
-    if (revisionAsOfs.nonEmpty && revisionAsOfs.last.isAfter(asOf))
-      throw new IllegalArgumentException(
-        s"'asOf': ${asOf} should be no earlier than that of the last revision: ${revisionAsOfs.last}")
-  }
-
-  def revise(events: Map[_ <: EventId, Option[Event]],
-             asOf: Instant): Revision = {
-    def newEventDatumsFor(nextRevisionPriorToUpdate: Revision)
-      : Map[EventId, AbstractEventData] = {
-      events.zipWithIndex map {
-        case ((eventId, event), tiebreakerIndex) =>
-          eventId -> (event match {
-            case Some(event) =>
-              EventData(event, nextRevisionPriorToUpdate, tiebreakerIndex)
-            case None => AnnulledEventData(nextRevisionPriorToUpdate)
-          })
+  def revise_(
+      events: collection.Map[_ <: EventId, Option[Event]],
+      asOf: Instant
+  ): Revision = {
+    def newEventDatumsFor(
+        nextRevisionPriorToUpdate: Revision
+    ): collection.Map[EventId, AbstractEventData] = {
+      events.zipWithIndex map { case ((eventId, event), tiebreakerIndex) =>
+        eventId -> (event match {
+          case Some(event) =>
+            EventData(event, nextRevisionPriorToUpdate, tiebreakerIndex)
+          case None => AnnulledEventData(nextRevisionPriorToUpdate)
+        })
       }
     }
 
     def buildAndValidateEventTimelineForProposedNewRevision(
         newEventDatums: Seq[(EventId, AbstractEventData)],
         pertinentEventDatumsExcludingTheNewRevision: Seq[
-          (EventId, AbstractEventData)]): Unit = {
+          (EventId, AbstractEventData)
+        ]
+    ): Unit = {
       val eventTimelineIncludingNewRevision = eventTimelineFrom(
-        pertinentEventDatumsExcludingTheNewRevision union newEventDatums)
+        pertinentEventDatumsExcludingTheNewRevision union newEventDatums
+      )
 
       (new IdentifiedItemsScope)
         .populate(PositiveInfinity[Instant], eventTimelineIncludingNewRevision)
     }
 
-    transactNewRevision(asOf,
-                        newEventDatumsFor,
-                        buildAndValidateEventTimelineForProposedNewRevision)
-  }
-
-  override def nextRevision: Revision = mutableState.nextRevision
-
-  override def forkExperimentalWorld(scope: javaApi.Scope): World = {
-    val forkedMutableState = new MutableState {
-      val baseMutableState                     = mutableState
-      val numberOfRevisionsInCommon            = scope.nextRevision
-      val cutoffWhenAfterWhichHistoriesDiverge = scope.when
-
-      override def nextRevision: Revision =
-        numberOfRevisionsInCommon + super.nextRevision
-
-      override def revisionAsOfs: Array[Instant] =
-        (baseMutableState.revisionAsOfs take numberOfRevisionsInCommon) ++ super.revisionAsOfs
-
-      override def pertinentEventDatums(cutoffRevision: Revision,
-                                        cutoffWhen: Unbounded[Instant],
-                                        eventIdInclusion: EventIdInclusion)
-        : Seq[(EventId, AbstractEventData)] = {
-        val cutoffWhenForBaseWorld = cutoffWhen min cutoffWhenAfterWhichHistoriesDiverge
-        if (cutoffRevision > numberOfRevisionsInCommon) {
-          val foo =
-            eventIdsAndTheirDatums(cutoffRevision, cutoffWhen, eventIdInclusion)
-          val eventIdsToBeExcluded = foo.map(_._1).toSet
-          foo
-            .filterNot(PartialFunction.cond(_) {
-              case (_, eventData: EventData) =>
-                eventData.serializableEvent.when > cutoffWhen
-            })
-            .toStream ++ baseMutableState.pertinentEventDatums(
-            numberOfRevisionsInCommon,
-            cutoffWhenForBaseWorld,
-            eventId =>
-              !eventIdsToBeExcluded.contains(eventId) && eventIdInclusion(
-                eventId))
-        } else
-          baseMutableState.pertinentEventDatums(cutoffRevision,
-                                                cutoffWhenForBaseWorld,
-                                                eventIdInclusion)
-      }
-    }
-
-    new WorldReferenceImplementation(forkedMutableState)
-  }
-
-  override def revisionAsOfs: Array[Instant] = mutableState.revisionAsOfs
-
-  protected def eventTimeline(
-      cutoffRevision: Revision): Seq[(Event, EventId)] = {
-    val idOfThreadThatMostlyRecentlyStartedARevisionBeforehand =
-      mutableState.synchronized {
-        mutableState.readerThreadsThatHaveNotBeenBouncedByARevision += Thread.currentThread.getId
-      }
-    val result = eventTimelineFrom(
-      mutableState.pertinentEventDatums(cutoffRevision))
-    mutableState.synchronized {
-      if (!mutableState.readerThreadsThatHaveNotBeenBouncedByARevision
-            .contains(Thread.currentThread.getId)) {
-        throw new RuntimeException(
-          "Concurrent revision attempt detected in query.")
-      }
-    }
-    result
+    transactNewRevision(
+      asOf,
+      newEventDatumsFor,
+      buildAndValidateEventTimelineForProposedNewRevision
+    )
   }
 
   private def transactNewRevision(
       asOf: Instant,
-      newEventDatumsFor: Revision => Map[EventId, AbstractEventData],
+      newEventDatumsFor: Revision => collection.Map[EventId, AbstractEventData],
       buildAndValidateEventTimelineForProposedNewRevision: (
           Seq[(EventId, AbstractEventData)],
-          Seq[(EventId, AbstractEventData)]) => Unit): Revision = {
+          Seq[(EventId, AbstractEventData)]
+      ) => Unit
+  ): Revision = {
 
-    val (newEventDatums,
-         nextRevisionPriorToUpdate,
-         pertinentEventDatumsExcludingTheNewRevision) =
+    val (
+      newEventDatums,
+      nextRevisionPriorToUpdate,
+      pertinentEventDatumsExcludingTheNewRevision
+    ) =
       mutableState.synchronized {
         mutableState.writerThreadsThatHaveNotBeenBouncedByARevision += Thread.currentThread.getId
         checkRevisionPrecondition(asOf, revisionAsOfs)
         val nextRevisionPriorToUpdate = nextRevision
-        val newEventDatums: Map[EventId, AbstractEventData] =
-          newEventDatumsFor(nextRevisionPriorToUpdate)
+        val newEventDatums = newEventDatumsFor(nextRevisionPriorToUpdate)
         val pertinentEventDatumsExcludingTheNewRevision =
-          mutableState.pertinentEventDatums(nextRevisionPriorToUpdate,
-                                            newEventDatums.keys)
-        (newEventDatums,
-         nextRevisionPriorToUpdate,
-         pertinentEventDatumsExcludingTheNewRevision)
+          mutableState.pertinentEventDatums(
+            nextRevisionPriorToUpdate,
+            newEventDatums.keys
+          )
+        (
+          newEventDatums,
+          nextRevisionPriorToUpdate,
+          pertinentEventDatumsExcludingTheNewRevision
+        )
       }
 
     buildAndValidateEventTimelineForProposedNewRevision(
       newEventDatums.toSeq,
-      pertinentEventDatumsExcludingTheNewRevision)
+      pertinentEventDatumsExcludingTheNewRevision
+    )
 
     mutableState.synchronized {
-      if (!mutableState.writerThreadsThatHaveNotBeenBouncedByARevision
-            .contains(Thread.currentThread.getId)) {
+      if (
+        !mutableState.writerThreadsThatHaveNotBeenBouncedByARevision
+          .contains(Thread.currentThread.getId)
+      ) {
         throw new RuntimeException(
-          "Concurrent revision attempt detected in revision.")
+          "Concurrent revision attempt detected in revision."
+        )
       }
 
       mutableState.readerThreadsThatHaveNotBeenBouncedByARevision.clear()
@@ -289,5 +232,106 @@ class WorldReferenceImplementation(mutableState: MutableState)
     }
 
     nextRevisionPriorToUpdate
+  }
+
+  protected def checkRevisionPrecondition(
+      asOf: Instant,
+      revisionAsOfs: Seq[Instant]
+  ): Unit = {
+    if (revisionAsOfs.nonEmpty && revisionAsOfs.last.isAfter(asOf))
+      throw new IllegalArgumentException(
+        s"'asOf': ${asOf} should be no earlier than that of the last revision: ${revisionAsOfs.last}"
+      )
+  }
+
+  override def nextRevision: Revision = mutableState.nextRevision
+
+  override def revisionAsOfs: Array[Instant] = mutableState.revisionAsOfs
+
+  override def forkExperimentalWorld(scope: javaApi.Scope): World = {
+    val forkedMutableState = new MutableState {
+      val baseMutableState                     = mutableState
+      val numberOfRevisionsInCommon            = scope.nextRevision
+      val cutoffWhenAfterWhichHistoriesDiverge = scope.when
+
+      override def nextRevision: Revision =
+        numberOfRevisionsInCommon + super.nextRevision
+
+      override def revisionAsOfs: Array[Instant] =
+        (baseMutableState.revisionAsOfs take numberOfRevisionsInCommon) ++ super.revisionAsOfs
+
+      override def pertinentEventDatums(
+          cutoffRevision: Revision,
+          cutoffWhen: Unbounded[Instant],
+          eventIdInclusion: EventIdInclusion
+      ): Seq[(EventId, AbstractEventData)] = {
+        val cutoffWhenForBaseWorld =
+          cutoffWhen min cutoffWhenAfterWhichHistoriesDiverge
+        if (cutoffRevision > numberOfRevisionsInCommon) {
+          val foo =
+            eventIdsAndTheirDatums(cutoffRevision, cutoffWhen, eventIdInclusion)
+          val eventIdsToBeExcluded = foo.map(_._1).toSet
+          foo
+            .filterNot(PartialFunction.cond(_) {
+              case (_, eventData: EventData) =>
+                eventData.serializableEvent.when > cutoffWhen
+            })
+            .toStream ++ baseMutableState.pertinentEventDatums(
+            numberOfRevisionsInCommon,
+            cutoffWhenForBaseWorld,
+            eventId =>
+              !eventIdsToBeExcluded.contains(eventId) && eventIdInclusion(
+                eventId
+              )
+          )
+        } else
+          baseMutableState.pertinentEventDatums(
+            cutoffRevision,
+            cutoffWhenForBaseWorld,
+            eventIdInclusion
+          )
+      }
+    }
+
+    new WorldReferenceImplementation(forkedMutableState)
+  }
+
+  protected def eventTimeline(
+      cutoffRevision: Revision
+  ): Seq[(Event, EventId)] = {
+    val idOfThreadThatMostlyRecentlyStartedARevisionBeforehand =
+      mutableState.synchronized {
+        mutableState.readerThreadsThatHaveNotBeenBouncedByARevision += Thread.currentThread.getId
+      }
+    val result = eventTimelineFrom(
+      mutableState.pertinentEventDatums(cutoffRevision)
+    )
+    mutableState.synchronized {
+      if (
+        !mutableState.readerThreadsThatHaveNotBeenBouncedByARevision
+          .contains(Thread.currentThread.getId)
+      ) {
+        throw new RuntimeException(
+          "Concurrent revision attempt detected in query."
+        )
+      }
+    }
+    result
+  }
+
+  trait SelfPopulatedScope
+      extends com.sageserpent.plutonium.Scope
+      with ItemCacheImplementation {
+    val identifiedItemsScope = new IdentifiedItemsScope
+
+    override def itemsFor[Item](
+        uniqueItemSpecification: UniqueItemSpecification
+    ): Stream[Item] =
+      identifiedItemsScope.itemsFor(uniqueItemSpecification)
+
+    override def allItems[Item](clazz: Class[Item]): Stream[Item] =
+      identifiedItemsScope.allItems(clazz)
+
+    identifiedItemsScope.populate(when, eventTimeline(nextRevision))
   }
 }

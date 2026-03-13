@@ -1,39 +1,41 @@
 package com.sageserpent.plutonium
 
-import java.time.Instant
-import java.util.Optional
-
 import com.sageserpent.americium.{Finite, NegativeInfinity, Unbounded}
 import com.sageserpent.plutonium.World.Revision
 
-import scala.collection.JavaConversions._
+import java.time.Instant
+import java.util.Optional
+import scala.collection.JavaConverters._
+import scala.compat.java8.OptionConverters.RichOptionalGeneric
 
 object World {
   type Revision = Int
-  val initialRevision
-    : Revision = 0 // NOTE: this is the revision defined when the world is first revised.
+  val initialRevision: Revision =
+    0 // NOTE: this is the revision defined when the world is first revised.
 }
 
 trait World extends javaApi.World {
   def nextRevision
-    : Revision // NOTE: this is the number of *revisions* that have all been made via 'revise'.
+      : Revision // NOTE: this is the number of *revisions* that have all been made via 'revise'.
 
   def revisionAsOfs
-    : Array[Instant] // Adjacent duplicates are permitted - this is taken to mean that successive revisions were booked in faster than than the time resolution.
+      : Array[Instant] // Adjacent duplicates are permitted - this is taken to mean that successive revisions were booked in faster than than the time resolution.
 
-  def revise(events: Map[_ <: EventId, Option[Event]], asOf: Instant): Revision
-
-  def revise(events: java.util.Map[_ <: EventId, Optional[Event]],
-             asOf: Instant): Revision = {
-    val sam: java.util.function.Function[Event, Option[Event]] = event =>
-      Some(event): Option[Event]
-    val eventsAsScalaImmutableMap = Map(
-      events mapValues (_.map[Option[Event]](sam).orElse(None)) toSeq: _*)
-    revise(eventsAsScalaImmutableMap, asOf)
+  def revise(
+      events: java.util.Map[_ <: EventId, Optional[Event]],
+      asOf: Instant
+  ): Revision = {
+    revise_(events.asScala.mapValues(_.asScala), asOf)
   }
 
   def revise(eventId: EventId, event: Event, asOf: Instant): Revision =
     revise(Map(eventId -> Some(event)), asOf)
+
+  def revise(
+      events: Map[_ <: EventId, Option[Event]],
+      asOf: Instant
+  ): Revision =
+    revise_(events: collection.Map[_ <: EventId, Option[Event]], asOf)
 
   def annul(eventId: EventId, asOf: Instant): Revision =
     revise(Map(eventId -> None), asOf)
@@ -49,20 +51,20 @@ trait World extends javaApi.World {
     scopeFor(Finite(when), asOf)
 
   def forkExperimentalWorld(scope: javaApi.Scope): World
+
+  protected[plutonium] def revise_(
+      events: collection.Map[_ <: EventId, Option[Event]],
+      asOf: Instant
+  ): Revision
 }
 
 trait WorldContracts extends World {
-  def checkInvariant: Unit = {
-    assert(revisionAsOfs.size == nextRevision)
-    assert(
-      revisionAsOfs.isEmpty || (revisionAsOfs zip revisionAsOfs.tail forall {
-        case (first, second) => !second.isBefore(first)
-      }))
-  }
-
-  // NOTE: this increments 'nextRevision' if it succeeds, associating the new revision with 'asOf'.
-  abstract override def revise(events: Map[_ <: EventId, Option[Event]],
-                               asOf: Instant): Revision = {
+  // NOTE: this increments 'nextRevision' if it succeeds, associating the new
+  // revision with 'asOf'.
+  abstract override def revise(
+      events: Map[_ <: EventId, Option[Event]],
+      asOf: Instant
+  ): Revision = {
     require(revisionAsOfs.isEmpty || !asOf.isBefore(revisionAsOfs.last))
     val revisionAsOfsBeforehand = revisionAsOfs
     val nextRevisionBeforehand  = nextRevision
@@ -75,22 +77,43 @@ trait WorldContracts extends World {
     } finally checkInvariant
   }
 
-  // This produces a 'read-only' scope - objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
-  abstract override def scopeFor(when: Unbounded[Instant],
-                                 nextRevision: Revision): Scope = {
+  def checkInvariant: Unit = {
+    assert(revisionAsOfs.size == nextRevision)
+    assert(
+      revisionAsOfs.isEmpty || (revisionAsOfs zip revisionAsOfs.tail forall {
+        case (first, second) => !second.isBefore(first)
+      })
+    )
+  }
+
+  // This produces a 'read-only' scope - objects that it renders from
+  // bitemporals will fail at runtime if an attempt is made to mutate them,
+  // subject to what the proxies can enforce.
+  abstract override def scopeFor(
+      when: Unbounded[Instant],
+      nextRevision: Revision
+  ): Scope = {
     require(nextRevision <= this.nextRevision)
     val result = super.scopeFor(when, nextRevision)
     assert(result.nextRevision == nextRevision)
-    assert(result.nextRevision == 0 && result.asOf == NegativeInfinity() ||
-      result.nextRevision > revisionAsOfs
-        .count(Finite(_) < result.asOf) && result.nextRevision <= revisionAsOfs
-        .count(Finite(_) <= result.asOf))
+    assert(
+      result.nextRevision == 0 && result.asOf == NegativeInfinity() ||
+        result.nextRevision > revisionAsOfs
+          .count(
+            Finite(_) < result.asOf
+          ) && result.nextRevision <= revisionAsOfs
+          .count(Finite(_) <= result.asOf)
+    )
     result
   }
 
-  // This produces a 'read-only' scope - objects that it renders from bitemporals will fail at runtime if an attempt is made to mutate them, subject to what the proxies can enforce.
-  abstract override def scopeFor(when: Unbounded[Instant],
-                                 asOf: Instant): Scope = {
+  // This produces a 'read-only' scope - objects that it renders from
+  // bitemporals will fail at runtime if an attempt is made to mutate them,
+  // subject to what the proxies can enforce.
+  abstract override def scopeFor(
+      when: Unbounded[Instant],
+      asOf: Instant
+  ): Scope = {
     val result = super.scopeFor(when, asOf)
     assert(result.asOf == Finite(asOf))
     assert(result.nextRevision == revisionAsOfs.count(Finite(_) <= result.asOf))

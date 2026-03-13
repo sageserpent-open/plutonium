@@ -22,46 +22,59 @@ object Timeline {
     com.sageserpent.plutonium.BlobStorage[ItemStateUpdateTime, SnapshotBlob]
   val emptyTimeline: Timeline = Timeline()
 
-  case class PriorityQueueKey(itemStateUpdateKey: ItemStateUpdateKey,
-                              isAlreadyReferencedAsADependencyInTheDag: Boolean)
+  case class PriorityQueueKey(
+      itemStateUpdateKey: ItemStateUpdateKey,
+      isAlreadyReferencedAsADependencyInTheDag: Boolean
+  )
 }
 
 case class Timeline(
     allEvents: AllEvents = noEvents,
     itemStateUpdatesDag: ItemStateUpdatesDag = empty,
     blobStorage: Timeline.BlobStorage =
-      BlobStorageInMemory.empty[ItemStateUpdateTime, SnapshotBlob]) {
-  def revise(events: Map[_ <: EventId, Option[Event]]): Timeline = {
-    val ItemStateUpdatesDelta(allEventsForNewTimeline,
-                              itemStateUpdateKeysThatNeedToBeRevoked,
-                              newAndModifiedItemStateUpdates) =
-      allEvents
-        .revise(events)
+      BlobStorageInMemory.empty[ItemStateUpdateTime, SnapshotBlob]
+) {
+  def revise(events: collection.Map[_ <: EventId, Option[Event]]): Timeline = {
+    val ItemStateUpdatesDelta(
+      allEventsForNewTimeline,
+      itemStateUpdateKeysThatNeedToBeRevoked,
+      newAndModifiedItemStateUpdates
+    ) =
+      allEvents.revise(events)
 
     case class RecalculationStep(
-        itemStateUpdatesToApply: PriorityMap[PriorityQueueKey,
-                                             ItemStateUpdateKey],
+        itemStateUpdatesToApply: PriorityMap[
+          PriorityQueueKey,
+          ItemStateUpdateKey
+        ],
         itemStateUpdatesDag: ItemStateUpdatesDag,
-        blobStorage: Timeline.BlobStorage) {
+        blobStorage: Timeline.BlobStorage
+    ) {
       @tailrec
       final def afterRecalculations: RecalculationStep = {
         itemStateUpdatesToApply.headOption match {
           case Some(
-              (PriorityQueueKey(itemStateUpdateKey,
-                                isAlreadyReferencedAsADependencyInTheDag),
-               _)) =>
+                (
+                  PriorityQueueKey(
+                    itemStateUpdateKey,
+                    isAlreadyReferencedAsADependencyInTheDag
+                  ),
+                  _
+                )
+              ) =>
             val itemStateUpdate =
               itemStateUpdatesDag.label(itemStateUpdateKey).get
 
             val identifiedItemAccess =
               new IdentifiedItemAccessUsingBlobStorage {
                 override protected val blobStorageTimeSlice
-                  : SnapshotRetrievalApi[SnapshotBlob] =
+                    : SnapshotRetrievalApi[SnapshotBlob] =
                   blobStorage.timeSlice(itemStateUpdateKey, inclusive = false)
               }
 
-            def successorsOf(itemStateUpdateKey: ItemStateUpdateKey)
-              : Set[ItemStateUpdateKey] =
+            def successorsOf(
+                itemStateUpdateKey: ItemStateUpdateKey
+            ): Set[ItemStateUpdateKey] =
               Set(itemStateUpdatesDag.successors(itemStateUpdateKey): _*)
 
             itemStateUpdate match {
@@ -73,7 +86,8 @@ case class Timeline(
 
                 revisionBuilder.record(
                   itemStateUpdateKey,
-                  Map(annihilation.uniqueItemSpecification -> None))
+                  Map(annihilation.uniqueItemSpecification -> None)
+                )
 
                 val itemStateUpdatesDagWithUpdatedDependency =
                   itemStateUpdatesDag
@@ -84,7 +98,7 @@ case class Timeline(
                   }
 
                 val keyStartingNewLifecycleIfThisAnnihilationIsNotAlreadyADependencyInTheDag
-                  : Set[ItemStateUpdateKey] =
+                    : Set[ItemStateUpdateKey] =
                   if (isAlreadyReferencedAsADependencyInTheDag)
                     Set.empty[ItemStateUpdateKey]
                   else
@@ -93,25 +107,29 @@ case class Timeline(
                         case Some(ItemStatePatch(patch)) =>
                           patch.targetItemSpecification == annihilation.uniqueItemSpecification
                         case _ => false
-                    })
+                      }
+                    )
 
                 keyStartingNewLifecycleIfThisAnnihilationIsNotAlreadyADependencyInTheDag
-                  .foreach(
-                    key =>
-                      assert(
-                        Ordering[ItemStateUpdateKey].lt(itemStateUpdateKey,
-                                                        key),
-                        s"Comparison between item state update key being recalculated and the one being scheduled: ${Ordering[ItemStateUpdateKey]
+                  .foreach(key =>
+                    assert(
+                      Ordering[ItemStateUpdateKey].lt(itemStateUpdateKey, key),
+                      s"Comparison between item state update key being recalculated and the one being scheduled: ${Ordering[ItemStateUpdateKey]
                           .compare(itemStateUpdateKey, key)}, recalculated: $itemStateUpdateKey, scheduled: $key"
-                    ))
+                    )
+                  )
 
                 RecalculationStep(
                   itemStateUpdatesToApply
-                    .drop(1) ++ keyStartingNewLifecycleIfThisAnnihilationIsNotAlreadyADependencyInTheDag
+                    .drop(
+                      1
+                    ) ++ keyStartingNewLifecycleIfThisAnnihilationIsNotAlreadyADependencyInTheDag
                     .map(key =>
-                      PriorityQueueKey(itemStateUpdateKey = key,
-                                       isAlreadyReferencedAsADependencyInTheDag =
-                                         true) -> key),
+                      PriorityQueueKey(
+                        itemStateUpdateKey = key,
+                        isAlreadyReferencedAsADependencyInTheDag = true
+                      ) -> key
+                    ),
                   itemStateUpdatesDagWithUpdatedDependency,
                   revisionBuilder.build()
                 ).afterRecalculations
@@ -122,10 +140,12 @@ case class Timeline(
 
                 val revisionBuilder = blobStorage.openRevision()
 
-                revisionBuilder.record(itemStateUpdateKey,
-                                       mutatedItemSnapshots.mapValues {
-                                         case (snapshot, _) => Some(snapshot)
-                                       })
+                revisionBuilder.record(
+                  itemStateUpdateKey,
+                  mutatedItemSnapshots.mapValues { case (snapshot, _) =>
+                    Some(snapshot)
+                  }
+                )
 
                 val ancestorItemStateUpdates = mutatedItemSnapshots.collect {
                   case (_, (_, Some(ancestorItemStateUpdateKey))) =>
@@ -136,60 +156,70 @@ case class Timeline(
                   itemStateUpdatesDag.decomp(itemStateUpdateKey) match {
                     case Decomp(Some(context), remainder) =>
                       context.copy(inAdj =
-                        (ancestorItemStateUpdates union discoveredReadDependencies) map (() -> _) toVector) & remainder
+                        (ancestorItemStateUpdates union discoveredReadDependencies) map (() -> _) toVector
+                      ) & remainder
                   }
 
                 val successorsAccordingToPreviousRevision
-                  : Set[ItemStateUpdateKey] =
+                    : Set[ItemStateUpdateKey] =
                   successorsOf(itemStateUpdateKey)
 
                 val successorsTakenOverFromAnAncestorItemStateUpdate
-                  : Set[ItemStateUpdateKey] =
-                  ancestorItemStateUpdates.flatMap(
-                    ancestorItemStateUpdateKey =>
-                      successorsOf(ancestorItemStateUpdateKey)
-                        .filter(successorOfAncestor =>
-                          Ordering[ItemStateUpdateKey].gt(successorOfAncestor,
-                                                          itemStateUpdateKey)))
+                    : Set[ItemStateUpdateKey] =
+                  ancestorItemStateUpdates.flatMap(ancestorItemStateUpdateKey =>
+                    successorsOf(ancestorItemStateUpdateKey)
+                      .filter(successorOfAncestor =>
+                        Ordering[ItemStateUpdateKey]
+                          .gt(successorOfAncestor, itemStateUpdateKey)
+                      )
+                  )
 
-                val itemsNotStartingLifecyclesDueToThisPatch = mutatedItemSnapshots collect {
-                  case (uniqueItemIdentifier, (_, Some(_))) =>
-                    uniqueItemIdentifier
-                }
+                val itemsNotStartingLifecyclesDueToThisPatch =
+                  mutatedItemSnapshots collect {
+                    case (uniqueItemIdentifier, (_, Some(_))) =>
+                      uniqueItemIdentifier
+                  }
 
-                val itemsStartingLifecyclesDueToThisPatch = mutatedItemSnapshots.keys.toSet -- itemsNotStartingLifecyclesDueToThisPatch
+                val itemsStartingLifecyclesDueToThisPatch =
+                  mutatedItemSnapshots.keys.toSet -- itemsNotStartingLifecyclesDueToThisPatch
 
                 val keysStartingLifecyclesAccordingToPreviousRevisionIfThisPatchIsNotAlreadyADependencyInTheDag
-                  : Set[ItemStateUpdateKey] =
+                    : Set[ItemStateUpdateKey] =
                   if (isAlreadyReferencedAsADependencyInTheDag)
                     Set.empty[ItemStateUpdateKey]
                   else
                     itemsStartingLifecyclesDueToThisPatch flatMap (
-                        uniqueItemSpecification =>
-                          allEvents.startOfFollowingLifecycleFor(
-                            uniqueItemSpecification,
-                            itemStateUpdateKey)) diff itemStateUpdateKeysThatNeedToBeRevoked
+                      uniqueItemSpecification =>
+                        allEvents.startOfFollowingLifecycleFor(
+                          uniqueItemSpecification,
+                          itemStateUpdateKey
+                        )
+                    ) diff itemStateUpdateKeysThatNeedToBeRevoked
 
                 val itemStateUpdateKeysToScheduleForRecalculation =
                   successorsAccordingToPreviousRevision ++
                     successorsTakenOverFromAnAncestorItemStateUpdate ++
                     keysStartingLifecyclesAccordingToPreviousRevisionIfThisPatchIsNotAlreadyADependencyInTheDag
 
-                itemStateUpdateKeysToScheduleForRecalculation.foreach(
-                  key =>
-                    assert(
-                      Ordering[ItemStateUpdateKey].lt(itemStateUpdateKey, key),
-                      s"Comparison between item state update key being recalculated and the one being scheduled: ${Ordering[ItemStateUpdateKey]
+                itemStateUpdateKeysToScheduleForRecalculation.foreach(key =>
+                  assert(
+                    Ordering[ItemStateUpdateKey].lt(itemStateUpdateKey, key),
+                    s"Comparison between item state update key being recalculated and the one being scheduled: ${Ordering[ItemStateUpdateKey]
                         .compare(itemStateUpdateKey, key)}, recalculated: $itemStateUpdateKey, scheduled: $key"
-                  ))
+                  )
+                )
 
                 RecalculationStep(
                   itemStateUpdatesToApply
-                    .drop(1) ++ (itemStateUpdateKeysToScheduleForRecalculation map (
-                      key =>
-                        PriorityQueueKey(itemStateUpdateKey = key,
-                                         isAlreadyReferencedAsADependencyInTheDag =
-                                           true) -> key)),
+                    .drop(
+                      1
+                    ) ++ (itemStateUpdateKeysToScheduleForRecalculation map (
+                    key =>
+                      PriorityQueueKey(
+                        itemStateUpdateKey = key,
+                        isAlreadyReferencedAsADependencyInTheDag = true
+                      ) -> key
+                  )),
                   itemStateUpdatesDagWithUpdatedDependencies,
                   revisionBuilder.build()
                 ).afterRecalculations
@@ -212,16 +242,18 @@ case class Timeline(
 
     val baseItemStateUpdatesDagToApplyChangesTo: ItemStateUpdatesDag =
       itemStateUpdatesDag.removeNodes(
-        itemStateUpdateKeysThatNeedToBeRevoked.toSeq)
+        itemStateUpdateKeysThatNeedToBeRevoked.toSeq
+      )
 
     val itemStateUpdatesDagWithNewNodesAddedIn =
       baseItemStateUpdatesDagToApplyChangesTo.addNodes(
-        newAndModifiedItemStateUpdates.toSeq map {
-          case (key, value) => LNode(key, value)
-        })
+        newAndModifiedItemStateUpdates.toSeq map { case (key, value) =>
+          LNode(key, value)
+        }
+      )
 
-    val descendantsOfRevokedItemStateUpdates
-      : Seq[ItemStateUpdateKey] = itemStateUpdateKeysThatNeedToBeRevoked.toSeq flatMap (
+    val descendantsOfRevokedItemStateUpdates: Seq[ItemStateUpdateKey] =
+      itemStateUpdateKeysThatNeedToBeRevoked.toSeq flatMap (
         itemStateUpdateKey =>
           itemStateUpdatesDag.label(itemStateUpdateKey).get match {
             case ItemStatePatch(_) =>
@@ -230,23 +262,28 @@ case class Timeline(
               allEvents
                 .startOfFollowingLifecycleFor(
                   annihilation.uniqueItemSpecification,
-                  itemStateUpdateKey)
+                  itemStateUpdateKey
+                )
                 .toSeq
           }
-    ) filterNot itemStateUpdateKeysThatNeedToBeRevoked.contains
+      ) filterNot itemStateUpdateKeysThatNeedToBeRevoked.contains
 
     val itemStateUpdatesToApply
-      : PriorityMap[PriorityQueueKey, ItemStateUpdateKey] =
+        : PriorityMap[PriorityQueueKey, ItemStateUpdateKey] =
       PriorityMap(
         descendantsOfRevokedItemStateUpdates.map(key =>
           PriorityQueueKey(
             itemStateUpdateKey = key,
-            isAlreadyReferencedAsADependencyInTheDag = true) -> key) ++ newAndModifiedItemStateUpdates.keys
-          .map(
-            key =>
-              PriorityQueueKey(
-                itemStateUpdateKey = key,
-                isAlreadyReferencedAsADependencyInTheDag = false) -> key): _*)
+            isAlreadyReferencedAsADependencyInTheDag = true
+          ) -> key
+        ) ++ newAndModifiedItemStateUpdates.keys
+          .map(key =>
+            PriorityQueueKey(
+              itemStateUpdateKey = key,
+              isAlreadyReferencedAsADependencyInTheDag = false
+            ) -> key
+          ): _*
+      )
 
     if (itemStateUpdatesToApply.nonEmpty) {
       val initialState = RecalculationStep(
@@ -255,9 +292,11 @@ case class Timeline(
         blobStorageWithRevocations
       )
 
-      val RecalculationStep(_,
-                            itemStateUpdatesDagForNewTimeline,
-                            blobStorageForNewTimeline) =
+      val RecalculationStep(
+        _,
+        itemStateUpdatesDagForNewTimeline,
+        blobStorageForNewTimeline
+      ) =
         initialState.afterRecalculations
 
       Timeline(
@@ -276,8 +315,8 @@ case class Timeline(
   def retainUpTo(when: Unbounded[Instant]): Timeline =
     Timeline(
       allEvents = this.allEvents.retainUpTo(when),
-      itemStateUpdatesDag = this.itemStateUpdatesDag nfilter (key =>
-        when >= key.when),
+      itemStateUpdatesDag =
+        this.itemStateUpdatesDag nfilter (key => when >= key.when),
       blobStorage = this.blobStorage.retainUpTo(UpperBoundOfTimeslice(when))
     )
 }
