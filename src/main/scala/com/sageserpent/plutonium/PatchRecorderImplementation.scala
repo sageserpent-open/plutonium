@@ -17,7 +17,6 @@ abstract class PatchRecorderImplementation(
     extends PatchRecorder {
   // This class makes no pretence at exception safety - it doesn't need to in the context
   // of the client 'WorldReferenceImplementation', which provides exception safety at a higher level.
-  self: BestPatchSelection =>
   import PatchRecorderImplementation._
 
   private var _whenEventPertainedToByLastRecordingTookPlace
@@ -45,7 +44,7 @@ abstract class PatchRecorderImplementation(
     itemState.addPatch(when, patch, eventId, sequenceIndex)
   }
 
-  def annihilateItemFor_[SubclassOfItem <: Item, Item](
+  private def annihilateItemFor_[SubclassOfItem <: Item, Item](
       when: Unbounded[Instant],
       annihilation: Annihilation,
       eventId: EventId): Unit = {
@@ -215,7 +214,7 @@ abstract class PatchRecorderImplementation(
 
     def submitCandidatePatches(): Unit = {
       for ((exemplarMethod, candidatePatchTuples) <- exemplarMethodToCandidatePatchesMap) {
-        enqueueBestCandidatePatchFrom(candidatePatchTuples)
+        enqueuePatchFrom(candidatePatchTuples)
       }
       exemplarMethodToCandidatePatchesMap.clear()
     }
@@ -223,7 +222,7 @@ abstract class PatchRecorderImplementation(
     def submitCandidatePatches(method: Method): Unit =
       methodAndItsCandidatePatchTuplesFor(method) match {
         case Some((exemplarMethod, candidatePatchTuples)) =>
-          enqueueBestCandidatePatchFrom(candidatePatchTuples)
+          enqueuePatchFrom(candidatePatchTuples)
           exemplarMethodToCandidatePatchesMap -= exemplarMethod
         case None =>
       }
@@ -264,11 +263,11 @@ abstract class PatchRecorderImplementation(
   private val outstandingSequenceIndices =
     mutable.SortedSet.empty[SequenceIndex]
 
-  private def enqueueBestCandidatePatchFrom(
+  private def enqueuePatchFrom(
       candidatePatchTuples: CandidatePatches): Unit = {
-    val (bestPatch, sequenceIndexForBestPatch) = self(candidatePatchTuples.map {
+    val (bestPatch, sequenceIndexForBestPatch) = candidatePatchTuples.map {
       case (sequenceIndex, patch, _, _) => patch -> sequenceIndex
-    })
+    }.last
 
     val anchorPatchRepresentingTheEvent = candidatePatchTuples.head
 

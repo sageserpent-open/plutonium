@@ -4,28 +4,6 @@ import java.time.Instant
 
 import com.sageserpent.americium.Unbounded
 
-trait BestPatchSelection {
-  def apply[AssociatedData](
-      relatedPatches: Seq[(AbstractPatch, AssociatedData)])
-    : (AbstractPatch, AssociatedData)
-}
-
-trait BestPatchSelectionContracts extends BestPatchSelection {
-  abstract override def apply[AssociatedData](
-      relatedPatches: Seq[(AbstractPatch, AssociatedData)])
-    : (AbstractPatch, AssociatedData) = {
-    require(relatedPatches.nonEmpty)
-    require(1 == (relatedPatches map {
-      case (patch, _) => patch.targetItemSpecification.id
-    } distinct).size)
-    require((for {
-      lhs <- relatedPatches
-      rhs <- relatedPatches if lhs != rhs
-    } yield AbstractPatch.patchesAreRelated(lhs._1, rhs._1)).forall(identity))
-    super.apply(relatedPatches)
-  }
-}
-
 object PatchRecorder {
   trait UpdateConsumer {
     def captureAnnihilation(eventId: EventId, annihilation: Annihilation): Unit

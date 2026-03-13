@@ -58,8 +58,7 @@ class IdentifiedItemsScope extends IdentifiedItemAccess {
       .use(_ =>
         IO {
           val patchRecorder = new PatchRecorderImplementation(_when)
-          with PatchRecorderContracts with BestPatchSelectionImplementation
-          with BestPatchSelectionContracts {
+          with PatchRecorderContracts {
             val itemsAreLockedResource =
               Resource.make(IO {
                 allItemsAreLocked = true

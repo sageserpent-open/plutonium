@@ -35,7 +35,6 @@ class PatchRecorderSpec
 
   case class TestCase(recordingActions: Seq[RecordingAction],
                       updateConsumer: UpdateConsumer,
-                      bestPatchSelection: BestPatchSelection,
                       eventsHaveEffectNoLaterThan: Unbounded[Instant])
 
   val fooClazz = classOf[FooHistory]
@@ -61,7 +60,6 @@ class PatchRecorderSpec
   def recordingActionFactoriesGenerator(
       seed: Long,
       updateConsumer: UpdateConsumer,
-      bestPatchSelection: BestPatchSelection,
       eventsHaveEffectNoLaterThan: Unbounded[Instant])
     : Gen[Seq[RecordingActionFactory]] = inAnyOrder {
     def lifecyclesForAnIdGenerator(id: FooHistory#Id): Gen[LifecyclesForAnId] =
@@ -78,32 +76,8 @@ class PatchRecorderSpec
               val clumpsOfPatches =
                 randomBehaviour.splitIntoNonEmptyPieces(patches).force
 
-              val (setupInteractionsWithBestPatchSelection, bestPatches) =
-                (for (clumpOfPatches <- clumpsOfPatches) yield {
-                  val (bestPatch, bestPatchIndex) =
-                    randomBehaviour.chooseOneOf(clumpOfPatches.zipWithIndex)
-
-                  def setupInteractionWithBestPatchSelection() {
-                    (bestPatchSelection.apply[Long] _)
-                      .expects(
-                        where((candidatePatches: Seq[(AbstractPatch, Long)]) =>
-                          candidatePatches.map(_._1) == clumpOfPatches))
-                      .onCall((candidatePatches: Seq[(AbstractPatch, Long)]) =>
-                        candidatePatches(bestPatchIndex))
-                      .once
-                  }
-
-                  setupInteractionWithBestPatchSelection _ -> bestPatch
-                }) unzip
-
-              inSequence {
-                for (setupInteraction <- setupInteractionsWithBestPatchSelection) {
-                  setupInteraction()
-                }
-              }
-
-              val recordingActionFactories = clumpsOfPatches zip bestPatches map {
-                case (clumpOfPatches, bestPatch) =>
+              val recordingActionFactories = clumpsOfPatches map { clumpOfPatches =>
+                val bestPatch = clumpOfPatches.last
                   val eventIdsForPatches: Array[plutonium.EventId] =
                     clumpOfPatches map (System.identityHashCode) toArray
 
@@ -266,12 +240,10 @@ class PatchRecorderSpec
     for {
       seed <- seedGenerator
       updateConsumer     = mock[UpdateConsumer]
-      bestPatchSelection = mock[BestPatchSelection]
       eventsHaveEffectNoLaterThan <- unboundedInstantGenerator
       recordingActionFactories <- recordingActionFactoriesGenerator(
         seed,
         updateConsumer,
-        bestPatchSelection,
         eventsHaveEffectNoLaterThan)
       recordingTimes <- Gen.listOfN(recordingActionFactories.size,
                                     instantGenerator) map (_.sorted)
@@ -283,7 +255,6 @@ class PatchRecorderSpec
       TestCase(
         recordingActions = recordingActions,
         updateConsumer = updateConsumer,
-        bestPatchSelection = bestPatchSelection,
         eventsHaveEffectNoLaterThan = eventsHaveEffectNoLaterThan
       )
     }
@@ -294,23 +265,10 @@ class PatchRecorderSpec
       Prop.forAllNoShrink(testCaseGenerator) {
         case TestCase(recordingActions,
                       updateConsumerFromTestCase,
-                      bestPatchSelection,
                       eventsHaveEffectNoLaterThan) =>
-          // NOTE: the reason for this local trait is to allow mocking / stubbing of best patch selection, while keeping the contracts on the API.
-          // Otherwise if the patch recorder's implementation of 'BestPatchSelection' were to be mocked, there would be no contracts on it.
-          trait DelegatingBestPatchSelectionImplementation
-              extends BestPatchSelection {
-            def apply[AssociatedData](
-                relatedPatches: Seq[(AbstractPatch, AssociatedData)])
-              : (AbstractPatch, AssociatedData) =
-              bestPatchSelection(relatedPatches)
-          }
-
           val patchRecorder =
             new PatchRecorderImplementation(eventsHaveEffectNoLaterThan)
-            with PatchRecorderContracts
-            with DelegatingBestPatchSelectionImplementation
-            with BestPatchSelectionContracts {
+            with PatchRecorderContracts {
               override val updateConsumer: UpdateConsumer =
                 updateConsumerFromTestCase
             }

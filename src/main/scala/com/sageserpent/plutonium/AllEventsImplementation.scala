@@ -207,8 +207,7 @@ object AllEventsImplementation {
 
     def typeBoundsAreInconsistentWith(another: Lifecycle): Boolean
 
-    def itemStateUpdates(lifecyclesById: LifecyclesById,
-                         bestPatchSelection: BestPatchSelection)
+    def itemStateUpdates(lifecyclesById: LifecyclesById)
       : Set[(ItemStateUpdateKey, ItemStateUpdate)]
 
     def referencingLifecycles(lifecyclesById: LifecyclesById): Set[Lifecycle]
@@ -373,8 +372,7 @@ object AllEventsImplementation {
       this.upperClazzIsConsistentWith(another) ^ this
         .lowerClazzIsConsistentWith(another)
 
-    def itemStateUpdates(lifecyclesById: LifecyclesById,
-                         bestPatchSelection: BestPatchSelection)
+    def itemStateUpdates(lifecyclesById: LifecyclesById)
       : Set[(ItemStateUpdateKey, ItemStateUpdate)] = {
       type ResultsWriter[X] =
         Writer[Set[(ItemStateUpdateKey, ItemStateUpdate)], X]
@@ -425,8 +423,7 @@ object AllEventsImplementation {
           val Some((exemplarMethod, candidatePatches)) =
             exemplarMethodAndPatchesFor(method)
 
-          val (bestPatch, itemStateUpdateKeyForBestPatch) = bestPatchSelection(
-            candidatePatches)
+          val (bestPatch, itemStateUpdateKeyForBestPatch) = candidatePatches.head
 
           val (_, itemStateUpdateKeyForAnchorPatchRepresentingTheEvent) =
             candidatePatches.head
@@ -584,8 +581,7 @@ object AllEventsImplementation {
     }
 
     abstract override def itemStateUpdates(
-        lifecyclesById: LifecyclesById,
-        bestPatchSelection: BestPatchSelection)
+        lifecyclesById: LifecyclesById)
       : Set[(ItemStateUpdateKey, ItemStateUpdate)] = {
       val id = uniqueItemSpecification.id
       require(lifecyclesById.contains(id))
@@ -593,7 +589,7 @@ object AllEventsImplementation {
         lifecyclesById(id)
           .filterOverlaps(this)
           .contains(this))
-      super.itemStateUpdates(lifecyclesById, bestPatchSelection)
+      super.itemStateUpdates(lifecyclesById)
     }
   }
 
@@ -605,8 +601,6 @@ object AllEventsImplementation {
 
   // NOTE: an event footprint an cover several item state updates, each of which in turn can affect several items.
   case class EventFootprint(when: Unbounded[Instant], itemIds: Set[Any])
-
-  object bestPatchSelection extends BestPatchSelectionImplementation
 
   case class CalculationState(defunctLifecycles: Set[Lifecycle],
                               newLifecycles: Set[Lifecycle],
@@ -772,8 +766,7 @@ class AllEventsImplementation(
     lifecycleFootprintPerEvent: Map[EventId,
                                     AllEventsImplementation.EventFootprint] =
       Map.empty,
-    lifecyclesById: LifecyclesById = Map.empty,
-    bestPatchSelection: BestPatchSelection = bestPatchSelection)
+    lifecyclesById: LifecyclesById = Map.empty)
     extends AllEvents {
   val sampleLifecyclesById = lifecyclesById.take(maxNumberOfIdsToSample)
 
@@ -846,13 +839,13 @@ class AllEventsImplementation(
       : Set[(ItemStateUpdateKey, ItemStateUpdate)] =
       (finalDefunctLifecycles ++ finalDefunctLifecycles.flatMap(
         _.referencingLifecycles(lifecyclesById)))
-        .flatMap(_.itemStateUpdates(lifecyclesById, bestPatchSelection))
+        .flatMap(_.itemStateUpdates(lifecyclesById))
 
     val itemStateUpdatesFromNewOrModifiedLifecycles
       : Set[(ItemStateUpdateKey, ItemStateUpdate)] =
       (finalNewLifecycles ++ finalNewLifecycles.flatMap(
         _.referencingLifecycles(finalLifecyclesById)))
-        .flatMap(_.itemStateUpdates(finalLifecyclesById, bestPatchSelection))
+        .flatMap(_.itemStateUpdates(finalLifecyclesById))
 
     val itemStateUpdateKeysThatNeedToBeRevoked: Set[ItemStateUpdateKey] =
       (itemStateUpdatesFromDefunctLifecycles -- itemStateUpdatesFromNewOrModifiedLifecycles)
@@ -893,8 +886,7 @@ class AllEventsImplementation(
       allEvents = new AllEventsImplementation(
         nextRevision = 1 + this.nextRevision,
         lifecycleFootprintPerEvent = finalLifecycleFootprintPerEvent,
-        lifecyclesById = finalLifecyclesById,
-        bestPatchSelection = this.bestPatchSelection
+        lifecyclesById = finalLifecyclesById
       ),
       itemStateUpdateKeysThatNeedToBeRevoked =
         itemStateUpdateKeysThatNeedToBeRevoked,
@@ -925,8 +917,7 @@ class AllEventsImplementation(
 
         (noLifecycles /: (retainedUnchangedLifecycles ++ retainedTrimmedLifecycles
           .flatMap(_.retainUpTo(when))))(_ + _)
-      } filter (_._2.nonEmpty),
-      bestPatchSelection = this.bestPatchSelection
+      } filter (_._2.nonEmpty)
     )
   }
 
