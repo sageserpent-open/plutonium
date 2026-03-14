@@ -4,18 +4,19 @@ import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.{Finite, Unbounded}
 import com.sageserpent.plutonium
 import com.sageserpent.plutonium.PatchRecorder.UpdateConsumer
-import org.scalacheck.Prop.BooleanOperators
-import org.scalacheck.{Arbitrary, Gen, Prop, Test}
+import org.scalacheck.Prop.propBoolean
+import org.scalacheck.{Gen, Prop, Test}
 import org.scalamock.scalatest.MockFactory
-import org.scalatest.prop.Checkers
-import org.scalatest.{FlatSpec, Matchers}
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
+import org.scalatestplus.scalacheck.Checkers
 
 import java.lang.reflect.Method
 import java.time.Instant
 import scala.util.Random
 
 class PatchRecorderSpec
-    extends FlatSpec
+    extends AnyFlatSpec
     with Matchers
     with Checkers
     with MockFactory
@@ -32,43 +33,49 @@ class PatchRecorderSpec
 
   type RecordingAction =
     (PatchRecorder, Int, scala.collection.mutable.ListBuffer[Int]) => Unit
-
-  case class TestCase(recordingActions: Seq[RecordingAction],
-                      updateConsumer: UpdateConsumer,
-                      eventsHaveEffectNoLaterThan: Unbounded[Instant])
-
   val fooClazz = classOf[FooHistory]
-
   val fooProperty1 = fooClazz.getMethod("property1")
   val fooProperty2 = fooClazz.getMethod("property2")
-
-  def patchGenerator(expectedMethod: Method)(id: FooHistory#Id) =
-    Gen.const(() => {
-      abstract class WorkaroundToMakeAbstractPatchMockable
-          extends AbstractPatch {
-        override val method = expectedMethod
-
-        override val targetItemSpecification: UniqueItemSpecification =
-          UniqueItemSpecification(id, classOf[FooHistory])
-
-        override val argumentItemSpecifications = Seq.empty
+  val testCaseGenerator: Gen[TestCase] = inSequence {
+    for {
+      seed <- seedGenerator
+      updateConsumer = mock[UpdateConsumer]
+      eventsHaveEffectNoLaterThan <- unboundedInstantGenerator
+      recordingActionFactories <- recordingActionFactoriesGenerator(
+        seed,
+        updateConsumer,
+        eventsHaveEffectNoLaterThan
+      )
+      recordingTimes <- Gen.listOfN(
+        recordingActionFactories.size,
+        instantGenerator
+      ) map (_.sorted)
+    } yield {
+      val recordingActions = recordingActionFactories zip recordingTimes map {
+        case (recordingActionFactory, recordingTime) =>
+          recordingActionFactory(recordingTime)
       }
-
-      mock[WorkaroundToMakeAbstractPatchMockable]
-    }) map (_.apply)
+      TestCase(
+        recordingActions = recordingActions,
+        updateConsumer = updateConsumer,
+        eventsHaveEffectNoLaterThan = eventsHaveEffectNoLaterThan
+      )
+    }
+  }
 
   def recordingActionFactoriesGenerator(
       seed: Long,
       updateConsumer: UpdateConsumer,
-      eventsHaveEffectNoLaterThan: Unbounded[Instant])
-    : Gen[Seq[RecordingActionFactory]] = inAnyOrder {
+      eventsHaveEffectNoLaterThan: Unbounded[Instant]
+  ): Gen[Seq[RecordingActionFactory]] = inAnyOrder {
     def lifecyclesForAnIdGenerator(id: FooHistory#Id): Gen[LifecyclesForAnId] =
       inSequence {
         def lifecycleForAnIdGenerator(
-            id: FooHistory#Id): Gen[LifecycleForAnId] = inAnyOrder {
+            id: FooHistory#Id
+        ): Gen[LifecycleForAnId] = inAnyOrder {
           def patchesOfTheSameKindForAnIdGenerator(
-              patchGenerator: FooHistory#Id => Gen[AbstractPatch])
-            : Gen[PatchesOfTheSameKindForAnId] =
+              patchGenerator: FooHistory#Id => Gen[AbstractPatch]
+          ): Gen[PatchesOfTheSameKindForAnId] =
             for {
               patches <- Gen.nonEmptyListOf(patchGenerator(id))
             } yield {
@@ -79,7 +86,9 @@ class PatchRecorderSpec
                     patchRecorder: PatchRecorder,
                     masterSequenceIndex: Int,
                     sequenceIndicesFromAppliedPatches: scala.collection.mutable.ListBuffer[
-                      Int]): Unit = {
+                      Int
+                    ]
+                ): Unit = {
                   if (Finite(when) <= eventsHaveEffectNoLaterThan) {
                     (patch.rewriteItemClazzes _)
                       .expects(*)
@@ -90,9 +99,11 @@ class PatchRecorderSpec
                     (updateConsumer.capturePatch _)
                       .expects(Finite(when), eventId, patch)
                       .onCall {
-                        (_: Unbounded[Instant],
-                         _: plutonium.EventId,
-                         _: AbstractPatch) =>
+                        (
+                            _: Unbounded[Instant],
+                            _: plutonium.EventId,
+                            _: AbstractPatch
+                        ) =>
                           sequenceIndicesFromAppliedPatches += masterSequenceIndex: Unit
                       }
                       .once
@@ -100,7 +111,11 @@ class PatchRecorderSpec
                     (patch.rewriteItemClazzes _).expects(*).never
                     (updateConsumer.capturePatch _).expects(*, *, patch).never
                   }
-                  patchRecorder.recordPatchFromChange(eventId, Finite(when), patch)
+                  patchRecorder.recordPatchFromChange(
+                    eventId,
+                    Finite(when),
+                    patch
+                  )
                 }
 
                 recordingChange(patch) _
@@ -111,20 +126,25 @@ class PatchRecorderSpec
 
           for {
             recordingActionFactoriesOverSeveralKinds <- Gen
-              .sequence[Seq[PatchesOfTheSameKindForAnId],
-                        PatchesOfTheSameKindForAnId](
-                Seq(patchGenerator(fooProperty1) _,
-                    patchGenerator(fooProperty2) _) map (patchesOfTheSameKindForAnIdGenerator(
-                  _)))
+              .sequence[Seq[
+                PatchesOfTheSameKindForAnId
+              ], PatchesOfTheSameKindForAnId](
+                Seq(
+                  patchGenerator(fooProperty1) _,
+                  patchGenerator(fooProperty2) _
+                ) map (patchesOfTheSameKindForAnIdGenerator(_))
+              )
           } yield {
             val randomBehaviour = new Random(seed)
             randomBehaviour.pickAlternatelyFrom(
-              recordingActionFactoriesOverSeveralKinds)
+              recordingActionFactoriesOverSeveralKinds
+            )
           }
         }
 
         def finiteLifecycleForAnIdGenerator(
-            id: FooHistory#Id): Gen[LifecycleForAnId] =
+            id: FooHistory#Id
+        ): Gen[LifecycleForAnId] =
           for {
             recordingActionFactories <- lifecycleForAnIdGenerator(id)
           } yield {
@@ -132,15 +152,21 @@ class PatchRecorderSpec
                 patchRecorder: PatchRecorder,
                 masterSequenceIndex: Int,
                 sequenceIndicesFromAppliedPatches: scala.collection.mutable.ListBuffer[
-                  Int]): Unit = {
-              val patchApplicationDoesNotBreachTheCutoff = Finite(when) <= eventsHaveEffectNoLaterThan
+                  Int
+                ]
+            ): Unit = {
+              val patchApplicationDoesNotBreachTheCutoff =
+                Finite(when) <= eventsHaveEffectNoLaterThan
 
               if (patchApplicationDoesNotBreachTheCutoff)
                 (updateConsumer.captureAnnihilation _)
-                  .expects(masterSequenceIndex,
-                           Annihilation(
-                             when,
-                             UniqueItemSpecification(id, classOf[FooHistory])))
+                  .expects(
+                    masterSequenceIndex,
+                    Annihilation(
+                      when,
+                      UniqueItemSpecification(id, classOf[FooHistory])
+                    )
+                  )
                   .onCall { (_: plutonium.EventId, _: Annihilation) =>
                     sequenceIndicesFromAppliedPatches += masterSequenceIndex: Unit
                   }
@@ -148,9 +174,11 @@ class PatchRecorderSpec
               patchRecorder
                 .recordAnnihilation(
                   masterSequenceIndex,
-                  Annihilation(when,
-                               UniqueItemSpecification(id,
-                                                       classOf[FooHistory])))
+                  Annihilation(
+                    when,
+                    UniqueItemSpecification(id, classOf[FooHistory])
+                  )
+                )
             }
 
             recordingActionFactories :+ (recordingFinalAnnihilation _)
@@ -158,7 +186,8 @@ class PatchRecorderSpec
 
         val unconstrainedGenerator = for {
           recordingsItemFactoriesForFiniteLifecycles <- Gen.listOf(
-            finiteLifecycleForAnIdGenerator(id))
+            finiteLifecycleForAnIdGenerator(id)
+          )
           finalUnboundedLifecycle <- Gen.option(lifecycleForAnIdGenerator(id))
         } yield {
           val recordingActionFactories =
@@ -179,47 +208,48 @@ class PatchRecorderSpec
       ids <- Gen.nonEmptyContainerOf[Set, FooHistory#Id](fooHistoryIdGenerator)
       recordingActionFactoriesOverSeveralIds <- Gen
         .sequence[Seq[LifecyclesForAnId], LifecyclesForAnId](
-          ids.toSeq map (lifecyclesForAnIdGenerator(_)))
+          ids.toSeq map (lifecyclesForAnIdGenerator(_))
+        )
     } yield {
       val randomBehaviour = new Random(seed)
       randomBehaviour.pickAlternatelyFrom(
-        recordingActionFactoriesOverSeveralIds)
-    }
-  }
-
-  val testCaseGenerator: Gen[TestCase] = inSequence {
-    for {
-      seed <- seedGenerator
-      updateConsumer     = mock[UpdateConsumer]
-      eventsHaveEffectNoLaterThan <- unboundedInstantGenerator
-      recordingActionFactories <- recordingActionFactoriesGenerator(
-        seed,
-        updateConsumer,
-        eventsHaveEffectNoLaterThan)
-      recordingTimes <- Gen.listOfN(recordingActionFactories.size,
-                                    instantGenerator) map (_.sorted)
-    } yield {
-      val recordingActions = recordingActionFactories zip recordingTimes map {
-        case (recordingActionFactory, recordingTime) =>
-          recordingActionFactory(recordingTime)
-      }
-      TestCase(
-        recordingActions = recordingActions,
-        updateConsumer = updateConsumer,
-        eventsHaveEffectNoLaterThan = eventsHaveEffectNoLaterThan
+        recordingActionFactoriesOverSeveralIds
       )
     }
   }
 
+  def patchGenerator(expectedMethod: Method)(id: FooHistory#Id) =
+    Gen.const(() => {
+      abstract class WorkaroundToMakeAbstractPatchMockable
+          extends AbstractPatch {
+        override val method = expectedMethod
+
+        override val targetItemSpecification: UniqueItemSpecification =
+          UniqueItemSpecification(id, classOf[FooHistory])
+
+        override val argumentItemSpecifications = Seq.empty
+      }
+
+      mock[WorkaroundToMakeAbstractPatchMockable]
+    }) map (_.apply)
+
+  case class TestCase(
+      recordingActions: Seq[RecordingAction],
+      updateConsumer: UpdateConsumer,
+      eventsHaveEffectNoLaterThan: Unbounded[Instant]
+  )
+
   "A patch recorder" should "select and apply the best patches, but not cause any effects beyond the event cutoff time" in {
     check(
       Prop.forAllNoShrink(testCaseGenerator) {
-        case TestCase(recordingActions,
-                      updateConsumerFromTestCase,
-                      eventsHaveEffectNoLaterThan) =>
+        case TestCase(
+              recordingActions,
+              updateConsumerFromTestCase,
+              eventsHaveEffectNoLaterThan
+            ) =>
           val patchRecorder =
             new PatchRecorderImplementation(eventsHaveEffectNoLaterThan)
-            with PatchRecorderContracts {
+              with PatchRecorderContracts {
               override val updateConsumer: UpdateConsumer =
                 updateConsumerFromTestCase
             }
@@ -229,23 +259,31 @@ class PatchRecorderSpec
 
           val rangeOfValidSequenceIndices = 0 until recordingActions.size
 
-          for ((recordingAction, masterSequenceIndex) <- recordingActions zip rangeOfValidSequenceIndices) {
-            recordingAction(patchRecorder,
-                            masterSequenceIndex,
-                            sequenceIndicesFromAppliedPatches)
+          for (
+            (recordingAction, masterSequenceIndex) <-
+              recordingActions zip rangeOfValidSequenceIndices
+          ) {
+            recordingAction(
+              patchRecorder,
+              masterSequenceIndex,
+              sequenceIndicesFromAppliedPatches
+            )
           }
 
           patchRecorder.noteThatThereAreNoFollowingRecordings()
 
-          Prop.classify(sequenceIndicesFromAppliedPatches.isEmpty,
-                        "No patches were applied") {
+          Prop.classify(
+            sequenceIndicesFromAppliedPatches.isEmpty,
+            "No patches were applied"
+          ) {
             Prop.collect(sequenceIndicesFromAppliedPatches.size) {
               (sequenceIndicesFromAppliedPatches.isEmpty ||
-              sequenceIndicesFromAppliedPatches.forall(
-                rangeOfValidSequenceIndices.contains(_)) &&
-              (sequenceIndicesFromAppliedPatches zip sequenceIndicesFromAppliedPatches.tail forall {
-                case (first, second) => first < second
-              })) :|
+                sequenceIndicesFromAppliedPatches.forall(
+                  rangeOfValidSequenceIndices.contains(_)
+                ) &&
+                (sequenceIndicesFromAppliedPatches zip sequenceIndicesFromAppliedPatches.tail forall {
+                  case (first, second) => first < second
+                })) :|
                 s"Indices from applied patches and annihilations should be a subsequence of the master sequence."
             }
           }

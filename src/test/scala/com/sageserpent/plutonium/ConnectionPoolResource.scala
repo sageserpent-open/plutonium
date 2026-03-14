@@ -1,13 +1,13 @@
 package com.sageserpent.plutonium
 
+import cats.effect.{IO, Resource}
+import com.zaxxer.hikari.HikariDataSource
+import scalikejdbc._
+
 import java.io.IOException
 import java.nio.file.attribute.BasicFileAttributes
 import java.nio.file.{FileVisitResult, FileVisitor, Files, Path}
 import java.util.UUID
-
-import cats.effect.{IO, Resource}
-import com.zaxxer.hikari.HikariDataSource
-import scalikejdbc._
 
 trait ConnectionPoolResource {
   def connectionPoolResource: Resource[IO, ConnectionPool] =
@@ -15,11 +15,12 @@ trait ConnectionPoolResource {
       databaseDirectory <- Resource.make(IO {
         Files.createTempDirectory("h2Storage")
       })(cleanupDatabaseDirectory)
-      databaseName <- Resource.liftF(IO { UUID.randomUUID().toString })
+      databaseName <- Resource.liftK(IO { UUID.randomUUID().toString })
       dataSource <- Resource.make(IO {
         val result = new HikariDataSource()
         result.setJdbcUrl(
-          s"jdbc:h2:file:${databaseDirectory.resolve(databaseName)};DB_CLOSE_ON_EXIT=FALSE;MV_STORE=FALSE;ANALYZE_AUTO=5000;ANALYZE_SAMPLE=50000")
+          s"jdbc:h2:file:${databaseDirectory.resolve(databaseName)};DB_CLOSE_ON_EXIT=FALSE;MV_STORE=FALSE;ANALYZE_AUTO=5000;ANALYZE_SAMPLE=50000"
+        )
         result.setUsername("automatedTestIdentity")
         result
       })(dataSource => IO { dataSource.close() })
@@ -29,7 +30,8 @@ trait ConnectionPoolResource {
     } yield connectionPool
 
   private def dropDatabaseTables(
-      connectionPool: DataSourceConnectionPool): IO[Unit] = {
+      connectionPool: DataSourceConnectionPool
+  ): IO[Unit] = {
     val dbResource: Resource[IO, DB] =
       Resource.make(IO { DB(connectionPool.borrow()) })(db => IO { db.close() })
     dbResource
@@ -40,7 +42,8 @@ trait ConnectionPoolResource {
              DROP ALL OBJECTS
          """.update.apply()
           }
-      })
+        }
+      )
   }
 
   private def cleanupDatabaseDirectory(directory: Path): IO[Unit] = {
@@ -50,22 +53,28 @@ trait ConnectionPoolResource {
         new FileVisitor[Path] {
           override def preVisitDirectory(
               dir: Path,
-              attrs: BasicFileAttributes): FileVisitResult =
+              attrs: BasicFileAttributes
+          ): FileVisitResult =
             FileVisitResult.CONTINUE
 
           override def visitFile(
               file: Path,
-              attrs: BasicFileAttributes): FileVisitResult = {
+              attrs: BasicFileAttributes
+          ): FileVisitResult = {
             Files.delete(file)
             FileVisitResult.CONTINUE
           }
 
-          override def visitFileFailed(file: Path,
-                                       exc: IOException): FileVisitResult =
+          override def visitFileFailed(
+              file: Path,
+              exc: IOException
+          ): FileVisitResult =
             FileVisitResult.CONTINUE
 
-          override def postVisitDirectory(dir: Path,
-                                          exc: IOException): FileVisitResult = {
+          override def postVisitDirectory(
+              dir: Path,
+              exc: IOException
+          ): FileVisitResult = {
             Files.delete(dir)
             FileVisitResult.CONTINUE
           }

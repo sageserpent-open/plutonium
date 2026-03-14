@@ -1,13 +1,14 @@
 package com.sageserpent.plutonium
 
-import java.util.UUID
-
 import com.sageserpent.americium.randomEnrichment._
-import org.scalacheck.Prop.BooleanOperators
+import org.scalacheck.Prop.propBoolean
 import org.scalacheck.{Gen, Prop}
-import org.scalatest.prop.Checkers
-import org.scalatest.{FlatSpec, Matchers}
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
+import org.scalatestplus.scalacheck.Checkers
 
+import java.util.UUID
+import scala.language.postfixOps
 import scala.util.Random
 
 object MarkSyntax {
@@ -18,9 +19,8 @@ object MarkSyntax {
 
 object GraphNode {
   implicit val ordering = Ordering.by[GraphNode, Int](_.mark)
-  val noGraphNodes      = Set.empty[GraphNode]
-
   type EventId = String
+  val noGraphNodes      = Set.empty[GraphNode]
 }
 
 case class Payload(x: Int, y: String)
@@ -31,10 +31,15 @@ trait GraphNode {
   type Id
 
   val id: Id
-
+  val payload = Payload(12345, "STUFF")
+  var lifecycleUUID: UUID = UUID.randomUUID()
+  var itemStateUpdateKey: Option[ItemStateUpdateKey] =
+    None
   private var _referencedNodes: Set[GraphNode] = noGraphNodes
+  private var _mark: Int = 0
 
   def referencedNodes: Set[GraphNode] = _referencedNodes
+
   def referencedNodes_=(value: Set[GraphNode]): Unit = {
     _referencedNodes = value
     checkInvariant()
@@ -42,35 +47,28 @@ trait GraphNode {
 
   def checkInvariant(): Unit
 
-  private var _mark: Int = 0
-
   def mark: Int
-
-  protected def traverseGraph(accumulated: (Set[GraphNode], Seq[String]))
-    : (Set[GraphNode], Seq[String]) = {
-    val (alreadyVisited, prefixOfResult) = accumulated
-    if (!alreadyVisited.contains(this)) {
-      val (visited, texts) =
-        (((alreadyVisited + this) -> Seq
-          .empty[String]) /: referencedNodes.toSeq.sorted)(
-          (accumulated, graphNodeItem) =>
-            graphNodeItem.traverseGraph(accumulated))
-      visited ->
-        (prefixOfResult :+ s"id: $id refers to: (${texts.mkString(",")}) and has a payload of $payload")
-    } else alreadyVisited -> (prefixOfResult :+ s"id: $id ALREADY SEEN")
-  }
 
   override def toString =
     traverseGraph(noGraphNodes -> Seq.empty)._2.head
 
   def reachableNodes() = traverseGraph(noGraphNodes -> Seq.empty)._1
 
-  val payload = Payload(12345, "STUFF")
-
-  var lifecycleUUID: UUID = UUID.randomUUID()
-
-  var itemStateUpdateKey: Option[ItemStateUpdateKey] =
-    None
+  protected def traverseGraph(
+      accumulated: (Set[GraphNode], Seq[String])
+  ): (Set[GraphNode], Seq[String]) = {
+    val (alreadyVisited, prefixOfResult) = accumulated
+    if (!alreadyVisited.contains(this)) {
+      val (visited, texts) =
+        (((alreadyVisited + this) -> Seq
+          .empty[String]) /: referencedNodes.toSeq.sorted)(
+          (accumulated, graphNodeItem) =>
+            graphNodeItem.traverseGraph(accumulated)
+        )
+      visited ->
+        (prefixOfResult :+ s"id: $id refers to: (${texts.mkString(",")}) and has a payload of $payload")
+    } else alreadyVisited -> (prefixOfResult :+ s"id: $id ALREADY SEEN")
+  }
 }
 
 class OddGraphNode(@transient override val id: OddGraphNode#Id)
@@ -79,12 +77,12 @@ class OddGraphNode(@transient override val id: OddGraphNode#Id)
 
   override type Id = String
 
-  override def mark: Int = id.toInt
-
   override def checkInvariant(): Unit = {
     assert(!mark.isEven)
     assert(referencedNodes forall (_.mark.isEven))
   }
+
+  override def mark: Int = id.toInt
 }
 
 class EvenGraphNode(@transient override val id: EvenGraphNode#Id)
@@ -93,16 +91,16 @@ class EvenGraphNode(@transient override val id: EvenGraphNode#Id)
 
   override type Id = Int
 
-  override def mark: Int = id
-
   override def checkInvariant(): Unit = {
     assert(mark.isEven)
     assert(referencedNodes forall (!_.mark.isEven))
   }
+
+  override def mark: Int = id
 }
 
 class ItemStateStorageSpec
-    extends FlatSpec
+    extends AnyFlatSpec
     with Matchers
     with Checkers
     with SharedGenerators {
@@ -112,27 +110,31 @@ class ItemStateStorageSpec
   val oddGraphNodeClazz = classOf[OddGraphNode]
 
   val evenGraphNodeClazz = classOf[EvenGraphNode]
-
-  def markMapletGenerator(maximumMark: Int) =
-    for {
-      mark <- Gen.chooseNum(0, maximumMark)
-      neighbourOffset = (1 + mark) % 2
-      neighbours <- Gen.containerOf[Set, Int](Gen.chooseNum(
-        0,
-        0 max (maximumMark / 2 - 1)) map (2 * _ + neighbourOffset))
-    } yield mark -> neighbours
-
   val markMapGenerator: Gen[Map[Int, Set[Int]]] = for {
     maximumMark <- Gen.chooseNum(1, 50)
     markMap <- Gen.nonEmptyListOf(markMapletGenerator(maximumMark)) map (_.toMap
       .withDefaultValue(Set.empty))
   } yield markMap
+  var count = 0
+
+  def markMapletGenerator(maximumMark: Int) =
+    for {
+      mark <- Gen.chooseNum(0, maximumMark)
+      neighbourOffset = (1 + mark) % 2
+      neighbours <- Gen.containerOf[Set, Int](
+        Gen.chooseNum(
+          0,
+          0 max (maximumMark / 2 - 1)
+        ) map (2 * _ + neighbourOffset)
+      )
+    } yield mark -> neighbours
 
   def buildGraphFrom(markMap: Map[Int, Set[Int]]): Seq[GraphNode] = {
     val allMarks = (markMap.keys ++ markMap.values.flatten).toSet
     val nodes = allMarks map (mark =>
       mark -> (if (mark.isEven) new EvenGraphNode(mark)
-               else new OddGraphNode(mark.toString))) toMap
+               else new OddGraphNode(mark.toString))
+    ) toMap
 
     for ((mark, referencedMarks) <- markMap) {
       nodes(mark).referencedNodes ++= referencedMarks map (nodes(_))
@@ -141,15 +143,14 @@ class ItemStateStorageSpec
     nodes.values.toSeq
   }
 
-  var count = 0
-
   object itemStateStorage extends ItemStateStorage {
     override protected type ItemSuperType = GraphNode
     override protected val clazzOfItemSuperType: Class[ItemSuperType] =
       classOf[ItemSuperType]
 
     override protected def uniqueItemSpecification(
-        item: ItemSuperType): UniqueItemSpecification = item.id match {
+        item: ItemSuperType
+    ): UniqueItemSpecification = item.id match {
       case oddId: String =>
         UniqueItemSpecification(oddId, oddGraphNodeClazz)
       case eventId: Int =>
@@ -160,7 +161,8 @@ class ItemStateStorageSpec
       item.lifecycleUUID
 
     override protected def itemStateUpdateKey(
-        item: ItemSuperType): Option[ItemStateUpdateKey] =
+        item: ItemSuperType
+    ): Option[ItemStateUpdateKey] =
       item.itemStateUpdateKey
 
     override protected def noteAnnihilationOnItem(item: ItemSuperType): Unit =
@@ -179,13 +181,15 @@ class ItemStateStorageSpec
 
       val sampleSize =
         randomBehaviour.chooseAnyNumberFromZeroToOneLessThan(
-          terminalGraphNodes.size)
+          terminalGraphNodes.size
+        )
 
       val nodesThatAreNotToBeRoundtripped = randomBehaviour
         .chooseSeveralOf(terminalGraphNodes, sampleSize)
         .toSet
 
-      val nodesThatAreToBeRoundtripped = graphNodes filterNot nodesThatAreNotToBeRoundtripped.contains
+      val nodesThatAreToBeRoundtripped =
+        graphNodes filterNot nodesThatAreNotToBeRoundtripped.contains
 
       val snapshotBlobs: Map[UniqueItemSpecification, SnapshotBlob] =
         nodesThatAreToBeRoundtripped map (node =>
@@ -195,21 +199,25 @@ class ItemStateStorageSpec
             case eventId: Int =>
               UniqueItemSpecification(eventId, evenGraphNodeClazz)
           }) -> itemStateStorage
-            .snapshotFor(node)) toMap
+            .snapshotFor(node)
+        ) toMap
 
       val stubTimeslice = new BlobStorage.Timeslice[SnapshotBlob] {
         override def uniqueItemQueriesFor[Item](
-            clazz: Class[Item]): Stream[UniqueItemSpecification] =
-          snapshotBlobs.keys.toStream
+            clazz: Class[Item]
+        ): LazyList[UniqueItemSpecification] =
+          snapshotBlobs.keys.to(LazyList)
 
         override def uniqueItemQueriesFor[Item](
-            uniqueItemSpecification: UniqueItemSpecification)
-          : Stream[UniqueItemSpecification] =
-          snapshotBlobs.keys.filter(_.id == uniqueItemSpecification.id).toStream
+            uniqueItemSpecification: UniqueItemSpecification
+        ): LazyList[UniqueItemSpecification] =
+          snapshotBlobs.keys
+            .filter(_.id == uniqueItemSpecification.id)
+            .to(LazyList)
 
         override def snapshotBlobFor(
-            uniqueItemSpecification: UniqueItemSpecification)
-          : Option[SnapshotBlob] =
+            uniqueItemSpecification: UniqueItemSpecification
+        ): Option[SnapshotBlob] =
           snapshotBlobs.get(uniqueItemSpecification)
       }
 
@@ -217,24 +225,30 @@ class ItemStateStorageSpec
         new itemStateStorage.ReconstitutionContext() {
           override val blobStorageTimeslice = stubTimeslice
 
-          // The following implementation is also the epitome of hokeyness. Can there be more than epitome?
+          // The following implementation is also the epitome of hokeyness. Can
+          // there be more than epitome?
           val idToFallbackItemMap = nodesThatAreNotToBeRoundtripped map (item =>
-            (item.id: Any) -> item) toMap
+            (item.id: Any) -> item
+          ) toMap
 
           override protected def fallbackItemFor[Item](
-              uniqueItemSpecification: UniqueItemSpecification): Item =
+              uniqueItemSpecification: UniqueItemSpecification
+          ): Item =
             idToFallbackItemMap(uniqueItemSpecification.id).asInstanceOf[Item]
 
           override protected def fallbackAnnihilatedItemFor[Item](
               uniqueItemSpecification: UniqueItemSpecification,
-              lifecycleUUID: UUID): Item =
+              lifecycleUUID: UUID
+          ): Item =
             idToFallbackItemMap(uniqueItemSpecification.id).asInstanceOf[Item]
 
-          // The following implementation is the epitome of hokeyness. Well, it's just test code... Hmmm.
+          // The following implementation is the epitome of hokeyness. Well,
+          // it's just test code... Hmmm.
           override protected def createItemFor[Item](
               uniqueItemSpecification: UniqueItemSpecification,
               lifecycleUUID: UUID,
-              itemStateUpdateKey: Option[ItemStateUpdateKey]): Item = {
+              itemStateUpdateKey: Option[ItemStateUpdateKey]
+          ): Item = {
             val item = uniqueItemSpecification match {
               case UniqueItemSpecification(id: OddGraphNode#Id, itemClazz)
                   if itemClazz == oddGraphNodeClazz =>
@@ -256,14 +270,17 @@ class ItemStateStorageSpec
         .map(_.id match {
           case oddId: String =>
             reconstitutionContext.itemFor[OddGraphNode](
-              UniqueItemSpecification(oddId, oddGraphNodeClazz))
+              UniqueItemSpecification(oddId, oddGraphNodeClazz)
+            )
           case evenId: Int =>
             reconstitutionContext.itemFor[EvenGraphNode](
-              UniqueItemSpecification(evenId, evenGraphNodeClazz))
+              UniqueItemSpecification(evenId, evenGraphNodeClazz)
+            )
         })
         .toList
 
-      val noNodesAreGainedOrLost = (individuallyReconstitutedGraphNodes.size == graphNodes.size) :| s"Expected to have: ${graphNodes.size} reconstituted nodes, but got: ${individuallyReconstitutedGraphNodes.size}."
+      val noNodesAreGainedOrLost =
+        (individuallyReconstitutedGraphNodes.size == graphNodes.size) :| s"Expected to have: ${graphNodes.size} reconstituted nodes, but got: ${individuallyReconstitutedGraphNodes.size}."
 
       val nodesHaveTheSameStructure =
         Prop.all(graphNodes zip individuallyReconstitutedGraphNodes map {
@@ -271,7 +288,8 @@ class ItemStateStorageSpec
             (original.toString == reconstituted.toString) :| s"Reconstituted node: $reconstituted should have the same structure as original node: $original."
         }: _*)
 
-      val nodesReachableFromReconstitutedNodesGroupedById = individuallyReconstitutedGraphNodes flatMap (_.reachableNodes()) groupBy (_.id)
+      val nodesReachableFromReconstitutedNodesGroupedById =
+        individuallyReconstitutedGraphNodes flatMap (_.reachableNodes()) groupBy (_.id)
 
       val nodesShareIdentityAcrossDistinctReconstitutionCalls =
         Prop.all((nodesReachableFromReconstitutedNodesGroupedById map {
@@ -281,7 +299,6 @@ class ItemStateStorageSpec
 
       noNodesAreGainedOrLost && nodesHaveTheSameStructure && nodesShareIdentityAcrossDistinctReconstitutionCalls
     },
-    MinSuccessful(200),
-    MaxSize(200)
+    MinSuccessful(200)
   )
 }

@@ -5,6 +5,7 @@ import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
 
 import java.util.UUID
 import scala.collection.mutable
+import scala.language.postfixOps
 import scala.util.DynamicVariable
 
 object IdentifiedItemAccessUsingBlobStorage {
@@ -30,7 +31,9 @@ trait IdentifiedItemAccessUsingBlobStorage
     mutable.Set.empty[ItemStateUpdateKey]
   private var ancestorKeyOfAnnihilatedItem: Option[ItemStateUpdateKey] = None
 
-  override def reconstitute(uniqueItemSpecification: UniqueItemSpecification): Any =
+  override def reconstitute(
+      uniqueItemSpecification: UniqueItemSpecification
+  ): Any =
     itemFor[Any](uniqueItemSpecification)
 
   override def blobStorageTimeslice: SnapshotRetrievalApi[SnapshotBlob] =

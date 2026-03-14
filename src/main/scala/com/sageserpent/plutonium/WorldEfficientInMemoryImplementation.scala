@@ -71,7 +71,7 @@ class WorldEfficientInMemoryImplementation(
       ItemCacheUsingBlobStorage.itemCacheAt(when, blobStorage)
     }
 
-    override def render[Item](bitemporal: Bitemporal[Item]): Stream[Item] =
+    override def render[Item](bitemporal: Bitemporal[Item]): LazyList[Item] =
       itemCache.render(bitemporal)
 
     override def numberOf[Item](bitemporal: Bitemporal[Item]): Revision =

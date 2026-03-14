@@ -19,8 +19,8 @@ import de.sciss.fingertree.RangedSeq
 import java.lang.reflect.Method
 import java.time.Instant
 import scala.annotation.tailrec
-import scala.collection.IterableView
 import scala.collection.immutable.{Map, Set, SortedMap}
+import scala.language.postfixOps
 
 object AllEventsImplementation {
 
@@ -326,11 +326,6 @@ object AllEventsImplementation {
       ) || this.lowerBoundClazz
         .isAssignableFrom(another.lowerBoundClazz)
 
-    def lowerBoundClazz: Class[_] = clazzes.keys.reduce[Class[_]] {
-      case (first, second) =>
-        if (second.isAssignableFrom(first)) first else second
-    }
-
     private def upperClazzIsConsistentWith(another: Lifecycle): Boolean =
       this.upperBoundClazz
         .isAssignableFrom(another.upperBoundClazz) || another.upperBoundClazz
@@ -524,6 +519,11 @@ object AllEventsImplementation {
         writtenState.flatMap(_.writeBestPatches)
 
       writtenStateWithFinalBestPatchesWritten.run._1
+    }
+
+    def lowerBoundClazz: Class[_] = clazzes.keys.reduce[Class[_]] {
+      case (first, second) =>
+        if (second.isAssignableFrom(first)) first else second
     }
 
     def id: Any =
@@ -1063,8 +1063,7 @@ class AllEventsImplementation(
   ): CalculationState = {
     lifecycleFootprintPerEvent.get(eventId) match {
       case Some(EventFootprint(when, itemIds)) =>
-        val lifecyclesWithRelevantIds
-            : IterableView[(Any, Lifecycles), Iterable[_]] =
+        val lifecyclesWithRelevantIds: Iterable[(Any, Lifecycles)] =
           itemIds.view.map(itemId => itemId -> lifecyclesById(itemId))
         val lifecyclesWithIrrelevantIds: LifecyclesById =
           lifecyclesById -- itemIds
@@ -1188,7 +1187,7 @@ class AllEventsImplementation(
           Ordering[ItemStateUpdateTime]
             .lteq(UpperBoundOfTimeslice(whenEventTakesPlace), cutoff)
       },
-      lifecyclesById = lifecyclesById.mapValues { lifecycles =>
+      lifecyclesById = lifecyclesById.map { case (id, lifecycles) =>
         val (retainedUnchangedLifecycles, retainedTrimmedLifecycles) =
           (lifecycles
             .filterIncludes(timespanUpToAndIncludingTheCutoff) ++ lifecycles
@@ -1197,7 +1196,7 @@ class AllEventsImplementation(
               Ordering[ItemStateUpdateTime].lteq(lifecycle.endTime, cutoff)
             )
 
-        (noLifecycles /: (retainedUnchangedLifecycles ++ retainedTrimmedLifecycles
+        id -> (noLifecycles /: (retainedUnchangedLifecycles ++ retainedTrimmedLifecycles
           .flatMap(_.retainUpTo(when))))(_ + _)
       } filter (_._2.nonEmpty)
     )

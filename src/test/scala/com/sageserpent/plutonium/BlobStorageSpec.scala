@@ -5,8 +5,9 @@ import com.sageserpent.americium.seqEnrichment._
 import com.sageserpent.plutonium.BlobStorage.Timeslice
 import org.scalacheck.{Gen, Shrink}
 import org.scalatest.LoneElement._
-import org.scalatest.prop.GeneratorDrivenPropertyChecks
-import org.scalatest.{FlatSpec, Matchers}
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
+import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 
 import scala.math.Ordering.ordered
 import scala.util.Random
@@ -19,37 +20,214 @@ trait NoKindOfThing
 
 object BlobStorageSpec extends SharedGenerators {
   type RecordingId = Int
-
-  def mixedIdGenerator(disambiguation: Int) =
-    Gen.oneOf(integerIdGenerator map (disambiguation + 2 * _),
-              stringIdGenerator map (_ + s"_$disambiguation"))
-
+  type Time         = Int
+  type SnapshotBlob = Double
   val uniqueItemSpecificationWithUniqueTypePerIdGenerator
-    : Gen[UniqueItemSpecification] =
+      : Gen[UniqueItemSpecification] =
     Gen.oneOf(
       mixedIdGenerator(0) map (id =>
-        UniqueItemSpecification(id, classOf[OneKindOfThing])),
+        UniqueItemSpecification(id, classOf[OneKindOfThing])
+      ),
       mixedIdGenerator(1) map (id =>
-        UniqueItemSpecification(id, classOf[AnotherKindOfThing]))
+        UniqueItemSpecification(id, classOf[AnotherKindOfThing])
+      )
     )
-
   val uniqueItemSpecificationWithDisjointTypesPerIdGenerator
-    : Gen[UniqueItemSpecification] = {
+      : Gen[UniqueItemSpecification] = {
     val aSmallChoiceOfIdsToIncreaseTheChancesOfCollisions = Gen.chooseNum(1, 10)
     Gen.oneOf(
       aSmallChoiceOfIdsToIncreaseTheChancesOfCollisions map (id =>
-        UniqueItemSpecification(id, classOf[OneKindOfThing])),
+        UniqueItemSpecification(id, classOf[OneKindOfThing])
+      ),
       aSmallChoiceOfIdsToIncreaseTheChancesOfCollisions map (id =>
-        UniqueItemSpecification(id, classOf[AnotherKindOfThing]))
+        UniqueItemSpecification(id, classOf[AnotherKindOfThing])
+      )
     )
   }
 
-  type Time         = Int
-  type SnapshotBlob = Double
+  def mixedIdGenerator(disambiguation: Int) =
+    Gen.oneOf(
+      integerIdGenerator map (disambiguation + 2 * _),
+      stringIdGenerator map (_ + s"_$disambiguation")
+    )
 
-  case class TimeSeries(uniqueItemSpecification: UniqueItemSpecification,
-                        snapshots: Seq[(Time, Option[SnapshotBlob])],
-                        queryTimes: Seq[Time]) {
+  def lotsOfTimeSeriesGenerator(
+      uniqueItemSpecificationGenerator: Gen[UniqueItemSpecification]
+  ): Gen[Seq[TimeSeries]] =
+    Gen
+      .nonEmptyContainerOf[Set, UniqueItemSpecification](
+        uniqueItemSpecificationGenerator
+      ) map (_.toSeq) flatMap (uniqueItemSpecifications =>
+      Gen.sequence[Seq[TimeSeries], TimeSeries](
+        uniqueItemSpecifications map timeSeriesGeneratorFor
+      )
+    )
+
+  implicit val shrink: Shrink[TimeSeries] = Shrink(_.shrink().distinct.toStream)
+
+  def timeSeriesGeneratorFor(
+      uniqueItemSpecification: UniqueItemSpecification
+  ): Gen[TimeSeries] = {
+    val blobGenerator: Gen[Option[SnapshotBlob]] =
+      Gen.frequency(
+        5 -> (Gen.posNum[Int] map (value => Some(value.toDouble))),
+        1 -> Gen.const(None)
+      )
+
+    val blobsGenerator: Gen[List[Option[SnapshotBlob]]] =
+      Gen.nonEmptyListOf(blobGenerator)
+
+    for {
+      snapshotBlobs <- blobsGenerator
+      twiceTheNumberOfSnapshots = 2 * snapshotBlobs.size
+      times <- ascendingTimes(twiceTheNumberOfSnapshots)
+      (snapshotTimes, queryTimes) = times
+        .grouped(2)
+        .map { case Seq(snapshotTime, queryTime) =>
+          snapshotTime -> queryTime
+        }
+        .toList
+        .unzip
+    } yield TimeSeries(
+      uniqueItemSpecification,
+      snapshotTimes zip snapshotBlobs,
+      queryTimes
+    )
+  }
+
+  def ascendingTimes(numberRequired: Int): Gen[List[Time]] = {
+    if (0 == numberRequired) Gen.const(List.empty)
+    else {
+      val numberOfDeltas = numberRequired - 1
+      val half           = numberOfDeltas / 2
+      val halfPlusOffCut = numberOfDeltas - half
+
+      def interleave(
+          firstSequence: List[Int],
+          secondSequence: List[Int]
+      ): List[Int] =
+        List(firstSequence, secondSequence).zipN.toList.flatten
+
+      val snapshotDeltaGenerator = Gen.posNum[Int]
+
+      val queryDeltaGenerator =
+        Gen.frequency(1 -> Gen.const(0), 5 -> Gen.posNum[Int])
+
+      for {
+        earliest: Time <- Gen.oneOf(0 until 10)
+        snapshotDeltas <- Gen.listOfN(half, snapshotDeltaGenerator)
+        queryDeltas    <- Gen.listOfN(halfPlusOffCut, queryDeltaGenerator)
+        deltas = interleave(queryDeltas, snapshotDeltas)
+      } yield deltas
+        .scanLeft(earliest)(_ + _)
+    }
+  }
+
+  def shuffledSnapshotBookings(
+      randomBehaviour: Random,
+      lotsOfTimeSeries: Seq[TimeSeries],
+      forceUseOfAnOverlappingType: Boolean = false
+  ): Seq[(Time, Seq[(UniqueItemSpecification, Option[SnapshotBlob])])] = {
+    def shuffleAndMergeBookingsSharingTheSameTime(
+        lotsOfTimeSeriesWithoutTheQueryTimeCruft: Seq[
+          (UniqueItemSpecification, Seq[(Time, Option[SnapshotBlob])])
+        ]
+    ): Seq[(Time, Seq[(UniqueItemSpecification, Option[SnapshotBlob])])] = {
+      val forceUseOfAnOverlappingTypeDecisions = {
+        val numberOfTimeSeries = lotsOfTimeSeriesWithoutTheQueryTimeCruft.size
+        val numberOfNonDefaultDecisions =
+          if (0 < numberOfTimeSeries)
+            randomBehaviour.chooseAnyNumberFromOneTo(numberOfTimeSeries)
+          else 0
+        randomBehaviour.shuffle(
+          Seq
+            .fill(numberOfNonDefaultDecisions)(
+              forceUseOfAnOverlappingType
+            ) ++ Seq
+            .fill(numberOfTimeSeries - numberOfNonDefaultDecisions)(false)
+        )
+      }
+
+      val snapshotSequencesForManyItems =
+        lotsOfTimeSeriesWithoutTheQueryTimeCruft zip forceUseOfAnOverlappingTypeDecisions flatMap {
+          case (
+                (uniqueItemSpecification, snapshots),
+                forceUseOfAnOverlappingType
+              ) =>
+            val numberOfSnapshots = snapshots.size
+            val decisionsToForceOverlappingType = {
+              val numberOfNonDefaultDecisions =
+                randomBehaviour.chooseAnyNumberFromOneTo(numberOfSnapshots)
+              randomBehaviour.shuffle(
+                Seq.fill(numberOfNonDefaultDecisions)(
+                  forceUseOfAnOverlappingType
+                ) ++ Seq.fill(numberOfSnapshots - numberOfNonDefaultDecisions)(
+                  false
+                )
+              )
+            }
+            snapshots zip decisionsToForceOverlappingType map {
+              case (snapshot, decision) =>
+                (if (decision)
+                   uniqueItemSpecification
+                     .copy(clazz = classOf[Any])
+                 else uniqueItemSpecification) -> snapshot
+            }
+        }
+
+      val snapshotBookingsForManyItemsAndTimesGroupedByTime =
+        (snapshotSequencesForManyItems groupBy { case (_, (when, _)) =>
+          when
+        } mapValues (_.map { case (uniqueItemSpecification, (_, blob)) =>
+          uniqueItemSpecification -> blob
+        })).toSeq map { case (when, chunkedBookings) =>
+          when -> chunkedBookings
+        }
+
+      randomBehaviour.shuffle(snapshotBookingsForManyItemsAndTimesGroupedByTime)
+    }
+
+    val lotsOfTimeSeriesWithoutTheQueryTimeCruft = lotsOfTimeSeries map {
+      case TimeSeries(uniqueItemSpecification, snapshots, _) =>
+        uniqueItemSpecification -> snapshots
+    }
+
+    shuffleAndMergeBookingsSharingTheSameTime(
+      lotsOfTimeSeriesWithoutTheQueryTimeCruft
+    )
+  }
+
+  def blobStorageFrom(
+      revisions: Seq[
+        Seq[(Time, Seq[(UniqueItemSpecification, Option[SnapshotBlob])])]
+      ]
+  ): BlobStorage[Time, SnapshotBlob] =
+    ((BlobStorageInMemory.empty[Time, SnapshotBlob]: BlobStorage[
+      Time,
+      SnapshotBlob
+    ]) /: revisions) { case (blobStorage, bookingsForRevision) =>
+      val builder = blobStorage.openRevision()
+      for ((when, snapshotBlobs) <- bookingsForRevision)
+        // NOTE: this is rather hokey, as it turns out that the 'annul' is
+        // implemented
+        // by passing an empty map to 'record', but the idea here is to respect
+        // the
+        // abstraction boundary of 'BlobStorage' and pretend we don't know that
+        // it will
+        // do that.
+        if (snapshotBlobs.nonEmpty) {
+          builder.record(when, snapshotBlobs.toMap)
+        } else {
+          builder.annul(when)
+        }
+      builder.build()
+    }
+
+  case class TimeSeries(
+      uniqueItemSpecification: UniqueItemSpecification,
+      snapshots: Seq[(Time, Option[SnapshotBlob])],
+      queryTimes: Seq[Time]
+  ) {
     require(snapshots.size == queryTimes.size)
     require(queryTimes zip snapshots.init.map(_._1) forall {
       case (queryTime, snapshotTime) => queryTime >= snapshotTime
@@ -58,7 +236,7 @@ object BlobStorageSpec extends SharedGenerators {
       case (queryTime, snapshotTime) => queryTime < snapshotTime
     })
 
-    def shrink(): Stream[TimeSeries] =
+    def shrink(): LazyList[TimeSeries] =
       if (1 < snapshots.size) {
         val indexToSplitAt = snapshots.size / 2
 
@@ -72,180 +250,33 @@ object BlobStorageSpec extends SharedGenerators {
           this.copy(snapshots = rightSnapshots, queryTimes = rightQueryTimes)
         leftTimeSeries #:: rightTimeSeries #:: leftTimeSeries
           .shrink() ++ rightTimeSeries.shrink()
-      } else Stream.empty
+      } else LazyList.empty
   }
-
-  implicit val shrink: Shrink[TimeSeries] = Shrink(_.shrink().distinct)
-
-  def ascendingTimes(numberRequired: Int): Gen[List[Time]] = {
-    if (0 == numberRequired) Gen.const(List.empty)
-    else {
-      val numberOfDeltas = numberRequired - 1
-      val half           = numberOfDeltas / 2
-      val halfPlusOffCut = numberOfDeltas - half
-
-      def interleave(firstSequence: List[Int],
-                     secondSequence: List[Int]): List[Int] =
-        List(firstSequence, secondSequence).zipN.toList.flatten
-
-      val snapshotDeltaGenerator = Gen.posNum[Int]
-
-      val queryDeltaGenerator =
-        Gen.frequency(1 -> Gen.const(0), 5 -> Gen.posNum[Int])
-
-      for {
-        earliest: Time <- Gen.oneOf(0 until 10)
-        snapshotDeltas <- Gen.listOfN(half, snapshotDeltaGenerator)
-        queryDeltas    <- Gen.listOfN(halfPlusOffCut, queryDeltaGenerator)
-        deltas = interleave(queryDeltas, snapshotDeltas)
-      } yield
-        deltas
-          .scanLeft(earliest)(_ + _)
-    }
-  }
-
-  def timeSeriesGeneratorFor(
-      uniqueItemSpecification: UniqueItemSpecification): Gen[TimeSeries] = {
-    val blobGenerator: Gen[Option[SnapshotBlob]] =
-      Gen.frequency(5 -> (Gen.posNum[Int] map (value => Some(value.toDouble))),
-                    1 -> Gen.const(None))
-
-    val blobsGenerator: Gen[List[Option[SnapshotBlob]]] =
-      Gen.nonEmptyListOf(blobGenerator)
-
-    for {
-      snapshotBlobs <- blobsGenerator
-      twiceTheNumberOfSnapshots = 2 * snapshotBlobs.size
-      times <- ascendingTimes(twiceTheNumberOfSnapshots)
-      (snapshotTimes, queryTimes) = times
-        .grouped(2)
-        .map {
-          case Seq(snapshotTime, queryTime) => snapshotTime -> queryTime
-        }
-        .toList
-        .unzip
-    } yield
-      TimeSeries(uniqueItemSpecification,
-                 snapshotTimes zip snapshotBlobs,
-                 queryTimes)
-  }
-
-  def lotsOfTimeSeriesGenerator(
-      uniqueItemSpecificationGenerator: Gen[UniqueItemSpecification])
-    : Gen[Seq[TimeSeries]] =
-    Gen
-      .nonEmptyContainerOf[Set, UniqueItemSpecification](
-        uniqueItemSpecificationGenerator) map (_.toSeq) flatMap (
-        uniqueItemSpecifications =>
-          Gen.sequence[Seq[TimeSeries], TimeSeries](
-            uniqueItemSpecifications map timeSeriesGeneratorFor))
-
-  def shuffledSnapshotBookings(randomBehaviour: Random,
-                               lotsOfTimeSeries: Seq[TimeSeries],
-                               forceUseOfAnOverlappingType: Boolean = false)
-    : Seq[(Time, Seq[(UniqueItemSpecification, Option[SnapshotBlob])])] = {
-    def shuffleAndMergeBookingsSharingTheSameTime(
-        lotsOfTimeSeriesWithoutTheQueryTimeCruft: Seq[
-          (UniqueItemSpecification, Seq[(Time, Option[SnapshotBlob])])])
-      : Seq[(Time, Seq[(UniqueItemSpecification, Option[SnapshotBlob])])] = {
-      val forceUseOfAnOverlappingTypeDecisions = {
-        val numberOfTimeSeries = lotsOfTimeSeriesWithoutTheQueryTimeCruft.size
-        val numberOfNonDefaultDecisions =
-          randomBehaviour.chooseAnyNumberFromOneTo(numberOfTimeSeries)
-        randomBehaviour.shuffle(Seq
-          .fill(numberOfNonDefaultDecisions)(forceUseOfAnOverlappingType) ++ Seq
-          .fill(numberOfTimeSeries - numberOfNonDefaultDecisions)(false))
-      }
-
-      val snapshotSequencesForManyItems =
-        lotsOfTimeSeriesWithoutTheQueryTimeCruft zip forceUseOfAnOverlappingTypeDecisions flatMap {
-          case ((uniqueItemSpecification, snapshots),
-                forceUseOfAnOverlappingType) =>
-            val numberOfSnapshots = snapshots.size
-            val decisionsToForceOverlappingType = {
-              val numberOfNonDefaultDecisions =
-                randomBehaviour.chooseAnyNumberFromOneTo(numberOfSnapshots)
-              randomBehaviour.shuffle(
-                Seq.fill(numberOfNonDefaultDecisions)(
-                  forceUseOfAnOverlappingType) ++ Seq.fill(
-                  numberOfSnapshots - numberOfNonDefaultDecisions)(false))
-            }
-            snapshots zip decisionsToForceOverlappingType map {
-              case (snapshot, decision) =>
-                (if (decision)
-                   uniqueItemSpecification
-                     .copy(clazz = classOf[Any])
-                 else uniqueItemSpecification) -> snapshot
-            }
-        }
-
-      val snapshotBookingsForManyItemsAndTimesGroupedByTime =
-        (snapshotSequencesForManyItems groupBy {
-          case (_, (when, _)) => when
-        } mapValues (_.map {
-          case (uniqueItemSpecification, (_, blob)) =>
-            uniqueItemSpecification -> blob
-        })).toSeq map {
-          case (when, chunkedBookings) => when -> chunkedBookings
-        }
-
-      randomBehaviour.shuffle(snapshotBookingsForManyItemsAndTimesGroupedByTime)
-    }
-
-    val lotsOfTimeSeriesWithoutTheQueryTimeCruft = lotsOfTimeSeries map {
-      case TimeSeries(uniqueItemSpecification, snapshots, _) =>
-        uniqueItemSpecification -> snapshots
-    }
-
-    shuffleAndMergeBookingsSharingTheSameTime(
-      lotsOfTimeSeriesWithoutTheQueryTimeCruft)
-  }
-
-  def blobStorageFrom(
-      revisions: Seq[
-        Seq[(Time, Seq[(UniqueItemSpecification, Option[SnapshotBlob])])]])
-    : BlobStorage[Time, SnapshotBlob] =
-    ((BlobStorageInMemory.empty[Time, SnapshotBlob]: BlobStorage[
-      Time,
-      SnapshotBlob]) /: revisions) {
-      case (blobStorage, bookingsForRevision) =>
-        val builder = blobStorage.openRevision()
-        for ((when, snapshotBlobs) <- bookingsForRevision)
-          // NOTE: this is rather hokey, as it turns out that the 'annul' is implemented
-          // by passing an empty map to 'record', but the idea here is to respect the
-          // abstraction boundary of 'BlobStorage' and pretend we don't know that it will
-          // do that.
-          if (snapshotBlobs.nonEmpty) {
-            builder.record(when, snapshotBlobs.toMap)
-          } else {
-            builder.annul(when)
-          }
-        builder.build()
-    }
 }
 
 class BlobStorageSpec
-    extends FlatSpec
+    extends AnyFlatSpec
     with Matchers
-    with GeneratorDrivenPropertyChecks {
+    with ScalaCheckPropertyChecks {
   import BlobStorageSpec._
 
   def setUpBlobStorage(
       lotsOfFinalTimeSeries: Seq[TimeSeries],
       lotsOfObsoleteTimeSeries: Seq[TimeSeries],
-      randomBehaviour: Random): BlobStorage[Time, SnapshotBlob] = {
+      randomBehaviour: Random
+  ): BlobStorage[Time, SnapshotBlob] = {
     val obsoleteBookings
-      : Seq[(Time, Seq[(UniqueItemSpecification, Option[SnapshotBlob])])] =
+        : Seq[(Time, Seq[(UniqueItemSpecification, Option[SnapshotBlob])])] =
       shuffledSnapshotBookings(randomBehaviour, lotsOfObsoleteTimeSeries)
 
     val timesOfObsoleteBookings: Seq[Time] = obsoleteBookings.map(_._1)
 
     val annulments
-      : Seq[(Time, Seq[(UniqueItemSpecification, Option[SnapshotBlob])])] =
+        : Seq[(Time, Seq[(UniqueItemSpecification, Option[SnapshotBlob])])] =
       timesOfObsoleteBookings.map(_ -> Seq.empty)
 
     val finalBookings
-      : Seq[(Time, Seq[(UniqueItemSpecification, Option[SnapshotBlob])])] =
+        : Seq[(Time, Seq[(UniqueItemSpecification, Option[SnapshotBlob])])] =
       shuffledSnapshotBookings(randomBehaviour, lotsOfFinalTimeSeries)
 
     val bookingsCulminatingInFinalOnes =
@@ -256,8 +287,9 @@ class BlobStorageSpec
     blobStorageFrom(bookingsCulminatingInFinalOnes)
   }
 
-  def checkExpectationsForNonExistence(timeSlice: Timeslice[SnapshotBlob])(
-      uniqueItemSpecification: UniqueItemSpecification): Unit = {
+  def checkExpectationsForNonExistence(
+      timeSlice: Timeslice[SnapshotBlob]
+  )(uniqueItemSpecification: UniqueItemSpecification): Unit = {
     val id = uniqueItemSpecification.id
 
     val retrievedUniqueItemSpecifications =
@@ -271,9 +303,10 @@ class BlobStorageSpec
     retrievedSnapshotBlob shouldBe None
   }
 
-  def checkExpectationsForExistence(timeSlice: Timeslice[SnapshotBlob],
-                                    expectedSnapshotBlob: Option[SnapshotBlob])(
-      uniqueItemSpecification: UniqueItemSpecification): Unit = {
+  def checkExpectationsForExistence(
+      timeSlice: Timeslice[SnapshotBlob],
+      expectedSnapshotBlob: Option[SnapshotBlob]
+  )(uniqueItemSpecification: UniqueItemSpecification): Unit = {
     val id    = uniqueItemSpecification.id
     val clazz = uniqueItemSpecification.clazz
 
@@ -291,7 +324,9 @@ class BlobStorageSpec
 
         assert(
           clazz.isAssignableFrom(
-            retrievedUniqueItemSpecifications.loneElement.clazz))
+            retrievedUniqueItemSpecifications.loneElement.clazz
+          )
+        )
 
         val theRetrievedUniqueItemSpecification: UniqueItemSpecification =
           retrievedUniqueItemSpecifications.head
@@ -316,20 +351,29 @@ class BlobStorageSpec
     forAll(
       seedGenerator,
       lotsOfTimeSeriesGenerator(
-        uniqueItemSpecificationWithUniqueTypePerIdGenerator),
-      Gen.frequency(10 -> lotsOfTimeSeriesGenerator(
-                      uniqueItemSpecificationWithUniqueTypePerIdGenerator),
-                    1 -> Gen.const(Seq.empty)),
+        uniqueItemSpecificationWithUniqueTypePerIdGenerator
+      ),
+      Gen.frequency(
+        10 -> lotsOfTimeSeriesGenerator(
+          uniqueItemSpecificationWithUniqueTypePerIdGenerator
+        ),
+        1 -> Gen.const(Seq.empty)
+      ),
       MinSuccessful(200)
     ) { (seed, lotsOfFinalTimeSeries, lotsOfObsoleteTimeSeries) =>
       val randomBehaviour = new Random(seed)
 
       val blobStorage: BlobStorage[Time, SnapshotBlob] =
-        setUpBlobStorage(lotsOfFinalTimeSeries,
-                         lotsOfObsoleteTimeSeries,
-                         randomBehaviour)
+        setUpBlobStorage(
+          lotsOfFinalTimeSeries,
+          lotsOfObsoleteTimeSeries,
+          randomBehaviour
+        )
 
-      for (TimeSeries(uniqueItemSpecification, snapshots, queryTimes) <- lotsOfFinalTimeSeries) {
+      for (
+        TimeSeries(uniqueItemSpecification, snapshots, queryTimes) <-
+          lotsOfFinalTimeSeries
+      ) {
         {
           val beforeTheFirstSnapshot = snapshots.head._1 - 1
 
@@ -338,10 +382,13 @@ class BlobStorageSpec
           checkExpectationsForNonExistence(timeSlice)(uniqueItemSpecification)
         }
 
-        for ((snapshotBlob: Option[SnapshotBlob], snapshotTime, queryTime) <- snapshots zip queryTimes map {
-               case ((snapshotTime, snapshotBlob), queryTime) =>
-                 (snapshotBlob, snapshotTime, queryTime)
-             }) {
+        for (
+          (snapshotBlob: Option[SnapshotBlob], snapshotTime, queryTime) <-
+            snapshots zip queryTimes map {
+              case ((snapshotTime, snapshotBlob), queryTime) =>
+                (snapshotBlob, snapshotTime, queryTime)
+            }
+        ) {
           val timeSlice = blobStorage.timeSlice(queryTime)
 
           {
@@ -351,7 +398,8 @@ class BlobStorageSpec
             checkExpectations(uniqueItemSpecification)
 
             checkExpectations(
-              uniqueItemSpecification.copy(clazz = classOf[Any]))
+              uniqueItemSpecification.copy(clazz = classOf[Any])
+            )
           }
 
           {
@@ -359,7 +407,8 @@ class BlobStorageSpec
               checkExpectationsForNonExistence(timeSlice)(_)
 
             checkExpectations(
-              uniqueItemSpecification.copy(clazz = classOf[NoKindOfThing]))
+              uniqueItemSpecification.copy(clazz = classOf[NoKindOfThing])
+            )
 
             val allRetrievedUniqueItemSpecifications =
               timeSlice.uniqueItemQueriesFor(classOf[NoKindOfThing])
@@ -369,7 +418,8 @@ class BlobStorageSpec
             val nonExistentItemId = "I do not exist."
 
             checkExpectations(
-              UniqueItemSpecification(nonExistentItemId, classOf[Any]))
+              UniqueItemSpecification(nonExistentItemId, classOf[Any])
+            )
           }
 
           if (queryTime > snapshotTime) {
@@ -383,7 +433,8 @@ class BlobStorageSpec
               checkExpectations(uniqueItemSpecification)
 
               checkExpectations(
-                uniqueItemSpecification.copy(clazz = classOf[Any]))
+                uniqueItemSpecification.copy(clazz = classOf[Any])
+              )
             }
 
             {
@@ -391,7 +442,8 @@ class BlobStorageSpec
                 checkExpectationsForNonExistence(timeSlice)(_)
 
               checkExpectations(
-                uniqueItemSpecification.copy(clazz = classOf[NoKindOfThing]))
+                uniqueItemSpecification.copy(clazz = classOf[NoKindOfThing])
+              )
 
               val allRetrievedUniqueItemSpecifications =
                 timeSlice.uniqueItemQueriesFor(classOf[NoKindOfThing])
@@ -401,7 +453,8 @@ class BlobStorageSpec
               val nonExistentItemId = "I do not exist."
 
               checkExpectations(
-                UniqueItemSpecification(nonExistentItemId, classOf[Any]))
+                UniqueItemSpecification(nonExistentItemId, classOf[Any])
+              )
             }
           }
         }
@@ -412,7 +465,8 @@ class BlobStorageSpec
   def checkExpectationsForExistenceWhenMultipleItemsShareTheSameId(
       timeSlice: Timeslice[SnapshotBlob],
       expectedSnapshotBlob: Option[SnapshotBlob],
-      uniqueItemSpecification: UniqueItemSpecification): Unit = {
+      uniqueItemSpecification: UniqueItemSpecification
+  ): Unit = {
     val id    = uniqueItemSpecification.id
     val clazz = uniqueItemSpecification.clazz
 
@@ -430,9 +484,12 @@ class BlobStorageSpec
 
         assert(
           retrievedUniqueItemSpecifications.forall(uniqueItemSpecification =>
-            clazz.isAssignableFrom(uniqueItemSpecification.clazz)))
+            clazz.isAssignableFrom(uniqueItemSpecification.clazz)
+          )
+        )
 
-        val retrievedSnapshotBlobs = retrievedUniqueItemSpecifications map timeSlice.snapshotBlobFor
+        val retrievedSnapshotBlobs =
+          retrievedUniqueItemSpecifications map timeSlice.snapshotBlobFor
 
         retrievedSnapshotBlobs should contain(Some(snapshotBlob))
       case None =>
@@ -443,21 +500,30 @@ class BlobStorageSpec
     forAll(
       seedGenerator,
       lotsOfTimeSeriesGenerator(
-        uniqueItemSpecificationWithDisjointTypesPerIdGenerator) filter (_.groupBy(
-        _.uniqueItemSpecification.id).values.exists(1 < _.size)),
-      Gen.frequency(10 -> lotsOfTimeSeriesGenerator(
-                      uniqueItemSpecificationWithDisjointTypesPerIdGenerator),
-                    1 -> Gen.const(Seq.empty)),
+        uniqueItemSpecificationWithDisjointTypesPerIdGenerator
+      ) filter (_.groupBy(_.uniqueItemSpecification.id).values
+        .exists(1 < _.size)),
+      Gen.frequency(
+        10 -> lotsOfTimeSeriesGenerator(
+          uniqueItemSpecificationWithDisjointTypesPerIdGenerator
+        ),
+        1 -> Gen.const(Seq.empty)
+      ),
       MinSuccessful(200)
     ) { (seed, lotsOfFinalTimeSeries, lotsOfObsoleteTimeSeries) =>
       val randomBehaviour = new Random(seed)
 
       val blobStorage: BlobStorage[Time, SnapshotBlob] =
-        setUpBlobStorage(lotsOfFinalTimeSeries,
-                         lotsOfObsoleteTimeSeries,
-                         randomBehaviour)
+        setUpBlobStorage(
+          lotsOfFinalTimeSeries,
+          lotsOfObsoleteTimeSeries,
+          randomBehaviour
+        )
 
-      for (TimeSeries(uniqueItemSpecification, snapshots, queryTimes) <- lotsOfFinalTimeSeries) {
+      for (
+        TimeSeries(uniqueItemSpecification, snapshots, queryTimes) <-
+          lotsOfFinalTimeSeries
+      ) {
         {
           val beforeTheFirstSnapshot = snapshots.head._1 - 1
 
@@ -466,16 +532,20 @@ class BlobStorageSpec
           checkExpectationsForNonExistence(timeSlice)(uniqueItemSpecification)
         }
 
-        for ((snapshotBlob: Option[SnapshotBlob], _, queryTime) <- snapshots zip queryTimes map {
-               case ((snapshotTime, snapshotBlob), queryTime) =>
-                 (snapshotBlob, snapshotTime, queryTime)
-             }) {
+        for (
+          (snapshotBlob: Option[SnapshotBlob], _, queryTime) <-
+            snapshots zip queryTimes map {
+              case ((snapshotTime, snapshotBlob), queryTime) =>
+                (snapshotBlob, snapshotTime, queryTime)
+            }
+        ) {
           val timeSlice = blobStorage.timeSlice(queryTime)
 
           checkExpectationsForExistenceWhenMultipleItemsShareTheSameId(
             timeSlice,
             snapshotBlob,
-            uniqueItemSpecification)
+            uniqueItemSpecification
+          )
         }
       }
     }
@@ -485,20 +555,29 @@ class BlobStorageSpec
     forAll(
       seedGenerator,
       lotsOfTimeSeriesGenerator(
-        uniqueItemSpecificationWithUniqueTypePerIdGenerator),
-      Gen.frequency(10 -> lotsOfTimeSeriesGenerator(
-                      uniqueItemSpecificationWithUniqueTypePerIdGenerator),
-                    1 -> Gen.const(Seq.empty)),
+        uniqueItemSpecificationWithUniqueTypePerIdGenerator
+      ),
+      Gen.frequency(
+        10 -> lotsOfTimeSeriesGenerator(
+          uniqueItemSpecificationWithUniqueTypePerIdGenerator
+        ),
+        1 -> Gen.const(Seq.empty)
+      ),
       MinSuccessful(200)
     ) { (seed, lotsOfFinalTimeSeries, lotsOfObsoleteTimeSeries) =>
       val randomBehaviour = new Random(seed)
 
       val blobStorage: BlobStorage[Time, SnapshotBlob] =
-        setUpBlobStorage(lotsOfFinalTimeSeries,
-                         lotsOfObsoleteTimeSeries,
-                         randomBehaviour)
+        setUpBlobStorage(
+          lotsOfFinalTimeSeries,
+          lotsOfObsoleteTimeSeries,
+          randomBehaviour
+        )
 
-      for (TimeSeries(uniqueItemSpecification, snapshots, queryTimes) <- lotsOfFinalTimeSeries) {
+      for (
+        TimeSeries(uniqueItemSpecification, snapshots, queryTimes) <-
+          lotsOfFinalTimeSeries
+      ) {
         {
           val timeSlice =
             blobStorage.timeSlice(snapshots.head._1, inclusive = false)
@@ -506,9 +585,11 @@ class BlobStorageSpec
           checkExpectationsForNonExistence(timeSlice)(uniqueItemSpecification)
         }
 
-        for ((snapshotTime, previousQueryTime) <- snapshots
-               .map(_._1)
-               .tail zip queryTimes) {
+        for (
+          (snapshotTime, previousQueryTime) <- snapshots
+            .map(_._1)
+            .tail zip queryTimes
+        ) {
           val previousTimeSlice = blobStorage.timeSlice(previousQueryTime)
 
           val previousSnapshot =
@@ -518,8 +599,10 @@ class BlobStorageSpec
             blobStorage.timeSlice(snapshotTime, inclusive = false)
 
           val checkExpectations =
-            checkExpectationsForExistence(timeSliceInExclusiveMode,
-                                          previousSnapshot)(_)
+            checkExpectationsForExistence(
+              timeSliceInExclusiveMode,
+              previousSnapshot
+            )(_)
 
           checkExpectations(uniqueItemSpecification)
 

@@ -11,8 +11,8 @@ import net.bytebuddy.matcher.ElementMatchers
 import net.bytebuddy.{ByteBuddy, NamingStrategy}
 
 import java.lang.reflect.Modifier
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.{Super => _, This => _}
 
 private[plutonium] object ProxyFactory {

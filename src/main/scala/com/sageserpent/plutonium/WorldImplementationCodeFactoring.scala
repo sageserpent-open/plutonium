@@ -1,53 +1,33 @@
 package com.sageserpent.plutonium
 
-import java.lang.reflect.Method
-import java.time.Instant
-
 import com.sageserpent.americium.{Finite, NegativeInfinity, Unbounded}
 import com.sageserpent.plutonium.World.Revision
 import net.bytebuddy.description.method.MethodDescription
 
-import scala.collection.JavaConversions._
+import java.lang.reflect.Method
+import java.time.Instant
 import scala.collection.Searching._
+import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.{Super => _, This => _}
 
 object WorldImplementationCodeFactoring {
   type EventOrderingTiebreakerIndex = Int
-
-  sealed abstract class AbstractEventData extends java.io.Serializable {
-    val introducedInRevision: Revision
-  }
-
   type EventOrderingKey =
     (Unbounded[Instant], Revision, EventOrderingTiebreakerIndex)
 
-  case class EventData(
-      serializableEvent: Event,
-      override val introducedInRevision: Revision,
-      eventOrderingTiebreakerIndex: EventOrderingTiebreakerIndex)
-      extends AbstractEventData {
-    def orderingKey: EventOrderingKey =
-      (serializableEvent.when,
-       introducedInRevision,
-       eventOrderingTiebreakerIndex)
-  }
-
-  case class AnnulledEventData(override val introducedInRevision: Revision)
-      extends AbstractEventData
-
-  implicit val eventDataOrdering: Ordering[EventData] =
-    Ordering.by(_.orderingKey)
-
   def eventTimelineFrom[EventId](
-      eventDatums: Seq[(EventId, AbstractEventData)]): Seq[(Event, EventId)] =
-    (eventDatums collect {
-      case (eventId, eventData: EventData) => eventId -> eventData
-    }).sortBy(_._2).map {
-      case (eventId, eventData) => eventData.serializableEvent -> eventId
+      eventDatums: Seq[(EventId, AbstractEventData)]
+  ): Seq[(Event, EventId)] =
+    (eventDatums collect { case (eventId, eventData: EventData) =>
+      eventId -> eventData
+    }).sortBy(_._2).map { case (eventId, eventData) =>
+      eventData.serializableEvent -> eventId
     }
 
-  def recordPatches(eventTimeline: Seq[(Event, EventId)],
-                    patchRecorder: PatchRecorder) = {
+  def recordPatches(
+      eventTimeline: Seq[(Event, EventId)],
+      patchRecorder: PatchRecorder
+  ) = {
     for ((event, eventId) <- eventTimeline) event match {
       case Change(when, patches) =>
         for (patch <- patches) {
@@ -62,8 +42,22 @@ object WorldImplementationCodeFactoring {
   }
 
   def firstMethodIsOverrideCompatibleWithSecond(
+      firstMethod: Method,
+      secondMethod: Method
+  ): Boolean = {
+    firstMethodIsOverrideCompatibleWithSecond(
+      new MethodDescription.ForLoadedMethod(firstMethod),
+      new MethodDescription.ForLoadedMethod(secondMethod)
+    )
+  }
+
+  implicit val eventDataOrdering: Ordering[EventData] =
+    Ordering.by(_.orderingKey)
+
+  def firstMethodIsOverrideCompatibleWithSecond(
       firstMethod: MethodDescription,
-      secondMethod: MethodDescription): Boolean =
+      secondMethod: MethodDescription
+  ): Boolean =
     secondMethod.getName == firstMethod.getName &&
       secondMethod.getReceiverType.asErasure
         .isAssignableFrom(firstMethod.getReceiverType.asErasure) &&
@@ -72,24 +66,37 @@ object WorldImplementationCodeFactoring {
         secondMethod.getReturnType.asErasure
           .isAssignableFrom(firstMethod.getReturnType.asErasure.asBoxed)) &&
       secondMethod.getParameters.size == firstMethod.getParameters.size &&
-      secondMethod.getParameters.toSeq
-        .map(_.getType) == firstMethod.getParameters.toSeq
+      secondMethod.getParameters.asScala.toSeq
+        .map(_.getType) == firstMethod.getParameters.asScala.toSeq
         .map(_.getType) // What about contravariance? Hmmm...
 
-  def firstMethodIsOverrideCompatibleWithSecond(
-      firstMethod: Method,
-      secondMethod: Method): Boolean = {
-    firstMethodIsOverrideCompatibleWithSecond(
-      new MethodDescription.ForLoadedMethod(firstMethod),
-      new MethodDescription.ForLoadedMethod(secondMethod))
+  sealed abstract class AbstractEventData extends java.io.Serializable {
+    val introducedInRevision: Revision
   }
+
+  case class EventData(
+      serializableEvent: Event,
+      override val introducedInRevision: Revision,
+      eventOrderingTiebreakerIndex: EventOrderingTiebreakerIndex
+  ) extends AbstractEventData {
+    def orderingKey: EventOrderingKey =
+      (
+        serializableEvent.when,
+        introducedInRevision,
+        eventOrderingTiebreakerIndex
+      )
+  }
+
+  case class AnnulledEventData(override val introducedInRevision: Revision)
+      extends AbstractEventData
 
 }
 
 abstract class WorldImplementationCodeFactoring extends World {
-  abstract class ScopeBasedOnNextRevision(val when: Unbounded[Instant],
-                                          val nextRevision: Revision)
-      extends com.sageserpent.plutonium.Scope {
+  abstract class ScopeBasedOnNextRevision(
+      val when: Unbounded[Instant],
+      val nextRevision: Revision
+  ) extends com.sageserpent.plutonium.Scope {
     def asOf = nextRevision match {
       case World.initialRevision => NegativeInfinity[Instant]()
       case _ =>
@@ -97,21 +104,25 @@ abstract class WorldImplementationCodeFactoring extends World {
           Finite(revisionAsOfs(nextRevision - 1))
         else
           throw new RuntimeException(
-            s"Scope based the revision prior to: $nextRevision can't be constructed - there are only ${revisionAsOfs.size} revisions of the world.")
+            s"Scope based the revision prior to: $nextRevision can't be constructed - there are only ${revisionAsOfs.size} revisions of the world."
+          )
     }
   }
 
-  abstract class ScopeBasedOnAsOf(val when: Unbounded[Instant],
-                                  unliftedAsOf: Instant)
-      extends com.sageserpent.plutonium.Scope {
+  abstract class ScopeBasedOnAsOf(
+      val when: Unbounded[Instant],
+      unliftedAsOf: Instant
+  ) extends com.sageserpent.plutonium.Scope {
     override val asOf = Finite(unliftedAsOf)
 
     override val nextRevision: Revision = {
       revisionAsOfs.search(unliftedAsOf) match {
         case found @ Found(_) =>
-          val versionTimelineNotIncludingAllUpToTheMatch = revisionAsOfs drop (1 + found.foundIndex)
+          val versionTimelineNotIncludingAllUpToTheMatch =
+            revisionAsOfs drop (1 + found.foundIndex)
           versionTimelineNotIncludingAllUpToTheMatch.indexWhere(
-            implicitly[Ordering[Instant]].lt(unliftedAsOf, _)) match {
+            implicitly[Ordering[Instant]].lt(unliftedAsOf, _)
+          ) match {
             case -1    => revisionAsOfs.length
             case index => found.foundIndex + 1 + index
           }

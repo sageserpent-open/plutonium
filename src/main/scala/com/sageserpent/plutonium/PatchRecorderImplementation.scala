@@ -2,14 +2,14 @@ package com.sageserpent.plutonium
 
 import java.lang.reflect.Method
 import java.time.Instant
-
 import com.sageserpent.americium.Unbounded
 
 import scala.collection.mutable
+import scala.language.postfixOps
 
 object PatchRecorderImplementation {
   private type SequenceIndex = Long
-  val initialSequenceIndex: SequenceIndex = 0L
+  private val initialSequenceIndex: SequenceIndex = 0L
 }
 
 abstract class PatchRecorderImplementation(
@@ -82,7 +82,7 @@ abstract class PatchRecorderImplementation(
             override val sequenceIndex            = _sequenceIndex
             override val when: Unbounded[Instant] = annihilation.when
 
-            override def perform() {
+            override def perform(): Unit = {
               for (itemStateToBeAnnihilated <- compatibleItemStates) {
                 annihilateItemFor_(when,
                                    annihilation.rewriteItemClass(
@@ -141,7 +141,7 @@ abstract class PatchRecorderImplementation(
   type CandidatePatchTuple =
     (SequenceIndex, AbstractPatch, Unbounded[Instant], EventId)
 
-  private type CandidatePatches = mutable.MutableList[CandidatePatchTuple]
+  private type CandidatePatches = mutable.ArrayBuffer[CandidatePatchTuple]
 
   private class ItemState(
       initialClazz: Class[_],
@@ -185,7 +185,7 @@ abstract class PatchRecorderImplementation(
           }
         case None =>
           exemplarMethodToCandidatePatchesMap += (patch.method -> mutable
-            .MutableList(candidatePatchTuple))
+            .ArrayBuffer(candidatePatchTuple))
       }
     }
 
@@ -296,9 +296,9 @@ abstract class PatchRecorderImplementation(
       override val sequenceIndex: SequenceIndex = sequenceIndexForAnchorPatch
       override val when: Unbounded[Instant]     = whenTheAnchorPatchOccurs
 
-      override def perform() {
+      override def perform(): Unit = {
         val bestPatchWithLoweredClazzes = bestPatch.rewriteItemClazzes(
-          reconstitutionDataToItemStateMap.mapValues(_.lowerBoundClazz))
+          reconstitutionDataToItemStateMap.map { case (k, v) => k -> v.lowerBoundClazz })
         updateConsumer.capturePatch(whenTheAnchorPatchOccurs,
                                     eventIdForAnchorPatch,
                                     bestPatchWithLoweredClazzes)

@@ -6,6 +6,7 @@ object ReferringHistory {
 
 abstract class ReferringHistory extends History {
   type Id = String
+  private val _referencedHistories = collection.mutable.Map.empty[Any, History]
 
   override def checkInvariant(): Unit = {
     super.checkInvariant()
@@ -29,7 +30,7 @@ abstract class ReferringHistory extends History {
   }
 
   def referencedDatums: collection.Map[Any, Seq[Any]] =
-    _referencedHistories mapValues (_.datums)
+    _referencedHistories.map { case (k, v) => k -> v.datums.toSeq }
 
   def referencedHistories: collection.Map[Any, History] = _referencedHistories
 
@@ -40,6 +41,4 @@ abstract class ReferringHistory extends History {
   def mutateRelatedItem(referencedHistoryId: History#Id): Unit = {
     _referencedHistories(referencedHistoryId).shouldBeUnchanged = false
   }
-
-  private val _referencedHistories = collection.mutable.Map.empty[Any, History]
 }

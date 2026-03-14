@@ -13,6 +13,7 @@ import quiver._
 
 import java.time.Instant
 import scala.annotation.tailrec
+import scala.language.postfixOps
 
 object Timeline {
   type ItemStateUpdatesDag =
@@ -138,8 +139,8 @@ case class Timeline(
 
                 revisionBuilder.record(
                   itemStateUpdateKey,
-                  mutatedItemSnapshots.mapValues { case (snapshot, _) =>
-                    Some(snapshot)
+                  mutatedItemSnapshots.map { case (k, (snapshot, _)) =>
+                    k -> Some(snapshot)
                   }
                 )
 

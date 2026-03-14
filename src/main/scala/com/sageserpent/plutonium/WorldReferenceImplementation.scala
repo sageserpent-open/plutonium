@@ -5,36 +5,26 @@ import com.sageserpent.americium.{PositiveInfinity, Unbounded}
 import java.time.Instant
 import scala.Ordering.Implicits._
 import scala.collection.Searching._
-import scala.collection.generic.IsSeqLike
-import scala.collection.mutable.MutableList
-import scala.collection.{SeqLike, SeqView, mutable}
+import scala.collection.mutable
+import scala.language.postfixOps
 
 object MutableState {
 
   import World._
   import WorldImplementationCodeFactoring._
 
-  type EventCorrections = MutableList[AbstractEventData]
+  type EventCorrections = mutable.ArrayBuffer[AbstractEventData]
   type EventIdToEventCorrectionsMap[EventId] =
     mutable.Map[EventId, EventCorrections]
-
-  implicit val isSeqLike = new IsSeqLike[SeqView[Revision, Seq[_]]] {
-    type A = Revision
-    override val conversion: SeqView[Revision, Seq[_]] => SeqLike[
-      this.A,
-      SeqView[Revision, Seq[_]]
-    ] =
-      identity
-  }
 
   def numberOfEventCorrectionsPriorToCutoff(
       eventCorrections: EventCorrections,
       cutoffRevision: Revision
   ): EventOrderingTiebreakerIndex = {
-    val revisionsView: SeqView[Revision, Seq[_]] =
-      eventCorrections.view.map(_.introducedInRevision)
+    val revisionsIndexedSeq: IndexedSeq[Revision] =
+      eventCorrections.view.map(_.introducedInRevision).toIndexedSeq
 
-    revisionsView.search(cutoffRevision) match {
+    revisionsIndexedSeq.search(cutoffRevision) match {
       case Found(foundIndex)              => foundIndex
       case InsertionPoint(insertionPoint) => insertionPoint
     }
@@ -54,7 +44,7 @@ class MutableState {
     mutable.Set.empty
   val eventIdToEventCorrectionsMap: EventIdToEventCorrectionsMap[EventId] =
     mutable.Map.empty
-  val _revisionAsOfs: MutableList[Instant] = MutableList.empty
+  val _revisionAsOfs: mutable.ArrayBuffer[Instant] = mutable.ArrayBuffer.empty
 
   def nextRevision: Revision = _revisionAsOfs.size
 
@@ -71,6 +61,11 @@ class MutableState {
   }
 
   def pertinentEventDatums(
+      cutoffRevision: Revision
+  ): Seq[(EventId, AbstractEventData)] =
+    pertinentEventDatums(cutoffRevision, PositiveInfinity(), _ => true)
+
+  def pertinentEventDatums(
       cutoffRevision: Revision,
       cutoffWhen: Unbounded[Instant],
       eventIdInclusion: EventIdInclusion
@@ -79,7 +74,7 @@ class MutableState {
       .filterNot(PartialFunction.cond(_) { case (_, eventData: EventData) =>
         eventData.serializableEvent.when > cutoffWhen
       })
-      .toStream
+      .toSeq
 
   def eventIdsAndTheirDatums(
       cutoffRevision: Revision,
@@ -103,11 +98,6 @@ class MutableState {
           None
     } collect { case Some(idAndDataPair) => idAndDataPair }
   }
-
-  def pertinentEventDatums(
-      cutoffRevision: Revision
-  ): Seq[(EventId, AbstractEventData)] =
-    pertinentEventDatums(cutoffRevision, PositiveInfinity(), _ => true)
 
   def checkInvariant() = {
     assert(revisionAsOfs zip revisionAsOfs.tail forall { case (first, second) =>
@@ -151,7 +141,7 @@ class WorldReferenceImplementation(mutableState: MutableState)
           case None => AnnulledEventData(nextRevisionPriorToUpdate)
         })
       }
-    }
+    } toMap
 
     def buildAndValidateEventTimelineForProposedNewRevision(
         newEventDatums: Seq[(EventId, AbstractEventData)],
@@ -225,7 +215,7 @@ class WorldReferenceImplementation(mutableState: MutableState)
 
       for ((eventId, eventDatum) <- newEventDatums) {
         mutableState.eventIdToEventCorrectionsMap
-          .getOrElseUpdate(eventId, MutableList.empty) += eventDatum
+          .getOrElseUpdate(eventId, mutable.ArrayBuffer.empty) += eventDatum
       }
       mutableState._revisionAsOfs += asOf
       mutableState.checkInvariant()
@@ -276,7 +266,7 @@ class WorldReferenceImplementation(mutableState: MutableState)
               case (_, eventData: EventData) =>
                 eventData.serializableEvent.when > cutoffWhen
             })
-            .toStream ++ baseMutableState.pertinentEventDatums(
+            .toSeq ++ baseMutableState.pertinentEventDatums(
             numberOfRevisionsInCommon,
             cutoffWhenForBaseWorld,
             eventId =>
@@ -326,10 +316,10 @@ class WorldReferenceImplementation(mutableState: MutableState)
 
     override def itemsFor[Item](
         uniqueItemSpecification: UniqueItemSpecification
-    ): Stream[Item] =
+    ): LazyList[Item] =
       identifiedItemsScope.itemsFor(uniqueItemSpecification)
 
-    override def allItems[Item](clazz: Class[Item]): Stream[Item] =
+    override def allItems[Item](clazz: Class[Item]): LazyList[Item] =
       identifiedItemsScope.allItems(clazz)
 
     identifiedItemsScope.populate(when, eventTimeline(nextRevision))

@@ -1,10 +1,10 @@
 package com.sageserpent.plutonium
 
 import cats.Alternative
-import cats.implicits.{catsStdBitraverseForEither, catsStdInstancesForStream}
+import cats.implicits._
 
 import scala.annotation.tailrec
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 /** Provides access to items selected by instances of [[Bitemporal]].
   * @todo
@@ -17,9 +17,9 @@ trait ItemCache {
     *   Specifies what item or items to retrieve.
     * @tparam Item
     * @return
-    *   A stream of matching items, there may be none.
+    *   A lazy list of matching items, there may be none.
     */
-  def render[Item](bitemporal: Bitemporal[Item]): Stream[Item]
+  def render[Item](bitemporal: Bitemporal[Item]): LazyList[Item]
 
   /** Alternative to [[render]] that yields a Java [[java.lang.Iterable]].
     * @param bitemporal
@@ -46,7 +46,7 @@ trait ItemCache {
 }
 
 protected[plutonium] trait ItemCacheImplementation extends ItemCache {
-  def render[Item](bitemporal: Bitemporal[Item]): Stream[Item] = {
+  def render[Item](bitemporal: Bitemporal[Item]): LazyList[Item] = {
     bitemporal match {
       case FlatMapBitemporalResult(
             precedingContext,
@@ -57,20 +57,20 @@ protected[plutonium] trait ItemCacheImplementation extends ItemCache {
       case TailRecMResult(initialItem, stage) =>
         @tailrec
         def unroll(
-            intermediates: Stream[Any],
-            results: Stream[Item]
-        ): Stream[Item] = if (intermediates.nonEmpty) {
-          val (newIntermediates, newResults) = Alternative[Stream].separate(
+            intermediates: LazyList[Any],
+            results: LazyList[Item]
+        ): LazyList[Item] = if (intermediates.nonEmpty) {
+          val (newIntermediates, newResults) = Alternative[LazyList].separate(
             intermediates.flatMap(intermediate => render(stage(intermediate)))
           )
 
           unroll(newIntermediates, results ++ newResults)
         } else results
 
-        unroll(Stream(initialItem), Stream.empty)
+        unroll(LazyList(initialItem), LazyList.empty)
       case PlusBitemporalResult(lhs, rhs) => render(lhs) ++ render(rhs)
-      case PointBitemporalResult(item)    => Stream(item)
-      case NoneBitemporalResult()         => Stream.empty
+      case PointBitemporalResult(item)    => LazyList(item)
+      case NoneBitemporalResult()         => LazyList.empty
       case IdentifiedItemsBitemporalResult(uniqueItemSpecification) =>
         itemsFor(uniqueItemSpecification)
       case WildcardBitemporalResult(clazz) =>
@@ -88,17 +88,17 @@ protected[plutonium] trait ItemCacheImplementation extends ItemCache {
       case TailRecMResult(initialItem, stage) =>
         @tailrec
         def unroll(
-            intermediates: Stream[Any],
+            intermediates: LazyList[Any],
             count: Int
         ): Int = if (intermediates.nonEmpty) {
-          val (newIntermediates, newResults) = Alternative[Stream].separate(
+          val (newIntermediates, newResults) = Alternative[LazyList].separate(
             intermediates.flatMap(intermediate => render(stage(intermediate)))
           )
 
           unroll(newIntermediates, count + newResults.size)
         } else count
 
-        unroll(Stream(initialItem), 0)
+        unroll(LazyList(initialItem), 0)
       case PlusBitemporalResult(lhs, rhs) => numberOf(lhs) + numberOf(rhs)
       case PointBitemporalResult(_)       => 1
       case NoneBitemporalResult()         => 0
@@ -111,7 +111,7 @@ protected[plutonium] trait ItemCacheImplementation extends ItemCache {
 
   protected def itemsFor[Item](
       uniqueItemSpecification: UniqueItemSpecification
-  ): Stream[Item]
+  ): LazyList[Item]
 
-  protected def allItems[Item](clazz: Class[Item]): Stream[Item]
+  protected def allItems[Item](clazz: Class[Item]): LazyList[Item]
 }

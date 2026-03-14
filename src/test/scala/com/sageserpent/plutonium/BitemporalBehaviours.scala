@@ -1,20 +1,22 @@
 package com.sageserpent.plutonium
 
 import cats.effect.IO
+import cats.effect.unsafe.implicits.global
 import cats.kernel.laws.discipline.MonoidTests
 import cats.laws.discipline.MonadTests
 import cats.syntax.apply._
 import cats.{Applicative, Eq}
-import org.scalacheck.Prop.BooleanOperators
+import org.scalacheck.Prop.propBoolean
 import org.scalacheck.{Arbitrary, Gen, Prop, Properties}
-import org.scalatest.FlatSpec
-import org.scalatest.prop.Checkers
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatestplus.scalacheck.Checkers
 
+import scala.language.postfixOps
 import scala.reflect.runtime.universe._
 import scala.util.Random
 
 trait BitemporalBehaviours
-    extends FlatSpec
+    extends AnyFlatSpec
     with Checkers
     with WorldSpecSupport { this: WorldResource =>
   def bitemporalBehaviour = {
@@ -128,7 +130,7 @@ trait BitemporalBehaviours
 
                 properties.include(MonoidTests[Bitemporal[Int]].monoid.all)
 
-                Prop.all(properties.properties map (_._2): _*)
+                Prop.all(properties.properties map (_._2) toSeq: _*)
               }
             )
             .unsafeRunSync
@@ -1049,7 +1051,7 @@ class BitemporalSpecUsingWorldReferenceImplementation
     extends BitemporalBehaviours
     with WorldReferenceImplementationResource {
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
-    PropertyCheckConfig(maxSize = 30)
+    PropertyCheckConfiguration()
 
   "The class Bitemporal (using the world reference implementation)" should behave like bitemporalBehaviour
 
@@ -1068,7 +1070,7 @@ class BitemporalSpecUsingWorldEfficientInMemoryImplementation
     extends BitemporalBehaviours
     with WorldEfficientInMemoryImplementationResource {
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
-    PropertyCheckConfig(maxSize = 30, minSuccessful = 30)
+    PropertyCheckConfiguration(minSuccessful = 30)
 
   "The class Bitemporal (using the world efficient in-memory implementation)" should behave like bitemporalBehaviour
 
@@ -1083,4 +1085,3 @@ class BitemporalSpecUsingWorldEfficientInMemoryImplementation
   "A bitemporal query (using the world efficient in-memory implementation)" should behave like bitemporalQueryBehaviour
 
 }
-

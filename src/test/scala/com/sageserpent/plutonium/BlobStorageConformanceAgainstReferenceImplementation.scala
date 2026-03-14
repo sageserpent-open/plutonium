@@ -1,10 +1,12 @@
 package com.sageserpent.plutonium
 
 import cats.effect.{IO, Resource}
+import cats.effect.unsafe.implicits.global
 import org.scalacheck.ScalacheckShapeless._
 import org.scalacheck.{Arbitrary, Gen}
-import org.scalatest.prop.GeneratorDrivenPropertyChecks
-import org.scalatest.{FlatSpec, Matchers}
+import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 import scalikejdbc.ConnectionPool
 
 import java.time.Instant
@@ -71,9 +73,9 @@ object BlobStorageConformanceAgainstReferenceImplementation
 }
 
 trait BlobStorageConformanceAgainstReferenceImplementation
-    extends FlatSpec
+    extends AnyFlatSpec
     with Matchers
-    with GeneratorDrivenPropertyChecks {
+    with ScalaCheckPropertyChecks {
   this: BlobStorageResource =>
 
   import BlobStorageConformanceAgainstReferenceImplementation._
@@ -100,10 +102,10 @@ trait BlobStorageConformanceAgainstReferenceImplementation
                 operation <- operations
               } {
                 def checkResults(when: ItemStateUpdateTime, inclusive: Boolean)(
-                    traineeResult: Stream[UniqueItemSpecification],
+                    traineeResult: Seq[UniqueItemSpecification],
                     traineeTimeslice: BlobStorage.Timeslice[
                       ItemStateStorage.SnapshotBlob])(
-                    exemplarResult: Stream[UniqueItemSpecification],
+                    exemplarResult: Seq[UniqueItemSpecification],
                     exemplarTimeslice: BlobStorage.Timeslice[
                       ItemStateStorage.SnapshotBlob]): Unit = {
                   try {
@@ -199,9 +201,9 @@ trait BlobStorageConformanceAgainstReferenceImplementation
                     val exemplarTimeslice = exemplar.timeSlice(when, inclusive)
                     val (traineeResult, exemplarResult) = traineeTimeslice
                       .uniqueItemQueriesFor(clazz)
-                      .force -> exemplarTimeslice
+                      .toList -> exemplarTimeslice
                       .uniqueItemQueriesFor(clazz)
-                      .force
+                      .toList
 
                     checkResults(when, inclusive)(
                       traineeResult,

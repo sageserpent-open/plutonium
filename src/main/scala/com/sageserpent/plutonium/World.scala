@@ -5,8 +5,9 @@ import com.sageserpent.plutonium.World.Revision
 
 import java.time.Instant
 import java.util.Optional
-import scala.collection.JavaConverters._
 import scala.compat.java8.OptionConverters.RichOptionalGeneric
+import scala.jdk.CollectionConverters._
+import scala.language.postfixOps
 
 object World {
   type Revision = Int
@@ -123,7 +124,7 @@ trait World extends AutoCloseable {
       events: java.util.Map[_ <: EventId, Optional[Event]],
       asOf: Instant
   ): Revision = {
-    revise_(events.asScala.mapValues(_.asScala), asOf)
+    revise_(events.asScala.mapValues(_.asScala) toMap, asOf)
   }
 
   /** Convenience overload to book in a single event.

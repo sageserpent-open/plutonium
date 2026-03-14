@@ -1,10 +1,10 @@
 package com.sageserpent.plutonium
 
-import java.time.Instant
-
 import cats.effect.IO
+import cats.effect.unsafe.implicits.global
 import com.sageserpent.americium.randomEnrichment._
 
+import java.time.Instant
 import scala.concurrent.duration._
 import scala.util.Random
 
@@ -54,13 +54,15 @@ trait Benchmark extends WorldEfficientInMemoryImplementationResource {
               world.revise(
                 eventId,
                 Change.forTwoItems[Thing, Thing](
-                  Instant.ofEpochSecond(3600L * theHourFromTheStart))(
+                  Instant.ofEpochSecond(3600L * theHourFromTheStart)
+                )(
                   oneId,
                   anotherId,
                   (oneThing, anotherThing) => {
                     oneThing.property1 = step
                     oneThing.referTo(anotherThing)
-                  }),
+                  }
+                ),
                 Instant.now()
               )
             } else {
@@ -69,21 +71,25 @@ trait Benchmark extends WorldEfficientInMemoryImplementationResource {
 
             val onePastQueryRevision =
               randomBehaviour.chooseAnyNumberFromZeroToOneLessThan(
-                1 + world.nextRevision)
+                1 + world.nextRevision
+              )
 
             val queryTime = Instant.ofEpochSecond(
               3600L * randomBehaviour.chooseAnyNumberFromZeroToOneLessThan(
-                1 + theHourFromTheStart))
+                1 + theHourFromTheStart
+              )
+            )
 
             val property1 = {
               val scope = world.scopeFor(queryTime, onePastQueryRevision)
 
               val queryId = randomBehaviour.chooseOneOfRange(
-                0 until (idOffset + idWindowSize))
+                0 until (idOffset + idWindowSize)
+              )
 
               scope
                 .render(Bitemporal.withId[Thing](queryId))
-                .force
+                .toList
                 .headOption
                 .fold(-2)(_.property1)
             }
@@ -94,12 +100,14 @@ trait Benchmark extends WorldEfficientInMemoryImplementationResource {
               val duration = currentTime - startTime
 
               println(
-                s"Step: $step, duration: ${duration.toMillis} milliseconds, property1: $property1")
+                s"Step: $step, duration: ${duration.toMillis} milliseconds, property1: $property1"
+              )
             }
           }
 
           world // NASTY HACK - allow the world to escape the resource scope, so that memory footprints can be taken.
-      })
+        }
+      )
 
     world.unsafeRunSync()
   }

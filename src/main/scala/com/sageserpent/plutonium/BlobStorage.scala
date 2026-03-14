@@ -3,23 +3,26 @@ package com.sageserpent.plutonium
 object BlobStorage {
   trait SnapshotRetrievalApi[SnapshotBlob] {
     def snapshotBlobFor(
-        uniqueItemSpecification: UniqueItemSpecification): Option[SnapshotBlob]
+        uniqueItemSpecification: UniqueItemSpecification
+    ): Option[SnapshotBlob]
   }
 
   trait Timeslice[SnapshotBlob] extends SnapshotRetrievalApi[SnapshotBlob] {
     def uniqueItemQueriesFor[Item](
-        clazz: Class[Item]): Stream[UniqueItemSpecification]
+        clazz: Class[Item]
+    ): LazyList[UniqueItemSpecification]
     def uniqueItemQueriesFor[Item](
-        uniqueItemSpecification: UniqueItemSpecification)
-      : Stream[UniqueItemSpecification]
+        uniqueItemSpecification: UniqueItemSpecification
+    ): LazyList[UniqueItemSpecification]
   }
 
   trait TimesliceContracts[SnapshotBlob] extends Timeslice[SnapshotBlob] {
     abstract override def snapshotBlobFor(
-        uniqueItemSpecification: UniqueItemSpecification)
-      : Option[SnapshotBlob] = {
+        uniqueItemSpecification: UniqueItemSpecification
+    ): Option[SnapshotBlob] = {
       val uniqueItemSpecifications = uniqueItemQueriesFor(
-        uniqueItemSpecification)
+        uniqueItemSpecification
+      )
       require(
         1 >= uniqueItemSpecifications.size,
         s"The item specification: '$uniqueItemSpecification', should pick out a unique item, these match it: ${uniqueItemSpecifications.toList}."
@@ -35,12 +38,21 @@ trait BlobStorage[Time, SnapshotBlob] { blobStorage =>
 
   implicit val timeOrdering: Ordering[Time]
 
+  def openRevision(): RevisionBuilder
+
+  def timeSlice(when: Time, inclusive: Boolean = true): Timeslice[SnapshotBlob]
+
+  def retainUpTo(when: Time): BlobStorage[Time, SnapshotBlob]
+
   trait RevisionBuilder {
-    // NOTE: the unique item specification must be exact and consistent for all of an item's snapshots. This implies that snapshots from a previous revision may have to be rewritten
+    // NOTE: the unique item specification must be exact and consistent for all
+    // of an item's snapshots. This implies that snapshots from a previous
+    // revision may have to be rewritten
     // if an item's greatest lower bound type changes.
     def record(
         when: Time,
-        snapshotBlobs: Map[UniqueItemSpecification, Option[SnapshotBlob]]): Unit
+        snapshotBlobs: Map[UniqueItemSpecification, Option[SnapshotBlob]]
+    ): Unit
 
     def annul(when: Time): Unit =
       record(when, Map.empty)
@@ -49,12 +61,10 @@ trait BlobStorage[Time, SnapshotBlob] { blobStorage =>
   }
 
   trait RevisionBuilderContracts extends RevisionBuilder {
-    protected def hasBooked(when: Time): Boolean
-
     abstract override def record(
         when: Time,
-        snapshotBlobs: Map[UniqueItemSpecification, Option[SnapshotBlob]])
-      : Unit = {
+        snapshotBlobs: Map[UniqueItemSpecification, Option[SnapshotBlob]]
+    ): Unit = {
       require(!hasBooked(when))
 
       super.record(when, snapshotBlobs)
@@ -69,12 +79,8 @@ trait BlobStorage[Time, SnapshotBlob] { blobStorage =>
 
       assert(hasBooked(when))
     }
+
+    protected def hasBooked(when: Time): Boolean
   }
-
-  def openRevision(): RevisionBuilder
-
-  def timeSlice(when: Time, inclusive: Boolean = true): Timeslice[SnapshotBlob]
-
-  def retainUpTo(when: Time): BlobStorage[Time, SnapshotBlob]
 
 }
