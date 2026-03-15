@@ -1,9 +1,10 @@
 package com.sageserpent.plutonium;
 
-import com.esotericsoftware.kryo.serializers.FieldSerializer;
+import com.esotericsoftware.kryo.kryo5.serializers.FieldSerializer;
 
 import java.lang.annotation.Annotation;
 
+// TODO: remove this? I can't find any usage...
 public class DoNotSerializeAnnotation implements FieldSerializer.Optional {
     @Override
     public String value() {

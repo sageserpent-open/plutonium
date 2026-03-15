@@ -4,3 +4,5 @@ project/project/
 hs_err_pid*.log
 /.bsp
 /sbt.json
+.DS_Store
+/htmlReport/

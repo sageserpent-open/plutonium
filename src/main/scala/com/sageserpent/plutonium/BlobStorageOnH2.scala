@@ -3,6 +3,13 @@ package com.sageserpent.plutonium
 import cats.effect.unsafe.implicits.global
 import cats.effect.{IO, Resource}
 import cats.implicits._
+import com.esotericsoftware.kryo.kryo5.Kryo
+import com.esotericsoftware.kryo.kryo5.objenesis.strategy.StdInstantiatorStrategy
+import com.esotericsoftware.kryo.kryo5.util.{
+  DefaultClassResolver,
+  MapReferenceResolver,
+  Pool
+}
 import com.sageserpent.americium.{
   Finite,
   NegativeInfinity,
@@ -11,25 +18,47 @@ import com.sageserpent.americium.{
 }
 import com.sageserpent.plutonium.BlobStorage.TimesliceContracts
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
-import com.twitter.chill.{KryoPool, KryoSerializer}
+import io.altoo.serialization.kryo.scala.serializer.ScalaKryo
 import scalikejdbc._
 
 import java.time.Instant
 import scala.collection.immutable.{SortedMap, TreeMap}
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
 //noinspection SqlNoDataSourceInspection
 object BlobStorageOnH2 {
   type LineageId = Long
   type Revision  = Int
-  val kryoPool: KryoPool =
-    KryoPool.withByteArrayOutputStream(40, KryoSerializer.registered)
   val sentinelLineageId         = -1
   val initialRevision: Revision = 1
   val placeholderItemIdBytes: Array[Byte] =
     Array.emptyByteArray
   val placeholderItemClazzBytes: Array[Byte] =
     Array.emptyByteArray
+  private val kryoPool: Pool[Kryo] =
+    new Pool[Kryo](true, false) {
+      override def create(): Kryo = {
+        val result = new ScalaKryo(
+          classResolver = new DefaultClassResolver,
+          referenceResolver = new MapReferenceResolver
+        )
+
+        result.setRegistrationRequired(false)
+        result.setInstantiatorStrategy(
+          new StdInstantiatorStrategy
+        )
+
+        result.setAutoReset(
+          true
+        )
+
+        result
+      }
+    }
+
+  private val serializationFacade =
+    new SerializationFacade(kryoPool)
 
   def empty(connectionPool: ConnectionPool): BlobStorageOnH2 =
     BlobStorageOnH2(
@@ -91,12 +120,6 @@ object BlobStorageOnH2 {
   private def dbResource(connectionPool: ConnectionPool): Resource[IO, DB] =
     Resource.make(IO { DB(connectionPool.borrow()) })(db => IO { db.close() })
 
-  def lessThanOrEqualTo(when: ItemStateUpdateTime): SQLSyntax =
-    sqls"""(TimeRevision.Time <= ${unpack(when)})"""
-
-  def lessThan(when: ItemStateUpdateTime): SQLSyntax =
-    sqls"""(TimeRevision.Time < ${unpack(when)})"""
-
   def itemSql(
       uniqueItemSpecification: Option[UniqueItemSpecification]
   ): SQLSyntax =
@@ -107,9 +130,9 @@ object BlobStorageOnH2 {
       """
     } { uniqueItemSpecification =>
       val itemIdBytes =
-        kryoPool.toBytesWithClass(uniqueItemSpecification.id)
+        serializationFacade.toBytesWithClass(uniqueItemSpecification.id)
       val itemClazzBytes =
-        kryoPool.toBytesWithClass(uniqueItemSpecification.clazz)
+        serializationFacade.toBytesWithClass(uniqueItemSpecification.clazz)
 
       sqls"""
       ItemId = $itemIdBytes,
@@ -169,14 +192,16 @@ object BlobStorageOnH2 {
 
     val clauseForItemSelectionSql: Option[SQLSyntax] = {
       val itemIdSql = targetItemId.map { targetItemId =>
-        val targetItemIdBytes = kryoPool.toBytesWithClass(targetItemId)
+        val targetItemIdBytes =
+          serializationFacade.toBytesWithClass(targetItemId)
         sqls"""
             ItemId = $targetItemIdBytes
               """
       }
 
       val itemClazzSql = targetItemClazz.map { targetItemClazz =>
-        val targetItemClazzBytes = kryoPool.toBytesWithClass(targetItemClazz)
+        val targetItemClazzBytes =
+          serializationFacade.toBytesWithClass(targetItemClazz)
         sqls"""
           ItemClass = $targetItemClazzBytes
             """
@@ -222,7 +247,7 @@ object BlobStorageOnH2 {
   def whenSql(when: ItemStateUpdateTime): SQLSyntax =
     sqls"""Time = ${unpack(when)}"""
 
-  def unpack(when: ItemStateUpdateTime): Array[Any] = when match {
+  private def unpack(when: ItemStateUpdateTime): Array[Any] = when match {
     case LowerBoundOfTimeslice(when) =>
       unpack(when) ++ Array(-1, 0, 0, 0)
     case ItemStateUpdateKey(
@@ -239,7 +264,7 @@ object BlobStorageOnH2 {
       unpack(when) ++ Array(1, 0, 0, 0)
   }
 
-  def unpack(when: Unbounded[Instant]): Array[Any] = when match {
+  private def unpack(when: Unbounded[Instant]): Array[Any] = when match {
     case NegativeInfinity() => Array(-1, 0)
     case Finite(unlifted)   => Array(0, unlifted)
     case PositiveInfinity() => Array(1, 0)
@@ -258,11 +283,17 @@ object BlobStorageOnH2 {
         Payload = NULL
         """
     } { payload =>
-      val payloadBytes = kryoPool.toBytesWithClass(payload)
+      val payloadBytes = serializationFacade.toBytesWithClass(payload)
       sqls"""
         Payload = $payloadBytes
         """
     }
+
+  private def lessThanOrEqualTo(when: ItemStateUpdateTime): SQLSyntax =
+    sqls"""(TimeRevision.Time <= ${unpack(when)})"""
+
+  private def lessThan(when: ItemStateUpdateTime): SQLSyntax =
+    sqls"""(TimeRevision.Time < ${unpack(when)})"""
 }
 
 case class BlobStorageOnH2(
@@ -278,9 +309,6 @@ case class BlobStorageOnH2(
   thisBlobStorage =>
   import BlobStorageOnH2._
 
-  def reconnectTo(connectionPool: ConnectionPool): BlobStorageOnH2 =
-    copy(connectionPool = connectionPool)
-
   override def openRevision(): RevisionBuilder = {
     class RevisionBuilderImplementation extends RevisionBuilder {
       type Recording =
@@ -289,7 +317,12 @@ case class BlobStorageOnH2(
             Map[UniqueItemSpecification, Option[SnapshotBlob]]
         )
 
-      protected val recordings = mutable.ArrayBuffer.empty[Recording]
+      protected val recordings: ArrayBuffer[
+        (
+            ItemStateUpdateTime,
+            Map[UniqueItemSpecification, Option[SnapshotBlob]]
+        )
+      ] = mutable.ArrayBuffer.empty[Recording]
 
       override def record(
           when: ItemStateUpdateTime,
@@ -405,14 +438,6 @@ case class BlobStorageOnH2(
       ): LazyList[UniqueItemSpecification] =
         uniqueItemSpecifications(None, clazz)
 
-      override def uniqueItemQueriesFor[Item](
-          uniqueItemSpecification: UniqueItemSpecification
-      ): LazyList[UniqueItemSpecification] =
-        uniqueItemSpecifications(
-          Some(uniqueItemSpecification.id),
-          uniqueItemSpecification.clazz
-        )
-
       private def uniqueItemSpecifications[Item](
           targetItemId: Option[Any],
           itemClazzUpperBound: Class[Item]
@@ -445,9 +470,11 @@ case class BlobStorageOnH2(
           .to(LazyList)
           .map { case (itemIdBytes, itemClazzBytes) =>
             val itemId =
-              targetItemId.getOrElse(kryoPool.fromBytes(itemIdBytes))
+              targetItemId.getOrElse(serializationFacade.fromBytes(itemIdBytes))
             val itemClazz =
-              kryoPool.fromBytes(itemClazzBytes).asInstanceOf[Class[_]]
+              serializationFacade
+                .fromBytes(itemClazzBytes)
+                .asInstanceOf[Class[_]]
             itemId -> itemClazz
           }
           .collect {
@@ -456,6 +483,14 @@ case class BlobStorageOnH2(
               UniqueItemSpecification(itemId, itemClazz)
           }
       }
+
+      override def uniqueItemQueriesFor[Item](
+          uniqueItemSpecification: UniqueItemSpecification
+      ): LazyList[UniqueItemSpecification] =
+        uniqueItemSpecifications(
+          Some(uniqueItemSpecification.id),
+          uniqueItemSpecification.clazz
+        )
 
       override def snapshotBlobFor(
           uniqueItemSpecification: UniqueItemSpecification
@@ -486,7 +521,7 @@ case class BlobStorageOnH2(
           .to(LazyList)
           .map { payload =>
             assert(payload.nonEmpty)
-            kryoPool.fromBytes(payload).asInstanceOf[SnapshotBlob]
+            serializationFacade.fromBytes(payload).asInstanceOf[SnapshotBlob]
           }
           .headOption
       }
