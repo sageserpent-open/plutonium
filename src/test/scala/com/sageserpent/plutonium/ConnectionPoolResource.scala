@@ -15,7 +15,7 @@ trait ConnectionPoolResource {
       databaseDirectory <- Resource.make(IO {
         Files.createTempDirectory("h2Storage")
       })(cleanupDatabaseDirectory)
-      databaseName <- Resource.liftK(IO { UUID.randomUUID().toString })
+      databaseName <- Resource.eval(IO { UUID.randomUUID().toString })
       dataSource <- Resource.make(IO {
         val result = new HikariDataSource()
         result.setJdbcUrl(

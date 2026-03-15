@@ -103,7 +103,7 @@ trait ExperimentalWorldBehaviours
             ) =>
           (for {
             baseWorld <- worldResource
-            _ <- Resource.liftK(IO {
+            _ <- Resource.eval(IO {
               recordEventsInWorld(
                 liftRecordings(bigShuffledHistoryOverLotsOfThings),
                 asOfs,
@@ -184,7 +184,7 @@ trait ExperimentalWorldBehaviours
             ) =>
           (for {
             baseWorld <- worldResource
-            _ <- Resource.liftK(IO {
+            _ <- Resource.eval(IO {
               recordEventsInWorld(
                 liftRecordings(bigShuffledHistoryOverLotsOfThings),
                 asOfs,
@@ -274,7 +274,7 @@ trait ExperimentalWorldBehaviours
             ) =>
           (for {
             baseWorld <- worldResource
-            _ <- Resource.liftK(IO {
+            _ <- Resource.eval(IO {
               recordEventsInWorld(
                 liftRecordings(bigShuffledHistoryOverLotsOfThings),
                 asOfs,
@@ -393,7 +393,7 @@ trait ExperimentalWorldBehaviours
             ) =>
           (for {
             baseWorld <- worldResource
-            _ <- Resource.liftK(IO {
+            _ <- Resource.eval(IO {
               recordEventsInWorld(
                 liftRecordings(bigShuffledHistoryOverLotsOfThings),
                 baseAsOfs,
@@ -500,7 +500,7 @@ trait ExperimentalWorldBehaviours
             ) =>
           (for {
             baseWorld <- worldResource
-            _ <- Resource.liftK(IO {
+            _ <- Resource.eval(IO {
               recordEventsInWorld(
                 liftRecordings(bigShuffledHistoryOverLotsOfThings),
                 asOfs,
@@ -620,7 +620,7 @@ trait ExperimentalWorldBehaviours
             ) =>
           (for {
             baseWorld <- worldResource
-            _ <- Resource.liftK(IO {
+            _ <- Resource.eval(IO {
               recordEventsInWorld(
                 liftRecordings(bigShuffledHistoryOverLotsOfThings),
                 baseAsOfs,
@@ -737,7 +737,7 @@ trait ExperimentalWorldBehaviours
             ) =>
           (for {
             baseWorld <- worldResource
-            _ <- Resource.liftK(IO {
+            _ <- Resource.eval(IO {
               recordEventsInWorld(
                 liftRecordings(bigShuffledHistoryOverLotsOfThings),
                 baseAsOfs,
