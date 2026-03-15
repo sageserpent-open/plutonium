@@ -53,6 +53,8 @@ object BlobStorageOnH2 {
           true
         )
 
+        SerializationFacade.registerCommonSerializers(result)
+
         result
       }
     }

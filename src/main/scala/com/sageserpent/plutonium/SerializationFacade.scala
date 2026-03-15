@@ -3,10 +3,29 @@ package com.sageserpent.plutonium
 import com.esotericsoftware.kryo.kryo5.Kryo
 import com.esotericsoftware.kryo.kryo5.io.{Input, Output}
 import com.esotericsoftware.kryo.kryo5.util.Pool
+import com.esotericsoftware.kryo.kryo5.{Kryo => KryoInstance, Serializer}
 
 import java.io.ByteArrayOutputStream
+import java.util.UUID
 import scala.util.Using
 import scala.util.Using.Releasable
+
+object SerializationFacade {
+  // Serialiser for UUID using only public API, avoiding JPMS reflection
+  // restrictions on java.util.UUID's private fields (mostSigBits, leastSigBits).
+  private val uuidSerializer = new Serializer[UUID] {
+    override def write(kryo: KryoInstance, output: Output, uuid: UUID): Unit = {
+      output.writeLong(uuid.getMostSignificantBits)
+      output.writeLong(uuid.getLeastSignificantBits)
+    }
+    override def read(kryo: KryoInstance, input: Input, clazz: Class[_ <: UUID]): UUID =
+      new UUID(input.readLong(), input.readLong())
+  }
+
+  def registerCommonSerializers(kryo: Kryo): Unit = {
+    kryo.register(classOf[UUID], uuidSerializer)
+  }
+}
 
 // Replacement for the now removed use of Chill's `KryoPool`...
 class SerializationFacade(

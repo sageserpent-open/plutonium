@@ -152,6 +152,8 @@ trait ItemStateStorage { itemStateStorageObject =>
           true
         )
 
+        SerializationFacade.registerCommonSerializers(result)
+
         // What follows is specific to `ItemStateStorage`...
         // TODO: review this, as I'm really perturbed by the gymnastics used to
         // wire up the special case handling of top-level objects. What's more,
