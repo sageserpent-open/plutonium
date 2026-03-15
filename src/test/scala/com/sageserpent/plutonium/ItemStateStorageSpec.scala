@@ -180,9 +180,11 @@ class ItemStateStorageSpec
       val terminalGraphNodes = graphNodes.filter(_.referencedNodes.isEmpty)
 
       val sampleSize =
-        randomBehaviour.chooseAnyNumberFromZeroToOneLessThan(
-          terminalGraphNodes.size
-        )
+        if (terminalGraphNodes.nonEmpty)
+          randomBehaviour.chooseAnyNumberFromZeroToOneLessThan(
+            terminalGraphNodes.size
+          )
+        else 0
 
       val nodesThatAreNotToBeRoundtripped = randomBehaviour
         .chooseSeveralOf(terminalGraphNodes, sampleSize)
