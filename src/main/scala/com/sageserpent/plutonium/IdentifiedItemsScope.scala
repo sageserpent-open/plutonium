@@ -6,15 +6,13 @@ import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.PatchRecorder.UpdateConsumer
 
 import java.time.Instant
-import scala.collection.mutable
+import scala.collection.mutable.MultiDict
 import scala.reflect.runtime.universe.{Super => _, This => _}
 
 class IdentifiedItemsScope extends IdentifiedItemAccess {
   identifiedItemsScopeThis =>
-  // Replacement for the removed mutable.MultiMap: a mutable map from id to
-  // mutable set of items.
-  val idToItemsMultiMap: mutable.Map[Any, mutable.Set[Any]] = mutable.Map.empty
-  private var allItemsAreLocked = false
+  private val idToItemsMultiMap: MultiDict[Any, Any] = MultiDict.empty
+  private var allItemsAreLocked                      = false
 
   override def reconstitute(
       uniqueItemSpecification: UniqueItemSpecification
@@ -41,46 +39,47 @@ class IdentifiedItemsScope extends IdentifiedItemAccess {
       item
     }
 
-    idToItemsMultiMap.get(_uniqueItemSpecification.id) match {
-      case None =>
-        constructAndCacheItem()
-      case Some(items) =>
-        assert(items.nonEmpty)
-        val conflictingItems =
-          IdentifiedItemsScope.yieldOnlyItemsOfSupertypeOf[Item](
+    val items = idToItemsMultiMap.get(_uniqueItemSpecification.id)
+
+    if (items.isEmpty) {
+      constructAndCacheItem()
+    } else {
+      assert(items.nonEmpty)
+      val conflictingItems =
+        IdentifiedItemsScope.yieldOnlyItemsOfSupertypeOf[Item](
+          items,
+          _uniqueItemSpecification.clazz
+            .asInstanceOf[Class[Item]]
+        ) // TODO: remove horrible typecast.
+      assert(
+        conflictingItems.isEmpty,
+        s"Found conflicting items for id: '${_uniqueItemSpecification.id}' with class: '${_uniqueItemSpecification.clazz}', these are: '${conflictingItems.toList}'."
+      )
+      val itemsOfDesiredType =
+        IdentifiedItemsScope
+          .yieldOnlyItemsOfType[Item](
             items,
             _uniqueItemSpecification.clazz
               .asInstanceOf[Class[Item]]
           ) // TODO: remove horrible typecast.
-        assert(
-          conflictingItems.isEmpty,
-          s"Found conflicting items for id: '${_uniqueItemSpecification.id}' with class: '${_uniqueItemSpecification.clazz}', these are: '${conflictingItems.toList}'."
-        )
-        val itemsOfDesiredType =
-          IdentifiedItemsScope
-            .yieldOnlyItemsOfType[Item](
-              items,
-              _uniqueItemSpecification.clazz
-                .asInstanceOf[Class[Item]]
-            ) // TODO: remove horrible typecast.
-            .to(LazyList)
-        if (itemsOfDesiredType.isEmpty)
-          constructAndCacheItem()
-        else {
-          assert(1 == itemsOfDesiredType.size)
-          itemsOfDesiredType.head
-        }
+          .to(LazyList)
+      if (itemsOfDesiredType.isEmpty)
+        constructAndCacheItem()
+      else {
+        assert(1 == itemsOfDesiredType.size)
+        itemsOfDesiredType.head
+      }
     }
   }
 
   private def addBinding(id: Any, item: Any): Unit = {
-    idToItemsMultiMap.getOrElseUpdate(id, mutable.Set.empty) += item
+    idToItemsMultiMap.addOne(id -> item)
   }
 
   override def noteAnnihilation(
       uniqueItemSpecification: UniqueItemSpecification
   ): Unit = {
-    val items = idToItemsMultiMap(uniqueItemSpecification.id)
+    val items = idToItemsMultiMap.get(uniqueItemSpecification.id)
 
     assert(items.nonEmpty)
 
@@ -95,15 +94,13 @@ class IdentifiedItemsScope extends IdentifiedItemAccess {
 
     val itemToBeAnnihilated = itemsSelectedForAnnihilation.head
 
-    items -= itemToBeAnnihilated
+    idToItemsMultiMap.subtractOne(
+      uniqueItemSpecification.id -> itemToBeAnnihilated
+    )
 
     itemToBeAnnihilated
       .asInstanceOf[AnnihilationHook]
       .recordAnnihilation()
-
-    if (items.isEmpty) {
-      idToItemsMultiMap.remove(uniqueItemSpecification.id)
-    }
   }
 
   def populate(
@@ -169,7 +166,7 @@ class IdentifiedItemsScope extends IdentifiedItemAccess {
       uniqueItemSpecification: UniqueItemSpecification
   ): LazyList[Item] = {
     val items =
-      idToItemsMultiMap.getOrElse(uniqueItemSpecification.id, Set.empty[Item])
+      idToItemsMultiMap.get(uniqueItemSpecification.id)
 
     IdentifiedItemsScope
       .yieldOnlyItemsOfType[Item](
@@ -181,7 +178,7 @@ class IdentifiedItemsScope extends IdentifiedItemAccess {
 
   def allItems[Item](clazz: Class[Item]): LazyList[Item] =
     IdentifiedItemsScope
-      .yieldOnlyItemsOfType[Item](idToItemsMultiMap.values.flatten, clazz)
+      .yieldOnlyItemsOfType[Item](idToItemsMultiMap.values, clazz)
 }
 
 object IdentifiedItemsScope {
