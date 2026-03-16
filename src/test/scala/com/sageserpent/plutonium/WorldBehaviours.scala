@@ -275,15 +275,14 @@ trait WorldBehaviours
         seed <- seedGenerator
         random = new Random(seed)
         fooHistoryIds <- Gen.nonEmptyContainerOf[Set, FooHistory#Id](
-          fooHistoryIdGenerator
+          fooHistoryIdGenerator.map("Foo_" + _)
         )
         numberOfReferrers <- Gen.chooseNum(1, 4)
         referringHistoryIds: Set[ReferringHistory#Id] <- Gen
           .containerOfN[Set, ReferringHistory#Id](
             numberOfReferrers,
-            referringHistoryIdGenerator
+            referringHistoryIdGenerator.map("Referring" + _)
           )
-        if (referringHistoryIds intersect fooHistoryIds).isEmpty
       } yield (random, fooHistoryIds, referringHistoryIds)
       check(Prop.forAllNoShrink(testCaseGenerator) {
         case (random, fooHistoryIds, referringHistoryIds) =>
@@ -299,7 +298,7 @@ trait WorldBehaviours
                 {
                   val events = (for {
                     fooHistoryId <- fooHistoryIds
-                    selectedReferringHistoryIds <- random.chooseSeveralOf(
+                    selectedReferringHistoryIds = random.chooseSeveralOf(
                       referringHistoryIds,
                       random.chooseAnyNumberFromOneTo(referringHistoryIds.size)
                     )
@@ -329,11 +328,11 @@ trait WorldBehaviours
 
                     val eventConstructors =
                       waysOfReferringToAFooHistory.last :: List.fill(
-                        referringHistoryIds.size - 1
+                        selectedReferringHistoryIds.size - 1
                       )(random.chooseOneOf(waysOfReferringToAFooHistory))
 
                     random
-                      .shuffle(eventConstructors) zip referringHistoryIds map {
+                      .shuffle(eventConstructors) zip selectedReferringHistoryIds map {
                       case (eventConstructor, referringHistoryId) =>
                         eventConstructor(referringHistoryId)
                     }
