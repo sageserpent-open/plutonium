@@ -50,6 +50,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
     )
   val integerHistoryRecordingsGroupedByIdGenerator =
     recordingsGroupedByIdGenerator_(integerDataSamplesForAnIdGenerator)
+  var referringHistoryIdGenerator = stringIdGenerator
   val referenceToItemDataSamplesForAnIdGenerator =
     dataSamplesForAnIdGenerator_[ReferringHistory](
       referringHistoryIdGenerator,
@@ -64,8 +65,6 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
       ),
       fooHistoryDataSampleGenerator2(faulty = false)
     )
-  var referringHistoryIdGenerator = stringIdGenerator
-
   def pertainingToAnotherItemDataSampleGenerator(faulty: Boolean) =
     Gen.frequency(
       Seq(
@@ -168,7 +167,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
         random,
         _
       ))
-    )
+    ).toList
   }
 
   def shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhenForAGivenItem(
@@ -188,9 +187,9 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
       })
 
     val groupedGroupsWithAnnihilationsIsolated =
-      recordingsGroupedByWhen groupWhile { case (lhs, rhs) =>
+      (recordingsGroupedByWhen groupWhile { case (lhs, rhs) =>
         !(groupContainsAnAnnihilation(lhs) || groupContainsAnAnnihilation(rhs))
-      }
+      }).toList
 
     groupedGroupsWithAnnihilationsIsolated flatMap (random
       .shuffle(_)) flatten
@@ -237,7 +236,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
       world: World
   ): Seq[() => Revision] = {
     for {
-      pieceOfHistory <- bigShuffledHistoryOverLotsOfThings
+      pieceOfHistory <- bigShuffledHistoryOverLotsOfThings.toList
       _ = require(
         pieceOfHistory.map(_._2).toSeq.distinct.size == pieceOfHistory.size
       )
@@ -706,14 +705,14 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
       random = new Random(seed)
       dataSamplesGroupedForLifespans =
         if (forbidAnnihilations)
-          LazyList(dataSamples)
-        else random.splitIntoNonEmptyPieces(dataSamples)
+          List(dataSamples)
+        else random.splitIntoNonEmptyPieces(dataSamples).toList
       finalLifespanIsOngoing <-
         if (forbidAnnihilations) Gen.const(true)
         else Arbitrary.arbitrary[Boolean]
       numberOfEventsForLifespans = {
         def numberOfEventsForLimitedLifespans(
-            dataSamplesGroupedForLimitedLifespans: LazyList[
+            dataSamplesGroupedForLimitedLifespans: Seq[
               Iterable[(Int, Any, (Unbounded[Instant]) => Event)]
             ]
         ) = {
@@ -725,7 +724,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
         if (finalLifespanIsOngoing) {
           val (
             dataSamplesGroupedForLimitedLifespans,
-            LazyList(dataSamplesGroupForEternalLife)
+            Seq(dataSamplesGroupForEternalLife)
           ) =
             dataSamplesGroupedForLifespans splitAt (dataSamplesGroupedForLifespans.size - 1)
           numberOfEventsForLimitedLifespans(
@@ -855,10 +854,10 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
       override val historiesFrom: ItemCache => Seq[History],
       annihilationFor: Instant => Annihilation,
       ineffectiveEventFor: Unbounded[Instant] => Event,
-      dataSamplesGroupedForLifespans: LazyList[
+      dataSamplesGroupedForLifespans: Seq[
         Iterable[(Int, Any, Unbounded[Instant] => Event)]
       ],
-      sampleWhensGroupedForLifespans: LazyList[List[Unbounded[Instant]]]
+      sampleWhensGroupedForLifespans: Seq[List[Unbounded[Instant]]]
   ) extends RecordingsForAnId {
     require(
       dataSamplesGroupedForLifespans.size == sampleWhensGroupedForLifespans.size

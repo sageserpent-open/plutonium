@@ -104,7 +104,7 @@ trait WorldBehaviours
               )
           ) zip asOfs
         latestAsOfsThatMapUnambiguouslyToEventWhens = chunksForRevisions
-          .groupWhile(chunksShareTheSameEventWhens) map (_.last._2)
+          .groupWhile(chunksShareTheSameEventWhens).toList map (_.last._2)
         latestEventWhenForEarliestAsOf = asOfToLatestEventWhenMap(
           latestAsOfsThatMapUnambiguouslyToEventWhens.head
         )
@@ -293,7 +293,7 @@ trait WorldBehaviours
               IO {
                 val linearizationIndices =
                   fooHistoryIds zip LazyList.continually {
-                    random.chooseAnyNumberFromZeroToOneLessThan(3)
+                    random.nextInt(3)
                   } toMap
 
                 {
@@ -428,14 +428,18 @@ trait WorldBehaviours
                     ),
                     revision
                   ) <- asOfPairs zip revisions
-                  laterAsOfSharingTheSameRevisionAsTheEarlierOne =
-                    earlierAsOfCorrespondingToRevision plusSeconds random
-                      .chooseAnyNumberFromZeroToOneLessThan(
-                        earlierAsOfCorrespondingToRevision.until(
-                          laterAsOfComingNoLaterThanAnySucceedingRevision,
-                          ChronoUnit.SECONDS
-                        )
+                  laterAsOfSharingTheSameRevisionAsTheEarlierOne = {
+                    val secondsAvailable =
+                      earlierAsOfCorrespondingToRevision.until(
+                        laterAsOfComingNoLaterThanAnySucceedingRevision,
+                        ChronoUnit.SECONDS
                       )
+                    if (secondsAvailable > 0)
+                      earlierAsOfCorrespondingToRevision plusSeconds random
+                        .nextLong(secondsAvailable)
+                    else
+                      earlierAsOfCorrespondingToRevision
+                  }
                 } yield (
                   earlierAsOfCorrespondingToRevision,
                   laterAsOfSharingTheSameRevisionAsTheEarlierOne,
@@ -559,14 +563,18 @@ trait WorldBehaviours
                     ),
                     revision
                   ) <- asOfPairs zip revisions
-                  laterAsOfSharingTheSameRevisionAsTheEarlierOne =
-                    earlierAsOfCorrespondingToRevision plusSeconds random
-                      .chooseAnyNumberFromZeroToOneLessThan(
-                        earlierAsOfCorrespondingToRevision.until(
-                          laterAsOfComingNoLaterThanAnySucceedingRevision,
-                          ChronoUnit.SECONDS
-                        )
+                  laterAsOfSharingTheSameRevisionAsTheEarlierOne = {
+                    val secondsAvailable =
+                      earlierAsOfCorrespondingToRevision.until(
+                        laterAsOfComingNoLaterThanAnySucceedingRevision,
+                        ChronoUnit.SECONDS
                       )
+                    if (secondsAvailable > 0)
+                      earlierAsOfCorrespondingToRevision plusSeconds random
+                        .nextLong(secondsAvailable)
+                    else
+                      earlierAsOfCorrespondingToRevision
+                  }
                 } yield (
                   earlierAsOfCorrespondingToRevision,
                   laterAsOfSharingTheSameRevisionAsTheEarlierOne,
@@ -669,14 +677,18 @@ trait WorldBehaviours
                     ),
                     revision
                   ) <- asOfPairs zip revisions
-                  laterAsOfSharingTheSameRevisionAsTheEarlierOne =
-                    earlierAsOfCorrespondingToRevision plusSeconds random
-                      .chooseAnyNumberFromZeroToOneLessThan(
-                        earlierAsOfCorrespondingToRevision.until(
-                          laterAsOfComingNoLaterThanAnySucceedingRevision,
-                          ChronoUnit.SECONDS
-                        )
+                  laterAsOfSharingTheSameRevisionAsTheEarlierOne = {
+                    val secondsAvailable =
+                      earlierAsOfCorrespondingToRevision.until(
+                        laterAsOfComingNoLaterThanAnySucceedingRevision,
+                        ChronoUnit.SECONDS
                       )
+                    if (secondsAvailable > 0)
+                      earlierAsOfCorrespondingToRevision plusSeconds random
+                        .nextLong(secondsAvailable)
+                    else
+                      earlierAsOfCorrespondingToRevision
+                  }
                 } yield (
                   earlierAsOfCorrespondingToRevision,
                   laterAsOfSharingTheSameRevisionAsTheEarlierOne,
@@ -2241,14 +2253,18 @@ trait WorldBehaviours
                     ),
                     revision
                   ) <- asOfPairs zip revisions
-                  laterAsOfSharingTheSameRevisionAsTheEarlierOne =
-                    earlierAsOfCorrespondingToRevision plusSeconds random
-                      .chooseAnyNumberFromZeroToOneLessThan(
-                        earlierAsOfCorrespondingToRevision.until(
-                          laterAsOfComingNoLaterThanAnySucceedingRevision,
-                          ChronoUnit.SECONDS
-                        )
+                  laterAsOfSharingTheSameRevisionAsTheEarlierOne = {
+                    val secondsAvailable =
+                      earlierAsOfCorrespondingToRevision.until(
+                        laterAsOfComingNoLaterThanAnySucceedingRevision,
+                        ChronoUnit.SECONDS
                       )
+                    if (secondsAvailable > 0)
+                      earlierAsOfCorrespondingToRevision plusSeconds random
+                        .nextLong(secondsAvailable)
+                    else
+                      earlierAsOfCorrespondingToRevision
+                  }
                 } yield (
                   earlierAsOfCorrespondingToRevision,
                   laterAsOfSharingTheSameRevisionAsTheEarlierOne,
@@ -2472,7 +2488,7 @@ trait WorldBehaviours
                 )
                 recordEventsInWorldWithoutGivingUpOnFailure(
                   liftRecordings(
-                    mergedShuffledHistoryOverLotsOfThings.to(LazyList)
+                    mergedShuffledHistoryOverLotsOfThings.toList
                   ),
                   mergedAsOfs.toList,
                   distopia
@@ -3524,7 +3540,7 @@ trait WorldBehaviours
           )
         bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(
           shuffledRecordings.zipWithIndex
-        )
+        ).toList
         asOfs <- Gen.listOfN(
           bigShuffledHistoryOverLotsOfThings.length,
           instantGenerator
@@ -3786,7 +3802,6 @@ trait WorldBehaviours
           .flatMap { case (obsolete, succeeding) =>
             Seq(Seq(obsolete), Seq(succeeding))
           }
-          .to(LazyList)
 
         asOfs <- Gen.listOfN(
           historyOverLotsOfThings.length,
@@ -3929,7 +3944,7 @@ trait WorldBehaviours
         eventIdsThatMayBeSpuriousAndDuplicated = allEventIds ++
           random.chooseSeveralOf(
             allEventIds,
-            random.chooseAnyNumberFromZeroToOneLessThan(allEventIds.length)
+            random.nextInt(allEventIds.length)
           ) ++
           (1 + maximumEventId to 10 + maximumEventId)
         annulmentsGalore = intersperseObsoleteEvents
@@ -4251,7 +4266,7 @@ trait WorldBehaviours
                             assert(World.initialRevision != world.nextRevision)
                             val asOfForAllCorrections = asOfs.last
 
-                            val annulmentsGalore = LazyList(
+                            val annulmentsGalore = List(
                               (0 to (maximumEventIdFromPreviousSubsection max maximumEventIdFromThisSubsection)) map ((None: Option[
                                 (Unbounded[Instant], Event)
                               ]) -> _)
@@ -4338,7 +4353,7 @@ trait WorldBehaviours
           ).zipWithIndex
         )
         allEventIds = bigShuffledHistoryOverLotsOfThings flatMap (_ map (_._2))
-        annulmentsGalore = LazyList(
+        annulmentsGalore = List(
           allEventIds map ((None: Option[(Unbounded[Instant], Event)]) -> _)
         )
         historyLength    = bigShuffledHistoryOverLotsOfThings.length

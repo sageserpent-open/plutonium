@@ -181,7 +181,7 @@ class ItemStateStorageSpec
 
       val sampleSize =
         if (terminalGraphNodes.nonEmpty)
-          randomBehaviour.chooseAnyNumberFromZeroToOneLessThan(
+          randomBehaviour.nextInt(
             terminalGraphNodes.size
           )
         else 0

@@ -3,10 +3,10 @@ package com.sageserpent.plutonium
 abstract class History {
   type Id
   val id: Id
-  val datums: scala.collection.Seq[Any] = _datums
+  private val _datums = scala.collection.mutable.ArrayBuffer.empty[Any]
+  def datums: scala.collection.Seq[Any] = _datums
   val propertyAllowingSecondOrderMutation =
     scala.collection.mutable.ArrayBuffer.empty[Any]
-  private val _datums = scala.collection.mutable.ArrayBuffer.empty[Any]
   var shouldBeUnchanged: Boolean = true
   private var invariantBreakageScheduled = false
 
