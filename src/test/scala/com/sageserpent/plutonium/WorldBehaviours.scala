@@ -88,7 +88,7 @@ trait WorldBehaviours
             (recordingsGroupedById.flatMap(_.events) sortBy {
               case (eventWhen, _) => eventWhen
             }).zipWithIndex
-          )
+          ).toVector
         asOfs <- Gen.listOfN(
           bigHistoryOverLotsOfThingsSortedInEventWhenOrder.length,
           instantGenerator
@@ -104,7 +104,7 @@ trait WorldBehaviours
               )
           ) zip asOfs
         latestAsOfsThatMapUnambiguouslyToEventWhens = chunksForRevisions
-          .groupWhile(chunksShareTheSameEventWhens).toList map (_.last._2)
+          .groupWhile(chunksShareTheSameEventWhens) map (_.last._2)
         latestEventWhenForEarliestAsOf = asOfToLatestEventWhenMap(
           latestAsOfsThatMapUnambiguouslyToEventWhens.head
         )
@@ -214,7 +214,7 @@ trait WorldBehaviours
             random,
             referringHistoryRecordingsGroupedById
           ).zipWithIndex
-        )
+        ).toVector
         asOfs <- Gen.listOfN(
           bigShuffledHistoryOverLotsOfThings.length,
           instantGenerator
@@ -377,7 +377,7 @@ trait WorldBehaviours
             random,
             recordingsGroupedById
           ).zipWithIndex
-        )
+        ).toVector
         asOfs <- Gen.listOfN(
           bigShuffledHistoryOverLotsOfThings.length,
           instantGenerator
@@ -512,7 +512,7 @@ trait WorldBehaviours
             random,
             recordingsGroupedById
           ).zipWithIndex
-        )
+        ).toVector
         asOfs <- Gen.listOfN(
           bigShuffledHistoryOverLotsOfThings.length,
           instantGenerator
@@ -638,7 +638,7 @@ trait WorldBehaviours
             random,
             recordingsGroupedById
           ).zipWithIndex
-        )
+        ).toVector
         asOfs <- Gen.listOfN(
           bigShuffledHistoryOverLotsOfThings.length,
           instantGenerator
@@ -747,7 +747,7 @@ trait WorldBehaviours
               random,
               faultyRecordingsGroupedById
             ).zipWithIndex
-          )
+          ).toVector
         asOfs <- Gen.listOfN(
           bigShuffledFaultyHistoryOverLotsOfThings.length,
           instantGenerator
@@ -798,7 +798,7 @@ trait WorldBehaviours
             random,
             recordingsGroupedById
           ).zipWithIndex
-        )
+        ).toVector
         asOfs <- Gen.listOfN(
           bigShuffledHistoryOverLotsOfThings.length,
           instantGenerator
@@ -886,7 +886,7 @@ trait WorldBehaviours
             random,
             events
           ).zipWithIndex
-        )
+        ).toVector
         asOfs <- Gen.listOfN(
           bigShuffledHistoryOverLotsOfThings.length,
           instantGenerator
@@ -932,7 +932,7 @@ trait WorldBehaviours
             random,
             recordingsGroupedById
           ).zipWithIndex
-        )
+        ).toVector
         asOfs <- Gen.listOfN(
           bigShuffledHistoryOverLotsOfThings.length,
           instantGenerator
@@ -996,7 +996,7 @@ trait WorldBehaviours
             random,
             recordingsGroupedById
           ).zipWithIndex
-        )
+        ).toVector
         asOfs <- Gen.listOfN(
           bigShuffledHistoryOverLotsOfThings.length,
           instantGenerator
@@ -1080,7 +1080,7 @@ trait WorldBehaviours
             random,
             referencedHistoryRecordingsGroupedById ++ referringHistoryRecordingsGroupedById
           ).zipWithIndex
-        )
+        ).toVector
         asOfs <- Gen.listOfN(
           bigShuffledHistoryOverLotsOfThings.length,
           instantGenerator
@@ -1189,7 +1189,7 @@ trait WorldBehaviours
             random,
             referencedHistoryRecordingsGroupedById ++ referringHistoryRecordingsGroupedById
           ).zipWithIndex
-        )
+        ).toVector
         asOfs <- Gen.listOfN(
           bigShuffledHistoryOverLotsOfThings.length,
           instantGenerator
@@ -1300,7 +1300,7 @@ trait WorldBehaviours
             random,
             recordingsGroupedById
           ).zipWithIndex
-        )
+        ).toVector
         asOfs <- Gen.listOfN(
           bigShuffledHistoryOverLotsOfThings.length,
           instantGenerator
@@ -1359,7 +1359,7 @@ trait WorldBehaviours
             random,
             recordingsGroupedById
           ).zipWithIndex
-        )
+        ).toVector
         asOfs <- Gen.listOfN(
           bigShuffledHistoryOverLotsOfThings.length,
           instantGenerator
@@ -1449,7 +1449,7 @@ trait WorldBehaviours
             random,
             referencedHistoryRecordingsGroupedById ++ referringHistoryRecordingsGroupedById
           ).zipWithIndex
-        )
+        ).toVector
         asOfs <- Gen.listOfN(
           bigShuffledHistoryOverLotsOfThings.length,
           instantGenerator
@@ -1538,7 +1538,7 @@ trait WorldBehaviours
             random,
             referencedHistoryRecordingsGroupedById
           ).zipWithIndex
-        )
+        ).toVector
         asOfs <- Gen.listOfN(
           bigShuffledHistoryOverLotsOfThings.length,
           instantGenerator
@@ -1658,7 +1658,7 @@ trait WorldBehaviours
             random,
             referencedHistoryRecordingsGroupedById
           ).zipWithIndex
-        )
+        ).toVector
         asOfs <- Gen.listOfN(
           bigShuffledHistoryOverLotsOfThings.length,
           instantGenerator
@@ -1807,7 +1807,7 @@ trait WorldBehaviours
             random,
             recordingsGroupedById
           ).zipWithIndex
-        )
+        ).toVector
         asOfs <- Gen.listOfN(
           bigShuffledHistoryOverLotsOfThings.length,
           instantGenerator
@@ -1878,7 +1878,7 @@ trait WorldBehaviours
             random,
             recordingsGroupedById
           ).zipWithIndex
-        )
+        ).toVector
         asOfs <- Gen.listOfN(
           bigShuffledHistoryOverLotsOfThings.length,
           instantGenerator
@@ -1914,7 +1914,7 @@ trait WorldBehaviours
             random,
             recordingsGroupedById
           ).zipWithIndex
-        )
+        ).toVector
         asOfs <- Gen.listOfN(
           bigShuffledHistoryOverLotsOfThings.length,
           instantGenerator
@@ -1953,7 +1953,7 @@ trait WorldBehaviours
             random,
             recordingsGroupedById
           ).zipWithIndex
-        )
+        ).toVector
         asOfs <- Gen.listOfN(
           bigShuffledHistoryOverLotsOfThings.length,
           instantGenerator
@@ -1992,7 +1992,7 @@ trait WorldBehaviours
             random,
             recordingsGroupedById
           ).zipWithIndex
-        )
+        ).toVector
         asOfs <- Gen.listOfN(
           bigShuffledHistoryOverLotsOfThings.length,
           instantGenerator
@@ -2031,7 +2031,7 @@ trait WorldBehaviours
             random,
             recordingsGroupedById
           ).zipWithIndex
-        )
+        ).toVector
         asOfs <- Gen.listOfN(
           bigShuffledHistoryOverLotsOfThings.length,
           instantGenerator
@@ -2067,7 +2067,7 @@ trait WorldBehaviours
             random,
             recordingsGroupedById
           ).zipWithIndex
-        )
+        ).toVector
         asOfs <- Gen.listOfN(
           bigShuffledHistoryOverLotsOfThings.length,
           instantGenerator
@@ -2128,7 +2128,7 @@ trait WorldBehaviours
             random,
             recordingsGroupedById
           ).zipWithIndex
-        )
+        ).toVector
         asOfs <- Gen.listOfN(
           bigShuffledHistoryOverLotsOfThings.length,
           instantGenerator
@@ -2214,7 +2214,7 @@ trait WorldBehaviours
             random,
             recordingsGroupedById
           ).zipWithIndex
-        )
+        ).toVector
         asOfs <- Gen.listOfN(
           bigShuffledHistoryOverLotsOfThings.length,
           instantGenerator
@@ -2340,7 +2340,7 @@ trait WorldBehaviours
             random,
             recordingsGroupedById
           ).zipWithIndex
-        )
+        ).toVector
         asOfs <- Gen.listOfN(
           bigShuffledHistoryOverLotsOfThings.length,
           instantGenerator
@@ -2430,8 +2430,7 @@ trait WorldBehaviours
               random,
               recordingsGroupedById
             ).zipWithIndex
-          )
-          .toList
+          ).toVector
         bigShuffledFaultyHistoryOverLotsOfThings = random
           .splitIntoNonEmptyPieces(
             shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
@@ -2440,8 +2439,7 @@ trait WorldBehaviours
             ).zipWithIndex map { case (stuff, index) =>
               stuff -> (-1 - index)
             }
-          )
-          .toList // Map with event ids over to strictly negative values to avoid collisions with the changes that are expected to work.
+          ).toVector // Map with event ids over to strictly negative values to avoid collisions with the changes that are expected to work.
         asOfs <- Gen.listOfN(
           bigShuffledHistoryOverLotsOfThings.length,
           instantGenerator
@@ -2529,12 +2527,10 @@ trait WorldBehaviours
             random,
             recordingsGroupedById
           ).zipWithIndex).toList
-        bigShuffledHistoryOverLotsOfThingsOneWay = (random
-          .splitIntoNonEmptyPieces(shuffledRecordingAndEventPairs))
-          .toList
-        bigShuffledHistoryOverLotsOfThingsAnotherWay = (random
-          .splitIntoNonEmptyPieces(shuffledRecordingAndEventPairs))
-          .toList
+        bigShuffledHistoryOverLotsOfThingsOneWay = random
+          .splitIntoNonEmptyPieces(shuffledRecordingAndEventPairs).toVector
+        bigShuffledHistoryOverLotsOfThingsAnotherWay = random
+          .splitIntoNonEmptyPieces(shuffledRecordingAndEventPairs).toVector
         asOfsOneWay <- Gen.listOfN(
           bigShuffledHistoryOverLotsOfThingsOneWay.length,
           instantGenerator
@@ -2971,7 +2967,7 @@ trait WorldBehaviours
               random
                 .splitIntoNonEmptyPieces(
                   (shuffledRecordingsForImplementingHistories ++ shuffledRecordingsForAbstractedHistories).zipWithIndex
-                )
+                ).toVector
             )
           asOfs <- Gen.listOfN(
             bigShuffledHistoryOverLotsOfThingsThatMakesSureThatAtLeastOneImplementingHistoryGetsBookedInFirst.length,
@@ -3051,7 +3047,7 @@ trait WorldBehaviours
               random
                 .splitIntoNonEmptyPieces(
                   (shuffledRecordingsForImplementingHistories ++ shuffledRecordingsForAbstractedHistories).zipWithIndex
-                )
+                ).toVector
             )
           asOfs <- Gen.listOfN(
             bigShuffledHistoryOverLotsOfThingsThatMakesSureThatAtLeastOneImplementingHistoryGetsBookedInFirst.length,
@@ -3539,7 +3535,7 @@ trait WorldBehaviours
           )
         bigShuffledHistoryOverLotsOfThings = random.splitIntoNonEmptyPieces(
           shuffledRecordings.zipWithIndex
-        ).toList
+        ).toVector
         asOfs <- Gen.listOfN(
           bigShuffledHistoryOverLotsOfThings.length,
           instantGenerator
@@ -4065,22 +4061,22 @@ trait WorldBehaviours
           shuffledObsoleteRecordings
         )
         shuffledFollowingRecordingAndEventPairs =
-          (shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
             random,
             followingRecordingsGroupedById
-          ).zipWithIndex).toList
+          ).zipWithIndex
         bigFollowingShuffledHistoryOverLotsOfThings = random
-          .splitIntoNonEmptyPieces(shuffledFollowingRecordingAndEventPairs)
-        bigOverallShuffledHistoryOverLotsOfThings =
+          .splitIntoNonEmptyPieces(shuffledFollowingRecordingAndEventPairs).toVector
+                          bigOverallShuffledHistoryOverLotsOfThings =
           bigShuffledHistoryOverLotsOfThings ++ liftRecordings(
             bigFollowingShuffledHistoryOverLotsOfThings
           )
-        asOfs <- Gen.listOfN(
+                          asOfs <- Gen.listOfN(
           bigOverallShuffledHistoryOverLotsOfThings.length,
           instantGenerator
         ) map (_.sorted)
-        queryWhen <- unboundedInstantGenerator
-        revisionOffsetToCheckAt = bigShuffledHistoryOverLotsOfThings.length
+                          queryWhen <- unboundedInstantGenerator
+                          revisionOffsetToCheckAt = bigShuffledHistoryOverLotsOfThings.length
       } yield (
         recordingsGroupedById,
         bigOverallShuffledHistoryOverLotsOfThings,
@@ -4350,7 +4346,7 @@ trait WorldBehaviours
             random,
             recordingsGroupedById
           ).zipWithIndex
-        )
+        ).toVector
         allEventIds = bigShuffledHistoryOverLotsOfThings flatMap (_ map (_._2))
         annulmentsGalore = List(
           allEventIds map ((None: Option[(Unbounded[Instant], Event)]) -> _)

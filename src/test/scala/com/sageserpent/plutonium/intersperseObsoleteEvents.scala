@@ -130,8 +130,8 @@ object intersperseObsoleteEvents {
       random: Random,
       eventIdPieces: Seq[(EventRelatedThing, EventId)]
   ): Seq[Seq[(EventRelatedThing, EventId)]] = {
-    val trialSplit: Seq[Seq[(EventRelatedThing, EventId)]] =
-      random.splitIntoNonEmptyPieces(eventIdPieces)
+    val trialSplit =
+      random.splitIntoNonEmptyPieces(eventIdPieces).toVector
 
     trialSplit flatMap (chunk =>
       if (
@@ -155,7 +155,7 @@ object intersperseObsoleteEvents {
         random,
         eventRelatedThings,
         obsoleteEventRelatedThings
-      ).toList
+      ).toVector
     )
   }
 }

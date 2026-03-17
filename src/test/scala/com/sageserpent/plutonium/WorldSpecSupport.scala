@@ -157,7 +157,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
   def shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
       random: Random,
       recordingsGroupedById: List[RecordingsForAnId]
-  ) = {
+  ): Seq[(Unbounded[Instant], Event)] = {
     // PLAN: shuffle each lots of events on a per-id basis, keeping the
     // annihilations out of the way. Then merge the results using random
     // picking.
@@ -167,13 +167,13 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
         random,
         _
       ))
-    ).toList
+    ).toVector
   }
 
   def shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhenForAGivenItem(
       random: Random,
       events: List[(Unbounded[Instant], Event)]
-  ) = {
+  ): Seq[(Unbounded[Instant], Event)] = {
     // NOTE: 'groupBy' actually destroys the sort order, so we have to sort
     // after grouping. We have to do this to
     // keep the annihilations after the events that define the lifespan of the
@@ -189,7 +189,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
     val groupedGroupsWithAnnihilationsIsolated =
       (recordingsGroupedByWhen groupWhile { case (lhs, rhs) =>
         !(groupContainsAnAnnihilation(lhs) || groupContainsAnAnnihilation(rhs))
-      }).toList
+      }).toVector
 
     groupedGroupsWithAnnihilationsIsolated flatMap (random
       .shuffle(_)) flatten
@@ -209,7 +209,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
       ]],
       asOfs: List[Instant],
       world: World
-  ) = {
+  ): Seq[Revision] = {
     revisionActions(
       bigShuffledHistoryOverLotsOfThings,
       asOfs,
@@ -236,7 +236,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
       world: World
   ): Seq[() => Revision] = {
     for {
-      pieceOfHistory <- bigShuffledHistoryOverLotsOfThings.toList
+      pieceOfHistory <- bigShuffledHistoryOverLotsOfThings
       _ = require(
         pieceOfHistory.map(_._2).toSeq.distinct.size == pieceOfHistory.size
       )
@@ -264,7 +264,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
       ]],
       asOfs: List[Instant],
       world: World
-  ) = {
+  ): Unit = {
     for (
       revisionAction <- revisionActions(
         bigShuffledHistoryOverLotsOfThings,
@@ -692,7 +692,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
         )
       ],
       forbidAnnihilations: Boolean = false
-  ) = {
+  ): Gen[List[RecordingsForAPhoenixId with RecordingsForAnIdContracts]] = {
     val unconstrainedParametersGenerator = for {
       (
         historyId,
@@ -712,10 +712,10 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
         else Arbitrary.arbitrary[Boolean]
       numberOfEventsForLifespans = {
         def numberOfEventsForLimitedLifespans(
-            dataSamplesGroupedForLimitedLifespans: Seq[
+            dataSamplesGroupedForLimitedLifespans: List[
               Iterable[(Int, Any, (Unbounded[Instant]) => Event)]
             ]
-        ) = {
+        ): List[Int] = {
           // Add an extra when for the annihilation at the end of the
           // lifespan...
           dataSamplesGroupedForLimitedLifespans map (1 + _.size)
@@ -732,7 +732,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
           ) :+ dataSamplesGroupForEternalLife.size
         } else
           numberOfEventsForLimitedLifespans(dataSamplesGroupedForLifespans)
-      }.toList
+      }
       sampleWhensGroupedForLifespans <- chunksGenerator(
         numberOfEventsForLifespans,
         changeWhenGenerator
@@ -789,7 +789,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
   def chunksGenerator[Article: Ordering](
       chunkSizes: List[Int],
       stuffGenerator: Gen[Article]
-  ) = {
+  ): Gen[Vector[List[Article]]] = {
     val numberOfEventsOverall = chunkSizes.sum
     for {
       articles <- Gen.listOfN(
@@ -798,17 +798,17 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
       ) map (_ sorted)
     } yield {
       def chunksOf(
-          chunkSizes: List[Int],
+          chunkSizes: Seq[Int],
           articles: List[Article]
-      ): LazyList[List[Article]] =
+      ): List[List[Article]] =
         chunkSizes match {
           case chunkSize :: remainingChunkSizes =>
             val (chunkOfStuff, remainingArticles) = articles splitAt chunkSize
-            chunkOfStuff #:: chunksOf(remainingChunkSizes, remainingArticles)
-          case Nil => LazyList.empty
+            chunkOfStuff :: chunksOf(remainingChunkSizes, remainingArticles)
+          case Nil => Nil
         }
 
-      chunksOf(chunkSizes, articles)
+      chunksOf(chunkSizes, articles).toVector
     }
   }
 
