@@ -5,10 +5,10 @@ import com.sageserpent.americium.{PositiveInfinity, Unbounded}
 import java.time.Instant
 import scala.Ordering.Implicits._
 import scala.collection.Searching._
-import scala.collection.mutable
+import scala.collection.{IndexedSeqView, mutable}
 import scala.language.postfixOps
 
-object MutableState {
+private object MutableState {
 
   import World._
   import WorldImplementationCodeFactoring._
@@ -21,8 +21,8 @@ object MutableState {
       eventCorrections: EventCorrections,
       cutoffRevision: Revision
   ): EventOrderingTiebreakerIndex = {
-    val revisionsIndexedSeq: IndexedSeq[Revision] =
-      eventCorrections.view.map(_.introducedInRevision).toIndexedSeq
+    val revisionsIndexedSeq: IndexedSeqView[Revision] =
+      eventCorrections.view.map(_.introducedInRevision)
 
     revisionsIndexedSeq.search(cutoffRevision) match {
       case Found(foundIndex)              => foundIndex
@@ -31,7 +31,7 @@ object MutableState {
   }
 }
 
-class MutableState {
+private class MutableState {
 
   import MutableState._
   import World._
@@ -69,19 +69,17 @@ class MutableState {
       cutoffRevision: Revision,
       cutoffWhen: Unbounded[Instant],
       eventIdInclusion: EventIdInclusion
-  ): Seq[(EventId, AbstractEventData)] =
-    eventIdsAndTheirDatums(cutoffRevision, cutoffWhen, eventIdInclusion)
-      .filterNot(PartialFunction.cond(_) { case (_, eventData: EventData) =>
-        eventData.serializableEvent.when > cutoffWhen
-      })
-      .toSeq
+  ): LazyList[(EventId, AbstractEventData)] =
+    LazyList.from(
+      eventIdsAndTheirDatums(cutoffRevision, cutoffWhen, eventIdInclusion)
+    )
 
   def eventIdsAndTheirDatums(
       cutoffRevision: Revision,
       cutoffWhen: Unbounded[Instant],
       eventIdInclusion: EventIdInclusion
-  ) = {
-    eventIdToEventCorrectionsMap collect {
+  ): Iterator[(Any, AbstractEventData)] = {
+    eventIdToEventCorrectionsMap.iterator collect {
       case (eventId, eventCorrections) if eventIdInclusion(eventId) =>
         val onePastIndexOfRelevantEventCorrection =
           numberOfEventCorrectionsPriorToCutoff(
@@ -96,7 +94,11 @@ class MutableState {
           )
         else
           None
-    } collect { case Some(idAndDataPair) => idAndDataPair }
+    } collect {
+      case Some(idAndDataPair @ (_, eventData: EventData))
+          if eventData.serializableEvent.when <= cutoffWhen =>
+        idAndDataPair
+    }
   }
 
   def checkInvariant() = {
@@ -133,7 +135,7 @@ class WorldReferenceImplementation(mutableState: MutableState)
   ): Revision = {
     def newEventDatumsFor(
         nextRevisionPriorToUpdate: Revision
-    ): collection.Map[EventId, AbstractEventData] = {
+    ): Iterable[(EventId, AbstractEventData)] = {
       events.zipWithIndex map { case ((eventId, event), tiebreakerIndex) =>
         eventId -> (event match {
           case Some(event) =>
@@ -141,7 +143,7 @@ class WorldReferenceImplementation(mutableState: MutableState)
           case None => AnnulledEventData(nextRevisionPriorToUpdate)
         })
       }
-    } toMap
+    }
 
     def buildAndValidateEventTimelineForProposedNewRevision(
         newEventDatums: Seq[(EventId, AbstractEventData)],
@@ -154,7 +156,7 @@ class WorldReferenceImplementation(mutableState: MutableState)
       )
 
       (new IdentifiedItemsScope)
-        .populate(PositiveInfinity[Instant], eventTimelineIncludingNewRevision)
+        .populate(PositiveInfinity(), eventTimelineIncludingNewRevision)
     }
 
     transactNewRevision(
@@ -166,7 +168,7 @@ class WorldReferenceImplementation(mutableState: MutableState)
 
   private def transactNewRevision(
       asOf: Instant,
-      newEventDatumsFor: Revision => collection.Map[EventId, AbstractEventData],
+      newEventDatumsFor: Revision => Iterable[(EventId, AbstractEventData)],
       buildAndValidateEventTimelineForProposedNewRevision: (
           Seq[(EventId, AbstractEventData)],
           Seq[(EventId, AbstractEventData)]
@@ -186,7 +188,7 @@ class WorldReferenceImplementation(mutableState: MutableState)
         val pertinentEventDatumsExcludingTheNewRevision =
           mutableState.pertinentEventDatums(
             nextRevisionPriorToUpdate,
-            newEventDatums.keys
+            newEventDatums.map(_._1)
           )
         (
           newEventDatums,
@@ -240,9 +242,9 @@ class WorldReferenceImplementation(mutableState: MutableState)
 
   override def forkExperimentalWorld(scope: Scope): World = {
     val forkedMutableState = new MutableState {
-      val baseMutableState                     = mutableState
-      val numberOfRevisionsInCommon            = scope.nextRevision
-      val cutoffWhenAfterWhichHistoriesDiverge = scope.when
+      private val baseMutableState                     = mutableState
+      private val numberOfRevisionsInCommon            = scope.nextRevision
+      private val cutoffWhenAfterWhichHistoriesDiverge = scope.when
 
       override def nextRevision: Revision =
         numberOfRevisionsInCommon + super.nextRevision
@@ -254,19 +256,15 @@ class WorldReferenceImplementation(mutableState: MutableState)
           cutoffRevision: Revision,
           cutoffWhen: Unbounded[Instant],
           eventIdInclusion: EventIdInclusion
-      ): Seq[(EventId, AbstractEventData)] = {
+      ): LazyList[(EventId, AbstractEventData)] = {
         val cutoffWhenForBaseWorld =
           cutoffWhen min cutoffWhenAfterWhichHistoriesDiverge
         if (cutoffRevision > numberOfRevisionsInCommon) {
           val foo =
             eventIdsAndTheirDatums(cutoffRevision, cutoffWhen, eventIdInclusion)
           val eventIdsToBeExcluded = foo.map(_._1).toSet
-          foo
-            .filterNot(PartialFunction.cond(_) {
-              case (_, eventData: EventData) =>
-                eventData.serializableEvent.when > cutoffWhen
-            })
-            .toSeq ++ baseMutableState.pertinentEventDatums(
+
+          LazyList.from(foo) ++ baseMutableState.pertinentEventDatums(
             numberOfRevisionsInCommon,
             cutoffWhenForBaseWorld,
             eventId =>
