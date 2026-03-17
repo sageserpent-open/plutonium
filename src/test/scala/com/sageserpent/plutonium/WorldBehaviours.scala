@@ -1160,7 +1160,7 @@ trait WorldBehaviours
                       Seq(referringHistory: ReferringHistory) =
                         referringHistoriesFrom(scope)
                       if referringHistory.referencedHistories
-                        .contains(referencedHistoryId)
+                        .get(referencedHistoryId).exists(!_.asInstanceOf[ItemExtensionApi].isGhost)
                     } yield (
                       referringHistoryId,
                       referencedHistoryId,
@@ -1257,8 +1257,8 @@ trait WorldBehaviours
                       ))
                     RecordingsNoLaterThan(
                       referencedHistoryId,
-                      referencedHistoriesFrom,
-                      pertinentRecordings,
+                      _,
+                      _,
                       _,
                       _
                     ) <-
@@ -1268,7 +1268,7 @@ trait WorldBehaviours
                     Seq(referringHistory: ReferringHistory) =
                       referringHistoriesFrom(scope)
                     if referringHistory.referencedHistories
-                      .contains(referencedHistoryId)
+                      .get(referencedHistoryId).exists(!_.asInstanceOf[ItemExtensionApi].isGhost)
                   } yield (referringHistoryId, referencedHistoryId)
 
                   if (checks.nonEmpty)
@@ -1414,11 +1414,11 @@ trait WorldBehaviours
                     )
 
                     for (
-                      (NonExistentRecordings(
-                        historyId,
+                      NonExistentRecordings(
+                        _,
                         _,
                         ineffectiveEventFor
-                      )) <- recordingsGroupedById flatMap (_.doesNotExistAt(
+                      ) <- recordingsGroupedById flatMap (_.doesNotExistAt(
                         queryWhen
                       ))
                     ) {
@@ -1458,6 +1458,7 @@ trait WorldBehaviours
       )
     }
 
+    // TODO: this is sporadically failing via starvation.
     it should "consider a reference to a related item in an event as being defining" in {
       val testCaseGenerator = for {
         referencedHistoryRecordingsGroupedById <-
@@ -1511,7 +1512,7 @@ trait WorldBehaviours
                   val checks: List[(Any, History)] =
                     for {
                       RecordingsNoLaterThan(
-                        referringHistoryId,
+                        _,
                         referringHistoriesFrom,
                         _,
                         _,
@@ -1531,13 +1532,13 @@ trait WorldBehaviours
                       Seq(referringHistory: ReferringHistory) =
                         referringHistoriesFrom(scope)
                       if referringHistory.referencedHistories
-                        .contains(referencedHistoryId)
+                        .get(referencedHistoryId).exists(!_.asInstanceOf[ItemExtensionApi].isGhost)
                       Seq(referencedHistory) = referencedHistoriesFrom(scope)
                     } yield (referencedHistoryId, referencedHistory)
 
                   if (checks.nonEmpty)
                     Prop.all(checks.map { case (historyId, actualHistory) =>
-                      (actualHistory.datums.isEmpty :| s"For ${historyId}, the datums: ${actualHistory.datums} was supposed to be empty")
+                      actualHistory.datums.isEmpty :| s"For ${historyId}, the datums: ${actualHistory.datums} was supposed to be empty"
                     }: _*)
                   else Prop.undecided
                 }

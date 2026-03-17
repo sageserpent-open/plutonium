@@ -36,7 +36,7 @@ abstract class ReferringHistory extends History {
     }
 
   def referencedHistories: collection.Map[Any, History] =
-    _referencedHistories filterNot (_._2.asInstanceOf[ItemExtensionApi].isGhost)
+    _referencedHistories
 
   def referToRelatedItem(referencedHistoryId: History#Id): Unit = {
     val _ = _referencedHistories(referencedHistoryId).datums
