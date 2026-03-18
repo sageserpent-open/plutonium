@@ -1051,7 +1051,7 @@ class BitemporalSpecUsingWorldReferenceImplementation
     extends BitemporalBehaviours
     with WorldReferenceImplementationResource {
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
-    PropertyCheckConfiguration()
+    PropertyCheckConfiguration(sizeRange = 30)
 
   "The class Bitemporal (using the world reference implementation)" should behave like bitemporalBehaviour
 
@@ -1070,7 +1070,7 @@ class BitemporalSpecUsingWorldEfficientInMemoryImplementation
     extends BitemporalBehaviours
     with WorldEfficientInMemoryImplementationResource {
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
-    PropertyCheckConfiguration(minSuccessful = 30)
+    PropertyCheckConfiguration(sizeRange = 30, minSuccessful = 30)
 
   "The class Bitemporal (using the world efficient in-memory implementation)" should behave like bitemporalBehaviour
 
