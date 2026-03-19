@@ -4,7 +4,7 @@ import cats.{Monad, Monoid}
 package object plutonium {
   type EventId = Any
 
-  implicit val applicativeMonad: Monad[Bitemporal] =
+  implicit val monad: Monad[Bitemporal] =
     new Monad[Bitemporal] {
       override def pure[A](a: A): Bitemporal[A] =
         Bitemporal(a)
@@ -18,7 +18,7 @@ package object plutonium {
       ): Bitemporal[B] = Bitemporal.tailRecM(a)(f)
     }
 
-  implicit def plus[Item]: Monoid[Bitemporal[Item]] =
+  implicit def monoid[Item]: Monoid[Bitemporal[Item]] =
     new Monoid[Bitemporal[Item]] {
       override def empty: Bitemporal[Item] = Bitemporal.none
       override def combine(
