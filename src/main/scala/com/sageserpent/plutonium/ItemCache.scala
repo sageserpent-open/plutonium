@@ -64,7 +64,7 @@ protected[plutonium] trait ItemCacheImplementation extends ItemCache {
             intermediates.flatMap(intermediate => render(stage(intermediate)))
           )
 
-          unroll(newIntermediates, results ++ newResults)
+          unroll(newIntermediates, results.force lazyAppendedAll newResults)
         } else results
 
         unroll(LazyList(initialItem), LazyList.empty)
