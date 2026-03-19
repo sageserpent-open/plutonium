@@ -62,7 +62,6 @@ class IdentifiedItemsScope extends IdentifiedItemAccess {
             _uniqueItemSpecification.clazz
               .asInstanceOf[Class[Item]]
           ) // TODO: remove horrible typecast.
-          .to(LazyList)
       if (itemsOfDesiredType.isEmpty)
         constructAndCacheItem()
       else {
@@ -89,7 +88,6 @@ class IdentifiedItemsScope extends IdentifiedItemAccess {
     val itemsSelectedForAnnihilation: LazyList[Any] =
       IdentifiedItemsScope
         .yieldOnlyItemsOfType(items, uniqueItemSpecification.clazz)
-        .to(LazyList)
     assert(1 == itemsSelectedForAnnihilation.size)
 
     val itemToBeAnnihilated = itemsSelectedForAnnihilation.head
@@ -106,7 +104,7 @@ class IdentifiedItemsScope extends IdentifiedItemAccess {
   def populate(
       _when: Unbounded[Instant],
       eventTimeline: Seq[(Event, EventId)]
-  ) = {
+  ): Unit = {
     idToItemsMultiMap.clear()
 
     Resource
@@ -182,7 +180,7 @@ class IdentifiedItemsScope extends IdentifiedItemAccess {
 }
 
 object IdentifiedItemsScope {
-  def yieldOnlyItemsOfSupertypeOf[Item](
+  private def yieldOnlyItemsOfSupertypeOf[Item](
       items: Iterable[Any],
       clazz: Class[Item]
   ): Iterable[Any] = {
@@ -192,11 +190,11 @@ object IdentifiedItemsScope {
     }
   }
 
-  def yieldOnlyItemsOfType[Item](
+  private def yieldOnlyItemsOfType[Item](
       items: Iterable[Any],
       clazz: Class[Item]
   ): LazyList[Item] = {
-    items.to(LazyList) filter (clazz.isInstance(_)) map (clazz.cast(_))
+    (LazyList.from(items) filter clazz.isInstance).asInstanceOf[LazyList[Item]]
   }
 
   object proxyFactory extends StatefulItemProxyFactory {
