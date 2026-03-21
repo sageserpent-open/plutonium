@@ -13,11 +13,11 @@ private object MutableState {
   import World._
   import WorldImplementationCodeFactoring._
 
-  type EventCorrections = mutable.ArrayBuffer[AbstractEventData]
-  type EventIdToEventCorrectionsMap[EventId] =
+  private type EventCorrections = mutable.ArrayBuffer[AbstractEventData]
+  private type EventIdToEventCorrectionsMap[EventId] =
     mutable.Map[EventId, EventCorrections]
 
-  def numberOfEventCorrectionsPriorToCutoff(
+  private def numberOfEventCorrectionsPriorToCutoff(
       eventCorrections: EventCorrections,
       cutoffRevision: Revision
   ): EventOrderingTiebreakerIndex = {
@@ -61,11 +61,6 @@ private class MutableState {
   }
 
   def pertinentEventDatums(
-      cutoffRevision: Revision
-  ): Seq[(EventId, AbstractEventData)] =
-    pertinentEventDatums(cutoffRevision, PositiveInfinity(), _ => true)
-
-  def pertinentEventDatums(
       cutoffRevision: Revision,
       cutoffWhen: Unbounded[Instant],
       eventIdInclusion: EventIdInclusion
@@ -100,6 +95,11 @@ private class MutableState {
         idAndDataPair
     }
   }
+
+  def pertinentEventDatums(
+      cutoffRevision: Revision
+  ): Seq[(EventId, AbstractEventData)] =
+    pertinentEventDatums(cutoffRevision, PositiveInfinity(), _ => true)
 
   def checkInvariant() = {
     assert(revisionAsOfs zip revisionAsOfs.tail forall { case (first, second) =>

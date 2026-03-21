@@ -35,7 +35,7 @@ class IdentifiedItemsScope extends IdentifiedItemAccess {
 
       val item = IdentifiedItemsScope.proxyFactory
         .constructFrom[Item](stateToBeAcquiredByProxy)
-      addBinding(_uniqueItemSpecification.id, item)
+      idToItemsMultiMap.addOne(_uniqueItemSpecification.id -> item)
       item
     }
 
@@ -71,10 +71,6 @@ class IdentifiedItemsScope extends IdentifiedItemAccess {
     }
   }
 
-  private def addBinding(id: Any, item: Any): Unit = {
-    idToItemsMultiMap.addOne(id -> item)
-  }
-
   override def noteAnnihilation(
       uniqueItemSpecification: UniqueItemSpecification
   ): Unit = {
@@ -82,15 +78,16 @@ class IdentifiedItemsScope extends IdentifiedItemAccess {
 
     assert(items.nonEmpty)
 
-    // Have to force evaluation so that the call to '--=' below does not try to
-    // incrementally evaluate as the underlying source collection is being
-    // mutated.
-    val itemsSelectedForAnnihilation: LazyList[Any] =
-      IdentifiedItemsScope
-        .yieldOnlyItemsOfType(items, uniqueItemSpecification.clazz)
-    assert(1 == itemsSelectedForAnnihilation.size)
+    val itemToBeAnnihilated = {
+      // NOTE: keep this lzy list local to avoid it being clobbered by the
+      // following call to `subtractOne`.
+      val itemsSelectedForAnnihilation: LazyList[Any] =
+        IdentifiedItemsScope
+          .yieldOnlyItemsOfType(items, uniqueItemSpecification.clazz)
+      assert(1 == itemsSelectedForAnnihilation.size)
 
-    val itemToBeAnnihilated = itemsSelectedForAnnihilation.head
+      itemsSelectedForAnnihilation.head
+    }
 
     idToItemsMultiMap.subtractOne(
       uniqueItemSpecification.id -> itemToBeAnnihilated
@@ -117,9 +114,10 @@ class IdentifiedItemsScope extends IdentifiedItemAccess {
       )
       .use(_ =>
         IO {
-          val patchRecorder =
+          val patchRecorder
+              : PatchRecorderImplementation with PatchRecorderContracts =
             new PatchRecorderImplementation(_when) with PatchRecorderContracts {
-              val itemsAreLockedResource =
+              private val itemsAreLockedResource =
                 Resource.make(IO {
                   allItemsAreLocked = true
                 })(_ =>
