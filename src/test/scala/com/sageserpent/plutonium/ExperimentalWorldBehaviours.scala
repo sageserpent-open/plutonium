@@ -81,7 +81,7 @@ trait ExperimentalWorldBehaviours
               recordingsGroupedById
             ).zipWithIndex
           )
-          .toList
+          .toVector
         asOfs <- Gen.listOfN(
           bigShuffledHistoryOverLotsOfThings.length,
           instantGenerator
@@ -156,7 +156,7 @@ trait ExperimentalWorldBehaviours
               recordingsGroupedById
             ).zipWithIndex
           )
-          .toList
+          .toVector
         asOfs <- Gen.listOfN(
           bigShuffledHistoryOverLotsOfThings.length,
           instantGenerator
@@ -248,7 +248,7 @@ trait ExperimentalWorldBehaviours
               recordingsGroupedById
             ).zipWithIndex
           )
-          .toList
+          .toVector
         asOfs <- Gen.listOfN(
           bigShuffledHistoryOverLotsOfThings.length,
           instantGenerator
@@ -338,9 +338,9 @@ trait ExperimentalWorldBehaviours
               recordingsGroupedById
             ).zipWithIndex
           )
-          .toList
+          .toVector
         allEventIds = bigShuffledHistoryOverLotsOfThings flatMap (_ map (_._2))
-        annulmentsGalore = LazyList(
+        annulmentsGalore = List(
           allEventIds map ((None: Option[(Unbounded[Instant], Event)]) -> _)
         )
         bigFollowingShuffledHistoryOverLotsOfThings = random
@@ -350,7 +350,7 @@ trait ExperimentalWorldBehaviours
               followingRecordingsGroupedById
             ).zipWithIndex
           )
-          .toList
+          .toVector
         baseHistoryLength = bigShuffledHistoryOverLotsOfThings.length
         annulmentsLength  = annulmentsGalore.length
         rewritingHistoryLength =
@@ -472,7 +472,7 @@ trait ExperimentalWorldBehaviours
               recordingsGroupedById
             ).zipWithIndex
           )
-          .toList
+          .toVector
         asOfs <- Gen.listOfN(
           bigShuffledHistoryOverLotsOfThings.length,
           instantGenerator
@@ -567,9 +567,9 @@ trait ExperimentalWorldBehaviours
               recordingsGroupedById
             ).zipWithIndex
           )
-          .toList
+          .toVector
         allEventIds = bigShuffledHistoryOverLotsOfThings flatMap (_ map (_._2))
-        annulmentsGalore = LazyList(
+        annulmentsGalore = List(
           allEventIds map ((None: Option[(Unbounded[Instant], Event)]) -> _)
         )
         bigFollowingShuffledHistoryOverLotsOfThings = random
@@ -579,7 +579,7 @@ trait ExperimentalWorldBehaviours
               followingRecordingsGroupedById
             ).zipWithIndex
           )
-          .toList
+          .toVector
         baseHistoryLength = bigShuffledHistoryOverLotsOfThings.length
         annulmentsLength  = annulmentsGalore.length
         rewritingHistoryLength =
@@ -633,7 +633,7 @@ trait ExperimentalWorldBehaviours
               forkAsOf,
               seed
             )
-          } yield scopeAndWorld._2).use { case experimentalWorld =>
+          } yield scopeAndWorld._2).use { experimentalWorld =>
             IO {
               recordEventsInWorld(
                 annulmentsGalore,
@@ -699,9 +699,9 @@ trait ExperimentalWorldBehaviours
               recordingsGroupedById
             ).zipWithIndex
           )
-          .toList
+          .toVector
         allEventIds = bigShuffledHistoryOverLotsOfThings flatMap (_ map (_._2))
-        annulmentsGalore = LazyList(
+        annulmentsGalore = List(
           allEventIds map ((None: Option[(Unbounded[Instant], Event)]) -> _)
         )
         baseHistoryLength = bigShuffledHistoryOverLotsOfThings.length
