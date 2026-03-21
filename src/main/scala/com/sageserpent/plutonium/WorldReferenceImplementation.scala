@@ -70,11 +70,13 @@ private class MutableState {
       cutoffWhen: Unbounded[Instant],
       eventIdInclusion: EventIdInclusion
   ): LazyList[(EventId, AbstractEventData)] =
-    eventIdsAndTheirDatums(cutoffRevision, cutoffWhen, eventIdInclusion)
+    eventIdsAndTheirDatums(cutoffRevision, eventIdInclusion)
+      .filterNot(PartialFunction.cond(_) { case (_, eventData: EventData) =>
+        eventData.serializableEvent.when > cutoffWhen
+      })
 
   def eventIdsAndTheirDatums(
       cutoffRevision: Revision,
-      cutoffWhen: Unbounded[Instant],
       eventIdInclusion: EventIdInclusion
   ): LazyList[(Any, AbstractEventData)] = {
     LazyList.from(eventIdToEventCorrectionsMap) collect {
@@ -92,10 +94,8 @@ private class MutableState {
           )
         else
           None
-    } collect {
-      case Some(idAndDataPair @ (_, eventData: EventData))
-          if eventData.serializableEvent.when <= cutoffWhen =>
-        idAndDataPair
+    } collect { case Some(idAndDataPair) =>
+      idAndDataPair
     }
   }
 
@@ -258,11 +258,16 @@ class WorldReferenceImplementation(mutableState: MutableState)
         val cutoffWhenForBaseWorld =
           cutoffWhen min cutoffWhenAfterWhichHistoriesDiverge
         if (cutoffRevision > numberOfRevisionsInCommon) {
-          val foo =
-            eventIdsAndTheirDatums(cutoffRevision, cutoffWhen, eventIdInclusion)
-          val eventIdsToBeExcluded = foo.map(_._1).toSet
+          val allEventsUpToTheCutoffRevisionRegardlessOfEventWhen =
+            eventIdsAndTheirDatums(cutoffRevision, eventIdInclusion)
+          val eventIdsToBeExcluded =
+            allEventsUpToTheCutoffRevisionRegardlessOfEventWhen.map(_._1).toSet
 
-          foo lazyAppendedAll baseMutableState.pertinentEventDatums(
+          allEventsUpToTheCutoffRevisionRegardlessOfEventWhen
+            .filterNot(PartialFunction.cond(_) {
+              case (_, eventData: EventData) =>
+                eventData.serializableEvent.when > cutoffWhen
+            }) lazyAppendedAll baseMutableState.pertinentEventDatums(
             numberOfRevisionsInCommon,
             cutoffWhenForBaseWorld,
             eventId =>
