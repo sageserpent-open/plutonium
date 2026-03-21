@@ -51,7 +51,7 @@ private class MutableState {
   def pertinentEventDatums(
       cutoffRevision: Revision,
       eventIds: Iterable[EventId]
-  ): Seq[(EventId, AbstractEventData)] = {
+  ): LazyList[(EventId, AbstractEventData)] = {
     val eventIdsToBeExcluded = eventIds.toSet
     pertinentEventDatums(
       cutoffRevision,
@@ -61,20 +61,23 @@ private class MutableState {
   }
 
   def pertinentEventDatums(
+      cutoffRevision: Revision
+  ): LazyList[(EventId, AbstractEventData)] =
+    pertinentEventDatums(cutoffRevision, PositiveInfinity(), _ => true)
+
+  def pertinentEventDatums(
       cutoffRevision: Revision,
       cutoffWhen: Unbounded[Instant],
       eventIdInclusion: EventIdInclusion
   ): LazyList[(EventId, AbstractEventData)] =
-    LazyList.from(
-      eventIdsAndTheirDatums(cutoffRevision, cutoffWhen, eventIdInclusion)
-    )
+    eventIdsAndTheirDatums(cutoffRevision, cutoffWhen, eventIdInclusion)
 
   def eventIdsAndTheirDatums(
       cutoffRevision: Revision,
       cutoffWhen: Unbounded[Instant],
       eventIdInclusion: EventIdInclusion
-  ): Iterator[(Any, AbstractEventData)] = {
-    eventIdToEventCorrectionsMap.iterator collect {
+  ): LazyList[(Any, AbstractEventData)] = {
+    LazyList.from(eventIdToEventCorrectionsMap) collect {
       case (eventId, eventCorrections) if eventIdInclusion(eventId) =>
         val onePastIndexOfRelevantEventCorrection =
           numberOfEventCorrectionsPriorToCutoff(
@@ -95,11 +98,6 @@ private class MutableState {
         idAndDataPair
     }
   }
-
-  def pertinentEventDatums(
-      cutoffRevision: Revision
-  ): Seq[(EventId, AbstractEventData)] =
-    pertinentEventDatums(cutoffRevision, PositiveInfinity(), _ => true)
 
   def checkInvariant() = {
     assert(revisionAsOfs zip revisionAsOfs.tail forall { case (first, second) =>
@@ -226,7 +224,7 @@ class WorldReferenceImplementation(mutableState: MutableState)
     nextRevisionPriorToUpdate
   }
 
-  protected def checkRevisionPrecondition(
+  private def checkRevisionPrecondition(
       asOf: Instant,
       revisionAsOfs: Seq[Instant]
   ): Unit = {
@@ -264,7 +262,7 @@ class WorldReferenceImplementation(mutableState: MutableState)
             eventIdsAndTheirDatums(cutoffRevision, cutoffWhen, eventIdInclusion)
           val eventIdsToBeExcluded = foo.map(_._1).toSet
 
-          LazyList.from(foo) ++ baseMutableState.pertinentEventDatums(
+          foo lazyAppendedAll baseMutableState.pertinentEventDatums(
             numberOfRevisionsInCommon,
             cutoffWhenForBaseWorld,
             eventId =>
