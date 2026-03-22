@@ -48,36 +48,48 @@ Add this to your _build.gradle_:
 ## Show me... ##
 
 ```java
-jshell> /reload
-|  Restarting and restoring state.
--: import com.sageserpent.americium.NegativeInfinity;
--: import com.sageserpent.americium.Unbounded;
--: import com.sageserpent.plutonium.World;
--: import com.sageserpent.plutonium.WorldReferenceImplementation;
--: import com.sageserpent.plutonium.javaApi.*;
--: import java.time.Instant;
--: World<Integer> world = new WorldReferenceImplementation<>();
--: NegativeInfinity<Instant> atTheBeginningOfTime = NegativeInfinity.apply();
--: {
-       final Instant asOf = Instant.now();
+jshell>/reload
+        |Restarting and restoring state.
+        -:import com.sageserpent.americium.NegativeInfinity;
+-:import com.sageserpent.americium.Unbounded;
+-:import com.sageserpent.plutonium.World;
+-:import com.sageserpent.plutonium.reference.WorldReferenceImplementation;
+-:import com.sageserpent.plutonium.javaApi.*;
+-:import java.time.Instant;
+-:World<Integer> world = new WorldReferenceImplementation<>();
+-:
+NegativeInfinity<Instant> atTheBeginningOfTime = NegativeInfinity.apply();
+-:{
+final Instant asOf = Instant.now();
+
+final int eventId = 0;
    
-       final int eventId = 0;
+       world.
+
+revise(eventId, Change.forOneItem(atTheBeginningOfTime, "Fred",Account .class, accountItem ->{
+        accountItem.
+
+setCash(5.0);
+       }),asOf);
+
+final int followingRevision = world.nextRevision();
+
+final Scope scope = world.scopeFor(atTheBeginningOfTime, followingRevision);
+
+final Account account = scope.render(Bitemporal.withId("Fred", Account.class)).head();
    
-       world.revise(eventId, Change.forOneItem(atTheBeginningOfTime, "Fred", Account.class, accountItem -> {
-           accountItem.setCash(5.0);
-       }), asOf);
-   
-       final int followingRevision = world.nextRevision();
-   
-       final Scope scope = world.scopeFor(atTheBeginningOfTime, followingRevision);
-   
-       final Account account = scope.render(Bitemporal.withId("Fred", Account.class)).head();
-   
-       System.out.println(followingRevision);
-       System.out.println(atTheBeginningOfTime);
-       System.out.println(account.getCash());
-   }
-1
+       System.out.
+
+println(followingRevision);
+       System.out.
+
+println(atTheBeginningOfTime);
+       System.out.
+
+println(account.getCash());
+        }
+        1
+
 NegativeInfinity()
 5.0
 ```

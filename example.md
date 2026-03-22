@@ -229,6 +229,7 @@ import com.sageserpent.plutonium.javaApi.Bitemporal;
 import com.sageserpent.plutonium.javaApi.Change;
 import com.sageserpent.plutonium.javaApi.Scope;
 import com.sageserpent.plutonium.javaApi.World;
+import com.sageserpent.plutonium.reference.WorldReferenceImplementation;
 
 import java.time.Instant;
 import java.util.Map;
@@ -247,7 +248,7 @@ public class DeliveringPackages {
         World<String> world = justADemo ?
                 new WorldReferenceImplementation<>(new MutableState<>()) :
                 new WorldRedisBasedImplementation<>(redisClient,
-                                                    "TheBigStoreOfDataOwnedByTheDispatchLineOfBusiness");
+                        "TheBigStoreOfDataOwnedByTheDispatchLineOfBusiness");
 
         {
             // Make a query at the end of time for any kind of thing that
@@ -268,11 +269,11 @@ public class DeliveringPackages {
 
         {
             world.revise("Define warehouse",
-                         Change.forOneItem(warehouseName, PackageHolder.class,
-                                           warehouse -> warehouse.setLocation(
-                                                   "Big warehouse by " +
-                                                           "motorway")),
-                         Instant.now() /*As-of time
+                    Change.forOneItem(warehouseName, PackageHolder.class,
+                            warehouse -> warehouse.setLocation(
+                                    "Big warehouse by " +
+                                            "motorway")),
+                    Instant.now() /*As-of time
                                            for the revision.*/);
 
             {
@@ -282,9 +283,9 @@ public class DeliveringPackages {
                                 .now() /*As-of time that picks out the
                                 revision.*/);
                 assert "Big warehouse by motorway".equals(scope.render(
-                        Bitemporal.withId(warehouseName,
-                                               PackageHolder.class)).head()
-                                                                  .getLocation());
+                                Bitemporal.withId(warehouseName,
+                                        PackageHolder.class)).head()
+                        .getLocation());
             }
         }
 
@@ -298,15 +299,15 @@ public class DeliveringPackages {
                 "Put package #1 in warehouse";
 
         world.revise(thisEventWillEventuallyBeCorrected,
-                     Change.forTwoItems(Instant.parse("2016-12-03T00:00:00Z"),
-                                        "Package #1", PackageItem.class,
-                                        warehouseName, PackageHolder.class,
-                                        (packageItem, warehouse) -> {
-                                            packageItem.setContents(
-                                                    "SuperTron HiPlasmatic " +
-                                                            "Telly");
-                                            packageItem.heldBy(warehouse);
-                                        }), Instant.now() /*As-of time for
+                Change.forTwoItems(Instant.parse("2016-12-03T00:00:00Z"),
+                        "Package #1", PackageItem.class,
+                        warehouseName, PackageHolder.class,
+                        (packageItem, warehouse) -> {
+                            packageItem.setContents(
+                                    "SuperTron HiPlasmatic " +
+                                            "Telly");
+                            packageItem.heldBy(warehouse);
+                        }), Instant.now() /*As-of time for
                                         the revision.*/);
 
         {
@@ -320,24 +321,24 @@ public class DeliveringPackages {
                             warehouseName,
                             PackageHolder.class)).head().getLocation());
             assert "SuperTron HiPlasmatic Telly".equals(scope.render(
-                    Bitemporal.withId("Package #1", PackageItem.class))
-                                                                .head()
-                                                                .getContents());
+                            Bitemporal.withId("Package #1", PackageItem.class))
+                    .head()
+                    .getContents());
         }
 
 
         // 3. The TV is ordered....
 
         world.revise("Order TV for Fred",
-                     Change.forOneItem(Instant.parse("2016-12-04T10:00:00Z"),
-                                       "Package #1", PackageItem.class,
-                                       packageItem -> {
-                                           packageItem.setIntendedDestination(
-                                                   "Fred's house");
-                                           packageItem.setValuePaid(
-                                                   800);    // Nice TV, eh
-                                           // Fred?
-                                       }), Instant.now() /*As-of time for
+                Change.forOneItem(Instant.parse("2016-12-04T10:00:00Z"),
+                        "Package #1", PackageItem.class,
+                        packageItem -> {
+                            packageItem.setIntendedDestination(
+                                    "Fred's house");
+                            packageItem.setValuePaid(
+                                    800);    // Nice TV, eh
+                            // Fred?
+                        }), Instant.now() /*As-of time for
                                        the revision.*/);
 
 
@@ -346,50 +347,50 @@ public class DeliveringPackages {
         // brevity.
 
         world.revise("Load package #1 into van registration JA10 PIE",
-                     Change.forTwoItems(Instant.parse("2016-12-04T15:00:00Z"),
-                                        "Package #1", PackageItem.class,
-                                        "JA10 PIE", PackageHolder.class,
-                                        PackageItem::heldBy), Instant.now()
-                     /*As-of time for the revision.*/);
+                Change.forTwoItems(Instant.parse("2016-12-04T15:00:00Z"),
+                        "Package #1", PackageItem.class,
+                        "JA10 PIE", PackageHolder.class,
+                        PackageItem::heldBy), Instant.now()
+                /*As-of time for the revision.*/);
 
 
         // 5. Fred gets his package!
 
         world.revise("Delivery of package #1",
-                     Change.forOneItem(Instant.parse("2016-12-05T10:00:00Z"),
-                                       "Package #1", PackageItem.class,
-                                       PackageItem::recordDelivery),
-                     Instant.now() /*As-of time for the revision.*/);
+                Change.forOneItem(Instant.parse("2016-12-05T10:00:00Z"),
+                        "Package #1", PackageItem.class,
+                        PackageItem::recordDelivery),
+                Instant.now() /*As-of time for the revision.*/);
 
 
         // 6. No, its the wrong item - turns out it is a year's supply of
         // kipper ties. What?!
 
         world.revise("Package #1 doesn't contain a TV",
-                     Change.forOneItem(Instant.parse("2016-12-05T10:30:00Z"),
-                                       "Package #1", PackageItem.class,
-                                       PackageItem::recordThatPackageWasWrongItem),
-                     Instant.now() /*As-of time for the revision.*/);
+                Change.forOneItem(Instant.parse("2016-12-05T10:30:00Z"),
+                        "Package #1", PackageItem.class,
+                        PackageItem::recordThatPackageWasWrongItem),
+                Instant.now() /*As-of time for the revision.*/);
 
 
         // 7. Back in the van it goes...
 
         world.revise("Load package #1 back into van registration JA10 PIE",
-                     Change.forTwoItems(Instant.parse("2016-12-06T10:00:00Z"),
-                                        "Package #1", PackageItem.class,
-                                        "JA10 PIE", PackageHolder.class,
-                                        PackageItem::heldBy), Instant.now()
-                     /*As-of time for the revision.*/);
+                Change.forTwoItems(Instant.parse("2016-12-06T10:00:00Z"),
+                        "Package #1", PackageItem.class,
+                        "JA10 PIE", PackageHolder.class,
+                        PackageItem::heldBy), Instant.now()
+                /*As-of time for the revision.*/);
 
 
         // 8. ... to be dropped off back in the warehouse.
 
         world.revise("Unload package #1 back into warehouse",
-                     Change.forTwoItems(Instant.parse("2016-12-07T10:00:00Z"),
-                                        "Package #1", PackageItem.class,
-                                        warehouseName, PackageHolder.class,
-                                        PackageItem::heldBy), Instant.now()
-                     /*As-of time for the revision.*/);
+                Change.forTwoItems(Instant.parse("2016-12-07T10:00:00Z"),
+                        "Package #1", PackageItem.class,
+                        warehouseName, PackageHolder.class,
+                        PackageItem::heldBy), Instant.now()
+                /*As-of time for the revision.*/);
 
 
         // So far, all revisions have been booking in *new* events, so
@@ -407,14 +408,14 @@ public class DeliveringPackages {
         // being corrected.
 
         world.revise(thisEventWillEventuallyBeCorrected,
-                     Change.forTwoItems(Instant.parse("2016-12-03T00:00:00Z"),
-                                        "Package #1", PackageItem.class,
-                                        warehouseName, PackageHolder.class,
-                                        (packageItem, warehouse) -> {
-                                            packageItem.setContents(
-                                                    "Krasster kipper ties");
-                                            packageItem.heldBy(warehouse);
-                                        }), Instant.now() /*As-of time for
+                Change.forTwoItems(Instant.parse("2016-12-03T00:00:00Z"),
+                        "Package #1", PackageItem.class,
+                        warehouseName, PackageHolder.class,
+                        (packageItem, warehouse) -> {
+                            packageItem.setContents(
+                                    "Krasster kipper ties");
+                            packageItem.heldBy(warehouse);
+                        }), Instant.now() /*As-of time for
                                         the revision.*/);
 
         {
@@ -428,9 +429,9 @@ public class DeliveringPackages {
                             warehouseName,
                             PackageHolder.class)).head().getLocation());
             assert "Krasster kipper ties".equals(scope.render(
-                    Bitemporal.withId("Package #1", PackageItem.class))
-                                                         .head()
-                                                         .getContents());
+                            Bitemporal.withId("Package #1", PackageItem.class))
+                    .head()
+                    .getContents());
         }
 
 
@@ -450,29 +451,29 @@ public class DeliveringPackages {
         {
             Map<String, Optional<Event>> warehouseLoadingEvents =
                     ImmutableMap.of("Put package #2 in warehouse",
-                                    Optional.of(Change.forTwoItems(
-                                            Instant.parse(
-                                                    "2016-12-03T00:00:00Z"),
-                                            "Package #2", PackageItem.class,
-                                            warehouseName,
-                                            PackageHolder.class,
-                                            (packageItem, warehouse) -> {
-                                                packageItem.setContents(
-                                                        "SuperTron HiPlasmatic Telly");
-                                                packageItem.heldBy(warehouse);
-                                            })),
-                                    "Put package #3 in warehouse",
-                                    Optional.of(Change.forTwoItems(
-                                            Instant.parse(
-                                                    "2016-12-03T00:30:00Z"),
-                                            "Package #3", PackageItem.class,
-                                            warehouseName,
-                                            PackageHolder.class,
-                                            (packageItem, warehouse) -> {
-                                                packageItem.setContents(
-                                                        "SuperTron Connoisseur Music System.");
-                                                packageItem.heldBy(warehouse);
-                                            })));
+                            Optional.of(Change.forTwoItems(
+                                    Instant.parse(
+                                            "2016-12-03T00:00:00Z"),
+                                    "Package #2", PackageItem.class,
+                                    warehouseName,
+                                    PackageHolder.class,
+                                    (packageItem, warehouse) -> {
+                                        packageItem.setContents(
+                                                "SuperTron HiPlasmatic Telly");
+                                        packageItem.heldBy(warehouse);
+                                    })),
+                            "Put package #3 in warehouse",
+                            Optional.of(Change.forTwoItems(
+                                    Instant.parse(
+                                            "2016-12-03T00:30:00Z"),
+                                    "Package #3", PackageItem.class,
+                                    warehouseName,
+                                    PackageHolder.class,
+                                    (packageItem, warehouse) -> {
+                                        packageItem.setContents(
+                                                "SuperTron Connoisseur Music System.");
+                                        packageItem.heldBy(warehouse);
+                                    })));
 
             world.revise(warehouseLoadingEvents, Instant.now() /*As-of time
              for the revision.*/);
@@ -481,13 +482,13 @@ public class DeliveringPackages {
         // 11. The music system is ordered....
 
         world.revise("Order music system for Bert",
-                     Change.forOneItem(Instant.parse("2016-12-08T20:00:00Z"),
-                                       "Package #3", PackageItem.class,
-                                       packageItem -> {
-                                           packageItem.setIntendedDestination(
-                                                   "Bert's house");
-                                           packageItem.setValuePaid(300);
-                                       }), Instant.now() /*As-of time for
+                Change.forOneItem(Instant.parse("2016-12-08T20:00:00Z"),
+                        "Package #3", PackageItem.class,
+                        packageItem -> {
+                            packageItem.setIntendedDestination(
+                                    "Bert's house");
+                            packageItem.setValuePaid(300);
+                        }), Instant.now() /*As-of time for
                                        the revision.*/);
 
         // 12. The music system goes out in a van...
@@ -496,11 +497,11 @@ public class DeliveringPackages {
                 "Load package #3 into van registration JA10 PIE";
 
         world.revise(thisEventWillBeAnnulled,
-                     Change.forTwoItems(Instant.parse("2016-12-09T01:00:00Z"),
-                                        "Package #3", PackageItem.class,
-                                        "JA10 PIE", PackageHolder.class,
-                                        PackageItem::heldBy), Instant.now()
-                     /*As-of time for the revision.*/);
+                Change.forTwoItems(Instant.parse("2016-12-09T01:00:00Z"),
+                        "Package #3", PackageItem.class,
+                        "JA10 PIE", PackageHolder.class,
+                        PackageItem::heldBy), Instant.now()
+                /*As-of time for the revision.*/);
 
         // 13 Hold on ... somebody finds package #3 on the floor of the
         // warehouse. They look it up and realise that is recorded as being
@@ -514,8 +515,8 @@ public class DeliveringPackages {
                     Instant.now() /*As-of time that picks out the revision
                     .*/);
             assert "JA10 PIE".equals(scope.render(
-                    Bitemporal.withId("Package #3", PackageItem.class))
-                                             .head().holder().id());
+                            Bitemporal.withId("Package #3", PackageItem.class))
+                    .head().holder().id());
         }
 
         world.annul(thisEventWillBeAnnulled, Instant.now() /*As-of time for
@@ -527,8 +528,8 @@ public class DeliveringPackages {
                     Instant.now() /*As-of time that picks out the revision
                     .*/);
             assert warehouseName.equals(scope.render(
-                    Bitemporal.withId("Package #3", PackageItem.class))
-                                                .head().holder().id());
+                            Bitemporal.withId("Package #3", PackageItem.class))
+                    .head().holder().id());
         }
 
         // Let's generate some reports...
@@ -579,7 +580,7 @@ public class DeliveringPackages {
 
             final double uncoveredValue = StreamSupport
                     .stream(scope.renderAsIterable(packageItemsBitemporal)
-                                    .spliterator(), false)
+                            .spliterator(), false)
                     .filter(((java.util.function.Predicate<PackageItem>)
                             PackageItem::hasBeenDelivered).negate())
                     .map(PackageItem::getValuePaid)

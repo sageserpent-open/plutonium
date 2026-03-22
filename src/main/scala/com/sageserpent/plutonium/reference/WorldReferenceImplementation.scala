@@ -1,6 +1,16 @@
-package com.sageserpent.plutonium
+package com.sageserpent.plutonium.reference
 
 import com.sageserpent.americium.{PositiveInfinity, Unbounded}
+import com.sageserpent.plutonium.{
+  Event,
+  EventId,
+  IdentifiedItemsScope,
+  ItemCacheImplementation,
+  Scope,
+  UniqueItemSpecification,
+  World,
+  WorldImplementationCodeFactoring
+}
 
 import java.time.Instant
 import scala.Ordering.Implicits._

@@ -9,6 +9,8 @@ import com.sageserpent.americium._
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.seqEnrichment._
 import com.sageserpent.plutonium.World._
+import com.sageserpent.plutonium.efficient.WorldEfficientInMemoryImplementation
+import com.sageserpent.plutonium.reference.WorldReferenceImplementation
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.Assertions
 

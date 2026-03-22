@@ -1424,15 +1424,3 @@ trait Bugs
     }
   }
 }
-
-class WorldReferenceImplementationBugs
-    extends Bugs
-    with WorldReferenceImplementationResource {
-  "a world (using the world reference implementation)" should behave like suite
-}
-
-class WorldEfficientInMemoryImplementationBugs
-    extends Bugs
-    with WorldEfficientInMemoryImplementationResource {
-  "a world (using the world efficient in-memory implementation)" should behave like suite
-}

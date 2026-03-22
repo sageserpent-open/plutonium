@@ -1160,7 +1160,8 @@ trait WorldBehaviours
                       Seq(referringHistory: ReferringHistory) =
                         referringHistoriesFrom(scope)
                       if referringHistory.referencedHistories
-                        .get(referencedHistoryId).exists(!_.asInstanceOf[ItemExtensionApi].isGhost)
+                        .get(referencedHistoryId)
+                        .exists(!_.asInstanceOf[ItemExtensionApi].isGhost)
                     } yield (
                       referringHistoryId,
                       referencedHistoryId,
@@ -1268,7 +1269,8 @@ trait WorldBehaviours
                     Seq(referringHistory: ReferringHistory) =
                       referringHistoriesFrom(scope)
                     if referringHistory.referencedHistories
-                      .get(referencedHistoryId).exists(!_.asInstanceOf[ItemExtensionApi].isGhost)
+                      .get(referencedHistoryId)
+                      .exists(!_.asInstanceOf[ItemExtensionApi].isGhost)
                   } yield (referringHistoryId, referencedHistoryId)
 
                   if (checks.nonEmpty)
@@ -1531,7 +1533,8 @@ trait WorldBehaviours
                       Seq(referringHistory: ReferringHistory) =
                         referringHistoriesFrom(scope)
                       if referringHistory.referencedHistories
-                        .get(referencedHistoryId).exists(!_.asInstanceOf[ItemExtensionApi].isGhost)
+                        .get(referencedHistoryId)
+                        .exists(!_.asInstanceOf[ItemExtensionApi].isGhost)
                       Seq(referencedHistory) = referencedHistoriesFrom(scope)
                     } yield (referencedHistoryId, referencedHistory)
 
@@ -4500,34 +4503,4 @@ trait WorldBehaviours
   case class NonExistentId() {
     fail("If I am not supposed to exist, why is something asking for me?")
   }
-}
-
-class WorldSpecUsingWorldReferenceImplementation
-    extends WorldBehaviours
-    with WorldReferenceImplementationResource {
-  implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
-    PropertyCheckConfiguration(minSuccessful = 50, sizeRange = 22)
-
-  "A world with no history (using the world reference implementation)" should behave like worldWithNoHistoryBehaviour
-
-  "A world with history added in order of increasing event time (using the world reference implementation)" should behave like worldWithHistoryAddedInOrderOfIncreasingEventTimeBehaviour
-
-  "A world (using the world reference implementation)" should behave like worldBehaviour
-
-  "A world with events that have since been corrected (using the world reference implementation)" should behave like worldWithEventsThatHaveSinceBeenCorrectedBehaviour
-}
-
-class WorldSpecUsingWorldEfficientInMemoryImplementation
-    extends WorldBehaviours
-    with WorldEfficientInMemoryImplementationResource {
-  implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
-    PropertyCheckConfiguration(minSuccessful = 50, sizeRange = 24)
-
-  "A world with no history (using the world efficient in-memory implementation)" should behave like worldWithNoHistoryBehaviour
-
-  "A world with history added in order of increasing event time (using the world efficient in-memory implementation)" should behave like worldWithHistoryAddedInOrderOfIncreasingEventTimeBehaviour
-
-  "A world (using the world efficient in-memory implementation)" should behave like worldBehaviour
-
-  "A world with events that have since been corrected (using the world efficient in-memory implementation)" should behave like worldWithEventsThatHaveSinceBeenCorrectedBehaviour
 }
