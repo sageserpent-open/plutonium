@@ -2,6 +2,7 @@ package com.sageserpent.plutonium.storage
 
 import cats.effect.unsafe.implicits.global
 import cats.effect.{IO, Resource}
+import com.sageserpent.plutonium.efficient.Timeline
 import com.sageserpent.plutonium.{
   BlobStorage,
   ConnectionPoolResource,
@@ -10,7 +11,6 @@ import com.sageserpent.plutonium.{
   ItemStateUpdateTime,
   SharedGenerators,
   Thing,
-  Timeline,
   UniqueItemSpecification
 }
 import org.scalacheck.ScalacheckShapeless._

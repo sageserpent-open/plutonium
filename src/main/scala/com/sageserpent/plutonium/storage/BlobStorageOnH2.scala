@@ -18,13 +18,13 @@ import com.sageserpent.americium.{
 }
 import com.sageserpent.plutonium.BlobStorage.TimesliceContracts
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
+import com.sageserpent.plutonium.efficient.Timeline
 import com.sageserpent.plutonium.{
   BlobStorage,
   ItemStateUpdateKey,
   ItemStateUpdateTime,
   LowerBoundOfTimeslice,
   SerializationFacade,
-  Timeline,
   UniqueItemSpecification,
   UpperBoundOfTimeslice
 }

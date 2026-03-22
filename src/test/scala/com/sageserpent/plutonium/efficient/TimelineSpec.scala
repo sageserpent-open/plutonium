@@ -1,5 +1,12 @@
-package com.sageserpent.plutonium
+package com.sageserpent.plutonium.efficient
 
+import com.sageserpent.plutonium.{
+  Event,
+  ItemCache,
+  ItemCacheUsingBlobStorage,
+  WorldSpecSupport,
+  intersperseObsoleteEvents
+}
 import org.scalacheck.{ShrinkLowPriority => NoShrinking}
 import org.scalatest.Inspectors
 import org.scalatest.exceptions.TestFailedException

@@ -1,13 +1,27 @@
-package com.sageserpent.plutonium
+package com.sageserpent.plutonium.efficient
 
 import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.AllEvents.{ItemStateUpdatesDelta, noEvents}
 import com.sageserpent.plutonium.BlobStorage.SnapshotRetrievalApi
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
 import com.sageserpent.plutonium.ItemStateUpdateKey.ordering
-import com.sageserpent.plutonium.Timeline.{ItemStateUpdatesDag, PriorityQueueKey}
-import com.sageserpent.plutonium.efficient.IdentifiedItemAccessUsingBlobStorage
+import com.sageserpent.plutonium.efficient.Timeline.{
+  ItemStateUpdatesDag,
+  PriorityQueueKey
+}
 import com.sageserpent.plutonium.storage.BlobStorageReferenceImplementation
+import com.sageserpent.plutonium.{
+  AllEvents,
+  CheapKnockOffPriorityMap,
+  Event,
+  EventId,
+  ItemStateAnnihilation,
+  ItemStatePatch,
+  ItemStateUpdate,
+  ItemStateUpdateKey,
+  ItemStateUpdateTime,
+  UpperBoundOfTimeslice
+}
 import quiver._
 
 import java.time.Instant
@@ -30,8 +44,8 @@ object Timeline {
 case class Timeline(
     allEvents: AllEvents = noEvents,
     itemStateUpdatesDag: ItemStateUpdatesDag = empty,
-    blobStorage: Timeline.BlobStorage =
-      BlobStorageReferenceImplementation.empty[ItemStateUpdateTime, SnapshotBlob]
+    blobStorage: Timeline.BlobStorage = BlobStorageReferenceImplementation
+      .empty[ItemStateUpdateTime, SnapshotBlob]
 ) {
   def revise(events: collection.Map[_ <: EventId, Option[Event]]): Timeline = {
     val ItemStateUpdatesDelta(

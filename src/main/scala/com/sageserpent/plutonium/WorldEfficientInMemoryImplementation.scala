@@ -3,6 +3,7 @@ package com.sageserpent.plutonium
 import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
 import com.sageserpent.plutonium.World.Revision
+import com.sageserpent.plutonium.efficient.Timeline
 import com.sageserpent.plutonium.storage.BlobStorageReferenceImplementation
 
 import java.time.Instant
