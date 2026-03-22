@@ -4,7 +4,6 @@ import com.sageserpent.americium.{PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.{
   Event,
   EventId,
-  IdentifiedItemsScope,
   ItemCacheImplementation,
   Scope,
   UniqueItemSpecification,
