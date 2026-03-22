@@ -2,6 +2,7 @@ package com.sageserpent.plutonium
 
 import com.sageserpent.americium.{Finite, NegativeInfinity, Unbounded}
 import com.sageserpent.plutonium.World.Revision
+import com.sageserpent.plutonium.reference.PatchRecorder
 import net.bytebuddy.description.method.MethodDescription
 
 import java.lang.reflect.Method

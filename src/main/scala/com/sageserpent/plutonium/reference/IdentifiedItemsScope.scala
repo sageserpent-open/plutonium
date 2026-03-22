@@ -3,7 +3,7 @@ package com.sageserpent.plutonium.reference
 import cats.effect.unsafe.implicits.global
 import cats.effect.{IO, Resource}
 import com.sageserpent.americium.Unbounded
-import com.sageserpent.plutonium.PatchRecorder.UpdateConsumer
+import PatchRecorder.UpdateConsumer
 import com.sageserpent.plutonium.{
   AbstractPatch,
   Annihilation,
@@ -12,8 +12,6 @@ import com.sageserpent.plutonium.{
   EventId,
   IdentifiedItemAccess,
   ItemExtensionApi,
-  PatchRecorderContracts,
-  PatchRecorderImplementation,
   StatefulItemProxyFactory,
   UniqueItemSpecification,
   WorldImplementationCodeFactoring

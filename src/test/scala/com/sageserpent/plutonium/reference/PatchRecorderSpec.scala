@@ -1,9 +1,16 @@
-package com.sageserpent.plutonium
+package com.sageserpent.plutonium.reference
 
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.{Finite, Unbounded}
 import com.sageserpent.plutonium
-import com.sageserpent.plutonium.PatchRecorder.UpdateConsumer
+import PatchRecorder.UpdateConsumer
+import com.sageserpent.plutonium.{
+  AbstractPatch,
+  Annihilation,
+  FooHistory,
+  UniqueItemSpecification,
+  WorldSpecSupport
+}
 import org.scalacheck.Prop.propBoolean
 import org.scalacheck.{Gen, Prop, Test}
 import org.scalamock.scalatest.MockFactory

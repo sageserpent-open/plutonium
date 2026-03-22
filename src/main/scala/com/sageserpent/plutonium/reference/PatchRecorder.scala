@@ -1,8 +1,9 @@
-package com.sageserpent.plutonium
-
-import java.time.Instant
+package com.sageserpent.plutonium.reference
 
 import com.sageserpent.americium.Unbounded
+import com.sageserpent.plutonium.{AbstractPatch, Annihilation, EventId}
+
+import java.time.Instant
 
 object PatchRecorder {
   trait UpdateConsumer {

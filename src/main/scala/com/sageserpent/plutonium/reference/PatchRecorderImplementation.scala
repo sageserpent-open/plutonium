@@ -1,9 +1,16 @@
-package com.sageserpent.plutonium
+package com.sageserpent.plutonium.reference
+
+import com.sageserpent.americium.Unbounded
+import com.sageserpent.plutonium.{
+  AbstractPatch,
+  Annihilation,
+  EventId,
+  UniqueItemSpecification,
+  WorldImplementationCodeFactoring
+}
 
 import java.lang.reflect.Method
 import java.time.Instant
-import com.sageserpent.americium.Unbounded
-
 import scala.collection.mutable
 import scala.language.postfixOps
 
