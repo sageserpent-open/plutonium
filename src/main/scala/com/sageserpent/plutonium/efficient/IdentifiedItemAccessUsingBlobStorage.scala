@@ -1,7 +1,7 @@
 package com.sageserpent.plutonium.efficient
 
 import com.sageserpent.plutonium.BlobStorage.SnapshotRetrievalApi
-import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
+import ItemStateStorage.SnapshotBlob
 import com.sageserpent.plutonium.{
   AbstractPatch,
   Annihilation,
@@ -12,8 +12,7 @@ import com.sageserpent.plutonium.{
   ItemStateUpdateKeyTrackingApi,
   LifecycleUUIDApi,
   PersistentItemProxyFactory,
-  UniqueItemSpecification,
-  itemStateStorageUsingProxies
+  UniqueItemSpecification
 }
 
 import java.util.UUID

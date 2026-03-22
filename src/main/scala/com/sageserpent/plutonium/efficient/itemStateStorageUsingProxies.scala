@@ -1,4 +1,13 @@
-package com.sageserpent.plutonium
+package com.sageserpent.plutonium.efficient
+
+import com.sageserpent.plutonium.{
+  AnnihilationHook,
+  ItemExtensionApi,
+  ItemStateUpdateKey,
+  ItemStateUpdateKeyTrackingApi,
+  LifecycleUUIDApi,
+  UniqueItemSpecification
+}
 
 import java.util.UUID
 

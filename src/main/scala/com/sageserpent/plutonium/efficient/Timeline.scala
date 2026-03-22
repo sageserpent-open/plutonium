@@ -3,7 +3,7 @@ package com.sageserpent.plutonium.efficient
 import com.sageserpent.americium.Unbounded
 import AllEvents.{ItemStateUpdatesDelta, noEvents}
 import com.sageserpent.plutonium.BlobStorage.SnapshotRetrievalApi
-import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
+import ItemStateStorage.SnapshotBlob
 import com.sageserpent.plutonium.ItemStateUpdateKey.ordering
 import com.sageserpent.plutonium.efficient.Timeline.{
   ItemStateUpdatesDag,

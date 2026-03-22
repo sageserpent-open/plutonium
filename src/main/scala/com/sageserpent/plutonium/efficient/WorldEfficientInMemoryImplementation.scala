@@ -1,7 +1,7 @@
 package com.sageserpent.plutonium.efficient
 
 import com.sageserpent.americium.Unbounded
-import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
+import ItemStateStorage.SnapshotBlob
 import com.sageserpent.plutonium.World.Revision
 import com.sageserpent.plutonium.storage.BlobStorageReferenceImplementation
 import com.sageserpent.plutonium.{

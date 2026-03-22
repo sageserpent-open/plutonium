@@ -1,6 +1,12 @@
-package com.sageserpent.plutonium
+package com.sageserpent.plutonium.efficient
 
 import com.sageserpent.americium.randomEnrichment._
+import com.sageserpent.plutonium.{
+  BlobStorage,
+  ItemStateUpdateKey,
+  SharedGenerators,
+  UniqueItemSpecification
+}
 import org.scalacheck.Prop.propBoolean
 import org.scalacheck.{Gen, Prop}
 import org.scalatest.flatspec.AnyFlatSpec
@@ -104,8 +110,8 @@ class ItemStateStorageSpec
     with Matchers
     with Checkers
     with SharedGenerators {
-  import ItemStateStorage.SnapshotBlob
   import MarkSyntax._
+  import com.sageserpent.plutonium.efficient.ItemStateStorage.SnapshotBlob
 
   val oddGraphNodeClazz = classOf[OddGraphNode]
 

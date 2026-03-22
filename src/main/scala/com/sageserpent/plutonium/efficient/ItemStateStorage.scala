@@ -1,4 +1,4 @@
-package com.sageserpent.plutonium
+package com.sageserpent.plutonium.efficient
 
 import com.esotericsoftware.kryo.kryo5.SerializerFactory.ReflectionSerializerFactory
 import com.esotericsoftware.kryo.kryo5.io.{Input, Output}
@@ -15,6 +15,12 @@ import com.esotericsoftware.kryo.kryo5.util.{
   Pool
 }
 import com.esotericsoftware.kryo.kryo5.{Kryo, Serializer}
+import com.sageserpent.plutonium.{
+  BlobStorage,
+  ItemStateUpdateKey,
+  SerializationFacade,
+  UniqueItemSpecification
+}
 import io.altoo.serialization.kryo.scala.serializer.ScalaKryo
 
 import java.util.UUID

@@ -17,7 +17,7 @@ import com.sageserpent.americium.{
   Unbounded
 }
 import com.sageserpent.plutonium.BlobStorage.TimesliceContracts
-import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
+import com.sageserpent.plutonium.efficient.ItemStateStorage.SnapshotBlob
 import com.sageserpent.plutonium.efficient.Timeline
 import com.sageserpent.plutonium.{
   BlobStorage,
