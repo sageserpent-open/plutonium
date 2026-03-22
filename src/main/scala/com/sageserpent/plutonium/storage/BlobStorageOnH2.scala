@@ -1,4 +1,4 @@
-package com.sageserpent.plutonium
+package com.sageserpent.plutonium.storage
 
 import cats.effect.unsafe.implicits.global
 import cats.effect.{IO, Resource}
@@ -18,6 +18,16 @@ import com.sageserpent.americium.{
 }
 import com.sageserpent.plutonium.BlobStorage.TimesliceContracts
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
+import com.sageserpent.plutonium.{
+  BlobStorage,
+  ItemStateUpdateKey,
+  ItemStateUpdateTime,
+  LowerBoundOfTimeslice,
+  SerializationFacade,
+  Timeline,
+  UniqueItemSpecification,
+  UpperBoundOfTimeslice
+}
 import io.altoo.serialization.kryo.scala.serializer.ScalaKryo
 import scalikejdbc._
 

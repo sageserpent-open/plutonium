@@ -1,12 +1,24 @@
-package com.sageserpent.plutonium
+package com.sageserpent.plutonium.storage
 
-import cats.effect.{IO, Resource}
 import cats.effect.unsafe.implicits.global
+import cats.effect.{IO, Resource}
+import com.sageserpent.plutonium.{
+  BlobStorage,
+  BlobStorageInMemory,
+  ConnectionPoolResource,
+  FooHistory,
+  ItemStateStorage,
+  ItemStateUpdateTime,
+  SharedGenerators,
+  Thing,
+  Timeline,
+  UniqueItemSpecification
+}
 import org.scalacheck.ScalacheckShapeless._
 import org.scalacheck.{Arbitrary, Gen}
-import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalikejdbc.ConnectionPool
 
 import java.time.Instant
