@@ -3,7 +3,6 @@ package com.sageserpent.plutonium.efficient
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.plutonium.{
   BlobStorage,
-  ItemStateUpdateKey,
   SharedGenerators,
   UniqueItemSpecification
 }

@@ -1,4 +1,4 @@
-package com.sageserpent.plutonium
+package com.sageserpent.plutonium.efficient
 
 trait ItemStateUpdateKeyTrackingApi {
   def setItemStateUpdateKey(

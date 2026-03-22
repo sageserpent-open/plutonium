@@ -1,5 +1,9 @@
-package com.sageserpent.plutonium
+package com.sageserpent.plutonium.efficient
 
+import com.sageserpent.plutonium.{
+  StatefulItemProxyFactory,
+  WorldImplementationCodeFactoring
+}
 import net.bytebuddy.description.method.MethodDescription
 import net.bytebuddy.dynamic.DynamicType.Builder
 import net.bytebuddy.implementation.MethodDelegation

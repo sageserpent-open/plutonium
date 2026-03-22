@@ -8,10 +8,6 @@ import com.sageserpent.plutonium.{
   AnnihilationHook,
   IdentifiedItemAccess,
   ItemExtensionApi,
-  ItemStateUpdateKey,
-  ItemStateUpdateKeyTrackingApi,
-  LifecycleUUIDApi,
-  PersistentItemProxyFactory,
   UniqueItemSpecification
 }
 

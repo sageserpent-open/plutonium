@@ -17,7 +17,6 @@ import com.esotericsoftware.kryo.kryo5.util.{
 import com.esotericsoftware.kryo.kryo5.{Kryo, Serializer}
 import com.sageserpent.plutonium.{
   BlobStorage,
-  ItemStateUpdateKey,
   SerializationFacade,
   UniqueItemSpecification
 }

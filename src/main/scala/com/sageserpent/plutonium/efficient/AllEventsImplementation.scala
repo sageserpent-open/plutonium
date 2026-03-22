@@ -29,15 +29,8 @@ import com.sageserpent.plutonium.{
   Change,
   Event,
   EventId,
-  ItemStateAnnihilation,
-  ItemStatePatch,
-  ItemStateUpdate,
-  ItemStateUpdateKey,
-  ItemStateUpdateTime,
-  LowerBoundOfTimeslice,
   Split,
   UniqueItemSpecification,
-  UpperBoundOfTimeslice,
   WorldImplementationCodeFactoring
 }
 import de.sciss.fingertree.RangedSeq

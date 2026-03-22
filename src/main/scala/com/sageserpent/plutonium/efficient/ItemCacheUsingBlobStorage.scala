@@ -8,13 +8,7 @@ import com.sageserpent.plutonium.{
   ItemCache,
   ItemCacheImplementation,
   ItemExtensionApi,
-  ItemStateUpdateKey,
-  ItemStateUpdateKeyTrackingApi,
-  ItemStateUpdateTime,
-  LifecycleUUIDApi,
-  PersistentItemProxyFactory,
-  UniqueItemSpecification,
-  UpperBoundOfTimeslice
+  UniqueItemSpecification
 }
 
 import java.time.Instant

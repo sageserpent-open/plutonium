@@ -5,9 +5,6 @@ import com.sageserpent.plutonium.efficient.AllEvents.ItemStateUpdatesDelta
 import com.sageserpent.plutonium.{
   Event,
   EventId,
-  ItemStateUpdate,
-  ItemStateUpdateKey,
-  ItemStateUpdateTime,
   UniqueItemSpecification
 }
 

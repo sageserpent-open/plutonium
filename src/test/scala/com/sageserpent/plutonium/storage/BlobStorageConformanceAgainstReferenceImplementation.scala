@@ -2,12 +2,11 @@ package com.sageserpent.plutonium.storage
 
 import cats.effect.unsafe.implicits.global
 import cats.effect.{IO, Resource}
-import com.sageserpent.plutonium.efficient.{ItemStateStorage, Timeline}
+import com.sageserpent.plutonium.efficient.{ItemStateStorage, ItemStateUpdateTime, Timeline}
 import com.sageserpent.plutonium.{
   BlobStorage,
   ConnectionPoolResource,
   FooHistory,
-  ItemStateUpdateTime,
   SharedGenerators,
   Thing,
   UniqueItemSpecification

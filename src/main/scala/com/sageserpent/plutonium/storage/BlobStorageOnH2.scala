@@ -18,15 +18,11 @@ import com.sageserpent.americium.{
 }
 import com.sageserpent.plutonium.BlobStorage.TimesliceContracts
 import com.sageserpent.plutonium.efficient.ItemStateStorage.SnapshotBlob
-import com.sageserpent.plutonium.efficient.Timeline
+import com.sageserpent.plutonium.efficient.{ItemStateUpdateKey, ItemStateUpdateTime, LowerBoundOfTimeslice, Timeline, UpperBoundOfTimeslice}
 import com.sageserpent.plutonium.{
   BlobStorage,
-  ItemStateUpdateKey,
-  ItemStateUpdateTime,
-  LowerBoundOfTimeslice,
   SerializationFacade,
-  UniqueItemSpecification,
-  UpperBoundOfTimeslice
+  UniqueItemSpecification
 }
 import io.altoo.serialization.kryo.scala.serializer.ScalaKryo
 import scalikejdbc._

@@ -1,10 +1,9 @@
-package com.sageserpent.plutonium
-
-import java.time.Instant
+package com.sageserpent.plutonium.efficient
 
 import com.sageserpent.americium.Unbounded
-import com.sageserpent.plutonium.ItemStateUpdateTime.IntraEventIndex
 import com.sageserpent.plutonium.WorldImplementationCodeFactoring.EventOrderingKey
+
+import java.time.Instant
 
 object ItemStateUpdateTime {
   type IntraEventIndex = Int

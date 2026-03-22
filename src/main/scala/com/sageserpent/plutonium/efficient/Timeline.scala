@@ -4,7 +4,7 @@ import com.sageserpent.americium.Unbounded
 import AllEvents.{ItemStateUpdatesDelta, noEvents}
 import com.sageserpent.plutonium.BlobStorage.SnapshotRetrievalApi
 import ItemStateStorage.SnapshotBlob
-import com.sageserpent.plutonium.ItemStateUpdateKey.ordering
+import ItemStateUpdateKey.ordering
 import com.sageserpent.plutonium.efficient.Timeline.{
   ItemStateUpdatesDag,
   PriorityQueueKey
@@ -12,13 +12,7 @@ import com.sageserpent.plutonium.efficient.Timeline.{
 import com.sageserpent.plutonium.storage.BlobStorageReferenceImplementation
 import com.sageserpent.plutonium.{
   Event,
-  EventId,
-  ItemStateAnnihilation,
-  ItemStatePatch,
-  ItemStateUpdate,
-  ItemStateUpdateKey,
-  ItemStateUpdateTime,
-  UpperBoundOfTimeslice
+  EventId
 }
 import quiver._
 
