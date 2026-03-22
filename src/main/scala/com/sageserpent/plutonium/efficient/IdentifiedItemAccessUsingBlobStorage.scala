@@ -1,7 +1,20 @@
-package com.sageserpent.plutonium
+package com.sageserpent.plutonium.efficient
 
 import com.sageserpent.plutonium.BlobStorage.SnapshotRetrievalApi
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
+import com.sageserpent.plutonium.{
+  AbstractPatch,
+  Annihilation,
+  AnnihilationHook,
+  IdentifiedItemAccess,
+  ItemExtensionApi,
+  ItemStateUpdateKey,
+  ItemStateUpdateKeyTrackingApi,
+  LifecycleUUIDApi,
+  PersistentItemProxyFactory,
+  UniqueItemSpecification,
+  itemStateStorageUsingProxies
+}
 
 import java.util.UUID
 import scala.collection.mutable

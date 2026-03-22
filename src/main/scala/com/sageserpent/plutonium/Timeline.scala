@@ -6,6 +6,7 @@ import com.sageserpent.plutonium.BlobStorage.SnapshotRetrievalApi
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
 import com.sageserpent.plutonium.ItemStateUpdateKey.ordering
 import com.sageserpent.plutonium.Timeline.{ItemStateUpdatesDag, PriorityQueueKey}
+import com.sageserpent.plutonium.efficient.IdentifiedItemAccessUsingBlobStorage
 import com.sageserpent.plutonium.storage.BlobStorageReferenceImplementation
 import quiver._
 
