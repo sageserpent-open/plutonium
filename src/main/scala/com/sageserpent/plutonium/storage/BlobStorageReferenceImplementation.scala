@@ -1,32 +1,33 @@
-package com.sageserpent.plutonium
+package com.sageserpent.plutonium.storage
 
+import com.sageserpent.plutonium.{BlobStorage, UniqueItemSpecification}
 import de.sciss.fingertree.{OrderedSeq => ScissOrderedSeq}
 
 import scala.collection.mutable
 import scala.language.postfixOps
 
-object BlobStorageInMemory {
+object BlobStorageReferenceImplementation {
   type Revision = Int
 
   def empty[Time: Ordering, SnapshotBlob] =
-    new BlobStorageInMemory[Time, SnapshotBlob](
+    new BlobStorageReferenceImplementation[Time, SnapshotBlob](
       revision = 0,
       recordingRevisions = Map.empty,
       lifecycles = Map.empty
     )
 }
 
-case class BlobStorageInMemory[Time, SnapshotBlob] private (
-    revision: BlobStorageInMemory.Revision,
-    recordingRevisions: Map[Time, BlobStorageInMemory.Revision],
-    lifecycles: Map[Any, Seq[BlobStorageInMemory[
+case class BlobStorageReferenceImplementation[Time, SnapshotBlob] private(
+                                                                           revision: BlobStorageReferenceImplementation.Revision,
+                                                                           recordingRevisions: Map[Time, BlobStorageReferenceImplementation.Revision],
+                                                                           lifecycles: Map[Any, Seq[BlobStorageReferenceImplementation[
       Time,
       SnapshotBlob
     ]#PhoenixLifecycleSpanningAnnihilations]]
 )(override implicit val timeOrdering: Ordering[Time])
     extends BlobStorage[Time, SnapshotBlob] { thisBlobStorage =>
   import BlobStorage._
-  import BlobStorageInMemory._
+  import BlobStorageReferenceImplementation._
 
   override def openRevision(): RevisionBuilder = {
     class RevisionBuilderImplementation extends RevisionBuilder {
@@ -52,7 +53,7 @@ case class BlobStorageInMemory[Time, SnapshotBlob] private (
 
         val newAndModifiedExplodedLifecycles =
           (Map
-            .empty[UniqueItemSpecification, BlobStorageInMemory[
+            .empty[UniqueItemSpecification, BlobStorageReferenceImplementation[
               Time,
               SnapshotBlob
             ]#PhoenixLifecycleSpanningAnnihilations] /: recordings) {
@@ -70,7 +71,7 @@ case class BlobStorageInMemory[Time, SnapshotBlob] private (
                 }
 
               val updatedExplodedLifecycles
-                  : Map[UniqueItemSpecification, BlobStorageInMemory[
+                  : Map[UniqueItemSpecification, BlobStorageReferenceImplementation[
                     Time,
                     SnapshotBlob
                   ]#PhoenixLifecycleSpanningAnnihilations] = snapshots map {
@@ -98,7 +99,7 @@ case class BlobStorageInMemory[Time, SnapshotBlob] private (
                   .get(id)
                   .fold(
                     Seq
-                      .empty[BlobStorageInMemory[
+                      .empty[BlobStorageReferenceImplementation[
                         Time,
                         SnapshotBlob
                       ]#PhoenixLifecycleSpanningAnnihilations]
@@ -177,7 +178,7 @@ case class BlobStorageInMemory[Time, SnapshotBlob] private (
     new TimesliceImplementation with TimesliceContracts[SnapshotBlob]
   }
 
-  override def retainUpTo(when: Time): BlobStorageInMemory[Time, SnapshotBlob] =
+  override def retainUpTo(when: Time): BlobStorageReferenceImplementation[Time, SnapshotBlob] =
     thisBlobStorage.copy(
       revision = this.revision,
       recordingRevisions = this.recordingRevisions,

@@ -5,10 +5,8 @@ import com.sageserpent.plutonium.AllEvents.{ItemStateUpdatesDelta, noEvents}
 import com.sageserpent.plutonium.BlobStorage.SnapshotRetrievalApi
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
 import com.sageserpent.plutonium.ItemStateUpdateKey.ordering
-import com.sageserpent.plutonium.Timeline.{
-  ItemStateUpdatesDag,
-  PriorityQueueKey
-}
+import com.sageserpent.plutonium.Timeline.{ItemStateUpdatesDag, PriorityQueueKey}
+import com.sageserpent.plutonium.storage.BlobStorageReferenceImplementation
 import quiver._
 
 import java.time.Instant
@@ -32,7 +30,7 @@ case class Timeline(
     allEvents: AllEvents = noEvents,
     itemStateUpdatesDag: ItemStateUpdatesDag = empty,
     blobStorage: Timeline.BlobStorage =
-      BlobStorageInMemory.empty[ItemStateUpdateTime, SnapshotBlob]
+      BlobStorageReferenceImplementation.empty[ItemStateUpdateTime, SnapshotBlob]
 ) {
   def revise(events: collection.Map[_ <: EventId, Option[Event]]): Timeline = {
     val ItemStateUpdatesDelta(

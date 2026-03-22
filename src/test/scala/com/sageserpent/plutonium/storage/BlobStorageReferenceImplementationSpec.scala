@@ -1,8 +1,13 @@
-package com.sageserpent.plutonium
+package com.sageserpent.plutonium.storage
 
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.seqEnrichment._
 import com.sageserpent.plutonium.BlobStorage.Timeslice
+import com.sageserpent.plutonium.{
+  BlobStorage,
+  SharedGenerators,
+  UniqueItemSpecification
+}
 import org.scalacheck.{Gen, Shrink}
 import org.scalatest.LoneElement._
 import org.scalatest.flatspec.AnyFlatSpec
@@ -18,8 +23,8 @@ trait AnotherKindOfThing
 
 trait NoKindOfThing
 
-object BlobStorageSpec extends SharedGenerators {
-  type RecordingId = Int
+object BlobStorageReferenceImplementationSpec extends SharedGenerators {
+  type RecordingId  = Int
   type Time         = Int
   type SnapshotBlob = Double
   val uniqueItemSpecificationWithUniqueTypePerIdGenerator
@@ -202,7 +207,7 @@ object BlobStorageSpec extends SharedGenerators {
         Seq[(Time, Seq[(UniqueItemSpecification, Option[SnapshotBlob])])]
       ]
   ): BlobStorage[Time, SnapshotBlob] =
-    ((BlobStorageInMemory.empty[Time, SnapshotBlob]: BlobStorage[
+    ((BlobStorageReferenceImplementation.empty[Time, SnapshotBlob]: BlobStorage[
       Time,
       SnapshotBlob
     ]) /: revisions) { case (blobStorage, bookingsForRevision) =>
@@ -254,11 +259,13 @@ object BlobStorageSpec extends SharedGenerators {
   }
 }
 
-class BlobStorageSpec
+// NOTE: this could be abstracted into a trait providing a behaviour, but it is much more efficient to test
+// against `BlobStorageReferenceImplementation` and then use a conformance test for any other implementation.
+class BlobStorageReferenceImplementationSpec
     extends AnyFlatSpec
     with Matchers
     with ScalaCheckPropertyChecks {
-  import BlobStorageSpec._
+  import BlobStorageReferenceImplementationSpec._
 
   def setUpBlobStorage(
       lotsOfFinalTimeSeries: Seq[TimeSeries],

@@ -3,6 +3,7 @@ package com.sageserpent.plutonium
 import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
 import com.sageserpent.plutonium.World.Revision
+import com.sageserpent.plutonium.storage.BlobStorageReferenceImplementation
 
 import java.time.Instant
 
@@ -67,7 +68,7 @@ class WorldEfficientInMemoryImplementation(
   trait ScopeUsingStorage extends com.sageserpent.plutonium.Scope {
     lazy val itemCache: ItemCache = {
       val blobStorage = blobStoragePriorTo(nextRevision)
-        .getOrElse(BlobStorageInMemory.empty[ItemStateUpdateTime, SnapshotBlob])
+        .getOrElse(BlobStorageReferenceImplementation.empty[ItemStateUpdateTime, SnapshotBlob])
       ItemCacheUsingBlobStorage.itemCacheAt(when, blobStorage)
     }
 
