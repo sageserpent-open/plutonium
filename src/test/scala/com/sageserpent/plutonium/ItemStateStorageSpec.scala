@@ -301,6 +301,7 @@ class ItemStateStorageSpec
 
       noNodesAreGainedOrLost && nodesHaveTheSameStructure && nodesShareIdentityAcrossDistinctReconstitutionCalls
     },
-    MinSuccessful(200)
+    MinSuccessful(200),
+    SizeRange(200)
   )
 }
