@@ -29,7 +29,6 @@ import com.sageserpent.plutonium.{
   Change,
   Event,
   EventId,
-  Split,
   UniqueItemSpecification,
   WorldImplementationCodeFactoring
 }

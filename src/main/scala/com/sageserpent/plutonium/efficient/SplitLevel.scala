@@ -1,4 +1,4 @@
-package com.sageserpent.plutonium
+package com.sageserpent.plutonium.efficient
 
 object Split {
   implicit def ordering[X: Ordering]: Ordering[Split[X]] =

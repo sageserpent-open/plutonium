@@ -1,9 +1,9 @@
-package com.sageserpent.plutonium
+package com.sageserpent.plutonium.efficient
 
-import com.esotericsoftware.kryo.kryo5.Kryo
 import com.esotericsoftware.kryo.kryo5.io.{Input, Output}
 import com.esotericsoftware.kryo.kryo5.util.Pool
-import com.esotericsoftware.kryo.kryo5.{Kryo => KryoInstance, Serializer}
+import com.esotericsoftware.kryo.kryo5.Kryo
+import com.esotericsoftware.kryo.kryo5.{Serializer, Kryo => KryoInstance}
 
 import java.io.ByteArrayOutputStream
 import java.util.UUID
