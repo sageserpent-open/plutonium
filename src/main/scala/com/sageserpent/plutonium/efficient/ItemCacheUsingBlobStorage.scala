@@ -1,8 +1,22 @@
-package com.sageserpent.plutonium
+package com.sageserpent.plutonium.efficient
 
 import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
-import com.sageserpent.plutonium.efficient.Timeline
+import com.sageserpent.plutonium.{
+  AnnihilationHook,
+  BlobStorage,
+  ItemCache,
+  ItemCacheImplementation,
+  ItemExtensionApi,
+  ItemStateUpdateKey,
+  ItemStateUpdateKeyTrackingApi,
+  ItemStateUpdateTime,
+  LifecycleUUIDApi,
+  PersistentItemProxyFactory,
+  UniqueItemSpecification,
+  UpperBoundOfTimeslice,
+  itemStateStorageUsingProxies
+}
 
 import java.time.Instant
 import java.util.UUID

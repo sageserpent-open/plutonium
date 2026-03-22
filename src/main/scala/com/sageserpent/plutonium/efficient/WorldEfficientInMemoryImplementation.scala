@@ -9,7 +9,6 @@ import com.sageserpent.plutonium.{
   Event,
   EventId,
   ItemCache,
-  ItemCacheUsingBlobStorage,
   ItemStateUpdateTime,
   Scope,
   World,

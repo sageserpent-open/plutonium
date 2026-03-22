@@ -3,7 +3,6 @@ package com.sageserpent.plutonium.efficient
 import com.sageserpent.plutonium.{
   Event,
   ItemCache,
-  ItemCacheUsingBlobStorage,
   WorldSpecSupport,
   intersperseObsoleteEvents
 }
