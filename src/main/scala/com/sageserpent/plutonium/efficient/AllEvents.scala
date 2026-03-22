@@ -1,7 +1,15 @@
-package com.sageserpent.plutonium
+package com.sageserpent.plutonium.efficient
 
 import com.sageserpent.americium.Unbounded
-import com.sageserpent.plutonium.AllEvents.ItemStateUpdatesDelta
+import com.sageserpent.plutonium.efficient.AllEvents.ItemStateUpdatesDelta
+import com.sageserpent.plutonium.{
+  Event,
+  EventId,
+  ItemStateUpdate,
+  ItemStateUpdateKey,
+  ItemStateUpdateTime,
+  UniqueItemSpecification
+}
 
 import java.time.Instant
 

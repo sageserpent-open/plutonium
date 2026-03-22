@@ -1,7 +1,7 @@
 package com.sageserpent.plutonium.efficient
 
 import com.sageserpent.americium.Unbounded
-import com.sageserpent.plutonium.AllEvents.{ItemStateUpdatesDelta, noEvents}
+import AllEvents.{ItemStateUpdatesDelta, noEvents}
 import com.sageserpent.plutonium.BlobStorage.SnapshotRetrievalApi
 import com.sageserpent.plutonium.ItemStateStorage.SnapshotBlob
 import com.sageserpent.plutonium.ItemStateUpdateKey.ordering
@@ -11,7 +11,6 @@ import com.sageserpent.plutonium.efficient.Timeline.{
 }
 import com.sageserpent.plutonium.storage.BlobStorageReferenceImplementation
 import com.sageserpent.plutonium.{
-  AllEvents,
   Event,
   EventId,
   ItemStateAnnihilation,

@@ -1,15 +1,45 @@
-package com.sageserpent.plutonium
+package com.sageserpent.plutonium.efficient
 
 import alleycats.std.iterable._
 import cats.Foldable
 import cats.data.Writer
 import cats.implicits._
-import com.sageserpent.americium.{Finite, NegativeInfinity, PositiveInfinity, Unbounded}
-import com.sageserpent.plutonium.AllEvents.ItemStateUpdatesDelta
-import com.sageserpent.plutonium.AllEventsImplementation.Lifecycle._
-import com.sageserpent.plutonium.AllEventsImplementation._
+import com.sageserpent.americium.{
+  Finite,
+  NegativeInfinity,
+  PositiveInfinity,
+  Unbounded
+}
 import com.sageserpent.plutonium.World.{Revision, initialRevision}
-import com.sageserpent.plutonium.efficient.CheapKnockOffPriorityMap
+import com.sageserpent.plutonium.efficient.AllEvents.ItemStateUpdatesDelta
+import com.sageserpent.plutonium.efficient.AllEventsImplementation.Lifecycle._
+import com.sageserpent.plutonium.efficient.AllEventsImplementation.{
+  CalculationState,
+  EventFootprint,
+  Lifecycle,
+  Lifecycles,
+  LifecyclesById,
+  maxNumberOfIdsToSample,
+  noLifecycles,
+  sentinelForEndTimeOfLifecycleWithoutAnnihilation
+}
+import com.sageserpent.plutonium.{
+  AbstractPatch,
+  Annihilation,
+  Change,
+  Event,
+  EventId,
+  ItemStateAnnihilation,
+  ItemStatePatch,
+  ItemStateUpdate,
+  ItemStateUpdateKey,
+  ItemStateUpdateTime,
+  LowerBoundOfTimeslice,
+  Split,
+  UniqueItemSpecification,
+  UpperBoundOfTimeslice,
+  WorldImplementationCodeFactoring
+}
 import de.sciss.fingertree.RangedSeq
 
 import java.lang.reflect.Method
@@ -20,7 +50,6 @@ import scala.language.postfixOps
 
 object AllEventsImplementation {
 
-  type LifecycleEndPoints = (ItemStateUpdateTime, ItemStateUpdateTime)
   type Lifecycles         = RangedSeq[Lifecycle, Split[ItemStateUpdateTime]]
   type LifecyclesById     = Map[Any, Lifecycles]
 
@@ -322,6 +351,11 @@ object AllEventsImplementation {
       ) || this.lowerBoundClazz
         .isAssignableFrom(another.lowerBoundClazz)
 
+    def lowerBoundClazz: Class[_] = clazzes.keys.reduce[Class[_]] {
+      case (first, second) =>
+        if (second.isAssignableFrom(first)) first else second
+    }
+
     private def upperClazzIsConsistentWith(another: Lifecycle): Boolean =
       this.upperBoundClazz
         .isAssignableFrom(another.upperBoundClazz) || another.upperBoundClazz
@@ -375,6 +409,29 @@ object AllEventsImplementation {
             stateAfterFlush <- stateWithPatch.writeBestPatch(patch.method)
           } yield stateAfterFlush
         }
+
+        def recordAnnihilation(
+            itemStateUpdateKey: ItemStateUpdateKey,
+            annihilation: Annihilation
+        ): ResultsWriter[PatchAccumulationState] =
+          for {
+            _ <- Set(
+              itemStateUpdateKey -> (ItemStateAnnihilation(
+                annihilation
+                  .rewriteItemClass(lowerBoundClazz)
+              ): ItemStateUpdate)
+            ).tell
+          } yield this // We can get away with this (ha-ha) because an annihilation must be the latest event, so comes *first*, so there will be no patches to select from.
+
+        def writeBestPatches: ResultsWriter[PatchAccumulationState] =
+          Foldable[Iterable]
+            .foldLeftM(accumulatedPatchesByExemplarMethod.keys, this) {
+              case (
+                    patchAccumulationState: PatchAccumulationState,
+                    method: Method
+                  ) =>
+                patchAccumulationState.writeBestPatch(method)
+            }
 
         def writeBestPatch(
             method: Method
@@ -455,29 +512,6 @@ object AllEventsImplementation {
                   )
             }
           }
-
-        def recordAnnihilation(
-            itemStateUpdateKey: ItemStateUpdateKey,
-            annihilation: Annihilation
-        ): ResultsWriter[PatchAccumulationState] =
-          for {
-            _ <- Set(
-              itemStateUpdateKey -> (ItemStateAnnihilation(
-                annihilation
-                  .rewriteItemClass(lowerBoundClazz)
-              ): ItemStateUpdate)
-            ).tell
-          } yield this // We can get away with this (ha-ha) because an annihilation must be the latest event, so comes *first*, so there will be no patches to select from.
-
-        def writeBestPatches: ResultsWriter[PatchAccumulationState] =
-          Foldable[Iterable]
-            .foldLeftM(accumulatedPatchesByExemplarMethod.keys, this) {
-              case (
-                    patchAccumulationState: PatchAccumulationState,
-                    method: Method
-                  ) =>
-                patchAccumulationState.writeBestPatch(method)
-            }
       }
 
       val writtenState: ResultsWriter[PatchAccumulationState] =
@@ -515,11 +549,6 @@ object AllEventsImplementation {
         writtenState.flatMap(_.writeBestPatches)
 
       writtenStateWithFinalBestPatchesWritten.run._1
-    }
-
-    def lowerBoundClazz: Class[_] = clazzes.keys.reduce[Class[_]] {
-      case (first, second) =>
-        if (second.isAssignableFrom(first)) first else second
     }
 
     def id: Any =
