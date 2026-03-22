@@ -1458,7 +1458,6 @@ trait WorldBehaviours
       )
     }
 
-    // TODO: this is sporadically failing via starvation.
     it should "consider a reference to a related item in an event as being defining" in {
       val testCaseGenerator = for {
         referencedHistoryRecordingsGroupedById <-
@@ -1545,6 +1544,7 @@ trait WorldBehaviours
               )
               .unsafeRunSync
         },
+        maxDiscardedFactor(10),
         minSuccessful(12),
         sizeRange(5)
       )
