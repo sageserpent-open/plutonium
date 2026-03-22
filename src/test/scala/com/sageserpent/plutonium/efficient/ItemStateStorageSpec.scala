@@ -1,11 +1,7 @@
 package com.sageserpent.plutonium.efficient
 
 import com.sageserpent.americium.randomEnrichment._
-import com.sageserpent.plutonium.{
-  BlobStorage,
-  SharedGenerators,
-  UniqueItemSpecification
-}
+import com.sageserpent.plutonium.{SharedGenerators, UniqueItemSpecification}
 import org.scalacheck.Prop.propBoolean
 import org.scalacheck.{Gen, Prop}
 import org.scalatest.flatspec.AnyFlatSpec

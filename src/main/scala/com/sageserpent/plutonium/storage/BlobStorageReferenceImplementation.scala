@@ -1,6 +1,7 @@
 package com.sageserpent.plutonium.storage
 
-import com.sageserpent.plutonium.{BlobStorage, UniqueItemSpecification}
+import com.sageserpent.plutonium.UniqueItemSpecification
+import com.sageserpent.plutonium.efficient.BlobStorage
 import de.sciss.fingertree.{OrderedSeq => ScissOrderedSeq}
 
 import scala.collection.mutable

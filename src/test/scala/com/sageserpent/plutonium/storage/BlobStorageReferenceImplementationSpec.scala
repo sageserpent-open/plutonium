@@ -2,12 +2,9 @@ package com.sageserpent.plutonium.storage
 
 import com.sageserpent.americium.randomEnrichment._
 import com.sageserpent.americium.seqEnrichment._
-import com.sageserpent.plutonium.BlobStorage.Timeslice
-import com.sageserpent.plutonium.{
-  BlobStorage,
-  SharedGenerators,
-  UniqueItemSpecification
-}
+import com.sageserpent.plutonium.efficient.BlobStorage
+import com.sageserpent.plutonium.efficient.BlobStorage.Timeslice
+import com.sageserpent.plutonium.{SharedGenerators, UniqueItemSpecification}
 import org.scalacheck.{Gen, Shrink}
 import org.scalatest.LoneElement._
 import org.scalatest.flatspec.AnyFlatSpec

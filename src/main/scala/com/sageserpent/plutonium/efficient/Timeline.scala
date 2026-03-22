@@ -2,18 +2,12 @@ package com.sageserpent.plutonium.efficient
 
 import com.sageserpent.americium.Unbounded
 import AllEvents.{ItemStateUpdatesDelta, noEvents}
-import com.sageserpent.plutonium.BlobStorage.SnapshotRetrievalApi
+import BlobStorage.SnapshotRetrievalApi
 import ItemStateStorage.SnapshotBlob
 import ItemStateUpdateKey.ordering
-import com.sageserpent.plutonium.efficient.Timeline.{
-  ItemStateUpdatesDag,
-  PriorityQueueKey
-}
+import com.sageserpent.plutonium.efficient.Timeline.{ItemStateUpdatesDag, PriorityQueueKey}
 import com.sageserpent.plutonium.storage.BlobStorageReferenceImplementation
-import com.sageserpent.plutonium.{
-  Event,
-  EventId
-}
+import com.sageserpent.plutonium.{Event, EventId, efficient, storage}
 import quiver._
 
 import java.time.Instant
@@ -24,7 +18,7 @@ object Timeline {
   type ItemStateUpdatesDag =
     Graph[ItemStateUpdateKey, ItemStateUpdate, Unit]
   type BlobStorage =
-    com.sageserpent.plutonium.BlobStorage[ItemStateUpdateTime, SnapshotBlob]
+    efficient.BlobStorage[ItemStateUpdateTime, SnapshotBlob]
   val emptyTimeline: Timeline = Timeline()
 
   case class PriorityQueueKey(

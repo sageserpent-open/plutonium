@@ -1,4 +1,6 @@
-package com.sageserpent.plutonium
+package com.sageserpent.plutonium.efficient
+
+import com.sageserpent.plutonium.UniqueItemSpecification
 
 object BlobStorage {
   trait SnapshotRetrievalApi[SnapshotBlob] {

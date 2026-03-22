@@ -5,24 +5,12 @@ import cats.effect.{IO, Resource}
 import cats.implicits._
 import com.esotericsoftware.kryo.kryo5.Kryo
 import com.esotericsoftware.kryo.kryo5.objenesis.strategy.StdInstantiatorStrategy
-import com.esotericsoftware.kryo.kryo5.util.{
-  DefaultClassResolver,
-  MapReferenceResolver,
-  Pool
-}
-import com.sageserpent.americium.{
-  Finite,
-  NegativeInfinity,
-  PositiveInfinity,
-  Unbounded
-}
-import com.sageserpent.plutonium.BlobStorage.TimesliceContracts
+import com.esotericsoftware.kryo.kryo5.util.{DefaultClassResolver, MapReferenceResolver, Pool}
+import com.sageserpent.americium.{Finite, NegativeInfinity, PositiveInfinity, Unbounded}
+import com.sageserpent.plutonium.efficient.BlobStorage.TimesliceContracts
 import com.sageserpent.plutonium.efficient.ItemStateStorage.SnapshotBlob
-import com.sageserpent.plutonium.efficient.{ItemStateUpdateKey, ItemStateUpdateTime, LowerBoundOfTimeslice, SerializationFacade, Timeline, UpperBoundOfTimeslice}
-import com.sageserpent.plutonium.{
-  BlobStorage,
-  UniqueItemSpecification
-}
+import com.sageserpent.plutonium.efficient.{BlobStorage, ItemStateUpdateKey, ItemStateUpdateTime, LowerBoundOfTimeslice, SerializationFacade, Timeline, UpperBoundOfTimeslice}
+import com.sageserpent.plutonium.UniqueItemSpecification
 import io.altoo.serialization.kryo.scala.serializer.ScalaKryo
 import scalikejdbc._
 

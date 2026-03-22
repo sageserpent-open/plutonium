@@ -2,15 +2,8 @@ package com.sageserpent.plutonium.storage
 
 import cats.effect.unsafe.implicits.global
 import cats.effect.{IO, Resource}
-import com.sageserpent.plutonium.efficient.{ItemStateStorage, ItemStateUpdateTime, Timeline}
-import com.sageserpent.plutonium.{
-  BlobStorage,
-  ConnectionPoolResource,
-  FooHistory,
-  SharedGenerators,
-  Thing,
-  UniqueItemSpecification
-}
+import com.sageserpent.plutonium.efficient.{BlobStorage, ItemStateStorage, ItemStateUpdateTime, Timeline}
+import com.sageserpent.plutonium.{ConnectionPoolResource, FooHistory, SharedGenerators, Thing, UniqueItemSpecification}
 import org.scalacheck.ScalacheckShapeless._
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.flatspec.AnyFlatSpec

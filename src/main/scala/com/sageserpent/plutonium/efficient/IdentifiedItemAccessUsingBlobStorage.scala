@@ -1,6 +1,6 @@
 package com.sageserpent.plutonium.efficient
 
-import com.sageserpent.plutonium.BlobStorage.SnapshotRetrievalApi
+import BlobStorage.SnapshotRetrievalApi
 import ItemStateStorage.SnapshotBlob
 import com.sageserpent.plutonium.{
   AbstractPatch,
