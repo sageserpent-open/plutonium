@@ -1,4 +1,4 @@
-package com.sageserpent.plutonium
+package com.sageserpent.plutonium.efficient
 
 import scala.collection.immutable.SortedMap
 

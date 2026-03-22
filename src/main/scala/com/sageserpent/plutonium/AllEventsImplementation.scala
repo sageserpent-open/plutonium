@@ -4,16 +4,12 @@ import alleycats.std.iterable._
 import cats.Foldable
 import cats.data.Writer
 import cats.implicits._
-import com.sageserpent.americium.{
-  Finite,
-  NegativeInfinity,
-  PositiveInfinity,
-  Unbounded
-}
+import com.sageserpent.americium.{Finite, NegativeInfinity, PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.AllEvents.ItemStateUpdatesDelta
 import com.sageserpent.plutonium.AllEventsImplementation.Lifecycle._
 import com.sageserpent.plutonium.AllEventsImplementation._
 import com.sageserpent.plutonium.World.{Revision, initialRevision}
+import com.sageserpent.plutonium.efficient.CheapKnockOffPriorityMap
 import de.sciss.fingertree.RangedSeq
 
 import java.lang.reflect.Method

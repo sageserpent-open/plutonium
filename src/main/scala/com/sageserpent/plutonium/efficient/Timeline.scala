@@ -12,7 +12,6 @@ import com.sageserpent.plutonium.efficient.Timeline.{
 import com.sageserpent.plutonium.storage.BlobStorageReferenceImplementation
 import com.sageserpent.plutonium.{
   AllEvents,
-  CheapKnockOffPriorityMap,
   Event,
   EventId,
   ItemStateAnnihilation,
