@@ -1,6 +1,6 @@
 package com.sageserpent.plutonium.reference
 
-import com.sageserpent.americium.Unbounded
+import com.sageserpent.plutonium.utilities.Unbounded
 import com.sageserpent.plutonium.{AbstractPatch, Annihilation, EventId}
 
 import java.time.Instant

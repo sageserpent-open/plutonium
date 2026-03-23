@@ -51,7 +51,7 @@ Add this to your _build.gradle_:
 jshell>/reload
         |Restarting and restoring state.
         -:import com.sageserpent.americium.NegativeInfinity;
--:import com.sageserpent.americium.Unbounded;
+-:import com.sageserpent.Unbounded;
 -:import com.sageserpent.plutonium.World;
 -:import com.sageserpent.plutonium.reference.WorldReferenceImplementation;
 -:import com.sageserpent.plutonium.javaApi.*;
@@ -90,7 +90,7 @@ println(account.getCash());
         }
         1
 
-NegativeInfinity()
+NegativeInfinity
 5.0
 ```
 ![Revision Zero](https://github.com/sageserpent-open/plutonium/blob/master/Revision%20Zero.png)
@@ -208,7 +208,7 @@ true
        System.out.println(account.getCash());
    }
 1
-NegativeInfinity()
+NegativeInfinity
 5.0
 ```
 ![Revision Zero Revisited](https://github.com/sageserpent-open/plutonium/blob/master/Revision%20Zero%20Revisited.png)
@@ -225,7 +225,7 @@ NegativeInfinity()
        System.out.println(account.getCash());
    }
 2
-NegativeInfinity()
+NegativeInfinity
 5.0
 ```
 ![Revision One Revisited](https://github.com/sageserpent-open/plutonium/blob/master/Revision%20One%20Revisited.png)
@@ -254,7 +254,7 @@ NegativeInfinity()
        }
    }
 3
-NegativeInfinity()
+NegativeInfinity
 5.0
 3
 1970-01-01T02:00:00Z

@@ -1,12 +1,12 @@
 package com.sageserpent.plutonium.efficient
 
-import com.sageserpent.americium.Unbounded
 import AllEvents.{ItemStateUpdatesDelta, noEvents}
 import BlobStorage.SnapshotRetrievalApi
 import ItemStateStorage.SnapshotBlob
 import ItemStateUpdateKey.ordering
 import com.sageserpent.plutonium.efficient.Timeline.{ItemStateUpdatesDag, PriorityQueueKey}
 import com.sageserpent.plutonium.storage.BlobStorageReferenceImplementation
+import com.sageserpent.plutonium.utilities.Unbounded
 import com.sageserpent.plutonium.{Event, EventId, efficient, storage}
 import quiver._
 

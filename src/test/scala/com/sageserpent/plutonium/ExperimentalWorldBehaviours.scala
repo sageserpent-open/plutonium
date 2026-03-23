@@ -2,8 +2,8 @@ package com.sageserpent.plutonium
 
 import cats.effect.unsafe.implicits.global
 import cats.effect.{IO, Resource}
-import com.sageserpent.americium.randomEnrichment._
-import com.sageserpent.americium.{Finite, PositiveInfinity, Unbounded}
+import com.sageserpent.americium.utilities.randomEnrichment._
+import com.sageserpent.plutonium.utilities.{Finite, PositiveInfinity, Unbounded}
 import org.scalacheck.Prop.propBoolean
 import org.scalacheck.{Gen, Prop}
 import org.scalatest.flatspec.AnyFlatSpec
@@ -283,7 +283,7 @@ trait ExperimentalWorldBehaviours
             })
             scopeAndWorld <- scopeAndExperimentalWorldFor(
               baseWorld,
-              PositiveInfinity[Instant],
+              PositiveInfinity,
               forkAsOf,
               seed
             )

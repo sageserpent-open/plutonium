@@ -8,9 +8,10 @@ import com.sageserpent.americium
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import com.sageserpent.americium._
-import com.sageserpent.americium.randomEnrichment._
-import com.sageserpent.americium.seqEnrichment._
+import com.sageserpent.americium.utilities.randomEnrichment._
+import com.sageserpent.americium.utilities.seqEnrichment._
 import com.sageserpent.plutonium.World.Revision
+import com.sageserpent.plutonium.utilities.{Finite, NegativeInfinity, PositiveInfinity, Unbounded}
 import org.scalacheck.Prop.propBoolean
 import org.scalacheck.{Gen, Prop}
 import org.scalatest.exceptions.TestFailedException
@@ -36,7 +37,7 @@ trait WorldBehaviours
     )
   val chunksShareTheSameEventWhens: (
       ((Unbounded[Instant], Unbounded[Instant]), Instant),
-      ((americium.Unbounded[Instant], Unbounded[Instant]), Instant)
+      ((Unbounded[Instant], Unbounded[Instant]), Instant)
   ) => Boolean = {
     case (((_, trailingEventWhen), _), ((leadingEventWhen, _), _)) => true
   }
@@ -110,8 +111,8 @@ trait WorldBehaviours
           latestAsOfsThatMapUnambiguouslyToEventWhens.head
         )
         queryWhen <- latestEventWhenForEarliestAsOf match {
-          case NegativeInfinity() => instantGenerator
-          case PositiveInfinity() => Gen.fail
+          case NegativeInfinity => instantGenerator
+          case PositiveInfinity => Gen.fail
           case Finite(latestDefiniteEventWhenForEarliestAsOf) =>
             Gen.frequency(
               3 -> (Gen
@@ -349,7 +350,7 @@ trait WorldBehaviours
                 }
 
                 val scope =
-                  world.scopeFor(NegativeInfinity[Instant](), sharedAsOf)
+                  world.scopeFor(NegativeInfinity, sharedAsOf)
 
                 Prop.all(fooHistoryIds.toSeq map { fooHistoryId =>
                   def fetch[AHistory <: History: TypeTag] =
@@ -1021,7 +1022,7 @@ trait WorldBehaviours
           bigShuffledHistoryOverLotsOfThings.length,
           instantGenerator
         ) map (_.sorted)
-        queryWhen <- unboundedInstantGenerator filter (_ < PositiveInfinity())
+        queryWhen <- unboundedInstantGenerator filter (_ < PositiveInfinity)
       } yield (
         recordingsGroupedById,
         bigShuffledHistoryOverLotsOfThings,
@@ -1426,11 +1427,11 @@ trait WorldBehaviours
                     ) {
                       world.revise(
                         Map(
-                          -1 -> Some(ineffectiveEventFor(NegativeInfinity()))
+                          -1 -> Some(ineffectiveEventFor(NegativeInfinity))
                         ),
                         asOfs.last
                       )
-                      if (queryWhen < PositiveInfinity()) {
+                      if (queryWhen < PositiveInfinity) {
                         world.revise(
                           Map(-2 -> Some(ineffectiveEventFor(queryWhen))),
                           asOfs.last
@@ -2196,7 +2197,7 @@ trait WorldBehaviours
                 )
 
                 val expectedAsOfBeforeInitialRevision: Unbounded[Instant] =
-                  NegativeInfinity[Instant]
+                  NegativeInfinity
 
                 def asOfAndNextRevisionPairs_(
                     nextRevisions: List[(Unbounded[Instant], (Int, Int))],
@@ -2715,7 +2716,7 @@ trait WorldBehaviours
                     world
                   )
 
-                  val atTheEndOfTime = PositiveInfinity[Instant]
+                  val atTheEndOfTime = PositiveInfinity
 
                   val scope = world.scopeFor(atTheEndOfTime, world.nextRevision)
 
@@ -2810,7 +2811,7 @@ trait WorldBehaviours
 
                   recordEventsInWorld(historyPartOne, asOfsPartOne, world)
 
-                  val atTheEndOfTime = PositiveInfinity[Instant]
+                  val atTheEndOfTime = PositiveInfinity
 
                   val queryScope = world
                     .scopeFor(whenAnInconsistentEventOccurs, world.nextRevision)
@@ -2908,7 +2909,7 @@ trait WorldBehaviours
       for { data <- Gen.posNum[Int] } yield (
         data,
         (
-            when: americium.Unbounded[Instant],
+            when: Unbounded[Instant],
             abstractedHistoryId: AbstractedHistory#Id
         ) =>
           eventConstructorReferringToOneItem[AbstractedHistory](when)
@@ -2938,7 +2939,7 @@ trait WorldBehaviours
       for { data <- Gen.negNum[Int] } yield (
         data,
         (
-            when: americium.Unbounded[Instant],
+            when: Unbounded[Instant],
             implementingHistoryId: ImplementingHistory#Id
         ) =>
           eventConstructorReferringToOneItem[ImplementingHistory](when)
@@ -3650,7 +3651,7 @@ trait WorldBehaviours
 
                 val scope =
                   world
-                    .scopeFor(PositiveInfinity[Instant](), world.nextRevision)
+                    .scopeFor(PositiveInfinity, world.nextRevision)
 
                 val fredTheItem = scope
                   .render(Bitemporal.withId[IntegerHistory](itemId))
@@ -3726,7 +3727,7 @@ trait WorldBehaviours
 
                 val scope =
                   world
-                    .scopeFor(PositiveInfinity[Instant](), world.nextRevision)
+                    .scopeFor(PositiveInfinity, world.nextRevision)
 
                 val fredTheItem = scope
                   .render(Bitemporal.withId[IntegerHistory](itemId))
@@ -3804,7 +3805,7 @@ trait WorldBehaviours
 
                   val scope =
                     world
-                      .scopeFor(PositiveInfinity[Instant](), world.nextRevision)
+                      .scopeFor(PositiveInfinity, world.nextRevision)
 
                   val fredTheItem = scope
                     .render(Bitemporal.withId[IntegerHistory](itemId))
@@ -3878,7 +3879,7 @@ trait WorldBehaviours
 
                   val scope =
                     world
-                      .scopeFor(PositiveInfinity[Instant](), world.nextRevision)
+                      .scopeFor(PositiveInfinity, world.nextRevision)
 
                   val fredTheItem = scope
                     .render(Bitemporal.withId[IntegerHistory](itemId))

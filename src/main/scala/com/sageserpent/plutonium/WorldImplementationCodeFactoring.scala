@@ -1,8 +1,8 @@
 package com.sageserpent.plutonium
 
-import com.sageserpent.americium.{Finite, NegativeInfinity, Unbounded}
 import com.sageserpent.plutonium.World.Revision
 import com.sageserpent.plutonium.reference.PatchRecorder
+import com.sageserpent.plutonium.utilities.{Finite, NegativeInfinity, Unbounded}
 import net.bytebuddy.description.method.MethodDescription
 
 import java.lang.reflect.Method
@@ -99,7 +99,7 @@ abstract class WorldImplementationCodeFactoring extends World {
       val nextRevision: Revision
   ) extends com.sageserpent.plutonium.Scope {
     def asOf = nextRevision match {
-      case World.initialRevision => NegativeInfinity[Instant]()
+      case World.initialRevision => NegativeInfinity
       case _ =>
         if (nextRevision <= revisionAsOfs.size)
           Finite(revisionAsOfs(nextRevision - 1))

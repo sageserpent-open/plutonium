@@ -1,7 +1,7 @@
 package com.sageserpent.plutonium.efficient
 
-import com.sageserpent.americium.Unbounded
 import ItemStateStorage.SnapshotBlob
+import com.sageserpent.plutonium.utilities.Unbounded
 import com.sageserpent.plutonium.{AnnihilationHook, ItemCache, ItemCacheImplementation, ItemExtensionApi, UniqueItemSpecification}
 
 import java.time.Instant

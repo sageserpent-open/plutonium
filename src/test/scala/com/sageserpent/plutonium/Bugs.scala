@@ -3,8 +3,8 @@ package com.sageserpent.plutonium
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import cats.syntax.apply._
-import com.sageserpent.americium.randomEnrichment._
-import com.sageserpent.americium.{NegativeInfinity, PositiveInfinity}
+import com.sageserpent.americium.utilities.randomEnrichment._
+import com.sageserpent.plutonium.utilities.{NegativeInfinity, PositiveInfinity}
 import org.scalacheck.Gen
 import org.scalatest.LoneElement
 import org.scalatest.exceptions.TestFailedException
@@ -88,7 +88,7 @@ trait Bugs
             )
 
             val scope =
-              world.scopeFor(PositiveInfinity[Instant](), world.nextRevision)
+              world.scopeFor(PositiveInfinity, world.nextRevision)
 
             scope
               .render(Bitemporal.withId[IntegerHistory](firstItemId))
@@ -161,7 +161,7 @@ trait Bugs
             )
 
             val scope =
-              world.scopeFor(PositiveInfinity[Instant](), world.nextRevision)
+              world.scopeFor(PositiveInfinity, world.nextRevision)
 
             scope
               .render(Bitemporal.withId[IntegerHistory](firstItemId))
@@ -499,7 +499,7 @@ trait Bugs
             )
 
             val scope =
-              world.scopeFor(PositiveInfinity[Instant](), world.nextRevision)
+              world.scopeFor(PositiveInfinity, world.nextRevision)
 
             scope
               .render(Bitemporal.withId[FooHistory](itemId))
@@ -560,7 +560,7 @@ trait Bugs
             )
 
             val scope =
-              world.scopeFor(PositiveInfinity[Instant](), world.nextRevision)
+              world.scopeFor(PositiveInfinity, world.nextRevision)
 
             scope
               .render(Bitemporal.withId[IntegerHistory](itemId))
@@ -782,7 +782,7 @@ trait Bugs
             )
 
             val scope =
-              world.scopeFor(PositiveInfinity[Instant](), world.nextRevision)
+              world.scopeFor(PositiveInfinity, world.nextRevision)
 
             scope
               .render(Bitemporal.withId[IntegerHistory](itemId))
@@ -836,7 +836,7 @@ trait Bugs
             world.annul(annihilationEvent, sharedAsOf)
 
             val scope =
-              world.scopeFor(PositiveInfinity[Instant](), world.nextRevision)
+              world.scopeFor(PositiveInfinity, world.nextRevision)
 
             scope
               .render(Bitemporal.withId[IntegerHistory](itemId))
@@ -891,7 +891,7 @@ trait Bugs
             )
 
             val scope =
-              world.scopeFor(PositiveInfinity[Instant](), world.nextRevision)
+              world.scopeFor(PositiveInfinity, world.nextRevision)
 
             scope
               .render(Bitemporal.withId[IntegerHistory](itemId))
@@ -1040,7 +1040,7 @@ trait Bugs
             )
 
             val scope =
-              world.scopeFor(PositiveInfinity[Instant](), world.nextRevision)
+              world.scopeFor(PositiveInfinity, world.nextRevision)
 
             scope
               .render(Bitemporal.withId[IntegerHistory](itemId))
@@ -1065,7 +1065,7 @@ trait Bugs
           IO {
             world.revise(
               0,
-              Change.forOneItem(NegativeInfinity[Instant]())(
+              Change.forOneItem(NegativeInfinity)(
                 itemId,
                 { item: MoreSpecificFooHistory =>
                   item.property1 = ""
@@ -1098,7 +1098,7 @@ trait Bugs
             )
 
             val scope =
-              world.scopeFor(PositiveInfinity[Instant](), world.nextRevision)
+              world.scopeFor(PositiveInfinity, world.nextRevision)
 
             scope
               .render(Bitemporal.withId[IntegerHistory](itemId)) shouldBe empty
@@ -1163,7 +1163,7 @@ trait Bugs
             }
 
             val scope =
-              world.scopeFor(PositiveInfinity[Instant](), world.nextRevision)
+              world.scopeFor(PositiveInfinity, world.nextRevision)
 
             scope
               .render(Bitemporal.withId[IntegerHistory](itemId)) shouldBe empty
@@ -1219,7 +1219,7 @@ trait Bugs
             world.annul(eventToBeAnnulled, sharedAsOf)
 
             val scope =
-              world.scopeFor(PositiveInfinity[Instant](), world.nextRevision)
+              world.scopeFor(PositiveInfinity, world.nextRevision)
 
             scope
               .render(
@@ -1271,7 +1271,7 @@ trait Bugs
             )
 
             val scope =
-              world.scopeFor(PositiveInfinity[Instant](), world.nextRevision)
+              world.scopeFor(PositiveInfinity, world.nextRevision)
 
             scope
               .render(Bitemporal.withId[Thing](referringId))
@@ -1325,7 +1325,7 @@ trait Bugs
 
                 val scope =
                   world
-                    .scopeFor(PositiveInfinity[Instant](), world.nextRevision)
+                    .scopeFor(PositiveInfinity, world.nextRevision)
 
                 val Seq((referrer, referred)) = scope
                   .render(
@@ -1399,7 +1399,7 @@ trait Bugs
             }
 
             val scope =
-              world.scopeFor(PositiveInfinity[Instant](), world.nextRevision)
+              world.scopeFor(PositiveInfinity, world.nextRevision)
 
             val Seq(referrerTransitiveClosure) = scope
               .render(Bitemporal.withId[Thing](headOfChainId))

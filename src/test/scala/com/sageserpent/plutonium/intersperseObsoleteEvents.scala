@@ -1,6 +1,6 @@
 package com.sageserpent.plutonium
 
-import com.sageserpent.americium.randomEnrichment._
+import com.sageserpent.americium.utilities.randomEnrichment._
 
 import scala.util.Random
 

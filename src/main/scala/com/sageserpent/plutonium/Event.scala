@@ -1,7 +1,6 @@
 package com.sageserpent.plutonium
 
-import com.sageserpent.americium
-import com.sageserpent.americium.{
+import com.sageserpent.plutonium.utilities.{
   Finite,
   NegativeInfinity,
   PositiveInfinity,
@@ -26,8 +25,9 @@ import scala.util.Using
   * place in the real world.
   *
   * @note
-  *   The time may be taken to be [[NegativeInfinity]] - this is a way of
-  *   introducing timeless events, although it permits following events to
+  *   The time may be taken to be
+  *   [[com.sageserpent.plutonium.utilities.NegativeInfinity]] - this is a way
+  *   of introducing timeless events, although it permits following events to
   *   modify the outcome, which may be quite handy. For now, there is no such
   *   corresponding use for [[PositiveInfinity]] - that results in a
   *   precondition failure.
@@ -38,7 +38,7 @@ import scala.util.Using
 sealed trait Event {
 
   val when: Unbounded[Instant]
-  require(when < PositiveInfinity())
+  require(when < PositiveInfinity)
 }
 
 private[plutonium] object capturePatches {
@@ -233,6 +233,9 @@ object Change {
   )(id: Any, update: Item => Unit): Change =
     forOneItem(Finite(when))(id, update)
 
+  def forOneItem[Item: TypeTag](id: Any, update: Item => Unit): Change =
+    forOneItem(NegativeInfinity)(id, update)
+
   def forOneItem[Item: TypeTag](
       when: Unbounded[Instant]
   )(id: Any, update: Item => Unit): Change = {
@@ -246,9 +249,6 @@ object Change {
     )
   }
 
-  def forOneItem[Item: TypeTag](id: Any, update: Item => Unit): Change =
-    forOneItem(americium.NegativeInfinity[Instant]())(id, update)
-
   def forTwoItems[Item1: TypeTag, Item2: TypeTag](
       when: Instant
   )(id1: Any, id2: Any, update: (Item1, Item2) => Unit): Change =
@@ -259,7 +259,7 @@ object Change {
       id2: Any,
       update: (Item1, Item2) => Unit
   ): Change =
-    forTwoItems(americium.NegativeInfinity[Instant]())(id1, id2, update)
+    forTwoItems(NegativeInfinity)(id1, id2, update)
 
   def forTwoItems[Item1: TypeTag, Item2: TypeTag](
       when: Unbounded[Instant]

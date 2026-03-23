@@ -1,6 +1,7 @@
 package com.sageserpent.plutonium
 
-import com.sageserpent.americium.Unbounded
+
+import com.sageserpent.plutonium.utilities.Unbounded
 
 import java.time.Instant
 

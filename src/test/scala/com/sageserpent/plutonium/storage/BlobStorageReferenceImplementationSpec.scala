@@ -1,7 +1,7 @@
 package com.sageserpent.plutonium.storage
 
-import com.sageserpent.americium.randomEnrichment._
-import com.sageserpent.americium.seqEnrichment._
+import com.sageserpent.americium.utilities.randomEnrichment._
+import com.sageserpent.americium.utilities.seqEnrichment._
 import com.sageserpent.plutonium.efficient.BlobStorage
 import com.sageserpent.plutonium.efficient.BlobStorage.Timeslice
 import com.sageserpent.plutonium.{SharedGenerators, UniqueItemSpecification}

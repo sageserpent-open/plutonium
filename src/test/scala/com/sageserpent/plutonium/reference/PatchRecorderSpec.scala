@@ -1,7 +1,7 @@
 package com.sageserpent.plutonium.reference
 
-import com.sageserpent.americium.randomEnrichment._
-import com.sageserpent.americium.{Finite, Unbounded}
+import com.sageserpent.americium.utilities.randomEnrichment._
+import com.sageserpent.plutonium.utilities.{Finite, Unbounded}
 import com.sageserpent.plutonium
 import PatchRecorder.UpdateConsumer
 import com.sageserpent.plutonium.{

@@ -1,19 +1,8 @@
 package com.sageserpent.plutonium.reference
 
-import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.reference.PatchRecorder.UpdateConsumer
-import com.sageserpent.plutonium.{
-  AbstractPatch,
-  Annihilation,
-  AnnihilationHook,
-  Event,
-  EventId,
-  IdentifiedItemAccess,
-  ItemExtensionApi,
-  StatefulItemProxyFactory,
-  UniqueItemSpecification,
-  WorldImplementationCodeFactoring
-}
+import com.sageserpent.plutonium.utilities.Unbounded
+import com.sageserpent.plutonium.{AbstractPatch, Annihilation, AnnihilationHook, Event, EventId, IdentifiedItemAccess, ItemExtensionApi, StatefulItemProxyFactory, UniqueItemSpecification, WorldImplementationCodeFactoring}
 
 import java.time.Instant
 import scala.collection.mutable.MultiDict

@@ -4,34 +4,12 @@ import alleycats.std.iterable._
 import cats.Foldable
 import cats.data.Writer
 import cats.implicits._
-import com.sageserpent.americium.{
-  Finite,
-  NegativeInfinity,
-  PositiveInfinity,
-  Unbounded
-}
 import com.sageserpent.plutonium.World.{Revision, initialRevision}
 import com.sageserpent.plutonium.efficient.AllEvents.ItemStateUpdatesDelta
 import com.sageserpent.plutonium.efficient.AllEventsImplementation.Lifecycle._
-import com.sageserpent.plutonium.efficient.AllEventsImplementation.{
-  CalculationState,
-  EventFootprint,
-  Lifecycle,
-  Lifecycles,
-  LifecyclesById,
-  maxNumberOfIdsToSample,
-  noLifecycles,
-  sentinelForEndTimeOfLifecycleWithoutAnnihilation
-}
-import com.sageserpent.plutonium.{
-  AbstractPatch,
-  Annihilation,
-  Change,
-  Event,
-  EventId,
-  UniqueItemSpecification,
-  WorldImplementationCodeFactoring
-}
+import com.sageserpent.plutonium.efficient.AllEventsImplementation.{CalculationState, EventFootprint, Lifecycle, Lifecycles, LifecyclesById, maxNumberOfIdsToSample, noLifecycles, sentinelForEndTimeOfLifecycleWithoutAnnihilation}
+import com.sageserpent.plutonium.utilities.{Finite, NegativeInfinity, PositiveInfinity, Unbounded}
+import com.sageserpent.plutonium.{AbstractPatch, Annihilation, Change, Event, EventId, UniqueItemSpecification, WorldImplementationCodeFactoring}
 import de.sciss.fingertree.RangedSeq
 
 import java.lang.reflect.Method
@@ -54,7 +32,7 @@ object AllEventsImplementation {
   // TODO - can we get rid of this? As long as the support for a closed-open
   // interval exists, maybe we don't need an explicit end time?
   val sentinelForEndTimeOfLifecycleWithoutAnnihilation = UpperBoundOfTimeslice(
-    PositiveInfinity()
+    PositiveInfinity
   )
   val noLifecycles = RangedSeq.empty[Lifecycle, Split[ItemStateUpdateTime]]
 
@@ -1194,7 +1172,7 @@ class AllEventsImplementation(
     val cutoff = UpperBoundOfTimeslice(when)
 
     val timespanUpToAndIncludingTheCutoff = (Split.alignedWith(
-      LowerBoundOfTimeslice(NegativeInfinity())
+      LowerBoundOfTimeslice(NegativeInfinity)
     ): Split[ItemStateUpdateTime]) -> (Split
       .alignedWith(cutoff): Split[ItemStateUpdateTime])
 

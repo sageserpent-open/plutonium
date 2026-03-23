@@ -1,15 +1,7 @@
 package com.sageserpent.plutonium.reference
 
-import com.sageserpent.americium.{PositiveInfinity, Unbounded}
-import com.sageserpent.plutonium.{
-  Event,
-  EventId,
-  ItemCacheImplementation,
-  Scope,
-  UniqueItemSpecification,
-  World,
-  WorldImplementationCodeFactoring
-}
+import com.sageserpent.plutonium.utilities.{PositiveInfinity, Unbounded}
+import com.sageserpent.plutonium.{Event, EventId, ItemCacheImplementation, Scope, UniqueItemSpecification, World, WorldImplementationCodeFactoring}
 
 import java.time.Instant
 import scala.Ordering.Implicits._
@@ -64,7 +56,7 @@ private class MutableState {
     val eventIdsToBeExcluded = eventIds.toSet
     pertinentEventDatums(
       cutoffRevision,
-      PositiveInfinity(),
+      PositiveInfinity,
       eventId => !eventIdsToBeExcluded.contains(eventId)
     )
   }
@@ -72,7 +64,7 @@ private class MutableState {
   def pertinentEventDatums(
       cutoffRevision: Revision
   ): LazyList[(EventId, AbstractEventData)] =
-    pertinentEventDatums(cutoffRevision, PositiveInfinity(), _ => true)
+    pertinentEventDatums(cutoffRevision, PositiveInfinity, _ => true)
 
   def pertinentEventDatums(
       cutoffRevision: Revision,
@@ -163,7 +155,7 @@ class WorldReferenceImplementation(mutableState: MutableState)
       )
 
       (new IdentifiedItemsScope)
-        .populate(PositiveInfinity(), eventTimelineIncludingNewRevision)
+        .populate(PositiveInfinity, eventTimelineIncludingNewRevision)
     }
 
     transactNewRevision(

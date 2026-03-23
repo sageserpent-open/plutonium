@@ -6,11 +6,12 @@ import cats.effect.{IO, Resource}
 import cats.implicits._
 import com.sageserpent.americium
 import com.sageserpent.americium._
-import com.sageserpent.americium.randomEnrichment._
-import com.sageserpent.americium.seqEnrichment._
+import com.sageserpent.americium.utilities.randomEnrichment._
+import com.sageserpent.americium.utilities.seqEnrichment._
 import com.sageserpent.plutonium.World._
 import com.sageserpent.plutonium.efficient.WorldEfficientInMemoryImplementation
 import com.sageserpent.plutonium.reference.WorldReferenceImplementation
+import com.sageserpent.plutonium.utilities.{Finite, Unbounded}
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.Assertions
 
@@ -81,7 +82,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
     } yield (
       idToReferToAnotherItem,
       (
-          when: americium.Unbounded[Instant],
+          when: Unbounded[Instant],
           referringHistoryId: ReferringHistory#Id
       ) =>
         eventConstructorReferringToTwoItems[ReferringHistory, FooHistory](when)
@@ -127,7 +128,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
     } yield (
       idToReferToAnotherItem,
       (
-          when: americium.Unbounded[Instant],
+          when: Unbounded[Instant],
           referringHistoryId: ReferringHistory#Id
       ) =>
         eventConstructorReferringToTwoItems[ReferringHistory, FooHistory](when)
@@ -363,7 +364,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
   def fooHistoryDataSampleGenerator1(faulty: Boolean) =
     for { data <- Arbitrary.arbitrary[String] } yield (
       data,
-      (when: americium.Unbounded[Instant], fooHistoryId: FooHistory#Id) =>
+      (when: Unbounded[Instant], fooHistoryId: FooHistory#Id) =>
         if (!faulty)
           eventConstructorReferringToOneItem[FooHistory](when)
             .apply(
@@ -452,7 +453,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
     for { data <- Arbitrary.arbitrary[String] } yield (
       data,
       (
-          when: americium.Unbounded[Instant],
+          when: Unbounded[Instant],
           fooHistoryId: MoreSpecificFooHistory#Id
       ) =>
         eventConstructorReferringToOneItem[MoreSpecificFooHistory](when)
@@ -527,7 +528,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
       data2 <- Arbitrary.arbitrary[Int]
     } yield (
       data1 -> data2,
-      (when: americium.Unbounded[Instant], barHistoryId: BarHistory#Id) =>
+      (when: Unbounded[Instant], barHistoryId: BarHistory#Id) =>
         eventConstructorReferringToOneItem[BarHistory](when)
           .apply(
             barHistoryId,
@@ -578,7 +579,7 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
     for { data <- Arbitrary.arbitrary[Int] } yield (
       data,
       (
-          when: americium.Unbounded[Instant],
+          when: Unbounded[Instant],
           integerHistoryId: IntegerHistory#Id
       ) =>
         eventConstructorReferringToOneItem[IntegerHistory](when)

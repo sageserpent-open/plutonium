@@ -2,7 +2,7 @@ package com.sageserpent.plutonium
 
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
-import com.sageserpent.americium.randomEnrichment._
+import com.sageserpent.americium.utilities.randomEnrichment._
 
 import java.time.Instant
 import scala.concurrent.duration._

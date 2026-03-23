@@ -6,11 +6,11 @@ import cats.implicits._
 import com.esotericsoftware.kryo.kryo5.Kryo
 import com.esotericsoftware.kryo.kryo5.objenesis.strategy.StdInstantiatorStrategy
 import com.esotericsoftware.kryo.kryo5.util.{DefaultClassResolver, MapReferenceResolver, Pool}
-import com.sageserpent.americium.{Finite, NegativeInfinity, PositiveInfinity, Unbounded}
 import com.sageserpent.plutonium.efficient.BlobStorage.TimesliceContracts
 import com.sageserpent.plutonium.efficient.ItemStateStorage.SnapshotBlob
 import com.sageserpent.plutonium.efficient.{BlobStorage, ItemStateUpdateKey, ItemStateUpdateTime, LowerBoundOfTimeslice, SerializationFacade, Timeline, UpperBoundOfTimeslice}
 import com.sageserpent.plutonium.UniqueItemSpecification
+import com.sageserpent.plutonium.utilities.{Finite, NegativeInfinity, PositiveInfinity, Unbounded}
 import io.altoo.serialization.kryo.scala.serializer.ScalaKryo
 import scalikejdbc._
 
@@ -260,9 +260,9 @@ object BlobStorageOnH2 {
   }
 
   private def unpack(when: Unbounded[Instant]): Array[Any] = when match {
-    case NegativeInfinity() => Array(-1, 0)
+    case NegativeInfinity => Array(-1, 0)
     case Finite(unlifted)   => Array(0, unlifted)
-    case PositiveInfinity() => Array(1, 0)
+    case PositiveInfinity => Array(1, 0)
   }
 
   def lineageSql(lineageId: LineageId, revision: Revision): SQLSyntax = {

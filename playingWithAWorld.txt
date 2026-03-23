@@ -1,5 +1,5 @@
 import com.sageserpent.americium.NegativeInfinity;
-import com.sageserpent.americium.Unbounded;
+import com.sageserpent.Unbounded;
 import com.sageserpent.plutonium.World;
 import com.sageserpent.plutonium.WorldReferenceImplementation;
 import com.sageserpent.plutonium.javaApi.*;

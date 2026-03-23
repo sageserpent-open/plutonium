@@ -1,7 +1,7 @@
 package com.sageserpent.plutonium
 
-import com.sageserpent.americium.{Finite, NegativeInfinity, Unbounded}
 import com.sageserpent.plutonium.World.Revision
+import com.sageserpent.plutonium.utilities.{Finite, NegativeInfinity, Unbounded}
 
 import java.time.Instant
 import java.util.Optional
@@ -335,7 +335,7 @@ trait WorldContracts extends World {
     val result = super.scopeFor(when, nextRevision)
     assert(result.nextRevision == nextRevision)
     assert(
-      result.nextRevision == 0 && result.asOf == NegativeInfinity[Instant]() ||
+      result.nextRevision == 0 && result.asOf == NegativeInfinity ||
         result.nextRevision > revisionAsOfs
           .count(
             Finite(_) < result.asOf

@@ -1,15 +1,10 @@
 package com.sageserpent.plutonium.javaApi
 
+import com.sageserpent.plutonium.utilities.{Finite, NegativeInfinity, Unbounded}
+
 import java.time.Instant
 import java.util.function.{BiConsumer, Consumer}
-
-import com.sageserpent.americium.{Finite, NegativeInfinity, Unbounded}
-import com.sageserpent.plutonium.{
-  RecorderFactory,
-  UniqueItemSpecification,
-  capturePatches,
-  Change => ScalaChange
-}
+import com.sageserpent.plutonium.{RecorderFactory, UniqueItemSpecification, capturePatches, Change => ScalaChange}
 
 object Change {
   def forOneItem[Item](when: Unbounded[Instant],
@@ -34,7 +29,7 @@ object Change {
   def forOneItem[Item](id: Any,
                        clazz: Class[Item],
                        update: Consumer[Item]): ScalaChange =
-    forOneItem(NegativeInfinity[Instant](), id, clazz, update)
+    forOneItem(NegativeInfinity, id, clazz, update)
 
   def forTwoItems[Item1, Item2](when: Unbounded[Instant],
                                 id1: Any,
@@ -66,5 +61,5 @@ object Change {
                                 id2: Any,
                                 clazz2: Class[Item2],
                                 update: BiConsumer[Item1, Item2]): ScalaChange =
-    forTwoItems(NegativeInfinity[Instant](), id1, clazz1, id2, clazz2, update)
+    forTwoItems(NegativeInfinity, id1, clazz1, id2, clazz2, update)
 }

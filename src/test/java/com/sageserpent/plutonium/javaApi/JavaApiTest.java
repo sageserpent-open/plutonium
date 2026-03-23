@@ -1,10 +1,11 @@
 package com.sageserpent.plutonium.javaApi;
 
-import com.sageserpent.americium.NegativeInfinity;
 import com.sageserpent.plutonium.Bitemporal;
 import com.sageserpent.plutonium.Scope;
 import com.sageserpent.plutonium.World;
 import com.sageserpent.plutonium.efficient.WorldEfficientInMemoryImplementation;
+import com.sageserpent.plutonium.utilities.NegativeInfinity$;
+import com.sageserpent.plutonium.utilities.Unbounded;
 import org.junit.Test;
 
 import java.time.Instant;
@@ -13,7 +14,7 @@ public class JavaApiTest {
     @Test
     public void smokeTestTheApi() {
         try (World world = new WorldEfficientInMemoryImplementation()) {
-            final NegativeInfinity<Instant> atTheBeginningOfTime = NegativeInfinity.apply();
+            final Unbounded<Instant> atTheBeginningOfTime = (Unbounded) NegativeInfinity$.MODULE$;
 
             {
                 final Instant asOf = Instant.now();

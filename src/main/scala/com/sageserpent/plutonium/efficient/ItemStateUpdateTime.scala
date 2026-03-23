@@ -1,8 +1,8 @@
 package com.sageserpent.plutonium.efficient
 
-import com.sageserpent.americium.Unbounded
 import com.sageserpent.plutonium.WorldImplementationCodeFactoring.EventOrderingKey
 import com.sageserpent.plutonium.efficient.ItemStateUpdateTime.IntraEventIndex
+import com.sageserpent.plutonium.utilities.Unbounded
 
 import java.time.Instant
 

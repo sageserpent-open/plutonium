@@ -1,18 +1,10 @@
 package com.sageserpent.plutonium.efficient
 
-import com.sageserpent.americium.Unbounded
 import ItemStateStorage.SnapshotBlob
 import com.sageserpent.plutonium.World.Revision
 import com.sageserpent.plutonium.storage.BlobStorageReferenceImplementation
-import com.sageserpent.plutonium.{
-  Bitemporal,
-  Event,
-  EventId,
-  ItemCache,
-  Scope,
-  World,
-  WorldImplementationCodeFactoring
-}
+import com.sageserpent.plutonium.utilities.Unbounded
+import com.sageserpent.plutonium.{Bitemporal, Event, EventId, ItemCache, Scope, World, WorldImplementationCodeFactoring}
 
 import java.time.Instant
 

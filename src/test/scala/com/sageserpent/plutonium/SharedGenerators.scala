@@ -1,6 +1,6 @@
 package com.sageserpent.plutonium
 
-import com.sageserpent.americium.{
+import com.sageserpent.plutonium.utilities.{
   Finite,
   NegativeInfinity,
   PositiveInfinity,
@@ -16,12 +16,14 @@ trait SharedGenerators {
   val instantGenerator = Arbitrary.arbitrary[Long] map Instant.ofEpochMilli
 
   val unboundedInstantGenerator: Gen[Unbounded[Instant]] = Gen.frequency(
-    1  -> Gen.oneOf(NegativeInfinity[Instant], PositiveInfinity[Instant]),
-    10 -> (instantGenerator map Finite.apply))
+    1  -> Gen.oneOf(NegativeInfinity, PositiveInfinity),
+    10 -> (instantGenerator map (Finite(_)))
+  )
 
   val changeWhenGenerator: Gen[Unbounded[Instant]] = Gen.frequency(
-    1  -> Gen.const(NegativeInfinity[Instant]),
-    10 -> (instantGenerator map (Finite(_))))
+    1  -> Gen.const(NegativeInfinity),
+    10 -> (instantGenerator map (Finite(_)))
+  )
 
   val stringIdGenerator = Gen.chooseNum(50, 100) map ("Name: " + _.toString)
 

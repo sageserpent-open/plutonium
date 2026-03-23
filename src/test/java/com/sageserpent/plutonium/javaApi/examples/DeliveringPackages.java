@@ -1,8 +1,7 @@
 package com.sageserpent.plutonium.javaApi.examples;
 
 import com.google.common.collect.ImmutableMap;
-import com.sageserpent.americium.NegativeInfinity;
-import com.sageserpent.americium.PositiveInfinity;
+import com.sageserpent.plutonium.utilities.*;
 import com.sageserpent.plutonium.Event;
 import com.sageserpent.plutonium.Scope;
 import com.sageserpent.plutonium.World;
@@ -32,7 +31,7 @@ public class DeliveringPackages {
                 // Make a query at the end of time for any kind of thing that
                 // could be booked into the world via a revision...
                 final Scope scope =
-                        world.scopeFor(PositiveInfinity.apply(), Instant.now()
+                        world.scopeFor((Unbounded)PositiveInfinity$.MODULE$, Instant.now()
                                    /*As-of time that picks out the revision
                                    .*/);
                 assert scope.render(Bitemporal.wildcard(Object.class))
@@ -57,7 +56,7 @@ public class DeliveringPackages {
                 {
                     // Make a query at the beginning of time...
                     final Scope scope =
-                            world.scopeFor(NegativeInfinity.apply(), Instant
+                            world.scopeFor((Unbounded) NegativeInfinity$.MODULE$, Instant
                                     .now() /*As-of time that picks out the
                                 revision.*/);
                     assert "Big warehouse by motorway".equals(scope.render(
