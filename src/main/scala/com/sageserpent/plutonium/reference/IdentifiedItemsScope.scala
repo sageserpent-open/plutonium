@@ -1,9 +1,7 @@
 package com.sageserpent.plutonium.reference
 
-import cats.effect.unsafe.implicits.global
-import cats.effect.{IO, Resource}
 import com.sageserpent.americium.Unbounded
-import PatchRecorder.UpdateConsumer
+import com.sageserpent.plutonium.reference.PatchRecorder.UpdateConsumer
 import com.sageserpent.plutonium.{
   AbstractPatch,
   Annihilation,
@@ -20,6 +18,7 @@ import com.sageserpent.plutonium.{
 import java.time.Instant
 import scala.collection.mutable.MultiDict
 import scala.reflect.runtime.universe.{Super => _, This => _}
+import scala.util.Using
 
 class IdentifiedItemsScope extends IdentifiedItemAccess {
   identifiedItemsScopeThis =>
@@ -116,58 +115,46 @@ class IdentifiedItemsScope extends IdentifiedItemAccess {
   ): Unit = {
     idToItemsMultiMap.clear()
 
-    Resource
-      .make(IO {
-        allItemsAreLocked = false
-      })(_ =>
-        IO {
-          allItemsAreLocked = true
-        }
-      )
-      .use(_ =>
-        IO {
-          val patchRecorder
-              : PatchRecorderImplementation with PatchRecorderContracts =
-            new PatchRecorderImplementation(_when) with PatchRecorderContracts {
-              private val itemsAreLockedResource =
-                Resource.make(IO {
-                  allItemsAreLocked = true
-                })(_ =>
-                  IO {
-                    allItemsAreLocked = false
-                  }
-                )
-              override val updateConsumer: UpdateConsumer =
-                new UpdateConsumer {
-                  override def captureAnnihilation(
-                      eventId: EventId,
-                      annihilation: Annihilation
-                  ): Unit = {
-                    annihilation(identifiedItemsScopeThis)
-                  }
+    Using.resource(new AutoCloseable {
+      allItemsAreLocked = false
 
-                  override def capturePatch(
-                      when: Unbounded[Instant],
-                      eventId: EventId,
-                      patch: AbstractPatch
-                  ): Unit = {
-                    patch(identifiedItemsScopeThis)
-                    itemsAreLockedResource
-                      .use(_ =>
-                        IO {
-                          patch.checkInvariants(identifiedItemsScopeThis)
-                        }
-                      )
-                      .unsafeRunSync()
-                  }
+      override def close(): Unit = allItemsAreLocked = true
+    }) { _ =>
+      val patchRecorder
+          : PatchRecorderImplementation with PatchRecorderContracts =
+        new PatchRecorderImplementation(_when) with PatchRecorderContracts {
+          private val itemsAreLockedResource =
+            Using.resource[AutoCloseable, Unit](new AutoCloseable {
+              allItemsAreLocked = true
+
+              override def close(): Unit = allItemsAreLocked = false
+            })(_)
+
+          override val updateConsumer: UpdateConsumer =
+            new UpdateConsumer {
+              override def captureAnnihilation(
+                  eventId: EventId,
+                  annihilation: Annihilation
+              ): Unit = {
+                annihilation(identifiedItemsScopeThis)
+              }
+
+              override def capturePatch(
+                  when: Unbounded[Instant],
+                  eventId: EventId,
+                  patch: AbstractPatch
+              ): Unit = {
+                patch(identifiedItemsScopeThis)
+                itemsAreLockedResource { _ =>
+                  patch.checkInvariants(identifiedItemsScopeThis)
                 }
+              }
             }
-
-          WorldImplementationCodeFactoring
-            .recordPatches(eventTimeline, patchRecorder)
         }
-      )
-      .unsafeRunSync()
+
+      WorldImplementationCodeFactoring
+        .recordPatches(eventTimeline, patchRecorder)
+    }
   }
 
   def itemsFor[Item](
