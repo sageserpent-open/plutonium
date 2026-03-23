@@ -1,7 +1,5 @@
 package com.sageserpent.plutonium
 
-import cats.effect.unsafe.implicits.global
-import cats.effect.{IO, Resource}
 import net.bytebuddy.description.method.MethodDescription
 import net.bytebuddy.dynamic.DynamicType.Builder
 import net.bytebuddy.implementation.MethodDelegation
@@ -18,11 +16,12 @@ import net.bytebuddy.matcher.{ElementMatcher, ElementMatchers}
 import java.lang.reflect.Method
 import java.util.concurrent.Callable
 import scala.reflect.runtime.universe.{Super => _, This => _}
+import scala.util.Using
 
 object StatefulItemProxyFactory {
   trait AcquiredState extends ProxyFactory.AcquiredState {
-    var _isGhost = false
-    var invariantCheckInProgress = false
+    var _isGhost                      = false
+    var invariantCheckInProgress      = false
     var unlockFullReadAccess: Boolean = false
 
     def recordAnnihilation(): Unit = {
@@ -187,26 +186,17 @@ trait StatefulItemProxyFactory extends ProxyFactory {
         @SuperCall superCall: Callable[_],
         @FieldValue("acquiredState") acquiredState: AcquiredState
     ) = {
-      if (!acquiredState.unlockFullReadAccess)
-        Resource
-          .make(IO {
-            acquiredState.unlockFullReadAccess = true
-          })(_ =>
-            IO {
-              acquiredState.unlockFullReadAccess = false
-            }
-          )
-          .use(_ =>
-            IO {
-              acquiredState.recordReadOnlyAccess(target)
-
-              superCall.call()
-            }
-          )
-          .unsafeRunSync()
-      else {
+      if (!acquiredState.unlockFullReadAccess) {
+        Using.resource(new AutoCloseable {
+          acquiredState.unlockFullReadAccess = true
+          override def close(): Unit = acquiredState.unlockFullReadAccess =
+            false
+        }) { _ =>
+          acquiredState.recordReadOnlyAccess(target)
+          superCall.call()
+        }
+      } else {
         acquiredState.recordReadOnlyAccess(target)
-
         superCall.call()
       }
     }
@@ -219,20 +209,12 @@ trait StatefulItemProxyFactory extends ProxyFactory {
     ): Unit = {
       apply(acquiredState)
       if (!acquiredState.invariantCheckInProgress) {
-        Resource
-          .make(IO {
+        Using
+          .resource(new AutoCloseable {
             acquiredState.invariantCheckInProgress = true
-          })(_ =>
-            IO {
+            override def close(): Unit =
               acquiredState.invariantCheckInProgress = false
-            }
-          )
-          .use(_ =>
-            IO {
-              superCall.call()
-            }
-          )
-          .unsafeRunSync()
+          })(_ => superCall.call())
       } else superCall.call()
     }
 

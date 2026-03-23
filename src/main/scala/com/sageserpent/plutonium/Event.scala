@@ -1,7 +1,5 @@
 package com.sageserpent.plutonium
 
-import cats.effect.unsafe.implicits.global
-import cats.effect.{IO, Resource}
 import com.sageserpent.americium
 import com.sageserpent.americium.{
   Finite,
@@ -20,6 +18,7 @@ import java.time.Instant
 import java.util.concurrent.Callable
 import scala.collection.mutable
 import scala.reflect.runtime.universe.{This => _, _}
+import scala.util.Using
 
 /** An event denotes some activity on a set of items taking place at a specific
   * time. In general, that time is *not* the time at which the event is booked
@@ -205,16 +204,11 @@ private[plutonium] object capturePatches {
           ) acquiredState: RecordingProxyAcquiredState
       ): Any =
         if (!acquiredState.unlockFullReadAccess)
-          Resource
-            .make(IO {
-              acquiredState.unlockFullReadAccess = true
-            })(_ =>
-              IO {
-                acquiredState.unlockFullReadAccess = false
-              }
-            )
-            .use(_ => IO { superCall.call() })
-            .unsafeRunSync()
+          Using.resource(new AutoCloseable {
+            acquiredState.unlockFullReadAccess = true
+            override def close(): Unit = acquiredState.unlockFullReadAccess =
+              false
+          })(_ => superCall.call())
         else superCall.call()
     }
   }
@@ -239,9 +233,6 @@ object Change {
   )(id: Any, update: Item => Unit): Change =
     forOneItem(Finite(when))(id, update)
 
-  def forOneItem[Item: TypeTag](id: Any, update: Item => Unit): Change =
-    forOneItem(americium.NegativeInfinity[Instant]())(id, update)
-
   def forOneItem[Item: TypeTag](
       when: Unbounded[Instant]
   )(id: Any, update: Item => Unit): Change = {
@@ -254,6 +245,9 @@ object Change {
       })
     )
   }
+
+  def forOneItem[Item: TypeTag](id: Any, update: Item => Unit): Change =
+    forOneItem(americium.NegativeInfinity[Instant]())(id, update)
 
   def forTwoItems[Item1: TypeTag, Item2: TypeTag](
       when: Instant
