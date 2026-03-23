@@ -88,18 +88,16 @@ public class JavaApiTest {
             {
                 final int followingRevision = 2;
 
-                final Scope scope = world.scopeFor(atTheBeginningOfTime, followingRevision);
-
-                final Account account = scope.render(Bitemporal.withId("Fred", Account.class)).head();
-
-                assert 3.8 == account.getCash();
-            }
-
-            {
-                int followingRevision = 3;
-
                 {
                     final Scope scope = world.scopeFor(atTheBeginningOfTime, followingRevision);
+
+                    final Account account = scope.render(Bitemporal.withId("Fred", Account.class)).head();
+
+                    assert 5.0 == account.getCash();
+                }
+
+                {
+                    final Scope scope = world.scopeFor(toStartWith, followingRevision);
 
                     final Account account = scope.render(Bitemporal.withId("Fred", Account.class)).head();
 
@@ -111,6 +109,34 @@ public class JavaApiTest {
 
                     final Account account = scope.render(Bitemporal.withId("Fred", Account.class)).head();
 
+                    assert 3.8 == account.getCash();
+                }
+            }
+
+            {
+                int followingRevision = 3;
+
+                {
+                    final Scope scope = world.scopeFor(atTheBeginningOfTime, followingRevision);
+
+                    final Account account = scope.render(Bitemporal.withId("Fred", Account.class)).head();
+
+                    assert 5.0 == account.getCash();
+                }
+
+                {
+                    final Scope scope = world.scopeFor(toStartWith, followingRevision);
+
+                    final Account account = scope.render(Bitemporal.withId("Fred", Account.class)).head();
+
+                    assert 3.8 == account.getCash();
+                }
+
+                {
+                    final Scope scope = world.scopeFor(oneHourLater, followingRevision);
+
+                    final Account account = scope.render(Bitemporal.withId("Fred", Account.class)).head();
+
                     assert 6.7 == account.getCash();
                 }
             }
@@ -118,21 +144,73 @@ public class JavaApiTest {
             {
                 int followingRevision = 4;
 
-                final Scope scope = world.scopeFor(twoHoursLater, followingRevision);
+                {
+                    final Scope scope = world.scopeFor(atTheBeginningOfTime, followingRevision);
 
-                final Iterable<Account> exampleIterable = scope.renderAsIterable(Bitemporal.withId("Fred", Account.class));
+                    final Account account = scope.render(Bitemporal.withId("Fred", Account.class)).head();
 
-                assert !exampleIterable.iterator().hasNext();
+                    assert 5.0 == account.getCash();
+                }
+
+                {
+                    final Scope scope = world.scopeFor(toStartWith, followingRevision);
+
+                    final Account account = scope.render(Bitemporal.withId("Fred", Account.class)).head();
+
+                    assert 3.8 == account.getCash();
+                }
+
+                {
+                    final Scope scope = world.scopeFor(oneHourLater, followingRevision);
+
+                    final Account account = scope.render(Bitemporal.withId("Fred", Account.class)).head();
+
+                    assert 6.7 == account.getCash();
+                }
+
+                {
+                    final Scope scope = world.scopeFor(twoHoursLater, followingRevision);
+
+                    final Iterable<Account> exampleIterable = scope.renderAsIterable(Bitemporal.withId("Fred", Account.class));
+
+                    assert !exampleIterable.iterator().hasNext();
+                }
             }
 
             {
                 int followingRevision = 5;
 
-                final Scope scope = world.scopeFor(toStartWith, followingRevision);
+                {
+                    final Scope scope = world.scopeFor(toStartWith, followingRevision);
 
-                final Account account = scope.render(Bitemporal.withId("Fred", Account.class)).head();
+                    final Account account = scope.render(Bitemporal.withId("Fred", Account.class)).head();
 
-                assert 3.0 == account.getCash();
+                    assert 3.0 == account.getCash();
+                }
+
+                {
+                    final Scope scope = world.scopeFor(toStartWith, followingRevision);
+
+                    final Account account = scope.render(Bitemporal.withId("Fred", Account.class)).head();
+
+                    assert 3.0 == account.getCash();
+                }
+
+                {
+                    final Scope scope = world.scopeFor(oneHourLater, followingRevision);
+
+                    final Account account = scope.render(Bitemporal.withId("Fred", Account.class)).head();
+
+                    assert 6.7 == account.getCash();
+                }
+
+                {
+                    final Scope scope = world.scopeFor(twoHoursLater, followingRevision);
+
+                    final Iterable<Account> exampleIterable = scope.renderAsIterable(Bitemporal.withId("Fred", Account.class));
+
+                    assert !exampleIterable.iterator().hasNext();
+                }
             }
         } catch (Exception exception) {
             exception.printStackTrace();
