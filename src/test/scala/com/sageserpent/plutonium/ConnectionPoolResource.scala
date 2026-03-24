@@ -19,7 +19,7 @@ trait ConnectionPoolResource {
       dataSource <- Resource.make(IO {
         val result = new HikariDataSource()
         result.setJdbcUrl(
-          s"jdbc:h2:file:${databaseDirectory.resolve(databaseName)};DB_CLOSE_ON_EXIT=FALSE;MV_STORE=FALSE;ANALYZE_AUTO=5000;ANALYZE_SAMPLE=50000"
+          s"jdbc:h2:file:${databaseDirectory.resolve(databaseName)};DB_CLOSE_ON_EXIT=FALSE;ANALYZE_AUTO=5000;ANALYZE_SAMPLE=50000"
         )
         result.setUsername("automatedTestIdentity")
         result
