@@ -243,10 +243,8 @@ trait BlobStorageConformanceAgainstReferenceImplementation
                     val traineeTimeslice  = trainee.timeSlice(when, inclusive)
                     val exemplarTimeslice = exemplar.timeSlice(when, inclusive)
                     val (traineeResult, exemplarResult) = traineeTimeslice
+                      .uniqueItemQueriesFor(clazz) -> exemplarTimeslice
                       .uniqueItemQueriesFor(clazz)
-                      .toList -> exemplarTimeslice
-                      .uniqueItemQueriesFor(clazz)
-                      .toList
 
                     checkResults(when, inclusive)(
                       traineeResult,
