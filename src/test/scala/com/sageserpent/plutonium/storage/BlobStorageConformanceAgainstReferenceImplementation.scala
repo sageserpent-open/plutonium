@@ -2,8 +2,19 @@ package com.sageserpent.plutonium.storage
 
 import cats.effect.unsafe.implicits.global
 import cats.effect.{IO, Resource}
-import com.sageserpent.plutonium.efficient.{BlobStorage, ItemStateStorage, ItemStateUpdateTime, Timeline}
-import com.sageserpent.plutonium.{ConnectionPoolResource, FooHistory, SharedGenerators, Thing, UniqueItemSpecification}
+import com.sageserpent.plutonium.efficient.{
+  BlobStorage,
+  ItemStateStorage,
+  ItemStateUpdateTime,
+  Timeline
+}
+import com.sageserpent.plutonium.{
+  ConnectionPoolResource,
+  FooHistory,
+  SharedGenerators,
+  Thing,
+  UniqueItemSpecification
+}
 import org.scalacheck.ScalacheckShapeless._
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.flatspec.AnyFlatSpec
@@ -135,13 +146,10 @@ trait BlobStorageConformanceAgainstReferenceImplementation
 
                   // NOTE: just use the result from the exemplar, as there is no
                   // guarantee that the result contents come back in the same
-                  // order
-                  // from the trainee and the exemplar. If execution reaches
-                  // this
-                  // point, we know there are the same unique item
-                  // specifications
-                  // with the same multiplicities, so there is no harm in doing
-                  // this.
+                  // order from the trainee and the exemplar. If execution
+                  // reaches this point, we know there are the same unique item
+                  // specifications with the same multiplicities, so there is no
+                  // harm in doing this.
 
                   if (traineeResult.nonEmpty) println("*** GOT RESULTS ***")
 
