@@ -154,11 +154,19 @@ trait BlobStorageConformanceAgainstReferenceImplementation
                   if (traineeResult.nonEmpty) println("*** GOT RESULTS ***")
 
                   exemplarResult.foreach(uniqueItemSpecification =>
-                    Try {
-                      traineeTimeslice.snapshotBlobFor(uniqueItemSpecification)
-                    }.toEither.left.map(_.getClass) should be(Try {
-                      exemplarTimeslice.snapshotBlobFor(uniqueItemSpecification)
-                    }.toEither.left.map(_.getClass))
+                    withClue(
+                      s"Blob mismatch for unique item specification: $uniqueItemSpecification\n"
+                    ) {
+                      Try {
+                        traineeTimeslice.snapshotBlobFor(
+                          uniqueItemSpecification
+                        )
+                      }.toEither.left.map(_.getClass) should be(Try {
+                        exemplarTimeslice.snapshotBlobFor(
+                          uniqueItemSpecification
+                        )
+                      }.toEither.left.map(_.getClass))
+                    }
                   )
                 }
 
