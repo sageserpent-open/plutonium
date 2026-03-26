@@ -260,9 +260,9 @@ object BlobStorageOnH2 {
   }
 
   private def unpack(when: Unbounded[Instant]): Array[Any] = when match {
-    case NegativeInfinity => Array(-1L, Instant.EPOCH)
-    case Finite(unlifted) => Array(0L, unlifted)
-    case PositiveInfinity => Array(1L, Instant.EPOCH)
+    case NegativeInfinity => Array(-1L, Instant.EPOCH.toEpochMilli)
+    case Finite(unlifted) => Array(0L, unlifted.toEpochMilli)
+    case PositiveInfinity => Array(1L, Instant.EPOCH.toEpochMilli)
   }
 
   def lineageSql(lineageId: LineageId, revision: Revision): SQLSyntax = {
