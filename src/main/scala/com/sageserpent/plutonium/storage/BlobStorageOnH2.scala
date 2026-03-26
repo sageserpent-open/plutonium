@@ -244,25 +244,25 @@ object BlobStorageOnH2 {
 
   private def unpack(when: ItemStateUpdateTime): Array[Any] = when match {
     case LowerBoundOfTimeslice(when) =>
-      unpack(when) ++ Array(-1, 0, 0, 0)
+      unpack(when) ++ Array[Long](-1L, 0L, 0L, 0L)
     case ItemStateUpdateKey(
           (eventWhen, eventRevision, eventTiebreaker),
           intraEventIndex
         ) =>
-      unpack(eventWhen) ++ Array(
-        0,
-        eventRevision,
-        eventTiebreaker,
-        intraEventIndex
+      unpack(eventWhen) ++ Array[Long](
+        0L,
+        eventRevision.toLong,
+        eventTiebreaker.toLong,
+        intraEventIndex.toLong
       )
     case UpperBoundOfTimeslice(when) =>
-      unpack(when) ++ Array(1, 0, 0, 0)
+      unpack(when) ++ Array[Long](1L, 0L, 0L, 0L)
   }
 
   private def unpack(when: Unbounded[Instant]): Array[Any] = when match {
-    case NegativeInfinity => Array(-1, 0)
-    case Finite(unlifted) => Array(0, unlifted)
-    case PositiveInfinity => Array(1, 0)
+    case NegativeInfinity => Array(-1L, Instant.EPOCH)
+    case Finite(unlifted) => Array(0L, unlifted)
+    case PositiveInfinity => Array(1L, Instant.EPOCH)
   }
 
   def lineageSql(lineageId: LineageId, revision: Revision): SQLSyntax = {
