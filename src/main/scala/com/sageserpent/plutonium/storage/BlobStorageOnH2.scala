@@ -88,7 +88,7 @@ object BlobStorageOnH2 {
               CREATE TABLE Snapshot(
                 ItemId                      VARBINARY         NOT NULL,
                 ItemClass                   VARBINARY         NOT NULL,
-                Time                        ARRAY             NOT NULL,
+                Time                        BIGINT ARRAY      NOT NULL,
                 LineageId                   BIGINT            REFERENCES Lineage(LineageId),
                 Revision                    INTEGER           NOT NULL,
                 Payload                     VARBINARY         NULL,
@@ -98,7 +98,7 @@ object BlobStorageOnH2 {
 
             sql"""
               CREATE TABLE TimeRevision(
-                Time                        ARRAY             NOT NULL,
+                Time                        BIGINT ARRAY      NOT NULL,
                 LineageId                   BIGINT            REFERENCES Lineage(LineageId),
                 Revision                    INTEGER           NOT NULL,
                 PRIMARY KEY (Time, LineageId, Revision)
@@ -259,7 +259,7 @@ object BlobStorageOnH2 {
       unpack(when) ++ Array[Long](1L, 0L, 0L, 0L)
   }
 
-  private def unpack(when: Unbounded[Instant]): Array[Any] = when match {
+  private def unpack(when: Unbounded[Instant]): Array[Long] = when match {
     case NegativeInfinity => Array(-1L, Instant.EPOCH.toEpochMilli)
     case Finite(unlifted) => Array(0L, unlifted.toEpochMilli)
     case PositiveInfinity => Array(1L, Instant.EPOCH.toEpochMilli)
