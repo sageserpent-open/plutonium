@@ -153,21 +153,37 @@ trait BlobStorageConformanceAgainstReferenceImplementation
 
                   if (traineeResult.nonEmpty) println("*** GOT RESULTS ***")
 
-                  exemplarResult.foreach(uniqueItemSpecification =>
+                  exemplarResult.foreach { uniqueItemSpecification =>
                     withClue(
-                      s"Blob mismatch for unique item specification: $uniqueItemSpecification\n"
+                      s"Retrieved unique item specification mismatch for unique item specification: $uniqueItemSpecification\n"
                     ) {
+                      traineeTimeslice.uniqueItemQueriesFor(
+                        uniqueItemSpecification
+                      ) should contain theSameElementsAs exemplarTimeslice
+                        .uniqueItemQueriesFor(
+                          uniqueItemSpecification
+                        )
+                    }
+
+                    withClue(
+                      s"Retrieved blob mismatch for unique item specification: $uniqueItemSpecification\n"
+                    ) {
+                      // NOTE: wrap the retrievals in `Try` because sometimes
+                      // `uniqueItemSpecification` is too wide-ranging and would
+                      // match more than one snapshot.
                       Try {
-                        traineeTimeslice.snapshotBlobFor(
-                          uniqueItemSpecification
-                        )
+                        traineeTimeslice
+                          .snapshotBlobFor(
+                            uniqueItemSpecification
+                          )
                       }.toEither.left.map(_.getClass) should be(Try {
-                        exemplarTimeslice.snapshotBlobFor(
-                          uniqueItemSpecification
-                        )
+                        exemplarTimeslice
+                          .snapshotBlobFor(
+                            uniqueItemSpecification
+                          )
                       }.toEither.left.map(_.getClass))
                     }
-                  )
+                  }
                 }
 
                 val (trainee, exemplar) =
