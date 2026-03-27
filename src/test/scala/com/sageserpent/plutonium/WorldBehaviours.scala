@@ -1191,7 +1191,7 @@ trait WorldBehaviours
               )
               .unsafeRunSync
         },
-        minSuccessful(12),
+        minSuccessful(200),
         sizeRange(5)
       )
     }
