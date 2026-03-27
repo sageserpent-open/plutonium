@@ -9,7 +9,7 @@ lazy val openSesames = Seq(
 
 lazy val javaVersion = "17"
 
-ThisBuild / scalaVersion := "2.13.16"
+ThisBuild / scalaVersion := "2.13.18"
 
 ThisBuild / javacOptions ++= Seq("-source", javaVersion, "-target", javaVersion)
 
