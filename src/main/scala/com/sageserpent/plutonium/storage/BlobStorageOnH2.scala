@@ -231,7 +231,7 @@ object BlobStorageOnH2 {
            AND RelevantItem.LineageId = DominantRevisionInLineage.LineageId
            AND RelevantItem.Revision = DominantRevisionInLineage.Revision
       ORDER BY Time DESC)
-      SELECT ItemId, ItemClass${payloadSelection}
+      SELECT ItemId, ItemClass$payloadSelection
       FROM DominantEntriesByItemIdAndItemClass
       WHERE ItemId != $placeholderItemIdBytes
             AND ItemClass != $placeholderItemClazzBytes
@@ -503,7 +503,6 @@ case class BlobStorageOnH2(
             }
           )
           .unsafeRunSync()
-          .to(LazyList)
           .map { payload =>
             assert(payload.nonEmpty)
             serializationFacade.fromBytes(payload).asInstanceOf[SnapshotBlob]

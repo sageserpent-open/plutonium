@@ -31,7 +31,7 @@ lazy val settings = Seq(
   libraryDependencies += "com.google.guava"     % "guava"      % "33.5.0-jre",
   libraryDependencies += "com.github.ben-manes.caffeine" % "caffeine" % "3.2.3",
   libraryDependencies += "org.scalikejdbc" %% "scalikejdbc" % "4.3.5",
-  libraryDependencies += "com.h2database" % "h2" % "2.1.212", // Versions >= 2.1.214 break the tests for `BlobStorageOnH2`.
+  libraryDependencies += "com.h2database" % "h2" % "2.4.240", // Versions >= 2.1.214 break the tests for `BlobStorageOnH2`.
   libraryDependencies += "com.zaxxer" % "HikariCP"  % "7.0.2",
   libraryDependencies += "org.slf4j"  % "slf4j-api" % "2.0.17" % "provided",
   libraryDependencies += "com.sageserpent" %% "americium-junit5" % "2.1.0" % "test",
@@ -48,7 +48,8 @@ lazy val settings = Seq(
   libraryDependencies += "org.typelevel" %% "cats-testkit-scalatest" % "2.1.5" % "test",
   libraryDependencies += "com.github.alexarchambault" %% "scalacheck-shapeless_1.14" % "1.2.5" % "test",
   libraryDependencies += "org.scala-lang.modules" %% "scala-parallel-collections" % "1.2.0" % "test",
-  publishMavenStyle := true,
+  libraryDependencies += "com.lihaoyi" %% "pprint" % "0.9.6" % "test",
+  publishMavenStyle                    := true,
   licenses += ("MIT", url("http://opensource.org/licenses/MIT")),
   bintrayVcsUrl := Some("git@github.com:sageserpent-open/plutonium.git"),
   Test / fork   := true,
