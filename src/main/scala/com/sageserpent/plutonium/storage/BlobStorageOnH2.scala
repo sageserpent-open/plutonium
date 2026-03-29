@@ -210,27 +210,28 @@ object BlobStorageOnH2 {
       WITH RelevantItem AS (
         SELECT ItemId, ItemClass, Time, LineageId, Revision, Payload
         FROM Snapshot
-      ${clauseForItemSelectionSql.fold(sqls"")(clause => sqls"WHERE $clause")}),
-      DominantEntriesByItemIdAndItemClass AS(
-      SELECT DISTINCT ON(ItemId, ItemClass)
+        ${clauseForItemSelectionSql.fold(sqls"")(clause => sqls"WHERE $clause")}),
+      DominantEntriesByItemIdAndItemClass AS (
+        SELECT DISTINCT ON(ItemId, ItemClass)
           ItemId,
           ItemClass,
           RelevantItem.Time,
           Payload
-      FROM RelevantItem
-      JOIN (SELECT DISTINCT ON(TimeRevision.Time)
-              TimeRevision.Time,
-                 TimeRevision.LineageId,
-              TimeRevision.Revision
+        FROM RelevantItem
+        JOIN (
+          SELECT DISTINCT ON(TimeRevision.Time)
+            TimeRevision.Time,
+            TimeRevision.LineageId,
+            TimeRevision.Revision
           FROM TimeRevision JOIN RelevantItem
           ON TimeRevision.Time = RelevantItem.Time
           WHERE $lineageAndTimeSelectionSql
-            ORDER BY TimeRevision.LineageId DESC,
-                     TimeRevision.Revision DESC) AS DominantRevisionInLineage
+          ORDER BY TimeRevision.LineageId DESC,
+                   TimeRevision.Revision DESC) AS DominantRevisionInLineage
         ON RelevantItem.Time = DominantRevisionInLineage.Time
            AND RelevantItem.LineageId = DominantRevisionInLineage.LineageId
            AND RelevantItem.Revision = DominantRevisionInLineage.Revision
-      ORDER BY Time DESC)
+        ORDER BY Time DESC)
       SELECT ItemId, ItemClass$payloadSelection
       FROM DominantEntriesByItemIdAndItemClass
       WHERE ItemId != $placeholderItemIdBytes
@@ -281,10 +282,10 @@ object BlobStorageOnH2 {
     }
 
   private def lessThanOrEqualTo(when: ItemStateUpdateTime): SQLSyntax =
-    sqls"""(TimeRevision.Time <= ${unpack(when)})"""
+    sqls"""TimeRevision.Time <= ${unpack(when)}"""
 
   private def lessThan(when: ItemStateUpdateTime): SQLSyntax =
-    sqls"""(TimeRevision.Time < ${unpack(when)})"""
+    sqls"""TimeRevision.Time < ${unpack(when)}"""
 }
 
 case class BlobStorageOnH2(
