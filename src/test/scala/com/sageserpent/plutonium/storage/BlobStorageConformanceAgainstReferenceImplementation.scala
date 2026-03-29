@@ -63,7 +63,9 @@ object BlobStorageConformanceAgainstReferenceImplementation
     Factory.lift(Trials.api.instants)
 
   implicit val uuidFactory: Factory[UUID] = Factory.lift(Trials.api.delay {
-    Trials.api.only(UUID.randomUUID())
+    Trials.api.longs.flatMap(msb =>
+      Trials.api.longs.map(lsb => new UUID(msb, lsb))
+    )
   })
   val maximumNumberOfAlternativeBlobStorages = 10
 
@@ -79,7 +81,9 @@ object BlobStorageConformanceAgainstReferenceImplementation
 
   def operationListsUsingIds(ids: Set[Any]): Trials[List[Operation]] = {
     implicit val idFactory: Factory[Any] =
-      Factory.lift(Trials.api.choose(ids))
+      Factory.lift(
+        Trials.api.chooseWithWeights(ids.zip(LazyList.from(1, 1)).map(_.swap))
+      )
 
     implicit val clazzFactory: Factory[Class[_]] =
       Factory.lift(
@@ -150,8 +154,8 @@ trait BlobStorageConformanceAgainstReferenceImplementation
       var counter = 0
 
       operationsTrials
-        .withStrategy(cycle => CasesLimitStrategy.counted(200, 20.0))
-        .withShrinkageAttemptsLimit(20)
+        .withLimit(200)
+        .withShrinkageAttemptsLimit(50)
         .supplyTo { operations =>
           println(counter)
           counter += 1
