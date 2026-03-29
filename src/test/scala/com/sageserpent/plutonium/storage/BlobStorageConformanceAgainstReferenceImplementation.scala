@@ -155,7 +155,7 @@ trait BlobStorageConformanceAgainstReferenceImplementation
 
       operationsTrials
         .withLimit(200)
-        .withShrinkageAttemptsLimit(50)
+        .withShrinkageAttemptsLimit(100)
         .supplyTo { operations =>
           println(counter)
           counter += 1
