@@ -6,14 +6,7 @@ import cats.implicits.{catsSyntaxTuple2Semigroupal, catsSyntaxTuple4Semigroupal}
 import com.sageserpent.americium.{Factory, Trials}
 import com.sageserpent.plutonium.efficient.ItemStateStorage.SnapshotBlob
 import com.sageserpent.plutonium.efficient._
-import com.sageserpent.plutonium.utilities.{Finite, NegativeInfinity}
-import com.sageserpent.plutonium.{
-  ConnectionPoolResource,
-  FooHistory,
-  SharedGenerators,
-  Thing,
-  UniqueItemSpecification
-}
+import com.sageserpent.plutonium.{ConnectionPoolResource, FooHistory, SharedGenerators, Thing, UniqueItemSpecification, storage}
 import org.scalatest.LoneElement.convertToCollectionLoneElementWrapper
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -27,7 +20,7 @@ import scala.concurrent.duration.FiniteDuration
 import scala.util.Try
 
 trait BlobStorageResource {
-  val blobStorageResource: Resource[IO, Timeline.BlobStorage]
+  val blobStorageResource: Resource[IO, storage.BlobStorageOnH2.BlobStorage]
 }
 
 trait BlobStorageOnH2DatabaseSetupResource extends ConnectionPoolResource {
@@ -124,18 +117,20 @@ object BlobStorageConformanceAgainstReferenceImplementation
 
   case class Revision(
       recordingDatums: Map[
-        ItemStateUpdateTime,
+        Instant,
         Map[UniqueItemSpecification, Option[ItemStateStorage.SnapshotBlob]]
       ]
   ) extends Operation
 
-  case class Retaining(when: ItemStateUpdateTime) extends Operation
+  case class Retaining(when: Instant) extends Operation
 
   case class Querying(
-      when: ItemStateUpdateTime,
+      when: Instant,
       itemSpecification: Either[UniqueItemSpecification, Class[_]],
       inclusive: Boolean
   ) extends Operation
+
+  implicit val ordering: Ordering[Instant] = Ordering.by[Instant, Long](_.toEpochMilli)
 }
 
 trait BlobStorageConformanceAgainstReferenceImplementation
@@ -161,7 +156,7 @@ trait BlobStorageConformanceAgainstReferenceImplementation
             .use(blobStorage =>
               IO {
                 val pairsOfTraineeAndExemplarImplementations: mutable.Queue[
-                  (Timeline.BlobStorage, Timeline.BlobStorage)
+                  (BlobStorageOnH2.BlobStorage, BlobStorageOnH2.BlobStorage)
                 ] =
                   mutable.Queue.empty
 
@@ -175,10 +170,10 @@ trait BlobStorageConformanceAgainstReferenceImplementation
                   operation <- operations
                 } {
                   def checkResults(
-                      when: ItemStateUpdateTime,
+                      when: Instant,
                       inclusive: Boolean,
-                      trainee: Timeline.BlobStorage,
-                      exemplar: Timeline.BlobStorage
+                      trainee: BlobStorageOnH2.BlobStorage,
+                      exemplar: BlobStorageOnH2.BlobStorage
                   )(
                       traineeResult: Seq[UniqueItemSpecification],
                       traineeTimeslice: BlobStorage.Timeslice[
@@ -385,7 +380,7 @@ trait BlobStorageConformanceAgainstReferenceImplementation
             val builder = empty.openRevision()
 
             builder.record(
-              LowerBoundOfTimeslice(when = NegativeInfinity),
+              Instant.EPOCH minusSeconds 1,
               Map(
                 theThing -> Some(
                   value = thingBlob
@@ -399,8 +394,7 @@ trait BlobStorageConformanceAgainstReferenceImplementation
             builder.build()
           }
 
-          val timeSlice = revised.timeSlice(
-            LowerBoundOfTimeslice(when = Finite(unlifted = Instant.EPOCH)),
+          val timeSlice = revised.timeSlice(Instant.EPOCH,
             inclusive = true
           )
 
@@ -443,10 +437,10 @@ trait BlobStorageConformanceAgainstReferenceImplementation
 trait BlobStorageOnH2Resource
     extends BlobStorageResource
     with BlobStorageOnH2DatabaseSetupResource {
-  override val blobStorageResource: Resource[IO, Timeline.BlobStorage] =
+  override val blobStorageResource: Resource[IO, storage.BlobStorageOnH2.BlobStorage] =
     connectionPoolResource.flatMap(connectionPool =>
       Resource.make(IO {
-        BlobStorageOnH2.empty(connectionPool): Timeline.BlobStorage
+        BlobStorageOnH2.empty(connectionPool): storage.BlobStorageOnH2.BlobStorage
       })(_ => IO {})
     )
 }

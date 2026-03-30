@@ -5,21 +5,11 @@ import cats.effect.{IO, Resource}
 import cats.implicits._
 import com.esotericsoftware.kryo.kryo5.Kryo
 import com.esotericsoftware.kryo.kryo5.objenesis.strategy.StdInstantiatorStrategy
-import com.esotericsoftware.kryo.kryo5.util.{
-  DefaultClassResolver,
-  MapReferenceResolver,
-  Pool
-}
-import com.sageserpent.plutonium.UniqueItemSpecification
+import com.esotericsoftware.kryo.kryo5.util.{DefaultClassResolver, MapReferenceResolver, Pool}
+import com.sageserpent.plutonium.{UniqueItemSpecification, efficient, storage}
 import com.sageserpent.plutonium.efficient.BlobStorage.TimesliceContracts
 import com.sageserpent.plutonium.efficient.ItemStateStorage.SnapshotBlob
 import com.sageserpent.plutonium.efficient._
-import com.sageserpent.plutonium.utilities.{
-  Finite,
-  NegativeInfinity,
-  PositiveInfinity,
-  Unbounded
-}
 import io.altoo.serialization.kryo.scala.serializer.ScalaKryo
 import scalikejdbc._
 
@@ -30,6 +20,9 @@ import scala.collection.mutable.ArrayBuffer
 
 //noinspection SqlNoDataSourceInspection
 object BlobStorageOnH2 {
+  type BlobStorage =
+    efficient.BlobStorage[Instant, SnapshotBlob]
+
   type LineageId = Long
   type Revision  = Int
   private val sentinelLineageId         = -1L
@@ -88,7 +81,7 @@ object BlobStorageOnH2 {
               CREATE TABLE Snapshot(
                 ItemId                      VARBINARY         NOT NULL,
                 ItemClass                   VARBINARY         NOT NULL,
-                Time                        BIGINT ARRAY      NOT NULL,
+                Time                        BIGINT            NOT NULL,
                 LineageId                   BIGINT            REFERENCES Lineage(LineageId),
                 Revision                    INTEGER           NOT NULL,
                 Payload                     VARBINARY         NULL,
@@ -98,7 +91,7 @@ object BlobStorageOnH2 {
 
             sql"""
               CREATE TABLE TimeRevision(
-                Time                        BIGINT ARRAY      NOT NULL,
+                Time                        BIGINT            NOT NULL,
                 LineageId                   BIGINT            REFERENCES Lineage(LineageId),
                 Revision                    INTEGER           NOT NULL,
                 PRIMARY KEY (Time, LineageId, Revision)
@@ -145,9 +138,9 @@ object BlobStorageOnH2 {
   )(
       branchPoints: SortedMap[
         LineageId,
-        (Revision, Option[ItemStateUpdateTime])
+        (Revision, Option[Instant])
       ],
-      when: ItemStateUpdateTime,
+      when: Instant,
       includePayload: Boolean,
       inclusive: Boolean
   ): SQLSyntax = {
@@ -155,7 +148,7 @@ object BlobStorageOnH2 {
       if (includePayload) sqls", Payload" else sqls""
 
     val lineageAndTimeSelectionSql: SQLSyntax = sqls"""(
-      ${(branchPoints :\ ((None: Option[ItemStateUpdateTime]) -> List
+      ${(branchPoints :\ ((None: Option[Instant]) -> List
         .empty[SQLSyntax])) {
         case (
               (lineageId, (revision, cutoff)),
@@ -165,7 +158,7 @@ object BlobStorageOnH2 {
             .flatMap(cumulativeCutoffTime =>
               cutoff
                 .map(
-                  Ordering[ItemStateUpdateTime]
+                  Ordering[Instant]
                     .min(cumulativeCutoffTime, _)
                 )
             ) orElse cumulativeCutoff orElse cutoff
@@ -174,12 +167,12 @@ object BlobStorageOnH2 {
           ${if (inclusive)
               lessThanOrEqualTo(
                 foldedCutoff.fold(when)(
-                  Ordering[ItemStateUpdateTime].min(when, _)
+                  Ordering[Instant].min(when, _)
                 )
               )
             else
               foldedCutoff.fold(lessThan(when))(cutoffTime =>
-                if (Ordering[ItemStateUpdateTime].gt(when, cutoffTime))
+                if (Ordering[Instant].gt(when, cutoffTime))
                   lessThanOrEqualTo(cutoffTime)
                 else lessThan(when)
               )}
@@ -240,31 +233,10 @@ object BlobStorageOnH2 {
       """
   }
 
-  def whenSql(when: ItemStateUpdateTime): SQLSyntax =
+  def whenSql(when: Instant): SQLSyntax =
     sqls"""Time = ${unpack(when)}"""
 
-  private def unpack(when: ItemStateUpdateTime): Array[Any] = when match {
-    case LowerBoundOfTimeslice(when) =>
-      unpack(when) ++ Array[Long](-1L, 0L, 0L, 0L)
-    case ItemStateUpdateKey(
-          (eventWhen, eventRevision, eventTiebreaker),
-          intraEventIndex
-        ) =>
-      unpack(eventWhen) ++ Array[Long](
-        0L,
-        eventRevision.toLong,
-        eventTiebreaker.toLong,
-        intraEventIndex.toLong
-      )
-    case UpperBoundOfTimeslice(when) =>
-      unpack(when) ++ Array[Long](1L, 0L, 0L, 0L)
-  }
-
-  private def unpack(when: Unbounded[Instant]): Array[Long] = when match {
-    case NegativeInfinity => Array(-1L, Instant.EPOCH.toEpochMilli)
-    case Finite(unlifted) => Array(0L, unlifted.toEpochMilli)
-    case PositiveInfinity => Array(1L, Instant.EPOCH.toEpochMilli)
-  }
+  private def unpack(when: Instant): Long = when.toEpochMilli
 
   def lineageSql(lineageId: LineageId, revision: Revision): SQLSyntax = {
     sqls"""
@@ -281,10 +253,10 @@ object BlobStorageOnH2 {
       sqls"""Payload = $payloadBytes"""
     }
 
-  private def lessThanOrEqualTo(when: ItemStateUpdateTime): SQLSyntax =
+  private def lessThanOrEqualTo(when: Instant): SQLSyntax =
     sqls"""TimeRevision.Time <= ${unpack(when)}"""
 
-  private def lessThan(when: ItemStateUpdateTime): SQLSyntax =
+  private def lessThan(when: Instant): SQLSyntax =
     sqls"""TimeRevision.Time < ${unpack(when)}"""
 }
 
@@ -294,10 +266,10 @@ case class BlobStorageOnH2(
     revision: BlobStorageOnH2.Revision,
     ancestralBranchpoints: SortedMap[
       BlobStorageOnH2.LineageId,
-      (BlobStorageOnH2.Revision, Option[ItemStateUpdateTime])
+      (BlobStorageOnH2.Revision, Option[Instant])
     ]
-)(override implicit val timeOrdering: Ordering[ItemStateUpdateTime])
-    extends Timeline.BlobStorage {
+)(override implicit val timeOrdering: Ordering[Instant])
+    extends storage.BlobStorageOnH2.BlobStorage {
   thisBlobStorage =>
   import BlobStorageOnH2._
 
@@ -305,7 +277,7 @@ case class BlobStorageOnH2(
     class RevisionBuilderImplementation extends RevisionBuilder {
       type Recording =
         (
-            ItemStateUpdateTime,
+            Instant,
             Map[UniqueItemSpecification, Option[SnapshotBlob]]
         )
 
@@ -313,13 +285,13 @@ case class BlobStorageOnH2(
         mutable.ArrayBuffer.empty[Recording]
 
       override def record(
-          when: ItemStateUpdateTime,
+          when: Instant,
           snapshotBlobs: Map[UniqueItemSpecification, Option[SnapshotBlob]]
       ): Unit = {
         recordings += (when -> snapshotBlobs)
       }
 
-      override def build(): BlobStorage[ItemStateUpdateTime, SnapshotBlob] = {
+      override def build(): BlobStorage = {
         (for {
           newLineageEntry <- makeRevision()
           (newLineageId, newRevision) = newLineageEntry
@@ -409,13 +381,13 @@ case class BlobStorageOnH2(
     }
 
     new RevisionBuilderImplementation with RevisionBuilderContracts {
-      override protected def hasBooked(when: ItemStateUpdateTime): Boolean =
+      override protected def hasBooked(when: Instant): Boolean =
         recordings.view.map(_._1).contains(when)
     }
   }
 
   override def timeSlice(
-      when: ItemStateUpdateTime,
+      when: Instant,
       inclusive: Boolean
   ): BlobStorage.Timeslice[SnapshotBlob] = {
     trait TimesliceImplementation extends BlobStorage.Timeslice[SnapshotBlob] {
@@ -515,7 +487,7 @@ case class BlobStorageOnH2(
     new TimesliceImplementation with TimesliceContracts[SnapshotBlob]
   }
 
-  override def retainUpTo(when: ItemStateUpdateTime): Timeline.BlobStorage = {
+  override def retainUpTo(when: Instant): storage.BlobStorageOnH2.BlobStorage = {
     def makeRevision(): IO[(LineageId, Revision)] =
       BlobStorageOnH2
         .dbResource(connectionPool)
