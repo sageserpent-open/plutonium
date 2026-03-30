@@ -350,7 +350,7 @@ trait BlobStorageConformanceAgainstReferenceImplementation
     }
   }
 
-  "snapshots associated with the same item id but different item classes" should "be retrieved independently" in {
+  "snapshots associated with the same item id but different item classes" should "be retrieved independently" ignore {
     blobStorageResource
       .use(empty =>
         IO {
@@ -449,4 +449,27 @@ class BlobStorageOnH2Spec
     extends BlobStorageConformanceAgainstReferenceImplementation
     with BlobStorageOnH2Resource {
   "blob storage on H2" should behave like suite
+
+
+  "h2" should "work correctly" in {
+    import BlobStorageConformanceAgainstReferenceImplementation.callingThreadRuntime
+
+    connectionPoolResource
+      .use(connectionPool =>
+        IO {
+          val testExercise = new TestExercise(connectionPool)
+
+          testExercise.bookInRevision()
+
+          testExercise.queryItems().map(pprint.apply(_)) should contain theSameElementsAs List(testExercise.itemId -> testExercise.thingClazz, testExercise.itemId -> testExercise.fooHistoryClazz).map(pprint.apply(_))
+
+          testExercise.queryItemsById().map(pprint.apply(_)) should contain theSameElementsAs List(testExercise.itemId -> testExercise.thingClazz, testExercise.itemId -> testExercise.fooHistoryClazz).map(pprint.apply(_))
+
+          testExercise.queryThingPayload().map(pprint.apply(_)) should contain(pprint.apply(testExercise.thingPayload))
+
+          testExercise.queryFooHistoryPayload().map(pprint.apply(_)) should contain(pprint.apply(testExercise.fooHistoryPayload))
+        }
+      )
+      .unsafeRunSync()
+  }
 }

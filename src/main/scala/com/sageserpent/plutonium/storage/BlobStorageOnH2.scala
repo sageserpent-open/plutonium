@@ -5,11 +5,15 @@ import cats.effect.{IO, Resource}
 import cats.implicits._
 import com.esotericsoftware.kryo.kryo5.Kryo
 import com.esotericsoftware.kryo.kryo5.objenesis.strategy.StdInstantiatorStrategy
-import com.esotericsoftware.kryo.kryo5.util.{DefaultClassResolver, MapReferenceResolver, Pool}
-import com.sageserpent.plutonium.{UniqueItemSpecification, efficient, storage}
+import com.esotericsoftware.kryo.kryo5.util.{
+  DefaultClassResolver,
+  MapReferenceResolver,
+  Pool
+}
 import com.sageserpent.plutonium.efficient.BlobStorage.TimesliceContracts
 import com.sageserpent.plutonium.efficient.ItemStateStorage.SnapshotBlob
 import com.sageserpent.plutonium.efficient._
+import com.sageserpent.plutonium.{UniqueItemSpecification, efficient, storage}
 import io.altoo.serialization.kryo.scala.serializer.ScalaKryo
 import scalikejdbc._
 
@@ -109,7 +113,7 @@ object BlobStorageOnH2 {
         }
       )
 
-  private def dbResource(connectionPool: ConnectionPool): Resource[IO, DB] =
+  def dbResource(connectionPool: ConnectionPool): Resource[IO, DB] =
     Resource.make(IO { DB(connectionPool.borrow()) })(db => IO { db.close() })
 
   def itemSql(
@@ -203,7 +207,9 @@ object BlobStorageOnH2 {
       WITH RelevantItem AS (
         SELECT ItemId, ItemClass, Time, LineageId, Revision, Payload
         FROM Snapshot
-        ${clauseForItemSelectionSql.fold(sqls"")(clause => sqls"WHERE $clause")}),
+        ${clauseForItemSelectionSql.fold(sqls"")(clause =>
+        sqls"WHERE $clause"
+      )}),
       DominantEntriesByItemIdAndItemClass AS (
         SELECT DISTINCT ON(ItemId, ItemClass)
           ItemId,
@@ -233,6 +239,12 @@ object BlobStorageOnH2 {
       """
   }
 
+  private def lessThanOrEqualTo(when: Instant): SQLSyntax =
+    sqls"""TimeRevision.Time <= ${unpack(when)}"""
+
+  private def lessThan(when: Instant): SQLSyntax =
+    sqls"""TimeRevision.Time < ${unpack(when)}"""
+
   def whenSql(when: Instant): SQLSyntax =
     sqls"""Time = ${unpack(when)}"""
 
@@ -252,12 +264,6 @@ object BlobStorageOnH2 {
       val payloadBytes = serializationFacade.toBytesWithClass(payload)
       sqls"""Payload = $payloadBytes"""
     }
-
-  private def lessThanOrEqualTo(when: Instant): SQLSyntax =
-    sqls"""TimeRevision.Time <= ${unpack(when)}"""
-
-  private def lessThan(when: Instant): SQLSyntax =
-    sqls"""TimeRevision.Time < ${unpack(when)}"""
 }
 
 case class BlobStorageOnH2(
@@ -487,7 +493,9 @@ case class BlobStorageOnH2(
     new TimesliceImplementation with TimesliceContracts[SnapshotBlob]
   }
 
-  override def retainUpTo(when: Instant): storage.BlobStorageOnH2.BlobStorage = {
+  override def retainUpTo(
+      when: Instant
+  ): storage.BlobStorageOnH2.BlobStorage = {
     def makeRevision(): IO[(LineageId, Revision)] =
       BlobStorageOnH2
         .dbResource(connectionPool)
@@ -523,4 +531,298 @@ case class BlobStorageOnH2(
     }).unsafeRunSync()
   }
 
+}
+
+class TestExercise(connectionPool: ConnectionPool) {
+  val itemId: Array[Byte] = Array(2, 0)
+
+  val thingClazz: Array[Byte] = Array(1, 0, 106, 97, 118, 97, 46, 108, 97, 110,
+    103, 46, 67, 108, 97, 115, -13, 1, 1, 1, 99, 111, 109, 46, 115, 97, 103,
+    101, 115, 101, 114, 112, 101, 110, 116, 46, 112, 108, 117, 116, 111, 110,
+    105, 117, 109, 46, 84, 104, 105, 110, -25)
+
+  val fooHistoryClazz: Array[Byte] = Array(1, 0, 106, 97, 118, 97, 46, 108, 97,
+    110, 103, 46, 67, 108, 97, 115, -13, 1, 1, 1, 99, 111, 109, 46, 115, 97,
+    103, 101, 115, 101, 114, 112, 101, 110, 116, 46, 112, 108, 117, 116, 111,
+    110, 105, 117, 109, 46, 70, 111, 111, 72, 105, 115, 116, 111, 114, -7)
+
+  val eventTimeForBookedRevision: Long = -1000L
+
+  val lineageIdForBookedRevision: Long = 0L
+
+  val bookedRevision: Int = 1
+
+  val queryTime: Long = 0L
+
+  val thingPayload: Array[Byte] = Array(1, 0, 99, 111, 109, 46, 115, 97, 103,
+    101, 115, 101, 114, 112, 101, 110, 116, 46, 112, 108, 117, 116, 111, 110,
+    105, 117, 109, 46, 101, 102, 102, 105, 99, 105, 101, 110, 116, 46, 73, 116,
+    101, 109, 83, 116, 97, 116, 101, 83, 116, 111, 114, 97, 103, 101, 36, 83,
+    110, 97, 112, 115, 104, 111, 116, 66, 108, 111, -30, 1, 1, 1, 115, 99, 97,
+    108, 97, 46, 78, 111, 110, 101, -92, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0,
+    0, 0, 0, 0, 0, 1)
+
+  val fooHistoryPayload: Array[Byte] = Array(1, 0, 99, 111, 109, 46, 115, 97,
+    103, 101, 115, 101, 114, 112, 101, 110, 116, 46, 112, 108, 117, 116, 111,
+    110, 105, 117, 109, 46, 101, 102, 102, 105, 99, 105, 101, 110, 116, 46, 73,
+    116, 101, 109, 83, 116, 97, 116, 101, 83, 116, 111, 114, 97, 103, 101, 36,
+    83, 110, 97, 112, 115, 104, 111, 116, 66, 108, 111, -30, 1, 1, 1, 115, 99,
+    97, 108, 97, 46, 78, 111, 110, 101, -92, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 1)
+
+  val placeholderId: Array[Byte] = Array.empty
+
+  val placeholderClazz: Array[Byte] = Array.empty
+
+  def bookInRevision(): Unit = {
+    BlobStorageOnH2
+      .dbResource(connectionPool)
+      .use(db =>
+        IO {
+          db localTx { implicit session: DBSession =>
+            // NOTE: the sentinel lineage id is always branched from, never
+            // extended; this works because there should be no entry in
+            // 'Lineage' using the sentinel lineage id.
+            sql"""
+                MERGE INTO Lineage
+                USING DUAL
+                ON LineageId = ? AND MaximumRevision = ?
+                WHEN MATCHED THEN UPDATE SET MaximumRevision = 1 + MaximumRevision
+                WHEN NOT MATCHED THEN INSERT (MaximumRevision) VALUES(?)
+                   """
+              .batchAndReturnGeneratedKey(
+                "LineageId",
+                Seq(lineageIdForBookedRevision, bookedRevision, bookedRevision)
+              )
+              .apply[collection.Seq]()
+
+            sql"""
+              INSERT INTO Snapshot SET  ItemId = $itemId,  ItemClass = $thingClazz,  Time = $eventTimeForBookedRevision,  LineageId = $lineageIdForBookedRevision,  Revision = $bookedRevision,  Payload = $thingPayload
+              """.update()
+
+            sql"""
+              INSERT INTO Snapshot SET  ItemId = $itemId,  ItemClass = $fooHistoryClazz,  Time = $eventTimeForBookedRevision,  LineageId = $lineageIdForBookedRevision,  Revision = $bookedRevision,  Payload = $fooHistoryPayload
+              """.update()
+
+            sql"""
+              INSERT INTO TimeRevision SET Time = $eventTimeForBookedRevision, LineageId = $lineageIdForBookedRevision, Revision = $bookedRevision
+              """.update()
+          }
+        }
+      )
+      .unsafeRunSync()
+  }
+
+  def queryItems(): List[Any] =
+    BlobStorageOnH2
+      .dbResource(connectionPool)
+      .use(db =>
+        IO {
+          db localTx { implicit session: DBSession =>
+            sql"""
+                 WITH RelevantItem AS (
+                  SELECT ItemId, ItemClass, Time, LineageId, Revision, Payload
+                  FROM Snapshot
+                  ),
+                  DominantEntriesByItemIdAndItemClass AS (
+                  SELECT DISTINCT ON(ItemId, ItemClass)
+                  ItemId,
+                  ItemClass,
+                  RelevantItem.Time,
+                  Payload
+                  FROM RelevantItem
+                  JOIN (
+                  SELECT DISTINCT ON(TimeRevision.Time)
+                  TimeRevision.Time,
+                  TimeRevision.LineageId,
+                  TimeRevision.Revision
+                  FROM TimeRevision JOIN RelevantItem
+                  ON TimeRevision.Time = RelevantItem.Time
+                  WHERE (
+                  TimeRevision.Time <= $queryTime
+                  AND TimeRevision.LineageId = -1
+                  AND TimeRevision.Revision <= 1 OR
+                  TimeRevision.Time <= $queryTime
+                  AND TimeRevision.LineageId = 0
+                  AND TimeRevision.Revision <= 1)
+                  ORDER BY TimeRevision.LineageId DESC,
+                  TimeRevision.Revision DESC) AS DominantRevisionInLineage
+                  ON RelevantItem.Time = DominantRevisionInLineage.Time
+                  AND RelevantItem.LineageId = DominantRevisionInLineage.LineageId
+                  AND RelevantItem.Revision = DominantRevisionInLineage.Revision
+                  ORDER BY Time DESC)
+                SELECT ItemId, ItemClass
+                FROM DominantEntriesByItemIdAndItemClass
+                WHERE ItemId != $placeholderId
+            AND ItemClass != $placeholderClazz
+            AND Payload IS NOT NULL
+               """
+              .map(resultSet =>
+                resultSet.bytes("ItemId")
+                  -> resultSet.bytes("ItemClass")
+              )
+              .list()
+          }
+        }
+      )
+      .unsafeRunSync()
+
+  def queryItemsById(): List[Any] =
+    BlobStorageOnH2
+      .dbResource(connectionPool)
+      .use(db =>
+        IO {
+          db localTx { implicit session: DBSession =>
+            sql"""
+                 WITH RelevantItem AS (
+                    SELECT ItemId, ItemClass, Time, LineageId, Revision, Payload
+                    FROM Snapshot
+                    WHERE ItemId = $itemId),
+                    DominantEntriesByItemIdAndItemClass AS (
+                    SELECT DISTINCT ON(ItemId, ItemClass)
+                    ItemId,
+                    ItemClass,
+                    RelevantItem.Time,
+                    Payload
+                    FROM RelevantItem
+                    JOIN (
+                    SELECT DISTINCT ON(TimeRevision.Time)
+                    TimeRevision.Time,
+                    TimeRevision.LineageId,
+                    TimeRevision.Revision
+                    FROM TimeRevision JOIN RelevantItem
+                    ON TimeRevision.Time = RelevantItem.Time
+                    WHERE (
+                    TimeRevision.Time <= $queryTime
+                    AND TimeRevision.LineageId = -1
+                    AND TimeRevision.Revision <= 1 OR
+                    TimeRevision.Time <= $queryTime
+                    AND TimeRevision.LineageId = 0
+                    AND TimeRevision.Revision <= 1)
+                    ORDER BY TimeRevision.LineageId DESC,
+                    TimeRevision.Revision DESC) AS DominantRevisionInLineage
+                    ON RelevantItem.Time = DominantRevisionInLineage.Time
+                    AND RelevantItem.LineageId = DominantRevisionInLineage.LineageId
+                    AND RelevantItem.Revision = DominantRevisionInLineage.Revision
+                    ORDER BY Time DESC)
+                SELECT ItemId, ItemClass
+                FROM DominantEntriesByItemIdAndItemClass
+                WHERE ItemId != $placeholderId
+            AND ItemClass != $placeholderClazz
+            AND Payload IS NOT NULL
+               """
+              .map(resultSet =>
+                resultSet.bytes("ItemId")
+                  -> resultSet.bytes("ItemClass")
+              )
+              .list()
+          }
+        }
+      )
+      .unsafeRunSync()
+
+  def queryThingPayload(): Option[Array[Byte]] =
+    BlobStorageOnH2
+      .dbResource(connectionPool)
+      .use(db =>
+        IO {
+          db localTx { implicit session: DBSession =>
+            sql"""
+                 WITH RelevantItem AS (
+                    SELECT ItemId, ItemClass, Time, LineageId, Revision, Payload
+                    FROM Snapshot
+                    WHERE (ItemId = $itemId AND ItemClass = $thingClazz)),
+                    DominantEntriesByItemIdAndItemClass AS (
+                    SELECT DISTINCT ON(ItemId, ItemClass)
+                    ItemId,
+                    ItemClass,
+                    RelevantItem.Time,
+                    Payload
+                    FROM RelevantItem
+                    JOIN (
+                    SELECT DISTINCT ON(TimeRevision.Time)
+                    TimeRevision.Time,
+                    TimeRevision.LineageId,
+                    TimeRevision.Revision
+                    FROM TimeRevision JOIN RelevantItem
+                    ON TimeRevision.Time = RelevantItem.Time
+                    WHERE (
+                    TimeRevision.Time <= $queryTime
+                    AND TimeRevision.LineageId = -1
+                    AND TimeRevision.Revision <= 1 OR
+                    TimeRevision.Time <= $queryTime
+                    AND TimeRevision.LineageId = 0
+                    AND TimeRevision.Revision <= 1)
+                    ORDER BY TimeRevision.LineageId DESC,
+                    TimeRevision.Revision DESC) AS DominantRevisionInLineage
+                    ON RelevantItem.Time = DominantRevisionInLineage.Time
+                    AND RelevantItem.LineageId = DominantRevisionInLineage.LineageId
+                    AND RelevantItem.Revision = DominantRevisionInLineage.Revision
+                    ORDER BY Time DESC)
+                SELECT ItemId, ItemClass, Payload
+                FROM DominantEntriesByItemIdAndItemClass
+                WHERE ItemId != $placeholderId
+            AND ItemClass != $placeholderClazz
+            AND Payload IS NOT NULL
+               """
+              .map(resultSet => resultSet.bytes("Payload"))
+              .list()
+              .headOption
+          }
+        }
+      )
+      .unsafeRunSync()
+
+
+  def queryFooHistoryPayload(): Option[Array[Byte]] =
+    BlobStorageOnH2
+      .dbResource(connectionPool)
+      .use(db =>
+        IO {
+          db localTx { implicit session: DBSession =>
+            sql"""
+                 WITH RelevantItem AS (
+                    SELECT ItemId, ItemClass, Time, LineageId, Revision, Payload
+                    FROM Snapshot
+                    WHERE (ItemId = $itemId AND ItemClass = $fooHistoryClazz)),
+                    DominantEntriesByItemIdAndItemClass AS (
+                    SELECT DISTINCT ON(ItemId, ItemClass)
+                    ItemId,
+                    ItemClass,
+                    RelevantItem.Time,
+                    Payload
+                    FROM RelevantItem
+                    JOIN (
+                    SELECT DISTINCT ON(TimeRevision.Time)
+                    TimeRevision.Time,
+                    TimeRevision.LineageId,
+                    TimeRevision.Revision
+                    FROM TimeRevision JOIN RelevantItem
+                    ON TimeRevision.Time = RelevantItem.Time
+                    WHERE (
+                    TimeRevision.Time <= $queryTime
+                    AND TimeRevision.LineageId = -1
+                    AND TimeRevision.Revision <= 1 OR
+                    TimeRevision.Time <= $queryTime
+                    AND TimeRevision.LineageId = 0
+                    AND TimeRevision.Revision <= 1)
+                    ORDER BY TimeRevision.LineageId DESC,
+                    TimeRevision.Revision DESC) AS DominantRevisionInLineage
+                    ON RelevantItem.Time = DominantRevisionInLineage.Time
+                    AND RelevantItem.LineageId = DominantRevisionInLineage.LineageId
+                    AND RelevantItem.Revision = DominantRevisionInLineage.Revision
+                    ORDER BY Time DESC)
+                SELECT ItemId, ItemClass, Payload
+                FROM DominantEntriesByItemIdAndItemClass
+                WHERE ItemId != $placeholderId
+            AND ItemClass != $placeholderClazz
+            AND Payload IS NOT NULL
+               """
+              .map(resultSet => resultSet.bytes("Payload"))
+              .list()
+              .headOption
+          }
+        }
+      )
+      .unsafeRunSync()
 }
