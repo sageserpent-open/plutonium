@@ -411,7 +411,7 @@ trait BlobStorageConformanceAgainstReferenceImplementation
             .uniqueItemQueriesFor(theThing)
             .loneElement should be(
             theThing
-          ) // NOTE: this fails with H2 version 2.1.214 up to 2.2.224, but passes with 2.4.240.
+          ) // NOTE: this fails with H2 version 2.1.214 up to 2.2.224, but passes with version 2.3.230 to 2.4.240.
 
           // Query for the `FooHistory` item...
           timeSlice
@@ -421,12 +421,12 @@ trait BlobStorageConformanceAgainstReferenceImplementation
           // Retrieve the snapshot blob for the `Thing` item...
           timeSlice.snapshotBlobFor(theThing) should be(
             Some(thingBlob)
-          ) // NOTE: this passes with 2.4.240.
+          ) // NOTE: this passes with version 2.3.230 to 2.4.240.
 
           // Retrieve the snapshot blob for the `FooHistory` item...
           timeSlice.snapshotBlobFor(theFooHistory) should be(
             Some(fooHistoryBlob)
-          ) // NOTE: this fails with 2.4.240.
+          ) // NOTE: this fails with version 2.3.230 to 2.4.240.
 
         }
       )
