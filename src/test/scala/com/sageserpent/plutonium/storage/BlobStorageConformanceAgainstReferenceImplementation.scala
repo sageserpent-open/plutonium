@@ -411,7 +411,7 @@ trait BlobStorageConformanceAgainstReferenceImplementation
             .uniqueItemQueriesFor(theThing)
             .loneElement should be(
             theThing
-          ) // NOTE: this fails with H2 version 2.1.214, but passes with 2.4.240.
+          ) // NOTE: this fails with H2 version 2.1.214 up to 2.2.224, but passes with 2.4.240.
 
           // Query for the `FooHistory` item...
           timeSlice
