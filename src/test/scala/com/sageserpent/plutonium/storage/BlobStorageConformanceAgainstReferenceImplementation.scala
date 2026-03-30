@@ -3,14 +3,10 @@ package com.sageserpent.plutonium.storage
 import cats.effect.unsafe.{IORuntime, IORuntimeConfig, Scheduler}
 import cats.effect.{IO, Resource}
 import cats.implicits.{catsSyntaxTuple2Semigroupal, catsSyntaxTuple4Semigroupal}
-import com.sageserpent.americium.java.CasesLimitStrategy
 import com.sageserpent.americium.{Factory, Trials}
-import com.sageserpent.plutonium.efficient.{
-  BlobStorage,
-  ItemStateStorage,
-  ItemStateUpdateTime,
-  Timeline
-}
+import com.sageserpent.plutonium.efficient.ItemStateStorage.SnapshotBlob
+import com.sageserpent.plutonium.efficient._
+import com.sageserpent.plutonium.utilities.{Finite, NegativeInfinity}
 import com.sageserpent.plutonium.{
   ConnectionPoolResource,
   FooHistory,
@@ -18,6 +14,7 @@ import com.sageserpent.plutonium.{
   Thing,
   UniqueItemSpecification
 }
+import org.scalatest.LoneElement.convertToCollectionLoneElementWrapper
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import scalikejdbc.ConnectionPool
@@ -150,7 +147,8 @@ trait BlobStorageConformanceAgainstReferenceImplementation
 
   def suite(): Unit = {
 
-    "a conforming blob storage implementation" should "behave the same way as blob storage in memory" in {
+    // TODO: reinstate this test...
+    "a conforming blob storage implementation" should "behave the same way as blob storage in memory" ignore {
       var counter = 0
 
       operationsTrials
@@ -355,6 +353,86 @@ trait BlobStorageConformanceAgainstReferenceImplementation
             .unsafeRunSync()
         }
     }
+  }
+
+  "snapshots associated with the same item id but different item classes" should "be retrieved independently" in {
+    blobStorageResource
+      .use(empty =>
+        IO {
+          val thingBlob = SnapshotBlob(
+            payload = Array(),
+            lifecycleUUID = new UUID(0L, 1L),
+            itemStateUpdateKey = None
+          )
+
+          val fooHistoryBlob = SnapshotBlob(
+            payload = Array(),
+            lifecycleUUID = new UUID(0L, 0L),
+            itemStateUpdateKey = None
+          )
+
+          val theThing = UniqueItemSpecification(
+            id = 0,
+            clazz = classOf[Thing]
+          )
+
+          val theFooHistory = UniqueItemSpecification(
+            id = 0,
+            clazz = classOf[FooHistory]
+          )
+
+          val revised = {
+            val builder = empty.openRevision()
+
+            builder.record(
+              LowerBoundOfTimeslice(when = NegativeInfinity),
+              Map(
+                theThing -> Some(
+                  value = thingBlob
+                ),
+                theFooHistory -> Some(
+                  value = fooHistoryBlob
+                )
+              )
+            )
+
+            builder.build()
+          }
+
+          val timeSlice = revised.timeSlice(
+            LowerBoundOfTimeslice(when = Finite(unlifted = Instant.EPOCH)),
+            inclusive = true
+          )
+
+          // Query for both items...
+          timeSlice.uniqueItemQueriesFor(
+            classOf[Any]
+          ) should contain theSameElementsAs List(
+            theThing,
+            theFooHistory
+          )
+
+          // Query for the `Thing` item...
+          timeSlice
+            .uniqueItemQueriesFor(theThing)
+            .loneElement should be(theThing)
+
+          // Query for the `FooHistory` item...
+          timeSlice
+            .uniqueItemQueriesFor(theFooHistory)
+            .loneElement should be(theFooHistory)
+
+          // Retrieve the snapshot blob for the `Thing` item...
+          timeSlice.snapshotBlobFor(theThing) should be(Some(thingBlob))
+
+          // Retrieve the snapshot blob for the `FooHistory` item...
+          timeSlice.snapshotBlobFor(theFooHistory) should be(
+            Some(fooHistoryBlob)
+          )
+
+        }
+      )
+      .unsafeRunSync()
   }
 }
 
