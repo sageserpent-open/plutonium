@@ -6,9 +6,9 @@ import com.sageserpent.plutonium.World;
 import com.sageserpent.plutonium.efficient.WorldEfficientInMemoryImplementation;
 import com.sageserpent.plutonium.utilities.NegativeInfinity$;
 import com.sageserpent.plutonium.utilities.Unbounded;
-import org.junit.Test;
 
 import java.time.Instant;
+import org.junit.jupiter.api.Test;
 
 public class JavaApiTest {
     @Test
