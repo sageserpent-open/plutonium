@@ -297,7 +297,7 @@ class BugReproduction extends BlobStorageOnH2Resource {
               testExercise.itemId -> testExercise.thingClazz,
               testExercise.itemId -> testExercise.fooHistoryClazz
             )
-          )
+          ) // NOTE: this fails with H2 version 2.1.214 up to 2.2.224, but passes with version 2.3.230 to 2.4.240.
 
           assert(
             testExercise
@@ -313,7 +313,7 @@ class BugReproduction extends BlobStorageOnH2Resource {
               .contains(
                 testExercise.fooHistoryPayload
               )
-          )
+          ) // NOTE: this fails with version 2.3.230 to 2.4.240.
         }
       )
       .unsafeRunSync()
