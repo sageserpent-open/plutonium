@@ -83,12 +83,12 @@ object BlobStorageOnH2 {
 
             sql"""
               CREATE TABLE Snapshot(
-                ItemId                      VARBINARY         NOT NULL,
-                ItemClass                   VARBINARY         NOT NULL,
+                ItemId                      INTEGER         NOT NULL,
+                ItemClass                   VARCHAR         NOT NULL,
                 Time                        BIGINT            NOT NULL,
                 LineageId                   BIGINT            REFERENCES Lineage(LineageId),
                 Revision                    INTEGER           NOT NULL,
-                Payload                     VARBINARY         NULL,
+                Payload                     VARCHAR         NULL,
                 PRIMARY KEY (ItemId, ItemClass, Time, LineageId, Revision)
               )
       """.update.apply()
@@ -245,10 +245,10 @@ object BlobStorageOnH2 {
   private def lessThan(when: Instant): SQLSyntax =
     sqls"""TimeRevision.Time < ${unpack(when)}"""
 
+  private def unpack(when: Instant): Long = when.toEpochMilli
+
   def whenSql(when: Instant): SQLSyntax =
     sqls"""Time = ${unpack(when)}"""
-
-  private def unpack(when: Instant): Long = when.toEpochMilli
 
   def lineageSql(lineageId: LineageId, revision: Revision): SQLSyntax = {
     sqls"""
@@ -402,14 +402,6 @@ case class BlobStorageOnH2(
       ): LazyList[UniqueItemSpecification] =
         uniqueItemSpecifications(None, clazz)
 
-      override def uniqueItemQueriesFor[Item](
-          uniqueItemSpecification: UniqueItemSpecification
-      ): LazyList[UniqueItemSpecification] =
-        uniqueItemSpecifications(
-          Some(uniqueItemSpecification.id),
-          uniqueItemSpecification.clazz
-        )
-
       private def uniqueItemSpecifications[Item](
           targetItemId: Option[Any],
           itemClazzUpperBound: Class[Item]
@@ -455,6 +447,14 @@ case class BlobStorageOnH2(
               UniqueItemSpecification(itemId, itemClazz)
           }
       }
+
+      override def uniqueItemQueriesFor[Item](
+          uniqueItemSpecification: UniqueItemSpecification
+      ): LazyList[UniqueItemSpecification] =
+        uniqueItemSpecifications(
+          Some(uniqueItemSpecification.id),
+          uniqueItemSpecification.clazz
+        )
 
       override def snapshotBlobFor(
           uniqueItemSpecification: UniqueItemSpecification
@@ -534,45 +534,20 @@ case class BlobStorageOnH2(
 }
 
 class TestExercise(connectionPool: ConnectionPool) {
-  val itemId: Array[Byte] = Array(2, 0)
+  val itemId: Int = 99
 
-  val thingClazz: Array[Byte] = Array(1, 0, 106, 97, 118, 97, 46, 108, 97, 110,
-    103, 46, 67, 108, 97, 115, -13, 1, 1, 1, 99, 111, 109, 46, 115, 97, 103,
-    101, 115, 101, 114, 112, 101, 110, 116, 46, 112, 108, 117, 116, 111, 110,
-    105, 117, 109, 46, 84, 104, 105, 110, -25)
+  val thingClazz: String = "Thing"
 
-  val fooHistoryClazz: Array[Byte] = Array(1, 0, 106, 97, 118, 97, 46, 108, 97,
-    110, 103, 46, 67, 108, 97, 115, -13, 1, 1, 1, 99, 111, 109, 46, 115, 97,
-    103, 101, 115, 101, 114, 112, 101, 110, 116, 46, 112, 108, 117, 116, 111,
-    110, 105, 117, 109, 46, 70, 111, 111, 72, 105, 115, 116, 111, 114, -7)
+  val fooHistoryClazz: String = "FooHistory"
+  val thingPayload: String = "The Thing's shopping."
+  val fooHistoryPayload: String = "The Foo's CV."
+  private val eventTimeForBookedRevision: Long = -1000L
+  private val lineageIdForBookedRevision: Long = 0L
+  private val bookedRevision: Int = 1
+  private val queryTime: Long = 0L
+  private val placeholderId: Int = -1
 
-  val eventTimeForBookedRevision: Long = -1000L
-
-  val lineageIdForBookedRevision: Long = 0L
-
-  val bookedRevision: Int = 1
-
-  val queryTime: Long = 0L
-
-  val thingPayload: Array[Byte] = Array(1, 0, 99, 111, 109, 46, 115, 97, 103,
-    101, 115, 101, 114, 112, 101, 110, 116, 46, 112, 108, 117, 116, 111, 110,
-    105, 117, 109, 46, 101, 102, 102, 105, 99, 105, 101, 110, 116, 46, 73, 116,
-    101, 109, 83, 116, 97, 116, 101, 83, 116, 111, 114, 97, 103, 101, 36, 83,
-    110, 97, 112, 115, 104, 111, 116, 66, 108, 111, -30, 1, 1, 1, 115, 99, 97,
-    108, 97, 46, 78, 111, 110, 101, -92, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0,
-    0, 0, 0, 0, 0, 1)
-
-  val fooHistoryPayload: Array[Byte] = Array(1, 0, 99, 111, 109, 46, 115, 97,
-    103, 101, 115, 101, 114, 112, 101, 110, 116, 46, 112, 108, 117, 116, 111,
-    110, 105, 117, 109, 46, 101, 102, 102, 105, 99, 105, 101, 110, 116, 46, 73,
-    116, 101, 109, 83, 116, 97, 116, 101, 83, 116, 111, 114, 97, 103, 101, 36,
-    83, 110, 97, 112, 115, 104, 111, 116, 66, 108, 111, -30, 1, 1, 1, 115, 99,
-    97, 108, 97, 46, 78, 111, 110, 101, -92, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 1)
-
-  val placeholderId: Array[Byte] = Array.empty
-
-  val placeholderClazz: Array[Byte] = Array.empty
+  private val placeholderClazz: String = ""
 
   def bookInRevision(): Unit = {
     BlobStorageOnH2
@@ -658,8 +633,8 @@ class TestExercise(connectionPool: ConnectionPool) {
             AND Payload IS NOT NULL
                """
               .map(resultSet =>
-                resultSet.bytes("ItemId")
-                  -> resultSet.bytes("ItemClass")
+                resultSet.int("ItemId")
+                  -> resultSet.string("ItemClass")
               )
               .list()
           }
@@ -712,8 +687,8 @@ class TestExercise(connectionPool: ConnectionPool) {
             AND Payload IS NOT NULL
                """
               .map(resultSet =>
-                resultSet.bytes("ItemId")
-                  -> resultSet.bytes("ItemClass")
+                resultSet.int("ItemId")
+                  -> resultSet.string("ItemClass")
               )
               .list()
           }
@@ -721,7 +696,7 @@ class TestExercise(connectionPool: ConnectionPool) {
       )
       .unsafeRunSync()
 
-  def queryThingPayload(): Option[Array[Byte]] =
+  def queryThingPayload(): Option[String] =
     BlobStorageOnH2
       .dbResource(connectionPool)
       .use(db =>
@@ -765,7 +740,7 @@ class TestExercise(connectionPool: ConnectionPool) {
             AND ItemClass != $placeholderClazz
             AND Payload IS NOT NULL
                """
-              .map(resultSet => resultSet.bytes("Payload"))
+              .map(resultSet => resultSet.string("Payload"))
               .list()
               .headOption
           }
@@ -773,8 +748,7 @@ class TestExercise(connectionPool: ConnectionPool) {
       )
       .unsafeRunSync()
 
-
-  def queryFooHistoryPayload(): Option[Array[Byte]] =
+  def queryFooHistoryPayload(): Option[String] =
     BlobStorageOnH2
       .dbResource(connectionPool)
       .use(db =>
@@ -818,7 +792,7 @@ class TestExercise(connectionPool: ConnectionPool) {
             AND ItemClass != $placeholderClazz
             AND Payload IS NOT NULL
                """
-              .map(resultSet => resultSet.bytes("Payload"))
+              .map(resultSet => resultSet.string("Payload"))
               .list()
               .headOption
           }

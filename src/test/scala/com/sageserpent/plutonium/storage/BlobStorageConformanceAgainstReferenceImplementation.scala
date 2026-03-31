@@ -6,7 +6,15 @@ import cats.implicits.{catsSyntaxTuple2Semigroupal, catsSyntaxTuple4Semigroupal}
 import com.sageserpent.americium.{Factory, Trials}
 import com.sageserpent.plutonium.efficient.ItemStateStorage.SnapshotBlob
 import com.sageserpent.plutonium.efficient._
-import com.sageserpent.plutonium.{ConnectionPoolResource, FooHistory, SharedGenerators, Thing, UniqueItemSpecification, storage}
+import com.sageserpent.plutonium.{
+  ConnectionPoolResource,
+  FooHistory,
+  SharedGenerators,
+  Thing,
+  UniqueItemSpecification,
+  storage
+}
+import org.junit.jupiter.api.Test
 import org.scalatest.LoneElement.convertToCollectionLoneElementWrapper
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -130,7 +138,8 @@ object BlobStorageConformanceAgainstReferenceImplementation
       inclusive: Boolean
   ) extends Operation
 
-  implicit val ordering: Ordering[Instant] = Ordering.by[Instant, Long](_.toEpochMilli)
+  implicit val ordering: Ordering[Instant] =
+    Ordering.by[Instant, Long](_.toEpochMilli)
 }
 
 trait BlobStorageConformanceAgainstReferenceImplementation
@@ -394,9 +403,7 @@ trait BlobStorageConformanceAgainstReferenceImplementation
             builder.build()
           }
 
-          val timeSlice = revised.timeSlice(Instant.EPOCH,
-            inclusive = true
-          )
+          val timeSlice = revised.timeSlice(Instant.EPOCH, inclusive = true)
 
           // Query for both items...
           timeSlice.uniqueItemQueriesFor(
@@ -437,10 +444,13 @@ trait BlobStorageConformanceAgainstReferenceImplementation
 trait BlobStorageOnH2Resource
     extends BlobStorageResource
     with BlobStorageOnH2DatabaseSetupResource {
-  override val blobStorageResource: Resource[IO, storage.BlobStorageOnH2.BlobStorage] =
+  override val blobStorageResource
+      : Resource[IO, storage.BlobStorageOnH2.BlobStorage] =
     connectionPoolResource.flatMap(connectionPool =>
       Resource.make(IO {
-        BlobStorageOnH2.empty(connectionPool): storage.BlobStorageOnH2.BlobStorage
+        BlobStorageOnH2.empty(
+          connectionPool
+        ): storage.BlobStorageOnH2.BlobStorage
       })(_ => IO {})
     )
 }
@@ -449,10 +459,13 @@ class BlobStorageOnH2Spec
     extends BlobStorageConformanceAgainstReferenceImplementation
     with BlobStorageOnH2Resource {
   "blob storage on H2" should behave like suite
+}
 
-
-  "h2" should "work correctly" in {
+class BugReproduction extends BlobStorageOnH2Resource {
+  @Test
+  def h2BugReproduction(): Unit = {
     import BlobStorageConformanceAgainstReferenceImplementation.callingThreadRuntime
+    import com.eed3si9n.expecty.Expecty.assert
 
     connectionPoolResource
       .use(connectionPool =>
@@ -461,13 +474,35 @@ class BlobStorageOnH2Spec
 
           testExercise.bookInRevision()
 
-          testExercise.queryItems().map(pprint.apply(_)) should contain theSameElementsAs List(testExercise.itemId -> testExercise.thingClazz, testExercise.itemId -> testExercise.fooHistoryClazz).map(pprint.apply(_))
+          assert(
+            testExercise.queryItems().toSet == Set(
+              testExercise.itemId -> testExercise.thingClazz,
+              testExercise.itemId -> testExercise.fooHistoryClazz
+            )
+          )
 
-          testExercise.queryItemsById().map(pprint.apply(_)) should contain theSameElementsAs List(testExercise.itemId -> testExercise.thingClazz, testExercise.itemId -> testExercise.fooHistoryClazz).map(pprint.apply(_))
+          assert(
+            testExercise.queryItemsById().toSet == Set(
+              testExercise.itemId -> testExercise.thingClazz,
+              testExercise.itemId -> testExercise.fooHistoryClazz
+            )
+          )
 
-          testExercise.queryThingPayload().map(pprint.apply(_)) should contain(pprint.apply(testExercise.thingPayload))
+          assert(
+            testExercise
+              .queryThingPayload()
+              .contains(
+                testExercise.thingPayload
+              )
+          )
 
-          testExercise.queryFooHistoryPayload().map(pprint.apply(_)) should contain(pprint.apply(testExercise.fooHistoryPayload))
+          assert(
+            testExercise
+              .queryFooHistoryPayload()
+              .contains(
+                testExercise.fooHistoryPayload
+              )
+          )
         }
       )
       .unsafeRunSync()
