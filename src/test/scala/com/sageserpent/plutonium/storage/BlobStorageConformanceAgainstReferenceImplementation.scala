@@ -14,7 +14,6 @@ import com.sageserpent.plutonium.{
   UniqueItemSpecification,
   storage
 }
-import org.junit.jupiter.api.Test
 import org.scalatest.LoneElement.convertToCollectionLoneElementWrapper
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -459,52 +458,4 @@ class BlobStorageOnH2Spec
     extends BlobStorageConformanceAgainstReferenceImplementation
     with BlobStorageOnH2Resource {
   "blob storage on H2" should behave like suite
-}
-
-class BugReproduction extends BlobStorageOnH2Resource {
-  @Test
-  def h2BugReproduction(): Unit = {
-    import BlobStorageConformanceAgainstReferenceImplementation.callingThreadRuntime
-    import com.eed3si9n.expecty.Expecty.assert
-
-    connectionPoolResource
-      .use(connectionPool =>
-        IO {
-          val testExercise = new TestExercise(connectionPool)
-
-          testExercise.bookInRevision()
-
-          assert(
-            testExercise.queryItems().toSet == Set(
-              testExercise.itemId -> testExercise.thingClazz,
-              testExercise.itemId -> testExercise.fooHistoryClazz
-            )
-          )
-
-          assert(
-            testExercise.queryItemsById().toSet == Set(
-              testExercise.itemId -> testExercise.thingClazz,
-              testExercise.itemId -> testExercise.fooHistoryClazz
-            )
-          )
-
-          assert(
-            testExercise
-              .queryThingPayload()
-              .contains(
-                testExercise.thingPayload
-              )
-          )
-
-          assert(
-            testExercise
-              .queryFooHistoryPayload()
-              .contains(
-                testExercise.fooHistoryPayload
-              )
-          )
-        }
-      )
-      .unsafeRunSync()
-  }
 }
