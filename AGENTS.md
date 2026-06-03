@@ -1,0 +1,121 @@
+# Plutonium Agent Guide
+
+Welcome to Plutonium, a bitemporal CQRS library for Plain Old Java Objects (and Scala). This document serves as a guide for both humans and AI agents to understand the project's architecture, core concepts, and future direction.
+
+## Project Overview
+
+Plutonium allows developers to model real-world entities (POJOs) and track their historical evolution over two dimensions of time:
+1.  **Event Time (Real-World Time)**: When an event actually occurred in the real world. Event times are lifted into a domain that includes **Negative Infinity** and **Positive Infinity**, allowing for events that have "always" been true or are extrapolated into the far future.
+2.  **Revision Time (As-Of Time)**: When the system's knowledge about that event was recorded or revised.
+
+It follows a **CQRS (Command Query Responsibility Segregation)** pattern:
+-   **Commands (Revisions)**: Imperative events that describe state changes to items.
+-   **Queries (Scopes)**: Purely functional API to query the state of items at any point in the historical record.
+
+## Core Concepts
+
+### Bitemporality
+-   **`World`**: The primary container for revisions and history.
+-   **`Revision`**: A set of event additions, amendments, or annulments booked at a specific `asOf` time.
+-   **`Scope`**: A "slice" through time. It picks a specific revision (or `asOf` time) and a specific event time (`when`) to provide a view of the world.
+
+### Item Lifecycle
+Plutonium manages the lifecycle of items automatically. An item exists at a point in event time if there is at least one event referring to it at or before that time. Items are identified by a unique ID and a class.
+
+### Event Types
+-   **`Change`**: Models a state change to one or more items using a lambda.
+-   **`Annihilation`**: Models the end-of-life for an item in the real world.
+-   **Note**: "Measurements" have been deprecated and removed from the `master` branch.
+
+## Codebase Structure
+
+Key packages in `src/main/scala/com/sageserpent/plutonium`:
+
+-   **Root Package**: Contains core traits like `World`, `Scope`, `Bitemporal`, and `Event`.
+-   **`reference`**: Contains `WorldReferenceImplementation`, a simple, in-memory implementation used for validation and as a baseline.
+-   **`efficient`**: Contains `WorldEfficientInMemoryImplementation` and the core "efficient" logic including `Timeline`, `AllEvents`, and `ItemStateStorage`.
+-   **`storage`**: Contains `BlobStorage` implementations like `BlobStorageOnH2` and `BlobStorageReferenceImplementation`.
+-   **`javaApi`**: Provides a Java-friendly wrapper for the Scala-centric core.
+
+## Implementation Details
+
+### The `World` Hierarchy
+The implementation of `World` is factored across several traits to reuse logic:
+-   `WorldImplementationCodeFactoring`: Common logic for handling event timelines and providing scopes based on either revision numbers or `asOf` times.
+-   `WorldReferenceImplementation`: A simple, in-memory implementation that records patches and plays them back on demand.
+-   `WorldEfficientInMemoryImplementation`: A more optimized implementation that uses a `Timeline` and `BlobStorage` to manage item states and snapshots.
+
+### Proxies and Patches
+Plutonium often uses ByteBuddy to create proxies of POJOs. When an event lambda runs, it operates on these proxies, which record the method calls as "patches." These patches can then be replayed to reconstruct the state of an item at any point in time.
+
+In the efficient implementation, these proxies play a critical role in **dependency discovery**. They intercept method calls to track which items are read from or written to during the execution of an event.
+
+-   **`recordMutation`**: When a mutative method (one returning `void`) is called on a proxy, it records that the item has been modified.
+-   **`recordReadOnlyAccess`**: When a query method is called, it records a read dependency on the item.
+
+These hooks allow Plutonium to build and maintain the `ItemStateUpdatesDag`, ensuring that if an item is modified in one event, all subsequent events that depend on its state are correctly identified for recalculation.
+
+## Technical Deep-Dive
+
+### `Timeline` and `AllEvents`
+The `Timeline` class is the heart of the efficient implementation. It represents the state of the world at a specific revision and consists of:
+-   **`allEvents`**: Managed by `AllEvents`, this tracks the "footprint" of events and the "lifecycles" of items.
+-   **`itemStateUpdatesDag`**: A Directed Acyclic Graph (using the `quiver` library) that tracks dependencies between item state updates. This allows Plutonium to only recalculate what is necessary when an event is revised or annulled.
+-   **`blobStorage`**: The low-level storage for item snapshots.
+
+When `Timeline.revise` is called, it:
+1.  Delegates to `allEvents.revise` to calculate a delta of `ItemStateUpdate`s that need to be revoked, added, or modified.
+2.  Performs a recalculation using a priority queue (`CheapKnockOffPriorityMap`) to process updates in event-time order.
+3.  Uses `IdentifiedItemAccessUsingBlobStorage` to apply patches and discover new read/write dependencies, which are then used to update the DAG.
+
+`AllEventsImplementation` manages `Lifecycle` objects for each item ID. A lifecycle represents the span of an item's existence from its **"birth"** (the earliest event that refers to it) to its **"death"** (due to an explicit `Annihilation` event). Items can have infinite lifespans, and their lifecycles can start as far back as negative infinity.
+
+When multiple events or partial lifecycles for the same item ID overlap, `AllEventsImplementation` handles the **fusion** of these lifecycles to ensure type consistency and a unified timeline for that item.
+
+### `ItemStateStorage` and Serialization
+Plutonium uses **Kryo** for serializing item states into `SnapshotBlob`s.
+-   **Inter-item References**: When an item is serialized, references to other items are not serialized deeply. Instead, their `UniqueItemSpecification` and `lifecycleUUID` are recorded.
+-   **`ReconstitutionContext`**: This trait handles the reconstruction of items from snapshots. It maintains caches to ensure that multiple references to the same item (within a single query or recalculation) result in the same object instance.
+
+### `BlobStorage`
+`BlobStorage` is a bitemporal key-value store for snapshots.
+-   **`BlobStorageReferenceImplementation`**: An in-memory implementation using `Fingertree` for efficient range queries.
+-   **`BlobStorageOnH2`**: A persistent implementation using an H2 database. It uses a **Lineage** mechanism to support "forking" the world (experimental worlds). Each revision either extends an existing lineage or branches off into a new one.
+
+## Testing Strategy
+
+Plutonium makes extensive use of **Property-Based Testing (PBT)**.
+-   **Shared Behaviours**: Test suites (e.g., `WorldBehaviours`) are defined as traits and mixed into test classes for different `World` implementations. This ensures that all implementations (reference, efficient, persistent) behave identically.
+-   **ScalaCheck to Americium**: Currently, tests use ScalaCheck, but there is an ongoing effort to migrate to **Americium** (another project by the same author) for better shrinking and more robust PBT.
+
+## Danger Zones & Caveats
+
+-   **Mixed Paradigms**: The implementation contains a mix of pure functional and imperative code (notably in event lambda invocation and item state storage).
+-   **Complexity**: The `World` implementation hierarchy and the proxy/patch mechanism are complex and require careful study.
+-   **Legacy Dependencies**: Some dependencies may be outdated.
+
+## Future Directions (Project Reboot)
+
+Based on [Issue #71](https://github.com/sageserpent-open/plutonium/issues/71), the project is heading towards:
+1.  **Scala 3 Migration**: While the project has moved to Scala 2.13, Scala 3 is still in the future.
+2.  **Americium Integration**: Replacing ScalaCheck with Americium for all PBT.
+3.  **Code Cleanup**: Streamlining the multiple `World` implementations and improving the mix of functional/imperative code.
+4.  **Performance Improvements**: Refining the efficient implementations and potentially revisiting storage backends.
+
+## Guidance for Agents
+
+### Running Tests
+Plutonium uses SBT. To run all tests:
+```bash
+sbt test
+```
+To run tests for a specific implementation (e.g., the reference implementation):
+```bash
+sbt "testOnly *WorldReferenceImplementationSpec"
+```
+
+### Key Principles
+-   **Verify Across Implementations**: If you modify core logic, ensure you run tests against both the reference and efficient implementations. Use the shared behaviour traits to keep them in sync.
+-   **Respect Bitemporality**: Always consider both "event time" (real-world) and "revision time" (system knowledge) when thinking about how data is stored or queried.
+-   **No Direct State Access**: Remember that event lambdas should not read state from the objects they are mutating; they should be a "canned sequence" of commands.
+-   **Edit Source, Not Artifacts**: Avoid editing generated code or artifacts. Tracing back to the source is essential, especially with ByteBuddy-generated proxies.
