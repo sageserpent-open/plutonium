@@ -58,12 +58,12 @@ Plutonium makes extensive use of **Property-Based Testing (PBT)**.
 
 -   **Mixed Paradigms**: The implementation contains a mix of pure functional and imperative code (notably in event lambda invocation and item state storage).
 -   **Complexity**: The `World` implementation hierarchy and the proxy/patch mechanism are complex and require careful study.
--   **Legacy Dependencies**: The project is currently on Scala 2.12. Some dependencies may be outdated.
+-   **Legacy Dependencies**: Some dependencies may be outdated.
 
 ## Future Directions (Project Reboot)
 
 Based on [Issue #71](https://github.com/sageserpent-open/plutonium/issues/71), the project is heading towards:
-1.  **Scala 2.13 and Scala 3 Migration**: Moving off the legacy 2.12 line.
+1.  **Scala 3 Migration**: While the project has moved to Scala 2.13, Scala 3 is still in the future.
 2.  **Americium Integration**: Replacing ScalaCheck with Americium for all PBT.
 3.  **Code Cleanup**: Streamlining the multiple `World` implementations and improving the mix of functional/imperative code.
 4.  **Performance Improvements**: Refining the efficient implementations and potentially revisiting storage backends.
