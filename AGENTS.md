@@ -116,6 +116,12 @@ sbt "testOnly *WorldReferenceImplementationSpec"
 
 ### Key Principles
 -   **Verify Across Implementations**: If you modify core logic, ensure you run tests against both the reference and efficient implementations. Use the shared behaviour traits to keep them in sync.
+-   **ScalaCheck to Americium Migration**: When migrating tests from ScalaCheck to Americium:
+    -   Use JUnit5 `@TestFactory` and Americium's `dynamicTests`.
+    -   Replace ScalaCheck `Gen` with Americium `Trials`.
+    -   Recast `randomBehaviour` (manual randomization) into `Trials` compositions. For example, use `api.indexPermutations` for shuffling and `api.indexCombinations` for partitioning.
+    -   Use Expecty `assert` for better failure diagnostics instead of standard JUnit5 or ScalaTest matchers.
+    -   Be careful with `filter` on `Trials`; if too restrictive, it may lead to `NoValidTrialsException`. Prefer constructive generation or use `org.junit.jupiter.api.Assumptions.assumeTrue` within the test body to skip invalid cases.
 -   **Respect Bitemporality**: Always consider both "event time" (real-world) and "revision time" (system knowledge) when thinking about how data is stored or queried.
 -   **No Direct State Access**: Remember that event lambdas should not read state from the objects they are mutating; they should be a "canned sequence" of commands.
 -   **Edit Source, Not Artifacts**: Avoid editing generated code or artifacts. Tracing back to the source is essential, especially with ByteBuddy-generated proxies.
