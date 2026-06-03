@@ -48,6 +48,13 @@ The implementation of `World` is factored across several traits to reuse logic:
 ### Proxies and Patches
 Plutonium often uses ByteBuddy to create proxies of POJOs. When an event lambda runs, it operates on these proxies, which record the method calls as "patches." These patches can then be replayed to reconstruct the state of an item at any point in time.
 
+In the efficient implementation, these proxies play a critical role in **dependency discovery**. They intercept method calls to track which items are read from or written to during the execution of an event.
+
+-   **`recordMutation`**: When a mutative method (one returning `void`) is called on a proxy, it records that the item has been modified.
+-   **`recordReadOnlyAccess`**: When a query method is called, it records a read dependency on the item.
+
+These hooks allow Plutonium to build and maintain the `ItemStateUpdatesDag`, ensuring that if an item is modified in one event, all subsequent events that depend on its state are correctly identified for recalculation.
+
 ## Technical Deep-Dive
 
 ### `Timeline` and `AllEvents`
