@@ -5,7 +5,7 @@ Welcome to Plutonium, a bitemporal CQRS library for Plain Old Java Objects (and 
 ## Project Overview
 
 Plutonium allows developers to model real-world entities (POJOs) and track their historical evolution over two dimensions of time:
-1.  **Event Time (Real-World Time)**: When an event actually occurred in the real world.
+1.  **Event Time (Real-World Time)**: When an event actually occurred in the real world. Event times are lifted into a domain that includes **Negative Infinity** and **Positive Infinity**, allowing for events that have "always" been true or are extrapolated into the far future.
 2.  **Revision Time (As-Of Time)**: When the system's knowledge about that event was recorded or revised.
 
 It follows a **CQRS (Command Query Responsibility Segregation)** pattern:
@@ -68,7 +68,9 @@ When `Timeline.revise` is called, it:
 2.  Performs a recalculation using a priority queue (`CheapKnockOffPriorityMap`) to process updates in event-time order.
 3.  Uses `IdentifiedItemAccessUsingBlobStorage` to apply patches and discover new read/write dependencies, which are then used to update the DAG.
 
-`AllEventsImplementation` manages `Lifecycle` objects for each item ID. These lifecycles ensure type consistency and handle the "fusion" of overlapping events.
+`AllEventsImplementation` manages `Lifecycle` objects for each item ID. A lifecycle represents the span of an item's existence from its **"birth"** (the earliest event that refers to it) to its **"death"** (due to an explicit `Annihilation` event). Items can have infinite lifespans, and their lifecycles can start as far back as negative infinity.
+
+When multiple events or partial lifecycles for the same item ID overlap, `AllEventsImplementation` handles the **fusion** of these lifecycles to ensure type consistency and a unified timeline for that item.
 
 ### `ItemStateStorage` and Serialization
 Plutonium uses **Kryo** for serializing item states into `SnapshotBlob`s.
