@@ -33,8 +33,8 @@ Key packages in `src/main/scala/com/sageserpent/plutonium`:
 
 -   **Root Package**: Contains core traits like `World`, `Scope`, `Bitemporal`, and `Event`.
 -   **`reference`**: Contains `WorldReferenceImplementation`, a simple, in-memory implementation used for validation and as a baseline.
--   **`efficient`**: Contains `WorldEfficientInMemoryImplementation` and scaffolding for efficient recalculation of changes. It uses a `Timeline` and `BlobStorage` to manage state.
--   **`storage`**: Contains persistence backends like `BlobStorageOnH2`.
+-   **`efficient`**: Contains `WorldEfficientInMemoryImplementation` and the core "efficient" logic including `Timeline`, `AllEvents`, and `ItemStateStorage`.
+-   **`storage`**: Contains `BlobStorage` implementations like `BlobStorageOnH2` and `BlobStorageReferenceImplementation`.
 -   **`javaApi`**: Provides a Java-friendly wrapper for the Scala-centric core.
 
 ## Implementation Details
@@ -47,6 +47,31 @@ The implementation of `World` is factored across several traits to reuse logic:
 
 ### Proxies and Patches
 Plutonium often uses ByteBuddy to create proxies of POJOs. When an event lambda runs, it operates on these proxies, which record the method calls as "patches." These patches can then be replayed to reconstruct the state of an item at any point in time.
+
+## Technical Deep-Dive
+
+### `Timeline` and `AllEvents`
+The `Timeline` class is the heart of the efficient implementation. It represents the state of the world at a specific revision and consists of:
+-   **`allEvents`**: Managed by `AllEvents`, this tracks the "footprint" of events and the "lifecycles" of items.
+-   **`itemStateUpdatesDag`**: A Directed Acyclic Graph (using the `quiver` library) that tracks dependencies between item state updates. This allows Plutonium to only recalculate what is necessary when an event is revised or annulled.
+-   **`blobStorage`**: The low-level storage for item snapshots.
+
+When `Timeline.revise` is called, it:
+1.  Delegates to `allEvents.revise` to calculate a delta of `ItemStateUpdate`s that need to be revoked, added, or modified.
+2.  Performs a recalculation using a priority queue (`CheapKnockOffPriorityMap`) to process updates in event-time order.
+3.  Uses `IdentifiedItemAccessUsingBlobStorage` to apply patches and discover new read/write dependencies, which are then used to update the DAG.
+
+`AllEventsImplementation` manages `Lifecycle` objects for each item ID. These lifecycles ensure type consistency and handle the "fusion" of overlapping events.
+
+### `ItemStateStorage` and Serialization
+Plutonium uses **Kryo** for serializing item states into `SnapshotBlob`s.
+-   **Inter-item References**: When an item is serialized, references to other items are not serialized deeply. Instead, their `UniqueItemSpecification` and `lifecycleUUID` are recorded.
+-   **`ReconstitutionContext`**: This trait handles the reconstruction of items from snapshots. It maintains caches to ensure that multiple references to the same item (within a single query or recalculation) result in the same object instance.
+
+### `BlobStorage`
+`BlobStorage` is a bitemporal key-value store for snapshots.
+-   **`BlobStorageReferenceImplementation`**: An in-memory implementation using `Fingertree` for efficient range queries.
+-   **`BlobStorageOnH2`**: A persistent implementation using an H2 database. It uses a **Lineage** mechanism to support "forking" the world (experimental worlds). Each revision either extends an existing lineage or branches off into a new one.
 
 ## Testing Strategy
 
