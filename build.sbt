@@ -34,8 +34,8 @@ lazy val settings = Seq(
   libraryDependencies += "com.h2database" % "h2" % "2.1.212", // Versions >= 2.1.214 break the tests for `BlobStorageOnH2`.
   libraryDependencies += "com.zaxxer" % "HikariCP"  % "7.0.2",
   libraryDependencies += "org.slf4j"  % "slf4j-api" % "2.0.17" % "provided",
-  libraryDependencies += "com.sageserpent" %% "americium-junit5" % "2.1.1" % "test",
-  libraryDependencies += "com.sageserpent" %% "americium-utilities" % "2.1.1" % "test",
+  libraryDependencies += "com.sageserpent" %% "americium-junit5" % "2.1.2" % "test",
+  libraryDependencies += "com.sageserpent" %% "americium-utilities" % "2.1.2" % "test",
   libraryDependencies += "com.eed3si9n.expecty" %% "expecty" % "0.17.1" % "test",
   libraryDependencies += "org.slf4j"       % "slf4j-nop"  % "2.0.17" % "test",
   libraryDependencies += "org.scalatest"  %% "scalatest"  % "3.2.20" % "test",

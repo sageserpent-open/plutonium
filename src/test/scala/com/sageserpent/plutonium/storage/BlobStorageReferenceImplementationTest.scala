@@ -128,30 +128,13 @@ object BlobStorageReferenceImplementationTest {
       annulments              = timesOfObsoleteBookings.map(_ -> Seq.empty)
       finalBookings <- shuffledSnapshotBookings(lotsOfFinalTimeSeries)
 
-      obsoleteBookingsPieces <-
-        if (obsoleteBookings.nonEmpty)
-          api
-            .integers(1, obsoleteBookings.size)
-            .flatMap(n =>
-              api.splitIntoNonEmptyPieces(obsoleteBookings.toIndexedSeq, n)
-            )
-        else api.only(Seq.empty)
-      annulmentsPieces <-
-        if (annulments.nonEmpty)
-          api
-            .integers(1, annulments.size)
-            .flatMap(n =>
-              api.splitIntoNonEmptyPieces(annulments.toIndexedSeq, n)
-            )
-        else api.only(Seq.empty)
-      finalBookingsPieces <-
-        if (finalBookings.nonEmpty)
-          api
-            .integers(1, finalBookings.size)
-            .flatMap(n =>
-              api.splitIntoNonEmptyPieces(finalBookings.toIndexedSeq, n)
-            )
-        else api.only(Seq.empty)
+      obsoleteBookingsPieces <- api.splitIntoNonEmptyPieces(
+        obsoleteBookings.toIndexedSeq
+      )
+      annulmentsPieces <- api.splitIntoNonEmptyPieces(annulments.toIndexedSeq)
+      finalBookingsPieces <- api.splitIntoNonEmptyPieces(
+        finalBookings.toIndexedSeq
+      )
 
       bookingsCulminatingInFinalOnes =
         obsoleteBookingsPieces ++ annulmentsPieces ++ finalBookingsPieces
