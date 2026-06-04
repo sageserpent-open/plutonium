@@ -128,56 +128,28 @@ object BlobStorageReferenceImplementationTest {
       annulments              = timesOfObsoleteBookings.map(_ -> Seq.empty)
       finalBookings <- shuffledSnapshotBookings(lotsOfFinalTimeSeries)
 
-      // Implementing splitIntoNonEmptyPieces equivalent using partitioning
       obsoleteBookingsPieces <-
         if (obsoleteBookings.nonEmpty)
           api
             .integers(1, obsoleteBookings.size)
             .flatMap(n =>
-              api
-                .indexCombinations(obsoleteBookings.size - 1, n - 1)
-                .map(comb => {
-                  val indices = (0 +: comb.map(_ + 1) :+ obsoleteBookings.size)
-                  indices
-                    .zip(indices.tail)
-                    .map { case (start, end) =>
-                      obsoleteBookings.slice(start, end)
-                    }
-                })
+              api.splitIntoNonEmptyPieces(obsoleteBookings.toIndexedSeq, n)
             )
         else api.only(Seq.empty)
-
       annulmentsPieces <-
         if (annulments.nonEmpty)
           api
             .integers(1, annulments.size)
             .flatMap(n =>
-              api
-                .indexCombinations(annulments.size - 1, n - 1)
-                .map(comb => {
-                  val indices = (0 +: comb.map(_ + 1) :+ annulments.size)
-                  indices
-                    .zip(indices.tail)
-                    .map { case (start, end) => annulments.slice(start, end) }
-                })
+              api.splitIntoNonEmptyPieces(annulments.toIndexedSeq, n)
             )
         else api.only(Seq.empty)
-
       finalBookingsPieces <-
         if (finalBookings.nonEmpty)
           api
             .integers(1, finalBookings.size)
             .flatMap(n =>
-              api
-                .indexCombinations(finalBookings.size - 1, n - 1)
-                .map(comb => {
-                  val indices = (0 +: comb.map(_ + 1) :+ finalBookings.size)
-                  indices
-                    .zip(indices.tail)
-                    .map { case (start, end) =>
-                      finalBookings.slice(start, end)
-                    }
-                })
+              api.splitIntoNonEmptyPieces(finalBookings.toIndexedSeq, n)
             )
         else api.only(Seq.empty)
 
