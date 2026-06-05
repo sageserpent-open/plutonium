@@ -14,11 +14,6 @@ import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scala.math.Ordering.ordered
 import scala.util.Random
 
-trait OneKindOfThing
-
-trait AnotherKindOfThing
-
-trait NoKindOfThing
 
 object BlobStorageReferenceImplementationSpec extends SharedGenerators {
   type RecordingId  = Int

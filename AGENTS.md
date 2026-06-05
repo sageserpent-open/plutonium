@@ -88,6 +88,50 @@ Plutonium makes extensive use of **Property-Based Testing (PBT)**.
 -   **Shared Behaviours**: Test suites (e.g., `WorldBehaviours`) are defined as traits and mixed into test classes for different `World` implementations. This ensures that all implementations (reference, efficient, persistent) behave identically.
 -   **ScalaCheck to Americium**: Currently, tests use ScalaCheck, but there is an ongoing effort to migrate to **Americium** (another project by the same author) for better shrinking and more robust PBT.
 
+### ScalaCheck to Americium Migration Guide
+
+When migrating tests from ScalaCheck/ScalaTest to Americium/JUnit5, follow these patterns:
+
+#### 1. Test Structure
+Replace ScalaTest `AnyFlatSpec` and `ScalaCheckPropertyChecks` with JUnit5 and Americium's `dynamicTests`.
+-   Use `@TestFactory` to return `DynamicTests`.
+-   Use `Trials.withLimit(n).dynamicTests { ... }` to execute the property.
+
+#### 2. Generators (`Gen` to `Trials`)
+-   `Gen.chooseNum` -> `api.integers`, `api.longs`, etc.
+-   `Gen.oneOf` -> `api.alternate` or `api.choices`.
+-   `Gen.frequency` -> `api.alternateWithWeights`.
+-   `Gen.listOf` -> `trials.lists`.
+-   `Gen.sequence` -> `api.sequences`.
+
+#### 3. Recasting `randomBehaviour`
+The legacy tests often use a `Random` instance for manual randomization. In Americium, this should be recast into `Trials` compositions:
+-   **Shuffling**: Use `api.shuffles(sequence)`.
+-   **Partitioning**: Use `api.splitsIntoPieces(sequence)` or `api.splitsIntoNonEmptyPieces(sequence)`.
+-   **Boolean Decisions**: Instead of `random.nextBoolean()`, use `api.booleans` or `api.indexPermutations` to create a shuffled sequence of decisions.
+
+#### 4. Forcing Duplicates
+ScalaCheck tends to reuse scalars, which can lead to accidental collisions. Americium is more thorough and may require explicit steps to force duplicates if the test depends on them (e.g., ID collisions):
+-   **Technique**: Use `flatMap` to pick a set of IDs, then `shuffles` to assign them to items, or use a restricted range of integers to increase collision probability.
+
+#### 5. Assertions
+Use **Expecty** for better diagnostics instead of JUnit5 or ScalaTest assertions.
+-   Recommended configuration:
+    ```scala
+    object ExpectyFlavouredAssert {
+      val assert: Expecty = new Expecty {
+        override val showLocation: Boolean = true
+        override val showTypes: Boolean    = true
+      }
+    }
+    ```
+-   Import `ExpectyFlavouredAssert.assert`.
+
+#### 6. Handling `NoValidTrialsException`
+If a `filter` on a `Trials` is too restrictive, Americium may fail to find enough valid cases.
+-   **Preference**: Refactor the generator to be **constructive** (ensuring the condition is met by design) rather than using `filter`.
+-   **Fallback**: Use `org.junit.jupiter.api.Assumptions.assumeTrue` within the test body to skip invalid cases.
+
 ## Danger Zones & Caveats
 
 -   **Mixed Paradigms**: The implementation contains a mix of pure functional and imperative code (notably in event lambda invocation and item state storage).
@@ -119,7 +163,7 @@ sbt "testOnly *WorldReferenceImplementationSpec"
 -   **ScalaCheck to Americium Migration**: When migrating tests from ScalaCheck to Americium:
     -   Use JUnit5 `@TestFactory` and Americium's `dynamicTests`.
     -   Replace ScalaCheck `Gen` with Americium `Trials`.
-    -   Recast `randomBehaviour` (manual randomization) into `Trials` compositions. For example, use `api.indexPermutations` for shuffling and `api.indexCombinations` for partitioning.
+    -   Recast `randomBehaviour` (manual randomization) into `Trials` compositions. Use `api.shuffles` for shuffling and `api.splitsIntoPieces` / `api.splitsIntoNonEmptyPieces` for partitioning.
     -   Use Expecty `assert` for better failure diagnostics instead of standard JUnit5 or ScalaTest matchers.
     -   Be careful with `filter` on `Trials`; if too restrictive, it may lead to `NoValidTrialsException`. Prefer constructive generation or use `org.junit.jupiter.api.Assumptions.assumeTrue` within the test body to skip invalid cases.
 -   **Respect Bitemporality**: Always consider both "event time" (real-world) and "revision time" (system knowledge) when thinking about how data is stored or queried.

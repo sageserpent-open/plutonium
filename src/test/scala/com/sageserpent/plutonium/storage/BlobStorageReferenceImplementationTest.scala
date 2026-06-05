@@ -1,6 +1,6 @@
 package com.sageserpent.plutonium.storage
 
-import com.eed3si9n.expecty.Expecty.assert
+import com.eed3si9n.expecty.Expecty
 import com.sageserpent.americium.Trials
 import com.sageserpent.americium.Trials.api
 import com.sageserpent.americium.junit5._
@@ -9,7 +9,22 @@ import com.sageserpent.plutonium.efficient.BlobStorage
 import com.sageserpent.plutonium.efficient.BlobStorage.Timeslice
 import org.junit.jupiter.api.TestFactory
 
+trait OneKindOfThing
+
+trait AnotherKindOfThing
+
+trait NoKindOfThing
+
+object ExpectyFlavouredAssert {
+  val assert: Expecty = new Expecty {
+    override val showLocation: Boolean = true
+    override val showTypes: Boolean    = true
+  }
+}
+
 object BlobStorageReferenceImplementationTest {
+  import ExpectyFlavouredAssert.assert
+
   type RecordingId  = Int
   type Time         = Int
   type SnapshotBlob = Double
@@ -17,6 +32,13 @@ object BlobStorageReferenceImplementationTest {
   val integerIdGenerator: Trials[Int] = api.integers(-20, 20)
   val stringIdGenerator: Trials[String] =
     api.integers(50, 100).map("Name: " + _.toString)
+
+  def mixedIdGenerator(disambiguation: Int): Trials[Any] =
+    api.alternate(
+      integerIdGenerator.map(disambiguation + 2 * _),
+      stringIdGenerator.map(_ + s"_$disambiguation")
+    )
+
   val uniqueItemSpecificationWithUniqueTypePerIdGenerator
       : Trials[UniqueItemSpecification] =
     api.alternate(
@@ -27,6 +49,7 @@ object BlobStorageReferenceImplementationTest {
         UniqueItemSpecification(id, classOf[AnotherKindOfThing])
       )
     )
+
   val uniqueItemSpecificationWithDisjointTypesPerIdGenerator
       : Trials[UniqueItemSpecification] = {
     val aSmallChoiceOfIdsToIncreaseTheChancesOfCollisions = api.integers(1, 10)
@@ -40,21 +63,34 @@ object BlobStorageReferenceImplementationTest {
     )
   }
 
-  def mixedIdGenerator(disambiguation: Int): Trials[Any] =
-    api.alternate(
-      integerIdGenerator.map(disambiguation + 2 * _),
-      stringIdGenerator.map(_ + s"_$disambiguation")
-    )
-
   def lotsOfTimeSeriesGenerator(
       uniqueItemSpecificationGenerator: Trials[UniqueItemSpecification]
   ): Trials[Seq[TimeSeries]] =
     uniqueItemSpecificationGenerator.lists
       .filter(_.nonEmpty)
-      .map(_.distinct)
+      .map(_.distinctBy(_.id))
       .flatMap(uniqueItemSpecifications =>
         api.sequences(uniqueItemSpecifications.map(timeSeriesGeneratorFor))
       )
+
+  def lotsOfTimeSeriesWithCollidingIdsGenerator(
+      uniqueItemSpecificationGenerator: Trials[UniqueItemSpecification]
+  ): Trials[Seq[TimeSeries]] =
+    uniqueItemSpecificationGenerator.lists
+      .filter(_.nonEmpty)
+      .flatMap(uniqueItemSpecifications => {
+        val ids = uniqueItemSpecifications.map(_.id)
+        api
+          .shuffles(ids)
+          .flatMap(shuffledIds =>
+            api.sequences(
+              (uniqueItemSpecifications zip shuffledIds).map {
+                case (spec, id) =>
+                  timeSeriesGeneratorFor(spec.copy(id = id))
+              }
+            )
+          )
+      })
 
   def timeSeriesGeneratorFor(
       uniqueItemSpecification: UniqueItemSpecification
@@ -110,7 +146,7 @@ object BlobStorageReferenceImplementationTest {
         api.alternateWithWeights(1 -> api.only(0), 5 -> api.integers(1, 100))
 
       for {
-        earliest: Time <- api.integers(0, 9)
+        earliest: Time  <- api.integers(0, 9)
         snapshotDeltas <- snapshotDeltaGenerator.listsOfSize(half)
         queryDeltas    <- queryDeltaGenerator.listsOfSize(halfPlusOffCut)
         deltas = interleave(queryDeltas, snapshotDeltas)
@@ -128,13 +164,9 @@ object BlobStorageReferenceImplementationTest {
       annulments              = timesOfObsoleteBookings.map(_ -> Seq.empty)
       finalBookings <- shuffledSnapshotBookings(lotsOfFinalTimeSeries)
 
-      obsoleteBookingsPieces <- api.splitIntoNonEmptyPieces(
-        obsoleteBookings.toIndexedSeq
-      )
-      annulmentsPieces <- api.splitIntoNonEmptyPieces(annulments.toIndexedSeq)
-      finalBookingsPieces <- api.splitIntoNonEmptyPieces(
-        finalBookings.toIndexedSeq
-      )
+      obsoleteBookingsPieces <- api.splitsIntoNonEmptyPieces(obsoleteBookings)
+      annulmentsPieces       <- api.splitsIntoNonEmptyPieces(annulments)
+      finalBookingsPieces    <- api.splitsIntoNonEmptyPieces(finalBookings)
 
       bookingsCulminatingInFinalOnes =
         obsoleteBookingsPieces ++ annulmentsPieces ++ finalBookingsPieces
@@ -159,44 +191,54 @@ object BlobStorageReferenceImplementationTest {
         0,
         numberOfTimeSeries
       )
-      forceUseOfAnOverlappingTypeDecisionsPermutation <- api.indexPermutations(
-        numberOfTimeSeries
+      forceUseOfAnOverlappingTypeDecisionsPermutation <- api.shuffles(
+        Seq
+          .fill(numberOfNonDefaultDecisionsForTimeSeries)(
+            forceUseOfAnOverlappingType
+          ) ++ Seq
+          .fill(numberOfTimeSeries - numberOfNonDefaultDecisionsForTimeSeries)(
+            false
+          )
       )
-      forceUseOfAnOverlappingTypeDecisions =
-        forceUseOfAnOverlappingTypeDecisionsPermutation
-          .map(i => i < numberOfNonDefaultDecisionsForTimeSeries)
-          .map(if (_) forceUseOfAnOverlappingType else false)
 
       snapshotsWithDecisions <- api.sequences(
-        (lotsOfTimeSeriesWithoutTheQueryTimeCruft zip forceUseOfAnOverlappingTypeDecisions)
-          .map { case ((uniqueItemSpecification, snapshots), forceType) =>
-            val numberOfSnapshots = snapshots.size
-            for {
-              numberOfNonDefaultDecisionsForSnapshots <- api.integers(
-                0,
-                numberOfSnapshots
-              )
-              decisionsToForceOverlappingTypePermutation <-
-                api.indexPermutations(numberOfSnapshots)
-              decisionsToForceOverlappingType =
-                decisionsToForceOverlappingTypePermutation
-                  .map(i => i < numberOfNonDefaultDecisionsForSnapshots)
-                  .map(if (_) forceType else false)
-            } yield {
-              snapshots zip decisionsToForceOverlappingType map {
-                case (snapshot, decision) =>
-                  (if (decision)
-                     uniqueItemSpecification.copy(clazz = classOf[Any])
-                   else uniqueItemSpecification) -> snapshot
+        (lotsOfTimeSeriesWithoutTheQueryTimeCruft zip forceUseOfAnOverlappingTypeDecisionsPermutation)
+          .map {
+            case (
+                  (uniqueItemSpecification, snapshots),
+                  forceUseOfAnOverlappingType
+                ) =>
+              val numberOfSnapshots = snapshots.size
+              for {
+                numberOfNonDefaultDecisionsForSnapshots <- api.integers(
+                  0,
+                  numberOfSnapshots
+                )
+                decisionsToForceOverlappingType <-
+                  api.shuffles(
+                    Seq.fill(numberOfNonDefaultDecisionsForSnapshots)(
+                      forceUseOfAnOverlappingType
+                    ) ++ Seq.fill(
+                      numberOfSnapshots - numberOfNonDefaultDecisionsForSnapshots
+                    )(
+                      false
+                    )
+                  )
+              } yield {
+                snapshots zip decisionsToForceOverlappingType map {
+                  case (snapshot, decision) =>
+                    (if (decision)
+                       uniqueItemSpecification.copy(clazz = classOf[Any])
+                     else uniqueItemSpecification) -> snapshot
+                }
               }
-            }
           }
       )
 
-      snapshotSequencesForManyItems = snapshotsWithDecisions.flatten.map {
+      snapshotSequencesForManyItems = snapshotsWithDecisions.flatMap(_.map {
         case (uniqueItemSpecification, (when, blob)) =>
           (when, (uniqueItemSpecification, blob))
-      }
+      })
 
       snapshotBookingsForManyItemsAndTimesGroupedByTime =
         snapshotSequencesForManyItems
@@ -205,12 +247,10 @@ object BlobStorageReferenceImplementationTest {
           .mapValues(_.map(_._2))
           .toSeq
 
-      shuffledBookingsIndices <- api.indexPermutations(
-        snapshotBookingsForManyItemsAndTimesGroupedByTime.size
+      shuffledBookings <- api.shuffles(
+        snapshotBookingsForManyItemsAndTimesGroupedByTime
       )
-    } yield shuffledBookingsIndices.map(
-      snapshotBookingsForManyItemsAndTimesGroupedByTime.toIndexedSeq
-    )
+    } yield shuffledBookings
   }
 
   def blobStorageFrom(
@@ -255,6 +295,7 @@ object BlobStorageReferenceImplementationTest {
 
 class BlobStorageReferenceImplementationTest {
   import BlobStorageReferenceImplementationTest._
+  import ExpectyFlavouredAssert.assert
 
   @TestFactory
   def queryingForAUniqueItemSnapshotNoEarlierThanWhenItWasBooked()
@@ -371,34 +412,23 @@ class BlobStorageReferenceImplementationTest {
   @TestFactory
   def yieldingTheRelevantSnapshotsEvenIfTheItemIdCanReferToSeveralItemsOfDisjointTypes()
       : DynamicTests = {
-    val idsToIncreaseTheChancesOfCollisions = api.integers(1, 5)
-
-    val lotsOfFinalTimeSeriesTrials = for {
-      collidingId <- idsToIncreaseTheChancesOfCollisions
-      series1 <- timeSeriesGeneratorFor(
-        UniqueItemSpecification(collidingId, classOf[OneKindOfThing])
-      )
-      series2 <- timeSeriesGeneratorFor(
-        UniqueItemSpecification(collidingId, classOf[AnotherKindOfThing])
-      )
-      otherSpecs <- uniqueItemSpecificationWithDisjointTypesPerIdGenerator.lists
-      others     <- api.sequences(otherSpecs.map(timeSeriesGeneratorFor))
-      allSeries = series1 +: series2 +: others
-      shuffledIndices <- api.indexPermutations(allSeries.size)
-    } yield shuffledIndices
-      .map(allSeries.toIndexedSeq)
-      .distinctBy(_.uniqueItemSpecification)
-
-    val lotsOfObsoleteTimeSeriesTrials =
-      lotsOfTimeSeriesGenerator(
+    val disjointTimeSeriesWithCollisionsTrials =
+      lotsOfTimeSeriesWithCollidingIdsGenerator(
         uniqueItemSpecificationWithDisjointTypesPerIdGenerator
       )
 
+    val disjointTimeSeriesTrials = lotsOfTimeSeriesGenerator(
+      uniqueItemSpecificationWithDisjointTypesPerIdGenerator
+    )
+
     (for {
-      lotsOfFinalTimeSeries <- lotsOfFinalTimeSeriesTrials
+      lotsOfFinalTimeSeries <- disjointTimeSeriesWithCollisionsTrials filter (_.groupBy(
+        _.uniqueItemSpecification.id
+      ).values
+        .exists(1 < _.size))
       lotsOfObsoleteTimeSeries <- api.alternateWithWeights(
-        10 -> lotsOfObsoleteTimeSeriesTrials,
-        1  -> api.only(Seq.empty)
+        10 -> disjointTimeSeriesTrials,
+        1 -> api.only(Seq.empty)
       )
       blobStorage <- setUpBlobStorage(
         lotsOfFinalTimeSeries,
