@@ -29,20 +29,20 @@ object BlobStorageReferenceImplementationTest {
   type Time         = Int
   type SnapshotBlob = Double
 
-  val integerIdGenerator: Trials[Int] = api.integers(-20, 20)
-  val stringIdGenerator: Trials[String] =
+  val integerIdTrials: Trials[Int] = api.integers(-20, 20)
+  val stringIdTrials: Trials[String] =
     api.integers(50, 100).map("Name: " + _.toString)
-  val uniqueItemSpecificationForcingAUniqueTypeForTheSameIdGenerator
+  val uniqueItemSpecificationForcingAUniqueTypeForTheSameIdTrials
       : Trials[UniqueItemSpecification] =
     api.alternate(
-      mixedIdGenerator(disambiguation = 0).map(id =>
+      mixedIdTrials(disambiguation = 0).map(id =>
         UniqueItemSpecification(id, classOf[OneKindOfThing])
       ),
-      mixedIdGenerator(disambiguation = 1).map(id =>
+      mixedIdTrials(disambiguation = 1).map(id =>
         UniqueItemSpecification(id, classOf[AnotherKindOfThing])
       )
     )
-  val uniqueItemSpecificationAllowingDisjointTypesForTheSameIdGenerator
+  val uniqueItemSpecificationAllowingDisjointTypesForTheSameIdTrials
       : Trials[UniqueItemSpecification] = {
     val aSmallChoiceOfIdsToIncreaseTheChancesOfCollisions = api.integers(1, 10)
     api.alternate(
@@ -55,37 +55,48 @@ object BlobStorageReferenceImplementationTest {
     )
   }
 
-  def mixedIdGenerator(disambiguation: Int): Trials[Any] =
+  def mixedIdTrials(disambiguation: Int): Trials[Any] =
     api.alternate(
-      integerIdGenerator.map(disambiguation + 2 * _),
-      stringIdGenerator.map(_ + s"_$disambiguation")
+      integerIdTrials.map(disambiguation + 2 * _),
+      stringIdTrials.map(_ + s"_$disambiguation")
     )
 
-  def lotsOfTimeSeriesGenerator(
-      uniqueItemSpecificationGenerator: Trials[UniqueItemSpecification]
+  def lotsOfTimeSeriesTrialsUsing(
+      uniqueItemSpecificationTrials: Trials[UniqueItemSpecification]
   ): Trials[Seq[TimeSeries]] =
-    uniqueItemSpecificationGenerator.sets
+    uniqueItemSpecificationTrials.sets
       .filter(_.nonEmpty)
       .flatMap(uniqueItemSpecifications =>
         api.sequences(
-          uniqueItemSpecifications.toSeq.map(timeSeriesGeneratorFor)
+          uniqueItemSpecifications.toSeq.map(timeSeriesTrialsUsing)
         )
       )
 
-  def timeSeriesGeneratorFor(
+  def lotsOfTimeSeriesWithCollidingIdsTrialsUsing(
+      uniqueItemSpecificationTrials: Trials[UniqueItemSpecification]
+  ): Trials[Seq[TimeSeries]] =
+    uniqueItemSpecificationTrials.sets
+      .filter(_.groupBy(_.id).exists(1 < _._2.size))
+      .flatMap(uniqueItemSpecifications =>
+        api.sequences(
+          uniqueItemSpecifications.toSeq.map(timeSeriesTrialsUsing)
+        )
+      )
+
+  def timeSeriesTrialsUsing(
       uniqueItemSpecification: UniqueItemSpecification
   ): Trials[TimeSeries] = {
-    val blobGenerator: Trials[Option[SnapshotBlob]] =
+    val blobTrials: Trials[Option[SnapshotBlob]] =
       api.alternateWithWeights(
         5 -> api.integers(1, 1000).map(value => Some(value.toDouble)),
         1 -> api.only(None)
       )
 
-    val blobsGenerator: Trials[List[Option[SnapshotBlob]]] =
-      blobGenerator.lists.filter(_.nonEmpty)
+    val blobsTrials: Trials[List[Option[SnapshotBlob]]] =
+      blobTrials.lists.filter(_.nonEmpty)
 
     for {
-      snapshotBlobs <- blobsGenerator
+      snapshotBlobs <- blobsTrials
       twiceTheNumberOfSnapshots = 2 * snapshotBlobs.size
       times <- ascendingTimes(twiceTheNumberOfSnapshots)
       (snapshotTimes, queryTimes) = times
@@ -121,29 +132,18 @@ object BlobStorageReferenceImplementationTest {
             secondSequence.tail
           )
 
-      val snapshotDeltaGenerator = api.integers(1, 100)
-      val queryDeltaGenerator =
+      val snapshotDeltaTrials = api.integers(1, 100)
+      val queryDeltaTrials =
         api.alternateWithWeights(1 -> api.only(0), 5 -> api.integers(1, 100))
 
       for {
         earliest: Time <- api.integers(0, 9)
-        snapshotDeltas <- snapshotDeltaGenerator.listsOfSize(half)
-        queryDeltas    <- queryDeltaGenerator.listsOfSize(halfPlusOffCut)
+        snapshotDeltas <- snapshotDeltaTrials.listsOfSize(half)
+        queryDeltas    <- queryDeltaTrials.listsOfSize(halfPlusOffCut)
         deltas = interleave(queryDeltas, snapshotDeltas)
       } yield deltas.scanLeft(earliest)(_ + _)
     }
   }
-
-  def lotsOfTimeSeriesWithCollidingIdsGenerator(
-      uniqueItemSpecificationGenerator: Trials[UniqueItemSpecification]
-  ): Trials[Seq[TimeSeries]] =
-    uniqueItemSpecificationGenerator.sets
-      .filter(_.groupBy(_.id).exists(1 < _._2.size))
-      .flatMap(uniqueItemSpecifications =>
-        api.sequences(
-          uniqueItemSpecifications.toSeq.map(timeSeriesGeneratorFor)
-        )
-      )
 
   def setUpBlobStorage(
       lotsOfFinalTimeSeries: Seq[TimeSeries],
@@ -291,8 +291,8 @@ class BlobStorageReferenceImplementationTest {
   @TestFactory
   def queryingForAUniqueItemSnapshotNoEarlierThanWhenItWasBooked()
       : DynamicTests = {
-    val lotsOfTimeSeriesTrials = lotsOfTimeSeriesGenerator(
-      uniqueItemSpecificationForcingAUniqueTypeForTheSameIdGenerator
+    val lotsOfTimeSeriesTrials = lotsOfTimeSeriesTrialsUsing(
+      uniqueItemSpecificationForcingAUniqueTypeForTheSameIdTrials
     )
 
     (for {
@@ -463,12 +463,12 @@ class BlobStorageReferenceImplementationTest {
   def yieldingTheRelevantSnapshotsEvenIfTheItemIdCanReferToSeveralItemsOfDisjointTypes()
       : DynamicTests = {
     val disjointTimeSeriesWithCollisionsTrials =
-      lotsOfTimeSeriesWithCollidingIdsGenerator(
-        uniqueItemSpecificationAllowingDisjointTypesForTheSameIdGenerator
+      lotsOfTimeSeriesWithCollidingIdsTrialsUsing(
+        uniqueItemSpecificationAllowingDisjointTypesForTheSameIdTrials
       )
 
-    val disjointTimeSeriesTrials = lotsOfTimeSeriesGenerator(
-      uniqueItemSpecificationAllowingDisjointTypesForTheSameIdGenerator
+    val disjointTimeSeriesTrials = lotsOfTimeSeriesTrialsUsing(
+      uniqueItemSpecificationAllowingDisjointTypesForTheSameIdTrials
     )
 
     (for {
@@ -553,8 +553,8 @@ class BlobStorageReferenceImplementationTest {
   @TestFactory
   def queryingForAUniqueItemSnapshotWhenItWasBookedInExclusiveMode()
       : DynamicTests = {
-    val lotsOfTimeSeriesTrials = lotsOfTimeSeriesGenerator(
-      uniqueItemSpecificationForcingAUniqueTypeForTheSameIdGenerator
+    val lotsOfTimeSeriesTrials = lotsOfTimeSeriesTrialsUsing(
+      uniqueItemSpecificationForcingAUniqueTypeForTheSameIdTrials
     )
 
     (for {
