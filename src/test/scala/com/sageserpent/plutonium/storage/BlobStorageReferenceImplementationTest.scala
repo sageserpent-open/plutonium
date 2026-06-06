@@ -1,8 +1,8 @@
 package com.sageserpent.plutonium.storage
 
-import com.eed3si9n.expecty.Expecty
 import com.sageserpent.americium.Trials
 import com.sageserpent.americium.Trials.api
+import com.sageserpent.americium.java.CasesLimitStrategy
 import com.sageserpent.americium.junit5._
 import com.sageserpent.plutonium.UniqueItemSpecification
 import com.sageserpent.plutonium.efficient.BlobStorage
@@ -16,6 +16,8 @@ trait AnotherKindOfThing
 trait NoKindOfThing
 
 object ExpectyFlavouredAssert {
+  import com.eed3si9n.expecty.Expecty
+
   val assert: Expecty = new Expecty {
     override val showLocation: Boolean = true
     override val showTypes: Boolean    = true
@@ -23,8 +25,6 @@ object ExpectyFlavouredAssert {
 }
 
 object BlobStorageReferenceImplementationTest {
-  import ExpectyFlavouredAssert.assert
-
   type RecordingId  = Int
   type Time         = Int
   type SnapshotBlob = Double
@@ -32,25 +32,17 @@ object BlobStorageReferenceImplementationTest {
   val integerIdGenerator: Trials[Int] = api.integers(-20, 20)
   val stringIdGenerator: Trials[String] =
     api.integers(50, 100).map("Name: " + _.toString)
-
-  def mixedIdGenerator(disambiguation: Int): Trials[Any] =
-    api.alternate(
-      integerIdGenerator.map(disambiguation + 2 * _),
-      stringIdGenerator.map(_ + s"_$disambiguation")
-    )
-
-  val uniqueItemSpecificationWithUniqueTypePerIdGenerator
+  val uniqueItemSpecificationForcingAUniqueTypeForTheSameIdGenerator
       : Trials[UniqueItemSpecification] =
     api.alternate(
-      mixedIdGenerator(0).map(id =>
+      mixedIdGenerator(disambiguation = 0).map(id =>
         UniqueItemSpecification(id, classOf[OneKindOfThing])
       ),
-      mixedIdGenerator(1).map(id =>
+      mixedIdGenerator(disambiguation = 1).map(id =>
         UniqueItemSpecification(id, classOf[AnotherKindOfThing])
       )
     )
-
-  val uniqueItemSpecificationWithDisjointTypesPerIdGenerator
+  val uniqueItemSpecificationAllowingDisjointTypesForTheSameIdGenerator
       : Trials[UniqueItemSpecification] = {
     val aSmallChoiceOfIdsToIncreaseTheChancesOfCollisions = api.integers(1, 10)
     api.alternate(
@@ -63,34 +55,22 @@ object BlobStorageReferenceImplementationTest {
     )
   }
 
+  def mixedIdGenerator(disambiguation: Int): Trials[Any] =
+    api.alternate(
+      integerIdGenerator.map(disambiguation + 2 * _),
+      stringIdGenerator.map(_ + s"_$disambiguation")
+    )
+
   def lotsOfTimeSeriesGenerator(
       uniqueItemSpecificationGenerator: Trials[UniqueItemSpecification]
   ): Trials[Seq[TimeSeries]] =
-    uniqueItemSpecificationGenerator.lists
+    uniqueItemSpecificationGenerator.sets
       .filter(_.nonEmpty)
-      .map(_.distinctBy(_.id))
       .flatMap(uniqueItemSpecifications =>
-        api.sequences(uniqueItemSpecifications.map(timeSeriesGeneratorFor))
+        api.sequences(
+          uniqueItemSpecifications.toSeq.map(timeSeriesGeneratorFor)
+        )
       )
-
-  def lotsOfTimeSeriesWithCollidingIdsGenerator(
-      uniqueItemSpecificationGenerator: Trials[UniqueItemSpecification]
-  ): Trials[Seq[TimeSeries]] =
-    uniqueItemSpecificationGenerator.lists
-      .filter(_.nonEmpty)
-      .flatMap(uniqueItemSpecifications => {
-        val ids = uniqueItemSpecifications.map(_.id)
-        api
-          .shuffles(ids)
-          .flatMap(shuffledIds =>
-            api.sequences(
-              (uniqueItemSpecifications zip shuffledIds).map {
-                case (spec, id) =>
-                  timeSeriesGeneratorFor(spec.copy(id = id))
-              }
-            )
-          )
-      })
 
   def timeSeriesGeneratorFor(
       uniqueItemSpecification: UniqueItemSpecification
@@ -146,13 +126,24 @@ object BlobStorageReferenceImplementationTest {
         api.alternateWithWeights(1 -> api.only(0), 5 -> api.integers(1, 100))
 
       for {
-        earliest: Time  <- api.integers(0, 9)
+        earliest: Time <- api.integers(0, 9)
         snapshotDeltas <- snapshotDeltaGenerator.listsOfSize(half)
         queryDeltas    <- queryDeltaGenerator.listsOfSize(halfPlusOffCut)
         deltas = interleave(queryDeltas, snapshotDeltas)
       } yield deltas.scanLeft(earliest)(_ + _)
     }
   }
+
+  def lotsOfTimeSeriesWithCollidingIdsGenerator(
+      uniqueItemSpecificationGenerator: Trials[UniqueItemSpecification]
+  ): Trials[Seq[TimeSeries]] =
+    uniqueItemSpecificationGenerator.sets
+      .filter(_.groupBy(_.id).exists(1 < _._2.size))
+      .flatMap(uniqueItemSpecifications =>
+        api.sequences(
+          uniqueItemSpecifications.toSeq.map(timeSeriesGeneratorFor)
+        )
+      )
 
   def setUpBlobStorage(
       lotsOfFinalTimeSeries: Seq[TimeSeries],
@@ -301,7 +292,7 @@ class BlobStorageReferenceImplementationTest {
   def queryingForAUniqueItemSnapshotNoEarlierThanWhenItWasBooked()
       : DynamicTests = {
     val lotsOfTimeSeriesTrials = lotsOfTimeSeriesGenerator(
-      uniqueItemSpecificationWithUniqueTypePerIdGenerator
+      uniqueItemSpecificationForcingAUniqueTypeForTheSameIdGenerator
     )
 
     (for {
@@ -409,33 +400,90 @@ class BlobStorageReferenceImplementationTest {
       }
   }
 
+  def checkExpectationsForNonExistence(
+      timeSlice: Timeslice[SnapshotBlob]
+  )(uniqueItemSpecification: UniqueItemSpecification): Unit = {
+    val retrievedUniqueItemSpecifications =
+      timeSlice.uniqueItemQueriesFor(uniqueItemSpecification)
+
+    assert(retrievedUniqueItemSpecifications.isEmpty)
+
+    val retrievedSnapshotBlob: Option[SnapshotBlob] =
+      timeSlice.snapshotBlobFor(uniqueItemSpecification)
+
+    assert(retrievedSnapshotBlob.isEmpty)
+  }
+
+  def checkExpectationsForExistence(
+      timeSlice: Timeslice[SnapshotBlob],
+      expectedSnapshotBlob: Option[SnapshotBlob]
+  )(uniqueItemSpecification: UniqueItemSpecification): Unit = {
+    val id    = uniqueItemSpecification.id
+    val clazz = uniqueItemSpecification.clazz
+
+    val allRetrievedUniqueItemSpecifications =
+      timeSlice.uniqueItemQueriesFor(clazz)
+
+    val retrievedUniqueItemSpecifications =
+      timeSlice.uniqueItemQueriesFor(uniqueItemSpecification)
+
+    expectedSnapshotBlob match {
+      case Some(snapshotBlob) =>
+        assert(allRetrievedUniqueItemSpecifications.map(_.id).contains(id))
+
+        assert(1 == retrievedUniqueItemSpecifications.size)
+        assert(retrievedUniqueItemSpecifications.head.id == id)
+
+        assert(
+          clazz.isAssignableFrom(
+            retrievedUniqueItemSpecifications.head.clazz
+          )
+        )
+
+        val theRetrievedUniqueItemSpecification: UniqueItemSpecification =
+          retrievedUniqueItemSpecifications.head
+
+        val retrievedSnapshotBlob: Option[SnapshotBlob] =
+          timeSlice.snapshotBlobFor(theRetrievedUniqueItemSpecification)
+
+        assert(retrievedSnapshotBlob == Some(snapshotBlob))
+      case None =>
+        assert(!allRetrievedUniqueItemSpecifications.map(_.id).contains(id))
+
+        assert(retrievedUniqueItemSpecifications.isEmpty)
+
+        val retrievedSnapshotBlob: Option[SnapshotBlob] =
+          timeSlice.snapshotBlobFor(uniqueItemSpecification)
+
+        assert(retrievedSnapshotBlob.isEmpty)
+    }
+  }
+
   @TestFactory
   def yieldingTheRelevantSnapshotsEvenIfTheItemIdCanReferToSeveralItemsOfDisjointTypes()
       : DynamicTests = {
     val disjointTimeSeriesWithCollisionsTrials =
       lotsOfTimeSeriesWithCollidingIdsGenerator(
-        uniqueItemSpecificationWithDisjointTypesPerIdGenerator
+        uniqueItemSpecificationAllowingDisjointTypesForTheSameIdGenerator
       )
 
     val disjointTimeSeriesTrials = lotsOfTimeSeriesGenerator(
-      uniqueItemSpecificationWithDisjointTypesPerIdGenerator
+      uniqueItemSpecificationAllowingDisjointTypesForTheSameIdGenerator
     )
 
     (for {
-      lotsOfFinalTimeSeries <- disjointTimeSeriesWithCollisionsTrials filter (_.groupBy(
-        _.uniqueItemSpecification.id
-      ).values
-        .exists(1 < _.size))
+      lotsOfFinalTimeSeries <-
+        disjointTimeSeriesWithCollisionsTrials
       lotsOfObsoleteTimeSeries <- api.alternateWithWeights(
         10 -> disjointTimeSeriesTrials,
-        1 -> api.only(Seq.empty)
+        1  -> api.only(Seq.empty)
       )
       blobStorage <- setUpBlobStorage(
         lotsOfFinalTimeSeries,
         lotsOfObsoleteTimeSeries
       )
     } yield lotsOfFinalTimeSeries -> blobStorage)
-      .withLimit(100)
+      .withStrategy(_ => CasesLimitStrategy.counted(100, 1000))
       .dynamicTests { case (lotsOfFinalTimeSeries, blobStorage) =>
         for (
           TimeSeries(uniqueItemSpecification, snapshots, queryTimes) <-
@@ -466,20 +514,6 @@ class BlobStorageReferenceImplementationTest {
           }
         }
       }
-  }
-
-  def checkExpectationsForNonExistence(
-      timeSlice: Timeslice[SnapshotBlob]
-  )(uniqueItemSpecification: UniqueItemSpecification): Unit = {
-    val retrievedUniqueItemSpecifications =
-      timeSlice.uniqueItemQueriesFor(uniqueItemSpecification)
-
-    assert(retrievedUniqueItemSpecifications.isEmpty)
-
-    val retrievedSnapshotBlob: Option[SnapshotBlob] =
-      timeSlice.snapshotBlobFor(uniqueItemSpecification)
-
-    assert(retrievedSnapshotBlob.isEmpty)
   }
 
   def checkExpectationsForExistenceWhenMultipleItemsShareTheSameId(
@@ -520,7 +554,7 @@ class BlobStorageReferenceImplementationTest {
   def queryingForAUniqueItemSnapshotWhenItWasBookedInExclusiveMode()
       : DynamicTests = {
     val lotsOfTimeSeriesTrials = lotsOfTimeSeriesGenerator(
-      uniqueItemSpecificationWithUniqueTypePerIdGenerator
+      uniqueItemSpecificationForcingAUniqueTypeForTheSameIdGenerator
     )
 
     (for {
@@ -574,50 +608,5 @@ class BlobStorageReferenceImplementationTest {
           }
         }
       }
-  }
-
-  def checkExpectationsForExistence(
-      timeSlice: Timeslice[SnapshotBlob],
-      expectedSnapshotBlob: Option[SnapshotBlob]
-  )(uniqueItemSpecification: UniqueItemSpecification): Unit = {
-    val id    = uniqueItemSpecification.id
-    val clazz = uniqueItemSpecification.clazz
-
-    val allRetrievedUniqueItemSpecifications =
-      timeSlice.uniqueItemQueriesFor(clazz)
-
-    val retrievedUniqueItemSpecifications =
-      timeSlice.uniqueItemQueriesFor(uniqueItemSpecification)
-
-    expectedSnapshotBlob match {
-      case Some(snapshotBlob) =>
-        assert(allRetrievedUniqueItemSpecifications.map(_.id).contains(id))
-
-        assert(1 == retrievedUniqueItemSpecifications.size)
-        assert(retrievedUniqueItemSpecifications.head.id == id)
-
-        assert(
-          clazz.isAssignableFrom(
-            retrievedUniqueItemSpecifications.head.clazz
-          )
-        )
-
-        val theRetrievedUniqueItemSpecification: UniqueItemSpecification =
-          retrievedUniqueItemSpecifications.head
-
-        val retrievedSnapshotBlob: Option[SnapshotBlob] =
-          timeSlice.snapshotBlobFor(theRetrievedUniqueItemSpecification)
-
-        assert(retrievedSnapshotBlob == Some(snapshotBlob))
-      case None =>
-        assert(!allRetrievedUniqueItemSpecifications.map(_.id).contains(id))
-
-        assert(retrievedUniqueItemSpecifications.isEmpty)
-
-        val retrievedSnapshotBlob: Option[SnapshotBlob] =
-          timeSlice.snapshotBlobFor(uniqueItemSpecification)
-
-        assert(retrievedSnapshotBlob.isEmpty)
-    }
   }
 }
