@@ -483,7 +483,7 @@ class BlobStorageReferenceImplementationTest {
         lotsOfObsoleteTimeSeries
       )
     } yield lotsOfFinalTimeSeries -> blobStorage)
-      .withStrategy(_ => CasesLimitStrategy.counted(100, 1000))
+      .withStrategy(_ => CasesLimitStrategy.counted(200, 1000))
       .dynamicTests { case (lotsOfFinalTimeSeries, blobStorage) =>
         for (
           TimeSeries(uniqueItemSpecification, snapshots, queryTimes) <-
