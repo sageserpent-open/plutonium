@@ -2,8 +2,8 @@ package com.sageserpent.plutonium
 
 import java.time.Instant
 import java.util.UUID
-import cats.effect.{IO, Resource}
-import cats.implicits._
+import scala.util.Using
+
 import com.sageserpent.americium
 import com.sageserpent.americium._
 import com.sageserpent.americium.utilities.randomEnrichment._
@@ -1041,21 +1041,16 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
     }
   }
 }
-
 trait WorldResource {
-  val worldResource: Resource[IO, World]
+  def makeWorld(): World
 }
 
 trait WorldReferenceImplementationResource extends WorldResource {
-  val worldResource: Resource[IO, World] =
-    Resource.fromAutoCloseable(IO {
-      new WorldReferenceImplementation with WorldContracts
-    })
+  override def makeWorld(): World =
+    new WorldReferenceImplementation with WorldContracts
 }
 
 trait WorldEfficientInMemoryImplementationResource extends WorldResource {
-  val worldResource: Resource[IO, World] =
-    Resource.fromAutoCloseable(IO {
-      new WorldEfficientInMemoryImplementation with WorldContracts
-    })
+  override def makeWorld(): World =
+    new WorldEfficientInMemoryImplementation with WorldContracts
 }

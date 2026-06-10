@@ -1,12 +1,10 @@
 package com.sageserpent.plutonium
 
-import cats.effect.IO
-import cats.effect.unsafe.implicits.global
 import com.sageserpent.americium.utilities.randomEnrichment._
 
 import java.time.Instant
 import scala.concurrent.duration._
-import scala.util.Random
+import scala.util.{Random, Using}
 
 trait Benchmark extends WorldEfficientInMemoryImplementationResource {
   implicit class Enhancement(randomBehaviour: Random) {
@@ -23,93 +21,88 @@ trait Benchmark extends WorldEfficientInMemoryImplementationResource {
 
     val startTime = Deadline.now
 
-    val world: IO[World] =
-      worldResource.use(world =>
-        IO {
-          for (step <- 0 until size) {
-            val eventId = step - randomBehaviour
-              .chooseAnyNumberFromZeroToOneLessThan(20)
+    Using.resource(makeWorld()) { world =>
+      for (step <- 0 until size) {
+        val eventId = step - randomBehaviour
+          .chooseAnyNumberFromZeroToOneLessThan(20)
 
-            val probabilityOfNotBackdatingAnEvent = 0 < randomBehaviour
-              .chooseAnyNumberFromZeroToOneLessThan(3)
+        val probabilityOfNotBackdatingAnEvent = 0 < randomBehaviour
+          .chooseAnyNumberFromZeroToOneLessThan(3)
 
-            val theHourFromTheStart =
-              if (probabilityOfNotBackdatingAnEvent) step
-              else
-                step - randomBehaviour
-                  .chooseAnyNumberFromOneTo(20)
+        val theHourFromTheStart =
+          if (probabilityOfNotBackdatingAnEvent) step
+          else
+            step - randomBehaviour
+              .chooseAnyNumberFromOneTo(20)
 
-            val idOffset = (step / idWindowSize) * idWindowSize
+        val idOffset = (step / idWindowSize) * idWindowSize
 
-            val probabilityOfBookingANewOrCorrectingEvent = 0 < randomBehaviour
-              .chooseAnyNumberFromZeroToOneLessThan(5)
+        val probabilityOfBookingANewOrCorrectingEvent = 0 < randomBehaviour
+          .chooseAnyNumberFromZeroToOneLessThan(5)
 
-            if (probabilityOfBookingANewOrCorrectingEvent) {
-              val oneId =
-                randomBehaviour.chooseOneOfRange(idSet.map(_ + idOffset))
+        if (probabilityOfBookingANewOrCorrectingEvent) {
+          val oneId =
+            randomBehaviour.chooseOneOfRange(idSet.map(_ + idOffset))
 
-              val anotherId =
-                randomBehaviour.chooseOneOfRange(idSet.map(_ + idOffset))
+          val anotherId =
+            randomBehaviour.chooseOneOfRange(idSet.map(_ + idOffset))
 
-              world.revise(
-                eventId,
-                Change.forTwoItems[Thing, Thing](
-                  Instant.ofEpochSecond(3600L * theHourFromTheStart)
-                )(
-                  oneId,
-                  anotherId,
-                  (oneThing, anotherThing) => {
-                    oneThing.property1 = step
-                    oneThing.referTo(anotherThing)
-                  }
-                ),
-                Instant.now()
-              )
-            } else {
-              world.annul(eventId, Instant.now())
-            }
-
-            val onePastQueryRevision =
-              randomBehaviour.chooseAnyNumberFromZeroToOneLessThan(
-                1 + world.nextRevision
-              )
-
-            val queryTime = Instant.ofEpochSecond(
-              3600L * randomBehaviour.chooseAnyNumberFromZeroToOneLessThan(
-                1 + theHourFromTheStart
-              )
-            )
-
-            val property1 = {
-              val scope = world.scopeFor(queryTime, onePastQueryRevision)
-
-              val queryId = randomBehaviour.chooseOneOfRange(
-                0 until (idOffset + idWindowSize)
-              )
-
-              scope
-                .render(Bitemporal.withId[Thing](queryId))
-                .toList
-                .headOption
-                .fold(-2)(_.property1)
-            }
-
-            if (step % 50 == 0) {
-              val currentTime = Deadline.now
-
-              val duration = currentTime - startTime
-
-              println(
-                s"Step: $step, duration: ${duration.toMillis} milliseconds, property1: $property1"
-              )
-            }
-          }
-
-          world // NASTY HACK - allow the world to escape the resource scope, so that memory footprints can be taken.
+          world.revise(
+            eventId,
+            Change.forTwoItems[Thing, Thing](
+              Instant.ofEpochSecond(3600L * theHourFromTheStart)
+            )(
+              oneId,
+              anotherId,
+              (oneThing, anotherThing) => {
+                oneThing.property1 = step
+                oneThing.referTo(anotherThing)
+              }
+            ),
+            Instant.now()
+          )
+        } else {
+          world.annul(eventId, Instant.now())
         }
-      )
 
-    world.unsafeRunSync()
+        val onePastQueryRevision =
+          randomBehaviour.chooseAnyNumberFromZeroToOneLessThan(
+            1 + world.nextRevision
+          )
+
+        val queryTime = Instant.ofEpochSecond(
+          3600L * randomBehaviour.chooseAnyNumberFromZeroToOneLessThan(
+            1 + theHourFromTheStart
+          )
+        )
+
+        val property1 = {
+          val scope = world.scopeFor(queryTime, onePastQueryRevision)
+
+          val queryId = randomBehaviour.chooseOneOfRange(
+            0 until (idOffset + idWindowSize)
+          )
+
+          scope
+            .render(Bitemporal.withId[Thing](queryId))
+            .toList
+            .headOption
+            .fold(-2)(_.property1)
+        }
+
+        if (step % 50 == 0) {
+          val currentTime = Deadline.now
+
+          val duration = currentTime - startTime
+
+          println(
+            s"Step: $step, duration: ${duration.toMillis} milliseconds, property1: $property1"
+          )
+        }
+      }
+
+      world // NASTY HACK - allow the world to escape the resource scope, so that memory footprints can be taken.
+    }
   }
 }
 

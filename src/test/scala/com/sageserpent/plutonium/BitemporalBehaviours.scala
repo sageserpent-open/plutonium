@@ -1,10 +1,9 @@
 package com.sageserpent.plutonium
 
-import cats.effect.IO
-import cats.effect.unsafe.implicits.global
 import cats.kernel.laws.discipline.MonoidTests
 import cats.laws.discipline.MonadTests
 import cats.syntax.apply._
+import scala.util.Using
 import cats.{Applicative, Eq}
 import org.scalacheck.Prop.propBoolean
 import org.scalacheck.{Arbitrary, Gen, Prop, Properties}
@@ -63,9 +62,7 @@ trait BitemporalBehaviours
               asOfs,
               queryWhen
             ) =>
-          worldResource
-            .use(world =>
-              IO {
+          Using.resource(makeWorld()) { world =>
                 recordEventsInWorld(
                   bigShuffledHistoryOverLotsOfThings,
                   asOfs,
@@ -132,8 +129,6 @@ trait BitemporalBehaviours
 
                 Prop.all(properties.properties map (_._2) toSeq: _*)
               }
-            )
-            .unsafeRunSync
       })
     }
   }
@@ -181,9 +176,7 @@ trait BitemporalBehaviours
               asOfs,
               queryWhen
             ) =>
-          worldResource
-            .use(world =>
-              IO {
+          Using.resource(makeWorld()) { world =>
                 recordEventsInWorld(
                   bigShuffledHistoryOverLotsOfThings,
                   asOfs,
@@ -209,8 +202,6 @@ trait BitemporalBehaviours
 
                 (idsFromWildcardQuery == idsInExistence) :| s"${idsFromWildcardQuery} should be ${idsInExistence}, the items are: $itemsFromWildcardQuery"
               }
-            )
-            .unsafeRunSync
       })
     }
 
@@ -246,9 +237,7 @@ trait BitemporalBehaviours
       } yield (bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
       check(Prop.forAllNoShrink(testCaseGenerator) {
         case (bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
-          worldResource
-            .use(world =>
-              IO {
+          Using.resource(makeWorld()) { world =>
                 recordEventsInWorld(
                   bigShuffledHistoryOverLotsOfThings,
                   asOfs,
@@ -268,8 +257,6 @@ trait BitemporalBehaviours
                     } toSeq: _*
                 )
               }
-            )
-            .unsafeRunSync
       })
     }
   }
@@ -318,9 +305,7 @@ trait BitemporalBehaviours
               asOfs,
               queryWhen
             ) =>
-          worldResource
-            .use(world =>
-              IO {
+          Using.resource(makeWorld()) { world =>
                 recordEventsInWorld(
                   bigShuffledHistoryOverLotsOfThings,
                   asOfs,
@@ -368,8 +353,6 @@ trait BitemporalBehaviours
                   holdsFor[MoreSpecificFooHistory]
                 )
               }
-            )
-            .unsafeRunSync
       })
     }
 
@@ -416,9 +399,7 @@ trait BitemporalBehaviours
               asOfs,
               queryWhen
             ) =>
-          worldResource
-            .use(world =>
-              IO {
+          Using.resource(makeWorld()) { world =>
                 recordEventsInWorld(
                   bigShuffledHistoryOverLotsOfThings,
                   asOfs,
@@ -463,8 +444,6 @@ trait BitemporalBehaviours
                   holdsFor[MoreSpecificFooHistory]
                 )
               }
-            )
-            .unsafeRunSync
       })
     }
 
@@ -512,9 +491,7 @@ trait BitemporalBehaviours
               asOfs,
               queryWhen
             ) =>
-          worldResource
-            .use(world =>
-              IO {
+          Using.resource(makeWorld()) { world =>
                 recordEventsInWorld(
                   bigShuffledHistoryOverLotsOfThings,
                   asOfs,
@@ -561,8 +538,6 @@ trait BitemporalBehaviours
                   holdsFor[MoreSpecificFooHistory]
                 )
               }
-            )
-            .unsafeRunSync
       })
     }
 
@@ -610,9 +585,7 @@ trait BitemporalBehaviours
               asOfs,
               queryWhen
             ) =>
-          worldResource
-            .use(world =>
-              IO {
+          Using.resource(makeWorld()) { world =>
                 recordEventsInWorld(
                   bigShuffledHistoryOverLotsOfThings,
                   asOfs,
@@ -666,8 +639,6 @@ trait BitemporalBehaviours
                   holdsFor[MoreSpecificFooHistory]
                 )
               }
-            )
-            .unsafeRunSync
       })
     }
   }
@@ -716,9 +687,7 @@ trait BitemporalBehaviours
               asOfs,
               queryWhen
             ) =>
-          worldResource
-            .use(world =>
-              IO {
+          Using.resource(makeWorld()) { world =>
                 recordEventsInWorld(
                   bigShuffledHistoryOverLotsOfThings,
                   asOfs,
@@ -762,8 +731,6 @@ trait BitemporalBehaviours
                   holdsFor[MoreSpecificFooHistory]
                 )
               }
-            )
-            .unsafeRunSync
       })
     }
   }
@@ -806,9 +773,7 @@ trait BitemporalBehaviours
       )
       check(Prop.forAllNoShrink(testCaseGenerator) {
         case (_, bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
-          worldResource
-            .use(world =>
-              IO {
+          Using.resource(makeWorld()) { world =>
                 recordEventsInWorld(
                   bigShuffledHistoryOverLotsOfThings,
                   asOfs,
@@ -821,8 +786,6 @@ trait BitemporalBehaviours
                   .render(Bitemporal.none)
                   .isEmpty :| "scope.render(Bitemporal.none).isEmpty"
               }
-            )
-            .unsafeRunSync
       })
     }
   }
@@ -870,9 +833,7 @@ trait BitemporalBehaviours
               asOfs,
               queryWhen
             ) =>
-          worldResource
-            .use(world =>
-              IO {
+          Using.resource(makeWorld()) { world =>
                 recordEventsInWorld(
                   bigShuffledHistoryOverLotsOfThings,
                   asOfs,
@@ -945,8 +906,6 @@ trait BitemporalBehaviours
                   Prop.all(wildcardProperty, genericQueryByIdProperty)
                 } else Prop.undecided
               }
-            )
-            .unsafeRunSync
       })
     }
 
@@ -993,9 +952,7 @@ trait BitemporalBehaviours
               asOfs,
               queryWhen
             ) =>
-          worldResource
-            .use(world =>
-              IO {
+          Using.resource(makeWorld()) { world =>
                 recordEventsInWorld(
                   bigShuffledHistoryOverLotsOfThings,
                   asOfs,
@@ -1040,8 +997,6 @@ trait BitemporalBehaviours
                   )
                 } else Prop.undecided
               }
-            )
-            .unsafeRunSync
       })
     }
   }
