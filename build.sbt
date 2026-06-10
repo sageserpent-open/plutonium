@@ -21,7 +21,6 @@ lazy val settings = Seq(
   libraryDependencies += "org.scala-lang.modules" %% "scala-java8-compat" % "1.0.2",
   libraryDependencies += "org.typelevel" %% "cats-core"      % "2.13.0",
   libraryDependencies += "org.typelevel" %% "alleycats-core" % "2.13.0",
-  libraryDependencies += "org.typelevel" %% "cats-effect"    % "3.7.0",
   libraryDependencies += "net.bytebuddy"  % "byte-buddy"     % "1.18.7",
   libraryDependencies += "org.scala-lang.modules" %% "scala-collection-contrib" % "0.4.0",
   libraryDependencies += "org.scala-lang" % "scala-reflect" % "2.13.18",

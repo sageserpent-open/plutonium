@@ -1,8 +1,7 @@
 package com.sageserpent.plutonium
 
-import cats.effect.IO
-import cats.effect.unsafe.implicits.global
 import cats.syntax.apply._
+import scala.util.Using
 import com.sageserpent.americium
 
 import java.time.Instant
@@ -44,9 +43,7 @@ trait WorldBehaviours
 
   def worldWithNoHistoryBehaviour = {
     it should "not contain any identifiables" in {
-      worldResource
-        .use(world =>
-          IO {
+      Using.resource(makeWorld()) { world =>
             val scopeGenerator = for {
               when <- unboundedInstantGenerator
               asOf <- instantGenerator
@@ -59,19 +56,13 @@ trait WorldBehaviours
               scope.render(exampleBitemporal).isEmpty
             }))
           }
-        )
-        .unsafeRunSync
     }
 
     it should "have no current revision" in {
       check(
-        worldResource
-          .use(world =>
-            IO {
+        Using.resource(makeWorld()) { world =>
               (World.initialRevision == world.nextRevision) :| s"Initial revision of a world ${world.nextRevision} should be: ${World.initialRevision}."
             }
-          )
-          .unsafeRunSync
       )
     }
   }
@@ -142,9 +133,7 @@ trait WorldBehaviours
               asOfToLatestEventWhenMap,
               asOfsIncludingAllEventsNoLaterThanTheQueryWhen
             ) =>
-          worldResource
-            .use(world =>
-              IO {
+          Using.resource(makeWorld()) { world =>
                 recordEventsInWorld(
                   liftRecordings(
                     bigHistoryOverLotsOfThingsSortedInEventWhenOrder
@@ -193,8 +182,6 @@ trait WorldBehaviours
                   }: _*)
                 else Prop.undecided
               }
-            )
-            .unsafeRunSync
       })
     }
   }
@@ -238,9 +225,7 @@ trait WorldBehaviours
                 asOfs,
                 queryWhen
               ) =>
-            worldResource
-              .use(world =>
-                IO {
+            Using.resource(makeWorld()) { world =>
                   recordEventsInWorld(
                     liftRecordings(bigShuffledHistoryOverLotsOfThings),
                     asOfs,
@@ -268,8 +253,6 @@ trait WorldBehaviours
                     }: _*)
                   else Prop.undecided
                 }
-              )
-              .unsafeRunSync
         }
       )
     }
@@ -291,9 +274,7 @@ trait WorldBehaviours
       check(Prop.forAllNoShrink(testCaseGenerator) {
         case (random, fooHistoryIds, referringHistoryIds) =>
           val sharedAsOf = Instant.ofEpochSecond(0L)
-          worldResource
-            .use(world =>
-              IO {
+          Using.resource(makeWorld()) { world =>
                 val linearizationIndices =
                   fooHistoryIds zip LazyList.continually {
                     random.nextInt(3)
@@ -366,8 +347,6 @@ trait WorldBehaviours
                   (bitemporalWithExpectedFlavourOfHistory.id == fooHistoryId) :| s"Expected to have a single bitemporal of id: $fooHistoryId, but got one of id: ${bitemporalWithExpectedFlavourOfHistory.id}"
                 }: _*)
               }
-            )
-            .unsafeRunSync
       })
     }
 
@@ -406,9 +385,7 @@ trait WorldBehaviours
               queryWhen,
               random
             ) =>
-          worldResource
-            .use(world =>
-              IO {
+          Using.resource(makeWorld()) { world =>
                 val revisions = recordEventsInWorld(
                   liftRecordings(bigShuffledHistoryOverLotsOfThings),
                   asOfs,
@@ -503,8 +480,6 @@ trait WorldBehaviours
                   }: _*)
                 else Prop.undecided
               }
-            )
-            .unsafeRunSync
       })
     }
 
@@ -543,9 +518,7 @@ trait WorldBehaviours
               queryWhen,
               random
             ) =>
-          worldResource
-            .use(world =>
-              IO {
+          Using.resource(makeWorld()) { world =>
                 val revisions = recordEventsInWorld(
                   liftRecordings(bigShuffledHistoryOverLotsOfThings),
                   asOfs,
@@ -631,8 +604,6 @@ trait WorldBehaviours
                   }: _*)
                 else Prop.undecided
               }
-            )
-            .unsafeRunSync
       })
     }
 
@@ -659,9 +630,7 @@ trait WorldBehaviours
       } yield (bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen, random)
       check(Prop.forAllNoShrink(testCaseGenerator) {
         case (bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen, random) =>
-          worldResource
-            .use(world =>
-              IO {
+          Using.resource(makeWorld()) { world =>
                 val revisions = recordEventsInWorld(
                   liftRecordings(bigShuffledHistoryOverLotsOfThings),
                   asOfs,
@@ -743,8 +712,6 @@ trait WorldBehaviours
                   }: _*)
                 else Prop.undecided
               }
-            )
-            .unsafeRunSync
       })
     }
 
@@ -779,9 +746,7 @@ trait WorldBehaviours
               asOfs,
               queryWhen
             ) =>
-          worldResource
-            .use(world =>
-              IO {
+          Using.resource(makeWorld()) { world =>
                 (try {
                   recordEventsInWorld(
                     liftRecordings(bigShuffledFaultyHistoryOverLotsOfThings),
@@ -794,8 +759,6 @@ trait WorldBehaviours
                     Prop.proved
                 }) :| "An exception should have been thrown when making an inconsistent revision."
               }
-            )
-            .unsafeRunSync
       })
     }
 
@@ -832,9 +795,7 @@ trait WorldBehaviours
               asOfs,
               queryWhen
             ) =>
-          worldResource
-            .use(world =>
-              IO {
+          Using.resource(makeWorld()) { world =>
                 recordEventsInWorld(
                   liftRecordings(bigShuffledHistoryOverLotsOfThings),
                   asOfs,
@@ -873,8 +834,6 @@ trait WorldBehaviours
                   }: _*)
                 else Prop.undecided
               }
-            )
-            .unsafeRunSync
       })
     }
 
@@ -912,9 +871,7 @@ trait WorldBehaviours
       } yield (bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen, sequence)
       check(Prop.forAllNoShrink(testCaseGenerator) {
         case (bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen, sequence) =>
-          worldResource
-            .use(world =>
-              IO {
+          Using.resource(makeWorld()) { world =>
                 recordEventsInWorld(
                   liftRecordings(bigShuffledHistoryOverLotsOfThings),
                   asOfs,
@@ -932,8 +889,6 @@ trait WorldBehaviours
 
                 Prop.proved
               }
-            )
-            .unsafeRunSync
       })
     }
 
@@ -970,9 +925,7 @@ trait WorldBehaviours
               asOfs,
               queryWhen
             ) =>
-          worldResource
-            .use(world =>
-              IO {
+          Using.resource(makeWorld()) { world =>
                 recordEventsInWorld(
                   liftRecordings(bigShuffledHistoryOverLotsOfThings),
                   asOfs,
@@ -998,8 +951,6 @@ trait WorldBehaviours
                   }: _*)
                 else Prop.undecided
               }
-            )
-            .unsafeRunSync
       })
     }
 
@@ -1036,9 +987,7 @@ trait WorldBehaviours
               asOfs,
               queryWhen
             ) =>
-          worldResource
-            .use(world =>
-              IO {
+          Using.resource(makeWorld()) { world =>
                 recordEventsInWorld(
                   liftRecordings(bigShuffledHistoryOverLotsOfThings),
                   asOfs,
@@ -1081,8 +1030,6 @@ trait WorldBehaviours
                   }: _*)
                 else Prop.undecided
               }
-            )
-            .unsafeRunSync
       })
     }
 
@@ -1125,9 +1072,7 @@ trait WorldBehaviours
                 asOfs,
                 queryWhen
               ) =>
-            worldResource
-              .use(world =>
-                IO {
+            Using.resource(makeWorld()) { world =>
                   recordEventsInWorld(
                     liftRecordings(bigShuffledHistoryOverLotsOfThings),
                     asOfs,
@@ -1188,8 +1133,6 @@ trait WorldBehaviours
                     }: _*)
                   else Prop.undecided
                 }
-              )
-              .unsafeRunSync
         },
         minSuccessful(200),
         sizeRange(5)
@@ -1235,9 +1178,7 @@ trait WorldBehaviours
                 asOfs,
                 queryWhen
               ) =>
-            worldResource
-              .use(world =>
-                IO {
+            Using.resource(makeWorld()) { world =>
                   recordEventsInWorld(
                     liftRecordings(bigShuffledHistoryOverLotsOfThings),
                     asOfs,
@@ -1303,8 +1244,6 @@ trait WorldBehaviours
                     }: _*)
                   else Prop.undecided
                 }
-              )
-              .unsafeRunSync
         },
         minSuccessful(12),
         sizeRange(5)
@@ -1344,9 +1283,7 @@ trait WorldBehaviours
               asOfs,
               queryWhen
             ) =>
-          worldResource
-            .use(world =>
-              IO {
+          Using.resource(makeWorld()) { world =>
                 recordEventsInWorld(
                   liftRecordings(bigShuffledHistoryOverLotsOfThings),
                   asOfs,
@@ -1367,8 +1304,6 @@ trait WorldBehaviours
                   }: _*)
                 else Prop.undecided
               }
-            )
-            .unsafeRunSync
       })
     }
 
@@ -1407,9 +1342,7 @@ trait WorldBehaviours
                   asOfs,
                   queryWhen
                 ) =>
-              worldResource
-                .use(world =>
-                  IO {
+              Using.resource(makeWorld()) { world =>
                     recordEventsInWorld(
                       liftRecordings(bigShuffledHistoryOverLotsOfThings),
                       asOfs,
@@ -1455,8 +1388,6 @@ trait WorldBehaviours
                       }: _*)
                     else Prop.undecided
                   }
-                )
-                .unsafeRunSync
           }
       )
     }
@@ -1500,9 +1431,7 @@ trait WorldBehaviours
                 asOfs,
                 queryWhen
               ) =>
-            worldResource
-              .use(world =>
-                IO {
+            Using.resource(makeWorld()) { world =>
                   recordEventsInWorld(
                     liftRecordings(bigShuffledHistoryOverLotsOfThings),
                     asOfs,
@@ -1545,8 +1474,6 @@ trait WorldBehaviours
                     }: _*)
                   else Prop.undecided
                 }
-              )
-              .unsafeRunSync
         },
         maxDiscardedFactor(10),
         minSuccessful(12),
@@ -1588,9 +1515,7 @@ trait WorldBehaviours
               asOfs,
               referencingEventWhen
             ) =>
-          worldResource
-            .use(world =>
-              IO {
+          Using.resource(makeWorld()) { world =>
                 recordEventsInWorld(
                   liftRecordings(bigShuffledHistoryOverLotsOfThings),
                   asOfs,
@@ -1672,8 +1597,6 @@ trait WorldBehaviours
                   }: _*)
                 else Prop.undecided
               }
-            )
-            .unsafeRunSync
       })
     }
 
@@ -1711,9 +1634,7 @@ trait WorldBehaviours
               asOfs,
               referencingEventWhen
             ) =>
-          worldResource
-            .use(world =>
-              IO {
+          Using.resource(makeWorld()) { world =>
                 recordEventsInWorld(
                   liftRecordings(bigShuffledHistoryOverLotsOfThings),
                   asOfs,
@@ -1826,8 +1747,6 @@ trait WorldBehaviours
                   }: _*)
                 else Prop.undecided
               }
-            )
-            .unsafeRunSync
       })
     }
 
@@ -1862,9 +1781,7 @@ trait WorldBehaviours
               asOfs,
               definiteQueryWhen
             ) =>
-          worldResource
-            .use(world =>
-              IO {
+          Using.resource(makeWorld()) { world =>
                 recordEventsInWorld(
                   liftRecordings(bigShuffledHistoryOverLotsOfThings),
                   asOfs,
@@ -1897,8 +1814,6 @@ trait WorldBehaviours
                   } :| s"Should have rejected the attempt to annihilate an item that didn't exist at the query time."): _*
                 )
               }
-            )
-            .unsafeRunSync
       })
     }
 
@@ -1924,9 +1839,7 @@ trait WorldBehaviours
       } yield (bigShuffledHistoryOverLotsOfThings, asOfs)
       check(Prop.forAllNoShrink(testCaseGenerator) {
         case (bigShuffledHistoryOverLotsOfThings, asOfs) =>
-          worldResource
-            .use(world =>
-              IO {
+          Using.resource(makeWorld()) { world =>
                 val revisions = recordEventsInWorld(
                   liftRecordings(bigShuffledHistoryOverLotsOfThings),
                   asOfs,
@@ -1935,8 +1848,6 @@ trait WorldBehaviours
 
                 (1 + revisions.last === world.nextRevision) :| s"1 + ${revisions}.last === ${world.nextRevision}"
               }
-            )
-            .unsafeRunSync
       })
     }
 
@@ -1962,9 +1873,7 @@ trait WorldBehaviours
       } yield (bigShuffledHistoryOverLotsOfThings, asOfs)
       check(Prop.forAllNoShrink(testCaseGenerator) {
         case (bigShuffledHistoryOverLotsOfThings, asOfs) =>
-          worldResource
-            .use(world =>
-              IO {
+          Using.resource(makeWorld()) { world =>
                 recordEventsInWorld(
                   liftRecordings(bigShuffledHistoryOverLotsOfThings),
                   asOfs,
@@ -1976,8 +1885,6 @@ trait WorldBehaviours
                     (asOf === timelineAsOf) :| s"${asOf} === ${timelineAsOf}"
                 }: _*)
               }
-            )
-            .unsafeRunSync
       })
     }
 
@@ -2003,9 +1910,7 @@ trait WorldBehaviours
       } yield (bigShuffledHistoryOverLotsOfThings, asOfs)
       check(Prop.forAllNoShrink(testCaseGenerator) {
         case (bigShuffledHistoryOverLotsOfThings, asOfs) =>
-          worldResource
-            .use(world =>
-              IO {
+          Using.resource(makeWorld()) { world =>
                 recordEventsInWorld(
                   liftRecordings(bigShuffledHistoryOverLotsOfThings),
                   asOfs,
@@ -2017,8 +1922,6 @@ trait WorldBehaviours
                     !first.isAfter(second) :| s"!${first}.isAfter(${second})"
                 }: _*)
               }
-            )
-            .unsafeRunSync
       })
     }
 
@@ -2044,9 +1947,7 @@ trait WorldBehaviours
       } yield (bigShuffledHistoryOverLotsOfThings, asOfs)
       check(Prop.forAllNoShrink(testCaseGenerator) {
         case (bigShuffledHistoryOverLotsOfThings, asOfs) =>
-          worldResource
-            .use(world =>
-              IO {
+          Using.resource(makeWorld()) { world =>
                 val revisions = recordEventsInWorld(
                   liftRecordings(bigShuffledHistoryOverLotsOfThings),
                   asOfs,
@@ -2058,8 +1959,6 @@ trait WorldBehaviours
                     (index === revision) :| s"${index} === ${revision}"
                 }: _*)
               }
-            )
-            .unsafeRunSync
       })
     }
 
@@ -2085,9 +1984,7 @@ trait WorldBehaviours
       } yield (bigShuffledHistoryOverLotsOfThings, asOfs)
       check(Prop.forAllNoShrink(testCaseGenerator) {
         case (bigShuffledHistoryOverLotsOfThings, asOfs) =>
-          worldResource
-            .use(world =>
-              IO {
+          Using.resource(makeWorld()) { world =>
                 recordEventsInWorld(
                   liftRecordings(bigShuffledHistoryOverLotsOfThings),
                   asOfs,
@@ -2096,8 +1993,6 @@ trait WorldBehaviours
 
                 (world.nextRevision === world.revisionAsOfs.length) :| s"${world.nextRevision} === ${world.revisionAsOfs}.length"
               }
-            )
-            .unsafeRunSync
       })
     }
 
@@ -2123,9 +2018,7 @@ trait WorldBehaviours
       } yield (bigShuffledHistoryOverLotsOfThings, asOfs, random)
       check(Prop.forAllNoShrink(testCaseGenerator) {
         case (bigShuffledHistoryOverLotsOfThings, asOfs, random) =>
-          worldResource
-            .use(world =>
-              IO {
+          Using.resource(makeWorld()) { world =>
                 val numberOfRevisions = asOfs.length
 
                 val candidateIndicesToStartATranspose =
@@ -2159,8 +2052,6 @@ trait WorldBehaviours
                   Prop.proved
                 } :| s"Using ${asOfsWithIncorrectTransposition} should cause a precondition failure."
               }
-            )
-            .unsafeRunSync
       })
     }
 
@@ -2187,9 +2078,7 @@ trait WorldBehaviours
       } yield (bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
       check(Prop.forAllNoShrink(testCaseGenerator) {
         case (bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
-          worldResource
-            .use(world =>
-              IO {
+          Using.resource(makeWorld()) { world =>
                 recordEventsInWorld(
                   liftRecordings(bigShuffledHistoryOverLotsOfThings),
                   asOfs,
@@ -2244,8 +2133,6 @@ trait WorldBehaviours
                   }: _*)
                 else Prop.undecided
               }
-            )
-            .unsafeRunSync
 
         // TODO - perturb the 'asOf' values so as not to go the next revision
         // and see how that plays with the two ways of constructing a scope.
@@ -2275,9 +2162,7 @@ trait WorldBehaviours
       } yield (bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen, random)
       check(Prop.forAllNoShrink(testCaseGenerator) {
         case (bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen, random) =>
-          worldResource
-            .use(world =>
-              IO {
+          Using.resource(makeWorld()) { world =>
                 val revisions = recordEventsInWorld(
                   liftRecordings(bigShuffledHistoryOverLotsOfThings),
                   asOfs,
@@ -2375,8 +2260,6 @@ trait WorldBehaviours
                   }: _*)
                 else Prop.undecided
               }
-            )
-            .unsafeRunSync
       })
     }
 
@@ -2413,9 +2296,7 @@ trait WorldBehaviours
               asOfs,
               queryWhen
             ) =>
-          worldResource
-            .use(world =>
-              IO {
+          Using.resource(makeWorld()) { world =>
                 // What's being tested is the imperative behaviour of 'World'
                 // wrt its scopes - so use imperative code.
                 val scopeViaRevisionToHistoryMap =
@@ -2464,8 +2345,6 @@ trait WorldBehaviours
                   Prop.all(results.toSeq: _*)
                 else Prop.undecided
               }
-            )
-            .unsafeRunSync
       })
     }
 
@@ -2522,10 +2401,7 @@ trait WorldBehaviours
               faultyAsOfs,
               queryWhen
             ) =>
-          (worldResource -> worldResource)
-            .mapN(Tuple2.apply)
-            .use { case (utopia, distopia) =>
-              IO {
+          Using.resources(makeWorld(), makeWorld()) { (utopia, distopia) =>
                 // NOTE: we add some 'good' changes within the faulty revisions
                 // to make things more realistic prior to merging the faulty
                 // history with the good history...
@@ -2566,8 +2442,6 @@ trait WorldBehaviours
                       (utopianCase === distopianCase) :| s"${utopianCase} === distopianCase"
                   }: _*)
               }
-            }
-            .unsafeRunSync
       })
     }
 
@@ -2615,10 +2489,7 @@ trait WorldBehaviours
               asOfsAnotherWay,
               queryWhen
             ) =>
-          (worldResource -> worldResource)
-            .mapN(Tuple2.apply)
-            .use { case (worldOneWay, worldAnotherWay) =>
-              IO {
+          Using.resources(makeWorld(), makeWorld()) { (worldOneWay, worldAnotherWay) =>
                 recordEventsInWorld(
                   liftRecordings(bigShuffledHistoryOverLotsOfThingsOneWay),
                   asOfsOneWay,
@@ -2649,8 +2520,6 @@ trait WorldBehaviours
                       (caseOneWay === caseAnotherWay) :| s"The datum calculated one way: ${caseOneWay} should be the same as the other way: ${caseAnotherWay}"
                   }: _*)
               }
-            }
-            .unsafeRunSync
       })
     }
 
@@ -2707,9 +2576,7 @@ trait WorldBehaviours
                 bigShuffledHistoryOverLotsOfThings,
                 asOfs
               ) =>
-            worldResource
-              .use(world =>
-                IO {
+            Using.resource(makeWorld()) { world =>
                   recordEventsInWorld(
                     bigShuffledHistoryOverLotsOfThings,
                     asOfs,
@@ -2750,8 +2617,6 @@ trait WorldBehaviours
                     }: _*)
                   else Prop.undecided
                 }
-              )
-              .unsafeRunSync
         })
       }
     }
@@ -2797,9 +2662,7 @@ trait WorldBehaviours
                 asOfs,
                 whenAnInconsistentEventOccurs
               ) =>
-            worldResource
-              .use(world =>
-                IO {
+            Using.resource(makeWorld()) { world =>
                   var numberOfEvents = bigShuffledHistoryOverLotsOfThings.size
 
                   val sizeOfPartOne = 1 min (numberOfEvents / 2)
@@ -2899,8 +2762,6 @@ trait WorldBehaviours
                     }: _*)
                   else Prop.undecided
                 }
-              )
-              .unsafeRunSync
         })
       }
     }
@@ -3040,9 +2901,7 @@ trait WorldBehaviours
         )
         check(Prop.forAllNoShrink(testCaseGenerator) {
           case (bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
-            worldResource
-              .use(world =>
-                IO {
+            Using.resource(makeWorld()) { world =>
                   recordEventsInWorld(
                     bigShuffledHistoryOverLotsOfThings,
                     asOfs,
@@ -3051,8 +2910,6 @@ trait WorldBehaviours
 
                   Prop.proved
                 }
-              )
-              .unsafeRunSync
         })
       }
     }
@@ -3121,9 +2978,7 @@ trait WorldBehaviours
         )
         check(Prop.forAllNoShrink(testCaseGenerator) {
           case (bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
-            worldResource
-              .use(world =>
-                IO {
+            Using.resource(makeWorld()) { world =>
                   recordEventsInWorld(
                     bigShuffledHistoryOverLotsOfThings,
                     asOfs,
@@ -3132,8 +2987,6 @@ trait WorldBehaviours
 
                   Prop.proved
                 }
-              )
-              .unsafeRunSync
         })
       }
     }
@@ -3197,9 +3050,7 @@ trait WorldBehaviours
                 queryWhen,
                 seed
               ) =>
-            worldResource
-              .use(world =>
-                IO {
+            Using.resource(makeWorld()) { world =>
                   try {
                     recordEventsInWorld(
                       bigShuffledHistoryOverLotsOfThings,
@@ -3251,8 +3102,6 @@ trait WorldBehaviours
                     case _: UnsupportedOperationException => Prop.undecided
                   }
                 }
-              )
-              .unsafeRunSync
         },
         minSuccessful(10)
       )
@@ -3303,9 +3152,7 @@ trait WorldBehaviours
                 asOfs,
                 queryWhen
               ) =>
-            worldResource
-              .use(world =>
-                IO {
+            Using.resource(makeWorld()) { world =>
                   intercept[UnsupportedOperationException] {
                     recordEventsInWorld(
                       bigShuffledHistoryOverLotsOfThings,
@@ -3316,8 +3163,6 @@ trait WorldBehaviours
 
                   Prop.proved
                 }
-              )
-              .unsafeRunSync
         })
       }
     }
@@ -3369,9 +3214,7 @@ trait WorldBehaviours
                 whenAnAnnihilationOccurs,
                 queryWhen
               ) =>
-            worldResource
-              .use(world =>
-                IO {
+            Using.resource(makeWorld()) { world =>
                   try {
                     recordEventsInWorld(
                       bigShuffledHistoryOverLotsOfThings,
@@ -3459,8 +3302,6 @@ trait WorldBehaviours
                     case _: UnsupportedOperationException => Prop.undecided
                   }
                 }
-              )
-              .unsafeRunSync
         })
       }
     }
@@ -3519,9 +3360,7 @@ trait WorldBehaviours
               queryWhen,
               idsThatEachReferToMoreThanOneItem
             ) =>
-          worldResource
-            .use(world =>
-              IO {
+          Using.resource(makeWorld()) { world =>
                 recordEventsInWorld(
                   bigShuffledHistoryOverLotsOfThings,
                   asOfs,
@@ -3560,8 +3399,6 @@ trait WorldBehaviours
                   itemsThatShouldNotExist.isEmpty :| s"The items '$itemsThatShouldNotExist' for id: '$id' should not exist at the query time of: '$queryWhen'."
                 }): _*)
               }
-            )
-            .unsafeRunSync
       })
     }
   }
@@ -3615,9 +3452,7 @@ trait WorldBehaviours
               steps,
               annihilationWhen
             ) =>
-          worldResource
-            .use(world =>
-              IO {
+          Using.resource(makeWorld()) { world =>
                 val initialEventId = -2
 
                 world.revise(
@@ -3659,8 +3494,6 @@ trait WorldBehaviours
 
                 (steps == fredTheItem.head.datums) :| s"Expecting: ${steps}, but got: ${fredTheItem.head.datums}"
               }
-            )
-            .unsafeRunSync
       })
     }
 
@@ -3716,9 +3549,7 @@ trait WorldBehaviours
       } yield (bigShuffledHistoryOverLotsOfThings, asOfs, steps)
       check(Prop.forAllNoShrink(testCaseGenerator) {
         case (bigShuffledHistoryOverLotsOfThings, asOfs, steps) =>
-          worldResource
-            .use(world =>
-              IO {
+          Using.resource(makeWorld()) { world =>
                 recordEventsInWorld(
                   bigShuffledHistoryOverLotsOfThings,
                   asOfs,
@@ -3735,8 +3566,6 @@ trait WorldBehaviours
 
                 (steps == fredTheItem.head.datums) :| s"Expecting: ${steps}, but got: ${fredTheItem.head.datums}"
               }
-            )
-            .unsafeRunSync
       })
     }
 
@@ -3794,9 +3623,7 @@ trait WorldBehaviours
       check(
         Prop.forAllNoShrink(testCaseGenerator) {
           case (bigShuffledHistoryOverLotsOfThings, asOfs, steps) =>
-            worldResource
-              .use(world =>
-                IO {
+            Using.resource(makeWorld()) { world =>
                   recordEventsInWorld(
                     bigShuffledHistoryOverLotsOfThings,
                     asOfs,
@@ -3813,8 +3640,6 @@ trait WorldBehaviours
 
                   (steps == fredTheItem.head.datums) :| s"Expecting: ${steps}, but got: ${fredTheItem.head.datums}"
                 }
-              )
-              .unsafeRunSync
         }
       )
     }
@@ -3868,9 +3693,7 @@ trait WorldBehaviours
       check(
         Prop.forAllNoShrink(testCaseGenerator) {
           case (historyOverLotsOfThings, asOfs, steps) =>
-            worldResource
-              .use(world =>
-                IO {
+            Using.resource(makeWorld()) { world =>
                   recordEventsInWorld(
                     liftRecordings(historyOverLotsOfThings),
                     asOfs,
@@ -3887,8 +3710,6 @@ trait WorldBehaviours
 
                   (steps.toSet == fredTheItem.head.datums.toSet) :| s"Expecting: ${steps}, but got: ${fredTheItem.head.datums}"
                 }
-              )
-              .unsafeRunSync
         }
       )
     }
@@ -3935,9 +3756,7 @@ trait WorldBehaviours
               asOfs,
               queryWhen
             ) =>
-          worldResource
-            .use(world =>
-              IO {
+          Using.resource(makeWorld()) { world =>
                 recordEventsInWorld(
                   bigShuffledHistoryOverLotsOfThings,
                   asOfs,
@@ -3976,8 +3795,6 @@ trait WorldBehaviours
                   }: _*)
                 else Prop.undecided
               }
-            )
-            .unsafeRunSync
       })
     }
 
@@ -4041,9 +3858,7 @@ trait WorldBehaviours
               asOfsForSecondHistory,
               queryWhen
             ) =>
-          worldResource
-            .use(world =>
-              IO {
+          Using.resource(makeWorld()) { world =>
                 // Define a history the first time around...
 
                 recordEventsInWorld(
@@ -4091,8 +3906,6 @@ trait WorldBehaviours
                 (historyAfterAnnulments.isEmpty :| s"${historyAfterAnnulments}.isEmpty") &&
                 ((firstHistory == secondHistory) :| s"firstHistory === ${secondHistory}")
               }
-            )
-            .unsafeRunSync
       })
     }
 
@@ -4155,9 +3968,7 @@ trait WorldBehaviours
               queryWhen,
               revisionOffsetToCheckAt
             ) =>
-          worldResource
-            .use(world =>
-              IO {
+          Using.resource(makeWorld()) { world =>
                 recordEventsInWorld(
                   bigOverallShuffledHistoryOverLotsOfThings,
                   asOfs,
@@ -4200,8 +4011,6 @@ trait WorldBehaviours
                   }: _*)
                 else Prop.undecided
               }
-            )
-            .unsafeRunSync
       })
     }
 
@@ -4243,9 +4052,7 @@ trait WorldBehaviours
       check(
         Prop.forAllNoShrink(testCaseGenerator) {
           case (testCaseSubsections, asOfsForSubsections, queryWhen) =>
-            worldResource
-              .use(world =>
-                IO {
+            Using.resource(makeWorld()) { world =>
                   type ScalaFormatWorkaround =
                     Seq[Seq[
                       (
@@ -4391,8 +4198,6 @@ trait WorldBehaviours
                     Prop.all(checks: _*)
                   else Prop.undecided
                 }
-              )
-              .unsafeRunSync
         }
       )
     }
@@ -4435,9 +4240,7 @@ trait WorldBehaviours
               asOfs,
               queryWhen
             ) =>
-          worldResource
-            .use(world =>
-              IO {
+          Using.resource(makeWorld()) { world =>
                 // Define a history the first time around...
 
                 recordEventsInWorld(
@@ -4491,8 +4294,6 @@ trait WorldBehaviours
                 (historyAfterAnnulments.isEmpty :| s"${historyAfterAnnulments}.isEmpty") &&
                 ((firstHistory == secondHistory) :| s"firstHistory === ${secondHistory}")
               }
-            )
-            .unsafeRunSync
       })
     }
   }

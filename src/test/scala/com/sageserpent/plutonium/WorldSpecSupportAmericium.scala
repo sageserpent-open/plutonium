@@ -1,8 +1,8 @@
 package com.sageserpent.plutonium
 
 import java.time.Instant
-import cats.effect.{IO, Resource}
-import cats.implicits._
+import scala.util.Using
+
 import com.sageserpent.americium.Trials
 import com.sageserpent.americium.Trials.api
 import com.sageserpent.americium.utilities.seqEnrichment._
@@ -1161,19 +1161,15 @@ trait WorldSpecSupportAmericium extends Assertions {
 }
 
 trait WorldResourceAmericium {
-  val worldResource: Resource[IO, World]
+  def makeWorld(): World
 }
 
 trait WorldReferenceImplementationResourceAmericium extends WorldResourceAmericium {
-  val worldResource: Resource[IO, World] =
-    Resource.fromAutoCloseable(IO {
-      new WorldReferenceImplementation with WorldContracts
-    })
+  override def makeWorld(): World =
+    new WorldReferenceImplementation with WorldContracts
 }
 
 trait WorldEfficientInMemoryImplementationResourceAmericium extends WorldResourceAmericium {
-  val worldResource: Resource[IO, World] =
-    Resource.fromAutoCloseable(IO {
-      new WorldEfficientInMemoryImplementation with WorldContracts
-    })
+  override def makeWorld(): World =
+    new WorldEfficientInMemoryImplementation with WorldContracts
 }
