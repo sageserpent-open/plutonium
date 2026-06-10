@@ -1,7 +1,7 @@
 package com.sageserpent.plutonium
 
-import cats.effect.IO
-import cats.effect.unsafe.implicits.global
+import scala.util.Using
+
 import cats.syntax.apply._
 import com.sageserpent.americium.utilities.randomEnrichment._
 import com.sageserpent.plutonium.utilities.{NegativeInfinity, PositiveInfinity}
@@ -40,63 +40,59 @@ trait Bugs
 
       val sharedAsOf = Instant.ofEpochSecond(0)
 
-      worldResource
-        .use(world =>
-          IO {
-            world.revise(
-              Map(
-                eventBeingRevised -> Some(
-                  Change
-                    .forOneItem[IntegerHistory](timeOfObsoleteEvent)(
-                      firstItemId,
-                      { item =>
-                        item.integerProperty = 734634
-                      }
-                    )
+      Using.resource(makeWorld()) { world =>
+        world.revise(
+          Map(
+            eventBeingRevised -> Some(
+              Change
+                .forOneItem[IntegerHistory](timeOfObsoleteEvent)(
+                  firstItemId,
+                  { item =>
+                    item.integerProperty = 734634
+                  }
                 )
-              ),
-              sharedAsOf
             )
-
-            world.revise(
-              Map(
-                firstFinalEventForFirstItem -> Some(
-                  Change
-                    .forOneItem[IntegerHistory](
-                      timeOfObsoleteEvent plusMillis 1
-                    )(
-                      firstItemId,
-                      { item =>
-                        item.integerProperty = expectedFinalValue
-                      }
-                    )
-                ),
-                eventBeingRevised ->
-                  Some(
-                    Change
-                      .forOneItem[MoreSpecificFooHistory](
-                        timeOfObsoleteEvent plusMillis 2
-                      )(
-                        secondItemId,
-                        { item =>
-                          item.property1 = "Kingston Bagpuize"
-                        }
-                      )
-                  )
-              ),
-              sharedAsOf
-            )
-
-            val scope =
-              world.scopeFor(PositiveInfinity, world.nextRevision)
-
-            scope
-              .render(Bitemporal.withId[IntegerHistory](firstItemId))
-              .loneElement
-              .datums should contain theSameElementsAs Seq(expectedFinalValue)
-          }
+          ),
+          sharedAsOf
         )
-        .unsafeRunSync
+
+        world.revise(
+          Map(
+            firstFinalEventForFirstItem -> Some(
+              Change
+                .forOneItem[IntegerHistory](
+                  timeOfObsoleteEvent plusMillis 1
+                )(
+                  firstItemId,
+                  { item =>
+                    item.integerProperty = expectedFinalValue
+                  }
+                )
+            ),
+            eventBeingRevised ->
+              Some(
+                Change
+                  .forOneItem[MoreSpecificFooHistory](
+                    timeOfObsoleteEvent plusMillis 2
+                  )(
+                    secondItemId,
+                    { item =>
+                      item.property1 = "Kingston Bagpuize"
+                    }
+                  )
+              )
+          ),
+          sharedAsOf
+        )
+
+        val scope =
+          world.scopeFor(PositiveInfinity, world.nextRevision)
+
+        scope
+          .render(Bitemporal.withId[IntegerHistory](firstItemId))
+          .loneElement
+          .datums should contain theSameElementsAs Seq(expectedFinalValue)
+      }
     }
 
     "events that have been revised" should "no longer contribute history to an item, even when the revised event refers to another item - with a twist" in {
@@ -115,61 +111,57 @@ trait Bugs
 
       val sharedAsOf = Instant.ofEpochSecond(0)
 
-      worldResource
-        .use(world =>
-          IO {
-            world.revise(
-              Map(
-                firstFinalEventForFirstItem -> Some(
-                  Change
-                    .forOneItem[IntegerHistory](
-                      sharedTimeOfFinalAndObsoleteEvent
-                    )(
-                      firstItemId,
-                      { item =>
-                        item.integerProperty = expectedFinalValue
-                      }
-                    )
-                ),
-                eventBeingRevised -> Some(
-                  Change
-                    .forOneItem[IntegerHistory](
-                      sharedTimeOfFinalAndObsoleteEvent
-                    )(
-                      firstItemId,
-                      { item =>
-                        item.integerProperty = 734634
-                      }
-                    )
-                )
-              ),
-              sharedAsOf
-            )
-
-            world.revise(
-              eventBeingRevised,
+      Using.resource(makeWorld()) { world =>
+        world.revise(
+          Map(
+            firstFinalEventForFirstItem -> Some(
               Change
-                .forOneItem[MoreSpecificFooHistory](
-                  sharedTimeOfFinalAndObsoleteEvent plusMillis 1
+                .forOneItem[IntegerHistory](
+                  sharedTimeOfFinalAndObsoleteEvent
                 )(
-                  secondItemId,
+                  firstItemId,
                   { item =>
-                    item.property1 = "Kingston Bagpuize"
+                    item.integerProperty = expectedFinalValue
                   }
-                ),
-              sharedAsOf
+                )
+            ),
+            eventBeingRevised -> Some(
+              Change
+                .forOneItem[IntegerHistory](
+                  sharedTimeOfFinalAndObsoleteEvent
+                )(
+                  firstItemId,
+                  { item =>
+                    item.integerProperty = 734634
+                  }
+                )
             )
-
-            val scope =
-              world.scopeFor(PositiveInfinity, world.nextRevision)
-
-            scope
-              .render(Bitemporal.withId[IntegerHistory](firstItemId))
-              .loneElement
-              .datums should contain theSameElementsAs Seq(expectedFinalValue)
-          }
+          ),
+          sharedAsOf
         )
-        .unsafeRunSync
+
+        world.revise(
+          eventBeingRevised,
+          Change
+            .forOneItem[MoreSpecificFooHistory](
+              sharedTimeOfFinalAndObsoleteEvent plusMillis 1
+            )(
+              secondItemId,
+              { item =>
+                item.property1 = "Kingston Bagpuize"
+              }
+            ),
+          sharedAsOf
+        )
+
+        val scope =
+          world.scopeFor(PositiveInfinity, world.nextRevision)
+
+        scope
+          .render(Bitemporal.withId[IntegerHistory](firstItemId))
+          .loneElement
+          .datums should contain theSameElementsAs Seq(expectedFinalValue)
+      }
     }
 
     "events that have the same effect on an item" should "be applicable across several item lifecycles, even if the item unified type changes" in {
@@ -179,98 +171,94 @@ trait Bugs
 
       val commonValue = "Foo"
 
-      worldResource
-        .use(world =>
-          IO {
-            {
-              world.revise(
-                0,
-                Change.forOneItem[FooHistory](Instant.ofEpochSecond(0L))(
-                  lizId,
-                  { liz =>
-                    liz.property1 = commonValue
-                  }
-                ),
-                sharedAsOf
-              )
+      Using.resource(makeWorld()) { world =>
+        {
+          world.revise(
+            0,
+            Change.forOneItem[FooHistory](Instant.ofEpochSecond(0L))(
+              lizId,
+              { liz =>
+                liz.property1 = commonValue
+              }
+            ),
+            sharedAsOf
+          )
 
-              world.revise(
-                1,
-                Annihilation[MoreSpecificFooHistory](
-                  Instant.ofEpochSecond(1L),
-                  lizId
-                ),
-                sharedAsOf
-              )
-            }
+          world.revise(
+            1,
+            Annihilation[MoreSpecificFooHistory](
+              Instant.ofEpochSecond(1L),
+              lizId
+            ),
+            sharedAsOf
+          )
+        }
 
-            {
-              world.revise(
-                2,
-                Change.forOneItem[FooHistory](Instant.ofEpochSecond(2L))(
-                  lizId,
-                  { liz =>
-                    liz.property1 = commonValue
-                  }
-                ),
-                sharedAsOf
-              )
+        {
+          world.revise(
+            2,
+            Change.forOneItem[FooHistory](Instant.ofEpochSecond(2L))(
+              lizId,
+              { liz =>
+                liz.property1 = commonValue
+              }
+            ),
+            sharedAsOf
+          )
 
-              world.revise(
-                3,
-                Annihilation[AnotherSpecificFooHistory](
-                  Instant.ofEpochSecond(3L),
-                  lizId
-                ),
-                sharedAsOf
-              )
-            }
+          world.revise(
+            3,
+            Annihilation[AnotherSpecificFooHistory](
+              Instant.ofEpochSecond(3L),
+              lizId
+            ),
+            sharedAsOf
+          )
+        }
 
-            {
-              world.revise(
-                4,
-                Change.forOneItem[FooHistory](Instant.ofEpochSecond(4L))(
-                  lizId,
-                  { liz =>
-                    liz.property1 = commonValue
-                  }
-                ),
-                sharedAsOf
-              )
+        {
+          world.revise(
+            4,
+            Change.forOneItem[FooHistory](Instant.ofEpochSecond(4L))(
+              lizId,
+              { liz =>
+                liz.property1 = commonValue
+              }
+            ),
+            sharedAsOf
+          )
 
-              world.revise(
-                5,
-                Annihilation[FooHistory](Instant.ofEpochSecond(5L), lizId),
-                sharedAsOf
-              )
-            }
+          world.revise(
+            5,
+            Annihilation[FooHistory](Instant.ofEpochSecond(5L), lizId),
+            sharedAsOf
+          )
+        }
 
-            {
-              world
-                .scopeFor(Instant.ofEpochSecond(0L), sharedAsOf)
-                .render(Bitemporal.withId[MoreSpecificFooHistory](lizId))
-                .loneElement
-                .datums should contain theSameElementsAs List(commonValue)
-            }
+        {
+          world
+            .scopeFor(Instant.ofEpochSecond(0L), sharedAsOf)
+            .render(Bitemporal.withId[MoreSpecificFooHistory](lizId))
+            .loneElement
+            .datums should contain theSameElementsAs List(commonValue)
+        }
 
-            {
-              world
-                .scopeFor(Instant.ofEpochSecond(2L), sharedAsOf)
-                .render(Bitemporal.withId[AnotherSpecificFooHistory](lizId))
-                .loneElement
-                .datums should contain theSameElementsAs List(commonValue)
-            }
+        {
+          world
+            .scopeFor(Instant.ofEpochSecond(2L), sharedAsOf)
+            .render(Bitemporal.withId[AnotherSpecificFooHistory](lizId))
+            .loneElement
+            .datums should contain theSameElementsAs List(commonValue)
+        }
 
-            {
-              world
-                .scopeFor(Instant.ofEpochSecond(4L), sharedAsOf)
-                .render(Bitemporal.withId[FooHistory](lizId))
-                .loneElement
-                .datums should contain theSameElementsAs List(commonValue)
-            }
-          }
-        )
-        .unsafeRunSync
+        {
+          world
+            .scopeFor(Instant.ofEpochSecond(4L), sharedAsOf)
+            .render(Bitemporal.withId[FooHistory](lizId))
+            .loneElement
+            .datums should contain theSameElementsAs List(commonValue)
+        }
+      }
     }
 
     "a related item that was annihilated where that item is resurrected just after it is annihilated" should "be detected as a ghost by an event that attempts to mutate it" in {
@@ -285,61 +273,57 @@ trait Bugs
 
       val sharedAsOf = Instant.ofEpochSecond(0)
 
-      worldResource
-        .use(world =>
-          IO {
-            world.revise(
-              1,
-              Change.forTwoItems[ReferringHistory, FooHistory](
-                startOfRelationship
-              )(
-                referrerId,
-                referredId,
-                { (referrer, referred) =>
-                  referrer.referTo(referred)
-                }
-              ),
-              sharedAsOf
-            )
-            world.revise(
-              2,
-              Annihilation[FooHistory](
-                whenAnnihilationAndResurrectionTakesPlace,
-                referredId
-              ),
-              sharedAsOf
-            )
-            world.revise(
-              3,
-              Change.forOneItem[FooHistory](
-                whenAnnihilationAndResurrectionTakesPlace
-              )(
-                referredId,
-                { referred =>
-                  referred.property1 = "Hello"
-                }
-              ),
-              sharedAsOf
-            )
-            intercept[RuntimeException] {
-              world.revise(
-                4,
-                Change.forOneItem[ReferringHistory](
-                  whenAnnihilationAndResurrectionTakesPlace
-                )(
-                  referrerId,
-                  { referrer =>
-                    referrer.mutateRelatedItem(
-                      referredId.asInstanceOf[History#Id]
-                    )
-                  }
-                ),
-                sharedAsOf
-              )
+      Using.resource(makeWorld()) { world =>
+        world.revise(
+          1,
+          Change.forTwoItems[ReferringHistory, FooHistory](
+            startOfRelationship
+          )(
+            referrerId,
+            referredId,
+            { (referrer, referred) =>
+              referrer.referTo(referred)
             }
-          }
+          ),
+          sharedAsOf
         )
-        .unsafeRunSync
+        world.revise(
+          2,
+          Annihilation[FooHistory](
+            whenAnnihilationAndResurrectionTakesPlace,
+            referredId
+          ),
+          sharedAsOf
+        )
+        world.revise(
+          3,
+          Change.forOneItem[FooHistory](
+            whenAnnihilationAndResurrectionTakesPlace
+          )(
+            referredId,
+            { referred =>
+              referred.property1 = "Hello"
+            }
+          ),
+          sharedAsOf
+        )
+        intercept[RuntimeException] {
+          world.revise(
+            4,
+            Change.forOneItem[ReferringHistory](
+              whenAnnihilationAndResurrectionTakesPlace
+            )(
+              referrerId,
+              { referrer =>
+                referrer.mutateRelatedItem(
+                  referredId.asInstanceOf[History#Id]
+                )
+              }
+            ),
+            sharedAsOf
+          )
+        }
+      }
     }
 
     "a related item that was annihilated where that item is resurrected just after it is annihilated" should "be detected as a ghost by an event that attempts to mutate it - with a twist" in {
@@ -354,62 +338,58 @@ trait Bugs
 
       val sharedAsOf = Instant.ofEpochSecond(0)
 
-      worldResource
-        .use(world =>
-          IO {
-            world.revise(
-              1,
-              Change.forTwoItems[ReferringHistory, FooHistory](
-                startOfRelationship
-              )(
-                referrerId,
-                referredId,
-                { (referrer, referred) =>
-                  referrer.referTo(referred)
-                }
-              ),
-              sharedAsOf
-            )
-            world.revise(
-              Map(
-                2 -> Some(
-                  Annihilation[FooHistory](
-                    whenAnnihilationAndResurrectionTakesPlace,
-                    referredId
-                  )
-                ),
-                3 -> Some(
-                  Change.forOneItem[FooHistory](
-                    whenAnnihilationAndResurrectionTakesPlace
-                  )(
-                    referredId,
-                    { referred =>
-                      referred.property1 = "Hello"
-                    }
-                  )
-                )
-              ),
-              sharedAsOf
-            )
-            intercept[RuntimeException] {
-              world.revise(
-                4,
-                Change.forOneItem[ReferringHistory](
-                  whenAnnihilationAndResurrectionTakesPlace
-                )(
-                  referrerId,
-                  { referrer =>
-                    referrer.mutateRelatedItem(
-                      referredId.asInstanceOf[History#Id]
-                    )
-                  }
-                ),
-                sharedAsOf
-              )
+      Using.resource(makeWorld()) { world =>
+        world.revise(
+          1,
+          Change.forTwoItems[ReferringHistory, FooHistory](
+            startOfRelationship
+          )(
+            referrerId,
+            referredId,
+            { (referrer, referred) =>
+              referrer.referTo(referred)
             }
-          }
+          ),
+          sharedAsOf
         )
-        .unsafeRunSync
+        world.revise(
+          Map(
+            2 -> Some(
+              Annihilation[FooHistory](
+                whenAnnihilationAndResurrectionTakesPlace,
+                referredId
+              )
+            ),
+            3 -> Some(
+              Change.forOneItem[FooHistory](
+                whenAnnihilationAndResurrectionTakesPlace
+              )(
+                referredId,
+                { referred =>
+                  referred.property1 = "Hello"
+                }
+              )
+            )
+          ),
+          sharedAsOf
+        )
+        intercept[RuntimeException] {
+          world.revise(
+            4,
+            Change.forOneItem[ReferringHistory](
+              whenAnnihilationAndResurrectionTakesPlace
+            )(
+              referrerId,
+              { referrer =>
+                referrer.mutateRelatedItem(
+                  referredId.asInstanceOf[History#Id]
+                )
+              }
+            ),
+            sharedAsOf
+          )
+        }
+      }
     }
 
     "booking in simple changes in the same single revision" should "work" in {
@@ -422,48 +402,44 @@ trait Bugs
       val barChangeWhen = Instant.ofEpochSecond(0L)
       val fooChangeWhen = barChangeWhen plusSeconds 1L
 
-      worldResource
-        .use(world =>
-          IO {
-            world.revise(
-              Map(
-                0 -> Some(
-                  Change.forOneItem(barChangeWhen)(
-                    barId,
-                    { bar: BarHistory =>
-                      bar.property1 = -7.81198542653286e87
-                    }
-                  )
-                ),
-                1 -> Some(
-                  Change.forOneItem(fooChangeWhen)(
-                    fooId,
-                    { foo: FooHistory =>
-                      foo.property2 = true
-                    }
-                  )
-                )
-              ),
-              asOf
+      Using.resource(makeWorld()) { world =>
+        world.revise(
+          Map(
+            0 -> Some(
+              Change.forOneItem(barChangeWhen)(
+                barId,
+                { bar: BarHistory =>
+                  bar.property1 = -7.81198542653286e87
+                }
+              )
+            ),
+            1 -> Some(
+              Change.forOneItem(fooChangeWhen)(
+                fooId,
+                { foo: FooHistory =>
+                  foo.property2 = true
+                }
+              )
             )
-
-            val scope =
-              world.scopeFor(fooChangeWhen, asOf)
-
-            scope
-              .render(Bitemporal.withId[BarHistory](barId))
-              .loneElement
-              .datums should contain theSameElementsInOrderAs Seq(
-              -7.81198542653286e87
-            )
-
-            scope
-              .render(Bitemporal.withId[FooHistory](fooId))
-              .loneElement
-              .datums should contain theSameElementsInOrderAs Seq(true)
-          }
+          ),
+          asOf
         )
-        .unsafeRunSync
+
+        val scope =
+          world.scopeFor(fooChangeWhen, asOf)
+
+        scope
+          .render(Bitemporal.withId[BarHistory](barId))
+          .loneElement
+          .datums should contain theSameElementsInOrderAs Seq(
+          -7.81198542653286e87
+        )
+
+        scope
+          .render(Bitemporal.withId[FooHistory](fooId))
+          .loneElement
+          .datums should contain theSameElementsInOrderAs Seq(true)
+      }
     }
 
     "booking in events in reverse order of physical time" should "work" in {
@@ -473,41 +449,37 @@ trait Bugs
 
       val expectedHistory = Seq("The Real Thing", true)
 
-      worldResource
-        .use(world =>
-          IO {
-            world.revise(
-              0,
-              Change.forOneItem(Instant.ofEpochSecond(1L))(
-                itemId,
-                { item: FooHistory =>
-                  item.property2 = true
-                }
-              ),
-              sharedAsOf
-            )
-
-            world.revise(
-              1,
-              Change.forOneItem(Instant.ofEpochSecond(0L))(
-                itemId,
-                { item: FooHistory =>
-                  item.property1 = "The Real Thing"
-                }
-              ),
-              sharedAsOf
-            )
-
-            val scope =
-              world.scopeFor(PositiveInfinity, world.nextRevision)
-
-            scope
-              .render(Bitemporal.withId[FooHistory](itemId))
-              .loneElement
-              .datums should contain theSameElementsInOrderAs expectedHistory
-          }
+      Using.resource(makeWorld()) { world =>
+        world.revise(
+          0,
+          Change.forOneItem(Instant.ofEpochSecond(1L))(
+            itemId,
+            { item: FooHistory =>
+              item.property2 = true
+            }
+          ),
+          sharedAsOf
         )
-        .unsafeRunSync
+
+        world.revise(
+          1,
+          Change.forOneItem(Instant.ofEpochSecond(0L))(
+            itemId,
+            { item: FooHistory =>
+              item.property1 = "The Real Thing"
+            }
+          ),
+          sharedAsOf
+        )
+
+        val scope =
+          world.scopeFor(PositiveInfinity, world.nextRevision)
+
+        scope
+          .render(Bitemporal.withId[FooHistory](itemId))
+          .loneElement
+          .datums should contain theSameElementsInOrderAs expectedHistory
+      }
     }
 
     "annihilating an item" should "not affect events occurring in a subsequent lifecycle" in {
@@ -517,58 +489,54 @@ trait Bugs
 
       val expectedHistory = Seq(1, 2)
 
-      worldResource
-        .use(world =>
-          IO {
-            world.revise(
-              0,
-              Change.forOneItem(Instant.ofEpochSecond(0L))(
-                itemId,
-                { item: IntegerHistory =>
-                  item.integerProperty = -999
-                }
-              ),
-              sharedAsOf
-            )
-
-            world.revise(
-              1,
-              Annihilation[IntegerHistory](Instant.ofEpochSecond(1L), itemId),
-              sharedAsOf
-            )
-
-            world.revise(
-              2,
-              Change.forOneItem(Instant.ofEpochSecond(3L))(
-                itemId,
-                { item: IntegerHistory =>
-                  item.integerProperty = 2
-                }
-              ),
-              sharedAsOf
-            )
-
-            world.revise(
-              3,
-              Change.forOneItem(Instant.ofEpochSecond(2L))(
-                itemId,
-                { item: IntegerHistory =>
-                  item.integerProperty = 1
-                }
-              ),
-              sharedAsOf
-            )
-
-            val scope =
-              world.scopeFor(PositiveInfinity, world.nextRevision)
-
-            scope
-              .render(Bitemporal.withId[IntegerHistory](itemId))
-              .loneElement
-              .datums should contain theSameElementsInOrderAs expectedHistory
-          }
+      Using.resource(makeWorld()) { world =>
+        world.revise(
+          0,
+          Change.forOneItem(Instant.ofEpochSecond(0L))(
+            itemId,
+            { item: IntegerHistory =>
+              item.integerProperty = -999
+            }
+          ),
+          sharedAsOf
         )
-        .unsafeRunSync
+
+        world.revise(
+          1,
+          Annihilation[IntegerHistory](Instant.ofEpochSecond(1L), itemId),
+          sharedAsOf
+        )
+
+        world.revise(
+          2,
+          Change.forOneItem(Instant.ofEpochSecond(3L))(
+            itemId,
+            { item: IntegerHistory =>
+              item.integerProperty = 2
+            }
+          ),
+          sharedAsOf
+        )
+
+        world.revise(
+          3,
+          Change.forOneItem(Instant.ofEpochSecond(2L))(
+            itemId,
+            { item: IntegerHistory =>
+              item.integerProperty = 1
+            }
+          ),
+          sharedAsOf
+        )
+
+        val scope =
+          world.scopeFor(PositiveInfinity, world.nextRevision)
+
+        scope
+          .render(Bitemporal.withId[IntegerHistory](itemId))
+          .loneElement
+          .datums should contain theSameElementsInOrderAs expectedHistory
+      }
     }
 
     "forgetting to supply a type tag when annihilating an item" should "result in a useful diagnostic" in {
@@ -576,32 +544,28 @@ trait Bugs
 
       val sharedAsOf = Instant.ofEpochSecond(0)
 
-      worldResource
-        .use(world =>
-          IO {
-            world.revise(
-              0,
-              Change.forOneItem(Instant.ofEpochSecond(0L))(
-                itemId,
-                { item: IntegerHistory =>
-                  item.integerProperty = 1
-                }
-              ),
-              sharedAsOf
-            )
-
-            val exception = intercept[RuntimeException] {
-              world.revise(
-                1,
-                Annihilation(Instant.ofEpochSecond(1L), itemId),
-                sharedAsOf
-              )
+      Using.resource(makeWorld()) { world =>
+        world.revise(
+          0,
+          Change.forOneItem(Instant.ofEpochSecond(0L))(
+            itemId,
+            { item: IntegerHistory =>
+              item.integerProperty = 1
             }
-
-            exception.getMessage should include regex "attempt to annihilate an item.*without an explicit type"
-          }
+          ),
+          sharedAsOf
         )
-        .unsafeRunSync
+
+        val exception = intercept[RuntimeException] {
+          world.revise(
+            1,
+            Annihilation(Instant.ofEpochSecond(1L), itemId),
+            sharedAsOf
+          )
+        }
+
+        exception.getMessage should include regex "attempt to annihilate an item.*without an explicit type"
+      }
     }
 
     "annihilating an item and then resurrecting it at the same physical time" should "result in a history for the resurrected item" in {
@@ -651,31 +615,6 @@ trait Bugs
         changeFor(secondReferringId, Instant.ofEpochSecond(-1L), "Louie")
       )
 
-      /* worldResource.use(world => IO{ world.revise(Map( 0 -> Some(
-       * changeFor(secondReferringId, Instant.ofEpochSecond(-4L), "Huey"))),
-       * sharedAsOf)
-       *
-       * world.revise( Map( 1 -> Some( changeFor(firstReferringId,
-       * Instant.ofEpochSecond(0L), "Louie")), 2 -> Some(
-       * annihilationFor(firstReferringId, Instant.ofEpochSecond(0L)))),
-       * sharedAsOf )
-       *
-       * world.revise( Map( 3 -> Some( changeFor(firstReferringId,
-       * Instant.ofEpochSecond(0L), "Duey")), 4 -> Some(
-       * annihilationFor(secondReferringId, Instant.ofEpochSecond(-3L))), 5 ->
-       * Some( changeFor(secondReferringId, Instant.ofEpochSecond(-2L), "Huey"))
-       * ), sharedAsOf )
-       *
-       * world.revise(Map( 6 -> Some( changeFor(secondReferringId,
-       * Instant.ofEpochSecond(-1L), "Louie")) ), sharedAsOf)
-       *
-       * val scope =
-       * world.scopeFor(Instant.ofEpochSecond(0L), world.nextRevision)
-       *
-       * scope .render(Bitemporal.withId[ReferringHistory](firstReferringId))
-       * .loneElement .referencedDatums .toSeq should contain theSameElementsAs
-       * Seq("Duey" -> Seq.empty) } */
-
       for (seed <- 1 to 100) {
         val randomBehaviour = new Random(seed)
 
@@ -686,40 +625,36 @@ trait Bugs
         val eventsInChunks = randomBehaviour
           .splitIntoNonEmptyPieces(eventsForBothItems.zipWithIndex)
 
-        worldResource
-          .use(world =>
-            IO {
-              for (eventChunk <- eventsInChunks) {
-                world.revise(
-                  SortedMap(eventChunk.map { case (event, eventId) =>
-                    eventId -> Some(event)
-                  }: _*),
-                  sharedAsOf
-                )
-              }
+        Using.resource(makeWorld()) { world =>
+          for (eventChunk <- eventsInChunks) {
+            world.revise(
+              SortedMap(eventChunk.map { case (event, eventId) =>
+                eventId -> Some(event)
+              }: _*),
+              sharedAsOf
+            )
+          }
 
-              val scope =
-                world.scopeFor(Instant.ofEpochSecond(0L), world.nextRevision)
+          val scope =
+            world.scopeFor(Instant.ofEpochSecond(0L), world.nextRevision)
 
-              try {
-                scope
-                  .render(Bitemporal.withId[ReferringHistory](firstReferringId))
-                  .loneElement
-                  .referencedDatums
-                  .toSeq should contain theSameElementsAs Seq(
-                  "Duey" -> Seq.empty
+          try {
+            scope
+              .render(Bitemporal.withId[ReferringHistory](firstReferringId))
+              .loneElement
+              .referencedDatums
+              .toSeq should contain theSameElementsAs Seq(
+              "Duey" -> Seq.empty
+            )
+          } catch {
+            case exception: TestFailedException =>
+              throw exception.modifyMessage(
+                _.map(message =>
+                  s"$message - Test case is: $eventsInChunks"
                 )
-              } catch {
-                case exception: TestFailedException =>
-                  throw exception.modifyMessage(
-                    _.map(message =>
-                      s"$message - Test case is: $eventsInChunks"
-                    )
-                  )
-              }
-            }
-          )
-          .unsafeRunSync
+              )
+          }
+        }
       }
     }
     "correcting an event by moving it in physical time" should "work properly" in {
@@ -731,66 +666,62 @@ trait Bugs
 
       val eventBeingMovedInPhysicalTime = 1
 
-      worldResource
-        .use(world =>
-          IO {
-            world.revise(
-              0,
-              Change.forOneItem(Instant.ofEpochSecond(-3L))(
-                itemId,
-                { item: IntegerHistory =>
-                  item.integerProperty = 99
-                }
-              ),
-              sharedAsOf
-            )
-
-            val foo = (item: IntegerHistory) => item.integerProperty = 55555
-
-            world.revise(
-              eventBeingMovedInPhysicalTime,
-              Change.forOneItem(Instant.ofEpochSecond(1L))(itemId, foo),
-              sharedAsOf
-            )
-
-            world.revise(
-              2,
-              Change.forOneItem(Instant.ofEpochSecond(0L))(
-                itemId,
-                { item: IntegerHistory =>
-                  item.integerProperty = 77
-                }
-              ),
-              sharedAsOf
-            )
-
-            world.revise(
-              Map(
-                eventBeingMovedInPhysicalTime -> Some(
-                  Change.forOneItem(Instant.ofEpochSecond(-1L))(itemId, foo)
-                ),
-                3 -> Some(
-                  Change.forOneItem(Instant.ofEpochSecond(-2L))(
-                    itemId,
-                    { item: IntegerHistory =>
-                      item.integerProperty = 88
-                    }
-                  )
-                )
-              ),
-              sharedAsOf
-            )
-
-            val scope =
-              world.scopeFor(PositiveInfinity, world.nextRevision)
-
-            scope
-              .render(Bitemporal.withId[IntegerHistory](itemId))
-              .loneElement
-              .datums should contain theSameElementsInOrderAs expectedHistory
-          }
+      Using.resource(makeWorld()) { world =>
+        world.revise(
+          0,
+          Change.forOneItem(Instant.ofEpochSecond(-3L))(
+            itemId,
+            { item: IntegerHistory =>
+              item.integerProperty = 99
+            }
+          ),
+          sharedAsOf
         )
-        .unsafeRunSync
+
+        val foo = (item: IntegerHistory) => item.integerProperty = 55555
+
+        world.revise(
+          eventBeingMovedInPhysicalTime,
+          Change.forOneItem(Instant.ofEpochSecond(1L))(itemId, foo),
+          sharedAsOf
+        )
+
+        world.revise(
+          2,
+          Change.forOneItem(Instant.ofEpochSecond(0L))(
+            itemId,
+            { item: IntegerHistory =>
+              item.integerProperty = 77
+            }
+          ),
+          sharedAsOf
+        )
+
+        world.revise(
+          Map(
+            eventBeingMovedInPhysicalTime -> Some(
+              Change.forOneItem(Instant.ofEpochSecond(-1L))(itemId, foo)
+            ),
+            3 -> Some(
+              Change.forOneItem(Instant.ofEpochSecond(-2L))(
+                itemId,
+                { item: IntegerHistory =>
+                  item.integerProperty = 88
+                }
+              )
+            )
+          ),
+          sharedAsOf
+        )
+
+        val scope =
+          world.scopeFor(PositiveInfinity, world.nextRevision)
+
+        scope
+          .render(Bitemporal.withId[IntegerHistory](itemId))
+          .loneElement
+          .datums should contain theSameElementsInOrderAs expectedHistory
+      }
     }
 
     "annulling an annihilation" should "fuse the earlier lifecycle with a subsequent one" in {
@@ -802,49 +733,45 @@ trait Bugs
 
       val annihilationEvent = 1
 
-      worldResource
-        .use(world =>
-          IO {
-            world.revise(
-              0,
-              Change.forOneItem(Instant.ofEpochSecond(0L))(
-                itemId,
-                { item: IntegerHistory =>
-                  item.integerProperty = 1
-                }
-              ),
-              sharedAsOf
-            )
-
-            world.revise(
-              annihilationEvent,
-              Annihilation[IntegerHistory](Instant.ofEpochSecond(1L), itemId),
-              sharedAsOf
-            )
-
-            world.revise(
-              2,
-              Change.forOneItem(Instant.ofEpochSecond(2L))(
-                itemId,
-                { item: IntegerHistory =>
-                  item.integerProperty = 2
-                }
-              ),
-              sharedAsOf
-            )
-
-            world.annul(annihilationEvent, sharedAsOf)
-
-            val scope =
-              world.scopeFor(PositiveInfinity, world.nextRevision)
-
-            scope
-              .render(Bitemporal.withId[IntegerHistory](itemId))
-              .loneElement
-              .datums should contain theSameElementsInOrderAs expectedHistory
-          }
+      Using.resource(makeWorld()) { world =>
+        world.revise(
+          0,
+          Change.forOneItem(Instant.ofEpochSecond(0L))(
+            itemId,
+            { item: IntegerHistory =>
+              item.integerProperty = 1
+            }
+          ),
+          sharedAsOf
         )
-        .unsafeRunSync
+
+        world.revise(
+          annihilationEvent,
+          Annihilation[IntegerHistory](Instant.ofEpochSecond(1L), itemId),
+          sharedAsOf
+        )
+
+        world.revise(
+          2,
+          Change.forOneItem(Instant.ofEpochSecond(2L))(
+            itemId,
+            { item: IntegerHistory =>
+              item.integerProperty = 2
+            }
+          ),
+          sharedAsOf
+        )
+
+        world.annul(annihilationEvent, sharedAsOf)
+
+        val scope =
+          world.scopeFor(PositiveInfinity, world.nextRevision)
+
+        scope
+          .render(Bitemporal.withId[IntegerHistory](itemId))
+          .loneElement
+          .datums should contain theSameElementsInOrderAs expectedHistory
+      }
     }
 
     "booking in events in a mixed up order of physical time" should "work" in {
@@ -854,52 +781,48 @@ trait Bugs
 
       val expectedHistory = Seq(55, 66, 77)
 
-      worldResource
-        .use(world =>
-          IO {
-            world.revise(
-              0,
-              Change.forOneItem(Instant.ofEpochSecond(1L))(
-                itemId,
-                { item: IntegerHistory =>
-                  item.integerProperty = 66
-                }
-              ),
-              sharedAsOf
-            )
-
-            world.revise(
-              1,
-              Change.forOneItem(Instant.ofEpochSecond(2L))(
-                itemId,
-                { item: IntegerHistory =>
-                  item.integerProperty = 77
-                }
-              ),
-              sharedAsOf
-            )
-
-            world.revise(
-              2,
-              Change.forOneItem(Instant.ofEpochSecond(0L))(
-                itemId,
-                { item: IntegerHistory =>
-                  item.integerProperty = 55
-                }
-              ),
-              sharedAsOf
-            )
-
-            val scope =
-              world.scopeFor(PositiveInfinity, world.nextRevision)
-
-            scope
-              .render(Bitemporal.withId[IntegerHistory](itemId))
-              .loneElement
-              .datums should contain theSameElementsInOrderAs expectedHistory
-          }
+      Using.resource(makeWorld()) { world =>
+        world.revise(
+          0,
+          Change.forOneItem(Instant.ofEpochSecond(1L))(
+            itemId,
+            { item: IntegerHistory =>
+              item.integerProperty = 66
+            }
+          ),
+          sharedAsOf
         )
-        .unsafeRunSync
+
+        world.revise(
+          1,
+          Change.forOneItem(Instant.ofEpochSecond(2L))(
+            itemId,
+            { item: IntegerHistory =>
+              item.integerProperty = 77
+            }
+          ),
+          sharedAsOf
+        )
+
+        world.revise(
+          2,
+          Change.forOneItem(Instant.ofEpochSecond(0L))(
+            itemId,
+            { item: IntegerHistory =>
+              item.integerProperty = 55
+            }
+          ),
+          sharedAsOf
+        )
+
+        val scope =
+          world.scopeFor(PositiveInfinity, world.nextRevision)
+
+        scope
+          .render(Bitemporal.withId[IntegerHistory](itemId))
+          .loneElement
+          .datums should contain theSameElementsInOrderAs expectedHistory
+      }
     }
 
     "events that refer to items using inconsistent types" should "be rejected" in {
@@ -965,19 +888,15 @@ trait Bugs
           }
         )
 
-        worldResource
-          .use(world =>
-            IO {
-              intercept[RuntimeException] {
-                val permutedActions = random.shuffle(actions)
+        Using.resource(makeWorld()) { world =>
+          intercept[RuntimeException] {
+            val permutedActions = random.shuffle(actions)
 
-                for (action <- permutedActions) {
-                  action(world)
-                }
-              }
+            for (action <- permutedActions) {
+              action(world)
             }
-          )
-          .unsafeRunSync
+          }
+        }
       }
     }
 
@@ -990,65 +909,61 @@ trait Bugs
 
       val expectedHistory = Seq(11, 22, 33, 44, 55)
 
-      worldResource
-        .use(world =>
-          IO {
-            world.revise(
-              TreeMap(
-                10 -> Some(
-                  Change.forOneItem(Instant.ofEpochSecond(0L))(
-                    itemId,
-                    { item: IntegerHistory =>
-                      item.integerProperty = 11
-                    }
-                  )
-                ),
-                20 -> Some(
-                  Change.forOneItem(Instant.ofEpochSecond(1L))(
-                    itemId,
-                    { item: IntegerHistory =>
-                      item.integerProperty = 22
-                    }
-                  )
-                ),
-                30 -> Some(
-                  Change.forOneItem(sharedPhysicalTime)(
-                    itemId,
-                    { item: IntegerHistory =>
-                      item.integerProperty = 33
-                    }
-                  )
-                ),
-                40 -> Some(
-                  Change.forOneItem(sharedPhysicalTime)(
-                    itemId,
-                    { item: IntegerHistory =>
-                      item.integerProperty = 44
-                    }
-                  )
-                ),
-                50 -> Some(
-                  Change.forOneItem(Instant.ofEpochSecond(1000L))(
-                    itemId,
-                    { item: IntegerHistory =>
-                      item.integerProperty = 55
-                    }
-                  )
-                )
-              ),
-              sharedAsOf
+      Using.resource(makeWorld()) { world =>
+        world.revise(
+          TreeMap(
+            10 -> Some(
+              Change.forOneItem(Instant.ofEpochSecond(0L))(
+                itemId,
+                { item: IntegerHistory =>
+                  item.integerProperty = 11
+                }
+              )
+            ),
+            20 -> Some(
+              Change.forOneItem(Instant.ofEpochSecond(1L))(
+                itemId,
+                { item: IntegerHistory =>
+                  item.integerProperty = 22
+                }
+              )
+            ),
+            30 -> Some(
+              Change.forOneItem(sharedPhysicalTime)(
+                itemId,
+                { item: IntegerHistory =>
+                  item.integerProperty = 33
+                }
+              )
+            ),
+            40 -> Some(
+              Change.forOneItem(sharedPhysicalTime)(
+                itemId,
+                { item: IntegerHistory =>
+                  item.integerProperty = 44
+                }
+              )
+            ),
+            50 -> Some(
+              Change.forOneItem(Instant.ofEpochSecond(1000L))(
+                itemId,
+                { item: IntegerHistory =>
+                  item.integerProperty = 55
+                }
+              )
             )
-
-            val scope =
-              world.scopeFor(PositiveInfinity, world.nextRevision)
-
-            scope
-              .render(Bitemporal.withId[IntegerHistory](itemId))
-              .loneElement
-              .datums should contain theSameElementsInOrderAs expectedHistory
-          }
+          ),
+          sharedAsOf
         )
-        .unsafeRunSync
+
+        val scope =
+          world.scopeFor(PositiveInfinity, world.nextRevision)
+
+        scope
+          .render(Bitemporal.withId[IntegerHistory](itemId))
+          .loneElement
+          .datums should contain theSameElementsInOrderAs expectedHistory
+      }
     }
 
     "an annihilation without any following lifecycle" should "work" in {
@@ -1058,53 +973,47 @@ trait Bugs
 
       val sharedAsOf = Instant.ofEpochSecond(0)
 
-      val expectedHistory = Seq(11)
-
-      worldResource
-        .use(world =>
-          IO {
-            world.revise(
-              0,
-              Change.forOneItem(NegativeInfinity)(
-                itemId,
-                { item: MoreSpecificFooHistory =>
-                  item.property1 = ""
-                }
-              ),
-              sharedAsOf
-            )
-
-            world.revise(
-              TreeMap(
-                1 -> Some(
-                  Change.forOneItem(Instant.ofEpochSecond(-2L))(
-                    bystanderId,
-                    { item: BarHistory =>
-                      item.property1 = -5.8368005564593e89
-                    }
-                  )
-                ),
-                2 -> Some(
-                  Annihilation[BarHistory](
-                    Instant.ofEpochSecond(-1L),
-                    bystanderId
-                  )
-                ),
-                3 -> Some(
-                  Annihilation[FooHistory](Instant.ofEpochSecond(0L), itemId)
-                )
-              ),
-              sharedAsOf
-            )
-
-            val scope =
-              world.scopeFor(PositiveInfinity, world.nextRevision)
-
-            scope
-              .render(Bitemporal.withId[IntegerHistory](itemId)) shouldBe empty
-          }
+      Using.resource(makeWorld()) { world =>
+        world.revise(
+          0,
+          Change.forOneItem(NegativeInfinity)(
+            itemId,
+            { item: MoreSpecificFooHistory =>
+              item.property1 = ""
+            }
+          ),
+          sharedAsOf
         )
-        .unsafeRunSync
+
+        world.revise(
+          TreeMap(
+            1 -> Some(
+              Change.forOneItem(Instant.ofEpochSecond(-2L))(
+                bystanderId,
+                { item: BarHistory =>
+                  item.property1 = -5.8368005564593e89
+                }
+              )
+            ),
+            2 -> Some(
+              Annihilation[BarHistory](
+                Instant.ofEpochSecond(-1L),
+                bystanderId
+              )
+            ),
+            3 -> Some(
+              Annihilation[FooHistory](Instant.ofEpochSecond(0L), itemId)
+            )
+          ),
+          sharedAsOf
+        )
+
+        val scope =
+          world.scopeFor(PositiveInfinity, world.nextRevision)
+
+        scope
+          .render(Bitemporal.withId[IntegerHistory](itemId)) shouldBe empty
+      }
     }
 
     "annulling all events" should "yield a history with the same effects as prior to the annulments" in {
@@ -1113,8 +1022,6 @@ trait Bugs
       val bystanderId = "Name: 50"
 
       val sharedAsOf = Instant.ofEpochSecond(0)
-
-      val expectedHistory = Seq(11)
 
       val revisionActions = Array(
         (world: World) => {
@@ -1149,27 +1056,23 @@ trait Bugs
         }
       )
 
-      worldResource
-        .use(world =>
-          IO {
-            for (revisionAction <- revisionActions) {
-              revisionAction(world)
-            }
+      Using.resource(makeWorld()) { world =>
+        for (revisionAction <- revisionActions) {
+          revisionAction(world)
+        }
 
-            world.revise(TreeMap(0 until 3 map (_ -> None): _*), sharedAsOf)
+        world.revise(TreeMap(0 until 3 map (_ -> None): _*), sharedAsOf)
 
-            for (revisionAction <- revisionActions) {
-              revisionAction(world)
-            }
+        for (revisionAction <- revisionActions) {
+          revisionAction(world)
+        }
 
-            val scope =
-              world.scopeFor(PositiveInfinity, world.nextRevision)
+        val scope =
+          world.scopeFor(PositiveInfinity, world.nextRevision)
 
-            scope
-              .render(Bitemporal.withId[IntegerHistory](itemId)) shouldBe empty
-          }
-        )
-        .unsafeRunSync
+        scope
+          .render(Bitemporal.withId[IntegerHistory](itemId)) shouldBe empty
+      }
     }
 
     "annulling an event that shares an argument reference with another event to an item that is not directly referenced as a target" should "work" in {
@@ -1183,56 +1086,52 @@ trait Bugs
 
       val eventToBeAnnulled = 0
 
-      worldResource
-        .use(world =>
-          IO {
-            world.revise(
-              eventToBeAnnulled,
-              Change
-                .forTwoItems(Instant.ofEpochSecond(2L))(
-                  secondReferringId,
-                  referredId,
-                  {
-                    (
-                        item: ReferringHistory,
-                        fooHistory: MoreSpecificFooHistory
-                    ) =>
-                      item.referTo(fooHistory)
-                  }
-                ),
-              sharedAsOf
-            )
-
-            world.revise(
-              1,
-              Change
-                .forTwoItems(Instant.ofEpochSecond(0L))(
-                  firstReferringId,
-                  referredId,
-                  { (item: ReferringHistory, fooHistory: FooHistory) =>
-                    item.referTo(fooHistory)
-                  }
-                ),
-              sharedAsOf
-            )
-
-            world.annul(eventToBeAnnulled, sharedAsOf)
-
-            val scope =
-              world.scopeFor(PositiveInfinity, world.nextRevision)
-
-            scope
-              .render(
-                Bitemporal.withId[MoreSpecificFooHistory](referredId)
-              ) shouldBe empty
-
-            scope
-              .render(Bitemporal.withId[FooHistory](referredId))
-              .loneElement
-              .datums shouldBe empty
-          }
+      Using.resource(makeWorld()) { world =>
+        world.revise(
+          eventToBeAnnulled,
+          Change
+            .forTwoItems(Instant.ofEpochSecond(2L))(
+              secondReferringId,
+              referredId,
+              {
+                (
+                    item: ReferringHistory,
+                    fooHistory: MoreSpecificFooHistory
+                ) =>
+                  item.referTo(fooHistory)
+              }
+            ),
+          sharedAsOf
         )
-        .unsafeRunSync
+
+        world.revise(
+          1,
+          Change
+            .forTwoItems(Instant.ofEpochSecond(0L))(
+              firstReferringId,
+              referredId,
+              { (item: ReferringHistory, fooHistory: FooHistory) =>
+                item.referTo(fooHistory)
+              }
+            ),
+          sharedAsOf
+        )
+
+        world.annul(eventToBeAnnulled, sharedAsOf)
+
+        val scope =
+          world.scopeFor(PositiveInfinity, world.nextRevision)
+
+        scope
+          .render(
+            Bitemporal.withId[MoreSpecificFooHistory](referredId)
+          ) shouldBe empty
+
+        scope
+          .render(Bitemporal.withId[FooHistory](referredId))
+          .loneElement
+          .datums shouldBe empty
+      }
     }
 
     "correcting an event that breaks down into more than one patch" should "work" in {
@@ -1242,44 +1141,40 @@ trait Bugs
 
       val eventToBeCorrected = 0
 
-      worldResource
-        .use(world =>
-          IO {
-            world.revise(
-              eventToBeCorrected,
-              Change
-                .forOneItem(Instant.ofEpochSecond(0L))(
-                  referringId,
-                  { referrer: Thing =>
-                    referrer.property1 = 23
-                    referrer.property2 = "Hi"
-                  }
-                ),
-              sharedAsOf
-            )
-
-            world.revise(
-              eventToBeCorrected,
-              Change
-                .forOneItem(Instant.ofEpochSecond(0L))(
-                  referringId,
-                  { referrer: Thing =>
-                    referrer.property1 = 45
-                  }
-                ),
-              sharedAsOf
-            )
-
-            val scope =
-              world.scopeFor(PositiveInfinity, world.nextRevision)
-
-            scope
-              .render(Bitemporal.withId[Thing](referringId))
-              .loneElement
-              .property1 shouldBe 45
-          }
+      Using.resource(makeWorld()) { world =>
+        world.revise(
+          eventToBeCorrected,
+          Change
+            .forOneItem(Instant.ofEpochSecond(0L))(
+              referringId,
+              { referrer: Thing =>
+                referrer.property1 = 23
+                referrer.property2 = "Hi"
+              }
+            ),
+          sharedAsOf
         )
-        .unsafeRunSync
+
+        world.revise(
+          eventToBeCorrected,
+          Change
+            .forOneItem(Instant.ofEpochSecond(0L))(
+              referringId,
+              { referrer: Thing =>
+                referrer.property1 = 45
+              }
+            ),
+          sharedAsOf
+        )
+
+        val scope =
+          world.scopeFor(PositiveInfinity, world.nextRevision)
+
+        scope
+          .render(Bitemporal.withId[Thing](referringId))
+          .loneElement
+          .property1 shouldBe 45
+      }
     }
 
     "correcting events that relate a common pool of items to each other" should "work" in {
@@ -1301,47 +1196,43 @@ trait Bugs
       forAll(eventsGenerator, MinSuccessful(200)) { events =>
         val sharedAsOf = Instant.ofEpochSecond(0)
 
-        worldResource
-          .use(world =>
-            IO {
-              for (
-                (Booking(eventId, referrerId, referredId), step) <-
-                  events.zipWithIndex
-              ) {
-                world.revise(
-                  eventId,
-                  Change
-                    .forTwoItems(Instant.ofEpochSecond(0L))(
-                      referrerId,
-                      referredId,
-                      { (referrer: Thing, referred: Thing) =>
-                        referrer.property1 = step
-                        referrer
-                          .referTo(referred)
-                      }
-                    ),
-                  sharedAsOf
-                )
+        Using.resource(makeWorld()) { world =>
+          for (
+            (Booking(eventId, referrerId, referredId), step) <-
+              events.zipWithIndex
+          ) {
+            world.revise(
+              eventId,
+              Change
+                .forTwoItems(Instant.ofEpochSecond(0L))(
+                  referrerId,
+                  referredId,
+                  { (referrer: Thing, referred: Thing) =>
+                    referrer.property1 = step
+                    referrer
+                      .referTo(referred)
+                  }
+                ),
+              sharedAsOf
+            )
 
-                val scope =
-                  world
-                    .scopeFor(PositiveInfinity, world.nextRevision)
+            val scope =
+              world
+                .scopeFor(PositiveInfinity, world.nextRevision)
 
-                val Seq((referrer, referred)) = scope
-                  .render(
-                    (
-                      Bitemporal.withId[Thing](referrerId),
-                      Bitemporal
-                        .withId[Thing](referredId)
-                    ).mapN((_, _))
-                  )
+            val Seq((referrer, referred)) = scope
+              .render(
+                (
+                  Bitemporal.withId[Thing](referrerId),
+                  Bitemporal
+                    .withId[Thing](referredId)
+                ).mapN((_, _))
+              )
 
-                referrer.property1 shouldBe step
-                referrer.reference should contain(referred)
-              }
-            }
-          )
-          .unsafeRunSync
+            referrer.property1 shouldBe step
+            referrer.reference should contain(referred)
+          }
+        }
       }
     }
 
@@ -1370,57 +1261,53 @@ trait Bugs
 
       val sharedAsOf = Instant.ofEpochSecond(0)
 
-      worldResource
-        .use(world =>
-          IO {
-            for (
-              (Booking(eventId, referrerId, referredId), step) <-
-                events.zipWithIndex
-            ) {
-              world.revise(
-                eventId,
-                Change
-                  .forTwoItems(Instant.ofEpochSecond(0L))(
-                    referrerId,
-                    referredId,
-                    { (referrer: Thing, referred: Thing) =>
-                      referrer
-                        .referTo(referred)
-                      // NOTE: the following mutation really is necessary, it
-                      // can either come before
-                      // or after the call to 'referTo', but its position
-                      // affected which item became
-                      // a ghost when this test was failing.
-                      referrer.property1 = step
-                    }
-                  ),
-                sharedAsOf
-              )
-            }
+      Using.resource(makeWorld()) { world =>
+        for (
+          (Booking(eventId, referrerId, referredId), step) <-
+            events.zipWithIndex
+        ) {
+          world.revise(
+            eventId,
+            Change
+              .forTwoItems(Instant.ofEpochSecond(0L))(
+                referrerId,
+                referredId,
+                { (referrer: Thing, referred: Thing) =>
+                  referrer
+                    .referTo(referred)
+                  // NOTE: the following mutation really is necessary, it
+                  // can either come before
+                  // or after the call to 'referTo', but its position
+                  // affected which item became
+                  // a ghost when this test was failing.
+                  referrer.property1 = step
+                }
+              ),
+            sharedAsOf
+          )
+        }
 
-            val scope =
-              world.scopeFor(PositiveInfinity, world.nextRevision)
+        val scope =
+          world.scopeFor(PositiveInfinity, world.nextRevision)
 
-            val Seq(referrerTransitiveClosure) = scope
-              .render(Bitemporal.withId[Thing](headOfChainId))
-              .map(_.transitiveClosure)
+        val Seq(referrerTransitiveClosure) = scope
+          .render(Bitemporal.withId[Thing](headOfChainId))
+          .map(_.transitiveClosure)
 
-            referrerTransitiveClosure should contain theSameElementsAs Seq(
-              headOfChainId,
-              secondInChainId,
-              thirdInChainId,
-              endOfChainId
-            )
-
-            forAll(
-              scope
-                .render(Bitemporal.wildcard[Thing]())
-                .map(_.asInstanceOf[ItemExtensionApi])
-                .head
-            )(!_.isGhost)
-          }
+        referrerTransitiveClosure should contain theSameElementsAs Seq(
+          headOfChainId,
+          secondInChainId,
+          thirdInChainId,
+          endOfChainId
         )
-        .unsafeRunSync
+
+        forAll(
+          scope
+            .render(Bitemporal.wildcard[Thing]())
+            .map(_.asInstanceOf[ItemExtensionApi])
+            .head
+        )(!_.isGhost)
+      }
     }
   }
 }
