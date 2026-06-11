@@ -1,18 +1,20 @@
 package com.sageserpent.plutonium
 
-import java.time.Instant
-import scala.util.Using
-
 import com.sageserpent.americium.Trials
 import com.sageserpent.americium.Trials.api
 import com.sageserpent.americium.utilities.seqEnrichment._
 import com.sageserpent.plutonium.World._
 import com.sageserpent.plutonium.efficient.WorldEfficientInMemoryImplementation
 import com.sageserpent.plutonium.reference.WorldReferenceImplementation
-import com.sageserpent.plutonium.utilities.{Finite, NegativeInfinity, PositiveInfinity, Unbounded}
+import com.sageserpent.plutonium.utilities.{
+  Finite,
+  NegativeInfinity,
+  PositiveInfinity,
+  Unbounded
+}
 import org.scalatest.Assertions
 
-import scala.jdk.CollectionConverters._
+import java.time.Instant
 import scala.collection.Searching._
 import scala.collection.immutable.TreeMap
 import scala.language.postfixOps
@@ -818,7 +820,7 @@ trait WorldSpecSupportAmericium extends Assertions {
       dataSamplesGroupedForLifespans <-
         if (forbidAnnihilations)
           api.only(List(dataSamples))
-        else api.splitsIntoNonEmptyPieces(dataSamples.toSeq).map(_.toList)
+        else api.splitsIntoNonEmptyPieces(dataSamples).map(_.toList)
       finalLifespanIsOngoing <-
         if (forbidAnnihilations) api.only(true)
         else api.booleans
@@ -887,12 +889,11 @@ trait WorldSpecSupportAmericium extends Assertions {
           sampleWhensGroupedForLifespans
         ) with RecordingsForAnIdContracts
 
-    api.integers(1, 3).flatMap(size => {
-      recordingsForAnIdTrials.listsOfSize(size).map(recordings => {
-        val seenIds = scala.collection.mutable.Set[Any]()
-        recordings.filter(recording => seenIds.add(recording.historyId))
-      })
-    })
+
+    recordingsForAnIdTrials.lists.map(recordings => {
+      val seenIds = scala.collection.mutable.Set[Any]()
+      recordings.filter(recording => seenIds.add(recording.historyId))
+    }).filter(_.nonEmpty)
   }
 
   def chunksTrials[Article: Ordering](
