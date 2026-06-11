@@ -865,7 +865,14 @@ trait WorldSpecSupportAmericium extends Assertions {
       sampleWhensGroupedForLifespans
     )
 
-    val parametersTrials = unconstrainedParametersTrials.filter(_._1).map(_._2)
+    val parametersTrials = unconstrainedParametersTrials
+      .filter {
+        case (firstAnnihilationHasBeenAlignedWithADefiniteWhen, _) =>
+          firstAnnihilationHasBeenAlignedWithADefiniteWhen
+      }
+      .map { case (_, parameters) =>
+        parameters
+      }
 
     val recordingsForAnIdTrials =
       for (
