@@ -39,133 +39,89 @@ object intersperseObsoleteEventsAmericium {
               )
           } else api.only(Nil) // All done.
         } else {
-          val tryObsolete =
-            if (unfoldState.obsoleteEventRelatedThings.nonEmpty) {
+          api.booleans.flatMap {
+            case true if unfoldState.obsoleteEventRelatedThings.nonEmpty =>
+              val obsoleteEventRelatedThing =
+                unfoldState.obsoleteEventRelatedThings.head
+              val remainingObsoleteEventRelatedThings =
+                unfoldState.obsoleteEventRelatedThings.tail
+
               api.booleans.flatMap {
-                case true =>
-                  val obsoleteEventRelatedThing =
-                    unfoldState.obsoleteEventRelatedThings.head
-                  val remainingObsoleteEventRelatedThings =
-                    unfoldState.obsoleteEventRelatedThings.tail
-                  if (unfoldState.eventsToBeCorrected.nonEmpty) {
-                    api.booleans.flatMap {
-                      case true =>
-                        // Correct an obsolete event with another obsolete
-                        // event.
-                        api
-                          .choose(unfoldState.eventsToBeCorrected)
-                          .flatMap(obsoleteEventId =>
-                            yieldEitherARecordingOrAnObsoleteRecording(
-                              unfoldState.copy(obsoleteEventRelatedThings =
-                                remainingObsoleteEventRelatedThings
-                              )
-                            ).map(
-                              (
-                                Some(obsoleteEventRelatedThing),
-                                obsoleteEventId
-                              ) :: _
-                            )
-                          )
-                      case false =>
-                        // Take some event id that denotes a subsequent
-                        // non-obsolete event
-                        // and make an obsolete revision of it.
-                        val maxOffset =
-                          onePastMaximumEventId - unfoldState.eventId - 1
-                        api.integers(0, maxOffset).flatMap(offset => {
-                          val anticipatedEventId = unfoldState.eventId + offset
-                          yieldEitherARecordingOrAnObsoleteRecording(
-                            unfoldState
-                              .copy(
-                                obsoleteEventRelatedThings =
-                                  remainingObsoleteEventRelatedThings,
-                                eventsToBeCorrected =
-                                  unfoldState.eventsToBeCorrected + anticipatedEventId
-                              )
-                          ).map(
-                            (
-                              Some(obsoleteEventRelatedThing),
-                              anticipatedEventId
-                            ) :: _
-                          )
-                        })
-                    }
-                  } else {
-                    // Take some event id that denotes a subsequent non-obsolete
-                    // event
-                    // and make an obsolete revision of it.
-                    val maxOffset =
-                      onePastMaximumEventId - unfoldState.eventId - 1
-                    api.integers(0, maxOffset).flatMap(offset => {
-                      val anticipatedEventId = unfoldState.eventId + offset
+                case true if unfoldState.eventsToBeCorrected.nonEmpty =>
+                  // Correct an obsolete event with another obsolete
+                  // event.
+                  api
+                    .choose(unfoldState.eventsToBeCorrected)
+                    .flatMap(obsoleteEventId =>
                       yieldEitherARecordingOrAnObsoleteRecording(
-                        unfoldState
-                          .copy(
-                            obsoleteEventRelatedThings =
-                              remainingObsoleteEventRelatedThings,
-                            eventsToBeCorrected =
-                              unfoldState.eventsToBeCorrected + anticipatedEventId
-                          )
+                        unfoldState.copy(obsoleteEventRelatedThings =
+                          remainingObsoleteEventRelatedThings
+                        )
                       ).map(
                         (
                           Some(obsoleteEventRelatedThing),
-                          anticipatedEventId
+                          obsoleteEventId
                         ) :: _
                       )
-                    })
-                  }
-                case false =>
-                  tryAnnulOrDefinitive(unfoldState)
+                    )
+                case _ =>
+                  // Take some event id that denotes a subsequent
+                  // non-obsolete event
+                  // and make an obsolete revision of it.
+                  val maxOffset =
+                    onePastMaximumEventId - unfoldState.eventId - 1
+                  api.integers(0, maxOffset).flatMap(offset => {
+                    val anticipatedEventId = unfoldState.eventId + offset
+                    yieldEitherARecordingOrAnObsoleteRecording(
+                      unfoldState
+                        .copy(
+                          obsoleteEventRelatedThings =
+                            remainingObsoleteEventRelatedThings,
+                          eventsToBeCorrected =
+                            unfoldState.eventsToBeCorrected + anticipatedEventId
+                        )
+                    ).map(
+                      (
+                        Some(obsoleteEventRelatedThing),
+                        anticipatedEventId
+                      ) :: _
+                    )
+                  })
               }
-            } else {
-              tryAnnulOrDefinitive(unfoldState)
-            }
-
-          tryObsolete
+            case _ =>
+              api.booleans.flatMap {
+                case true if unfoldState.eventsToBeCorrected.nonEmpty =>
+                  // Just annul an obsolete event for the sake of it, even though the
+                  // non-obsolete correction is still yet to follow.
+                  api
+                    .choose(unfoldState.eventsToBeCorrected)
+                    .flatMap(obsoleteEventId =>
+                      yieldEitherARecordingOrAnObsoleteRecording(
+                        unfoldState.copy(
+                          eventsToBeCorrected =
+                            unfoldState.eventsToBeCorrected - obsoleteEventId
+                        )
+                      ).map((None, obsoleteEventId) :: _)
+                    )
+                case _ =>
+                  // Issue the definitive non-obsolete event; this will not be
+                  // subsequently corrected.
+                  val eventRelatedThing =
+                    unfoldState.finalEventRelatedThings.head
+                  val remainingFinalEventRelatedThings =
+                    unfoldState.finalEventRelatedThings.tail
+                  yieldEitherARecordingOrAnObsoleteRecording(
+                    unfoldState.copy(
+                      finalEventRelatedThings = remainingFinalEventRelatedThings,
+                      eventId = 1 + unfoldState.eventId,
+                      eventsToBeCorrected =
+                        unfoldState.eventsToBeCorrected - unfoldState.eventId
+                    )
+                  ).map((Some(eventRelatedThing), unfoldState.eventId) :: _)
+              }
+          }
         }
       }
-
-    def tryAnnulOrDefinitive(
-        unfoldState: UnfoldState
-    ): Trials[List[(Option[EventRelatedThing], EventId)]] = {
-      if (unfoldState.eventsToBeCorrected.nonEmpty) {
-        api.booleans.flatMap {
-          case true =>
-            // Just annul an obsolete event for the sake of it, even though the
-            // non-obsolete correction is still yet to follow.
-            api
-              .choose(unfoldState.eventsToBeCorrected)
-              .flatMap(obsoleteEventId =>
-                yieldEitherARecordingOrAnObsoleteRecording(
-                  unfoldState.copy(
-                    eventsToBeCorrected =
-                      unfoldState.eventsToBeCorrected - obsoleteEventId
-                  )
-                ).map((None, obsoleteEventId) :: _)
-              )
-          case false =>
-            issueDefinitive(unfoldState)
-        }
-      } else {
-        issueDefinitive(unfoldState)
-      }
-    }
-
-    def issueDefinitive(
-        unfoldState: UnfoldState
-    ): Trials[List[(Option[EventRelatedThing], EventId)]] = {
-      val eventRelatedThing = unfoldState.finalEventRelatedThings.head
-      val remainingFinalEventRelatedThings =
-        unfoldState.finalEventRelatedThings.tail
-      yieldEitherARecordingOrAnObsoleteRecording(
-        unfoldState.copy(
-          finalEventRelatedThings = remainingFinalEventRelatedThings,
-          eventId = 1 + unfoldState.eventId,
-          eventsToBeCorrected =
-            unfoldState.eventsToBeCorrected - unfoldState.eventId
-        )
-      ).map((Some(eventRelatedThing), unfoldState.eventId) :: _)
-    }
 
     yieldEitherARecordingOrAnObsoleteRecording(
       UnfoldState(
