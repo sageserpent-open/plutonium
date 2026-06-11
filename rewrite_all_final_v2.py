@@ -1,4 +1,6 @@
-package com.sageserpent.plutonium
+import sys
+
+content = r"""package com.sageserpent.plutonium
 
 import java.time.Instant
 import scala.util.Using
@@ -887,11 +889,9 @@ trait WorldSpecSupportAmericium extends Assertions {
           sampleWhensGroupedForLifespans
         ) with RecordingsForAnIdContracts
 
-    api.integers(1, 3).flatMap(size => {
-      recordingsForAnIdTrials.listsOfSize(size).map(recordings => {
-        val seenIds = scala.collection.mutable.Set[Any]()
-        recordings.filter(recording => seenIds.add(recording.historyId))
-      })
+    recordingsForAnIdTrials.lists.filter(_.nonEmpty).map(recordings => {
+      val seenIds = scala.collection.mutable.Set[Any]()
+      recordings.filter(recording => seenIds.add(recording.historyId))
     })
   }
 
@@ -1158,3 +1158,7 @@ trait WorldEfficientInMemoryImplementationResourceAmericium extends WorldResourc
   override def makeWorld(): World =
     new WorldEfficientInMemoryImplementation with WorldContracts
 }
+"""
+
+with open('src/test/scala/com/sageserpent/plutonium/WorldSpecSupportAmericium.scala', 'w') as f:
+    f.write(content)
