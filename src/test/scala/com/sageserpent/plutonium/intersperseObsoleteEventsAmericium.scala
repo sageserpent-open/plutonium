@@ -125,29 +125,29 @@ object intersperseObsoleteEventsAmericium {
 
     yieldEitherARecordingOrAnObsoleteRecording(
       UnfoldState(
-        finalEventRelatedThings,
-        obsoleteEventRelatedThings,
-        0,
-        Set.empty
+        finalEventRelatedThings = finalEventRelatedThings,
+        obsoleteEventRelatedThings = obsoleteEventRelatedThings,
+        eventId = 0,
+        eventsToBeCorrected = Set.empty
       )
     )
   }
 
   def chunkKeepingEventIdsUniquePerChunk[EventRelatedThing](
-      eventIdPieces: Seq[(Option[EventRelatedThing], EventId)]
-  ): Trials[Seq[Seq[(Option[EventRelatedThing], EventId)]]] = {
-    api.splitsIntoNonEmptyPieces(eventIdPieces).flatMap { trialSplit =>
-      val chunks = trialSplit.toSeq
+      eventIdPieces: Seq[(EventRelatedThing, EventId)]
+  ): Trials[Seq[Seq[(EventRelatedThing, EventId)]]] = {
+    api.splitsIntoNonEmptyPieces(eventIdPieces).flatMap { chunks =>
       val processedChunksTrials = chunks.map { chunk =>
+        val chunkSeq = chunk.toSeq
         if (
-          chunk.groupBy(_._2).exists { case (_, groupForAnEventId) =>
+          chunkSeq.groupBy(_._2).exists { case (_, groupForAnEventId) =>
             1 < groupForAnEventId.size
           }
         )
-          chunkKeepingEventIdsUniquePerChunk(chunk)
+          chunkKeepingEventIdsUniquePerChunk(chunkSeq)
         else
-          api.only(Seq(chunk))
-      }
+          api.only(Seq(chunkSeq))
+      }.toSeq
       api.sequences(processedChunksTrials).map(_.flatten)
     }
   }
