@@ -72,11 +72,7 @@ object intersperseObsoleteEventsAmericium {
                         // and make an obsolete revision of it.
                         val maxOffset =
                           onePastMaximumEventId - unfoldState.eventId - 1
-                        val offsetTrials =
-                          if (maxOffset >= 0) api.integers(0, maxOffset)
-                          else api.only(0)
-
-                        offsetTrials.flatMap(offset => {
+                        api.integers(0, maxOffset).flatMap(offset => {
                           val anticipatedEventId = unfoldState.eventId + offset
                           yieldEitherARecordingOrAnObsoleteRecording(
                             unfoldState
@@ -100,11 +96,7 @@ object intersperseObsoleteEventsAmericium {
                     // and make an obsolete revision of it.
                     val maxOffset =
                       onePastMaximumEventId - unfoldState.eventId - 1
-                    val offsetTrials =
-                      if (maxOffset >= 0) api.integers(0, maxOffset)
-                      else api.only(0)
-
-                    offsetTrials.flatMap(offset => {
+                    api.integers(0, maxOffset).flatMap(offset => {
                       val anticipatedEventId = unfoldState.eventId + offset
                       yieldEitherARecordingOrAnObsoleteRecording(
                         unfoldState
