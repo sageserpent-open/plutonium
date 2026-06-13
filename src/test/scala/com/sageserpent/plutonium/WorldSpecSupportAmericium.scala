@@ -38,16 +38,6 @@ trait WorldSpecSupportAmericium extends Assertions {
 
   def instantTrials: Trials[Instant] = api.instants
 
-  def unboundedInstantTrials: Trials[Unbounded[Instant]] = api.alternateWithWeights(
-    1  -> api.choose(NegativeInfinity, PositiveInfinity),
-    10 -> instantTrials.map(Finite(_))
-  )
-
-  def changeWhenTrials: Trials[Unbounded[Instant]] = api.alternateWithWeights(
-    1  -> api.only(NegativeInfinity),
-    10 -> (instantTrials map (Finite(_)))
-  )
-
   def stringIdTrials: Trials[String] =
     api.uniqueIds.map("Name: " + _.toString)
 
@@ -748,7 +738,7 @@ trait WorldSpecSupportAmericium extends Assertions {
       ],
       forbidAnnihilations: Boolean = false
   ): Trials[List[RecordingsForAPhoenixId with RecordingsForAnIdContracts]] = {
-    val unconstrainedParametersTrials = for {
+    val recordingsForAnIdTrials = for {
       (
         historyId,
         historiesFrom,
@@ -786,47 +776,25 @@ trait WorldSpecSupportAmericium extends Assertions {
         } else
           numberOfEventsForLimitedLifespans(dataSamplesGroupedForLifespans)
       }
-      sampleWhensGroupedForLifespans <- chunksTrials(
-        numberOfEventsForLifespans,
-        changeWhenTrials
-      )
+
       noAnnihilationsToWorryAbout =
-        finalLifespanIsOngoing && 1 == sampleWhensGroupedForLifespans.size
-      firstAnnihilationHasBeenAlignedWithADefiniteWhen =
-        noAnnihilationsToWorryAbout ||
-          PartialFunction.cond(sampleWhensGroupedForLifespans.head.last) {
-            case Finite(_) => true
-          }
-    } yield firstAnnihilationHasBeenAlignedWithADefiniteWhen -> (
-      historyId,
-      historiesFrom,
-      annihilationFor,
-      ineffectiveEventFor,
-      dataSamplesGroupedForLifespans,
-      sampleWhensGroupedForLifespans
-    )
+        finalLifespanIsOngoing && 1 == numberOfEventsForLifespans.size
 
-    val parametersTrials = unconstrainedParametersTrials
-      .filter {
-        case (firstAnnihilationHasBeenAlignedWithADefiniteWhen, _) =>
-          firstAnnihilationHasBeenAlignedWithADefiniteWhen
-      }
-      .map { case (_, parameters) =>
-        parameters
-      }
+      eventWhens <-
+        (if (noAnnihilationsToWorryAbout)
+          api.alternate(api.only(NegativeInfinity), instantTrials.map(Finite(_))).listsOfSize(numberOfEventsForLifespans.sum)
+        else
+          api.only(NegativeInfinity)
+            .listsOfSize(numberOfEventsForLifespans.head - 1)
+            .flatMap(prefixLeadingUpToFirstAnnihilation => instantTrials.map(Finite(_))
+              .listsOfSize(1 + numberOfEventsForLifespans.tail.sum)
+              .map(prefixLeadingUpToFirstAnnihilation ++ _))).map(_.sorted)
 
-    val recordingsForAnIdTrials =
-      for (
-        (
-          historyId,
-          historiesFrom,
-          annihilationFor,
-          ineffectiveEventFor,
-          dataSamplesGroupedForLifespans,
-          sampleWhensGroupedForLifespans
-        ) <- parametersTrials
+      sampleWhensGroupedForLifespans = chunks(
+        numberOfEventsForLifespans,
+        eventWhens
       )
-        yield new RecordingsForAPhoenixId(
+    } yield new RecordingsForAPhoenixId(
       historyId,
       historiesFrom,
       annihilationFor,
@@ -841,14 +809,10 @@ trait WorldSpecSupportAmericium extends Assertions {
     }).filter(_.nonEmpty)
   }
 
-  def chunksTrials[Article: Ordering](
+  def chunks[Article](
       chunkSizes: List[Int],
-      stuffTrials: Trials[Article]
-  ): Trials[Vector[List[Article]]] = {
-    val numberOfEventsOverall = chunkSizes.sum
-    for {
-      articles <- stuffTrials.listsOfSize(numberOfEventsOverall).map(_.sorted)
-    } yield {
+      articles: List[Article]
+  ): Vector[List[Article]] = {
       def chunksOf(
           chunkSizes: Seq[Int],
           articles: List[Article]
@@ -862,7 +826,6 @@ trait WorldSpecSupportAmericium extends Assertions {
 
       chunksOf(chunkSizes, articles).toVector
     }
-  }
 
   trait RecordingsForAnId {
     val historyId: Any
