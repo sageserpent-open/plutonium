@@ -19,11 +19,22 @@ object WorldBehaviourAmericium {
     }
   }
 
-  case class TestCase(
+  case class RelatedItemTestCase(
       referencedHistoryRecordingsGroupedById: List[
         WorldSpecSupportAmericium#RecordingsForAnId
       ],
       referringHistoryRecordingsGroupedById: List[
+        WorldSpecSupportAmericium#RecordingsForAnId
+      ],
+      bigShuffledHistoryOverLotsOfThings: Vector[
+        Seq[(Option[(Unbounded[Instant], Event)], Int)]
+      ],
+      asOfs: List[Instant],
+      queryWhen: Unbounded[Instant]
+  )
+
+  case class HistoryTestCase(
+      recordingsGroupedById: List[
         WorldSpecSupportAmericium#RecordingsForAnId
       ],
       bigShuffledHistoryOverLotsOfThings: Vector[
@@ -38,7 +49,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
   this: WorldResourceAmericium =>
 
   import WorldBehaviourAmericium.ExpectyFlavouredAssert.assert
-  import WorldBehaviourAmericium.TestCase
+  import WorldBehaviourAmericium.{HistoryTestCase, RelatedItemTestCase}
 
   @TestFactory
   def worldWithNoHistory() = {
@@ -67,6 +78,76 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
   }
 
   @TestFactory
+  def revealAllTheHistoryUpToTheWhenLimitOfAScopeMadeFromIt() = {
+    val testCaseTrials = for {
+      recordingsGroupedById <- recordingsGroupedByIdTrials(
+        forbidAnnihilations = false
+      )
+      obsoleteRecordingsGroupedById <-
+        nonConflictingRecordingsGroupedByIdTrials
+      shuffledRecordings <- shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+        recordingsGroupedById
+      )
+      shuffledObsoleteRecordings <- shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+        obsoleteRecordingsGroupedById
+      )
+      bigShuffledHistoryOverLotsOfThings <- intersperseObsoleteEventsAmericium(
+        shuffledRecordings,
+        shuffledObsoleteRecordings
+      )
+      asOfs <- instantTrials
+        .listsOfSize(bigShuffledHistoryOverLotsOfThings.size)
+        .map(_.sorted)
+      queryWhen <- unboundedInstantTrials
+    } yield HistoryTestCase(
+      recordingsGroupedById,
+      bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toVector,
+      asOfs,
+      queryWhen
+    )
+    testCaseTrials.withLimit(200).dynamicTests {
+      case HistoryTestCase(
+            recordingsGroupedById,
+            bigShuffledHistoryOverLotsOfThings,
+            asOfs,
+            queryWhen
+          ) =>
+        Using.resource(makeWorld()) { world =>
+          recordEventsInWorld(
+            bigShuffledHistoryOverLotsOfThings,
+            asOfs,
+            world
+          )
+
+          val scope = world.scopeFor(queryWhen, world.nextRevision)
+
+          val checks = for {
+            recording <- recordingsGroupedById
+            RecordingsNoLaterThan(
+              historyId,
+              historiesFrom,
+              pertinentRecordings,
+              _,
+              _
+            ) <- recording.thePartNoLaterThan(queryWhen).toList
+            Seq(history) = historiesFrom(scope)
+          } yield (
+            historyId,
+            history.datums,
+            pertinentRecordings.map(_._1)
+          )
+
+          for ((_, actualHistory, expectedHistory) <- checks) {
+            assert(actualHistory.length == expectedHistory.length)
+            for (((actual, expected), _) <- (actualHistory zip expectedHistory).zipWithIndex) {
+              assert(actual == expected)
+            }
+          }
+        }
+    }
+  }
+
+  @TestFactory
   def revealAllTheHistoryOfARelatedItemUpToTheWhenLimitOfAScopeMadeFromIt() = {
     val testCaseTrials = for {
       referencedHistoryRecordingsGroupedById <-
@@ -91,7 +172,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
         .listsOfSize(bigShuffledHistoryOverLotsOfThings.size)
         .map(_.sorted)
       queryWhen <- unboundedInstantTrials
-    } yield TestCase(
+    } yield RelatedItemTestCase(
       referencedHistoryRecordingsGroupedById,
       referringHistoryRecordingsGroupedById,
       bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toVector,
@@ -99,7 +180,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
       queryWhen
     )
     testCaseTrials.withLimit(200).dynamicTests {
-      case TestCase(
+      case RelatedItemTestCase(
             referencedHistoryRecordingsGroupedById,
             referringHistoryRecordingsGroupedById,
             bigShuffledHistoryOverLotsOfThings,
@@ -193,7 +274,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
         .listsOfSize(bigShuffledHistoryOverLotsOfThings.size)
         .map(_.sorted)
       queryWhen <- unboundedInstantTrials
-    } yield TestCase(
+    } yield RelatedItemTestCase(
       referencedHistoryRecordingsGroupedById,
       referringHistoryRecordingsGroupedById,
       bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toVector,
@@ -201,7 +282,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
       queryWhen
     )
     testCaseTrials.withLimit(12).dynamicTests {
-      case TestCase(
+      case RelatedItemTestCase(
             referencedHistoryRecordingsGroupedById,
             referringHistoryRecordingsGroupedById,
             bigShuffledHistoryOverLotsOfThings,
