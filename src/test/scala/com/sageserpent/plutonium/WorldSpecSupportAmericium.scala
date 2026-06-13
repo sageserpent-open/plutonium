@@ -807,17 +807,6 @@ trait WorldSpecSupportAmericium extends Assertions {
         numberOfEventsForLifespans,
         eventWhens
       )
-
-      noAnnihilationsToWorryAbout =
-        finalLifespanIsOngoing && 1 == sampleWhensGroupedForLifespans.size
-
-      firstAnnihilationHasBeenAlignedWithADefiniteWhen =
-        noAnnihilationsToWorryAbout ||
-          PartialFunction.cond(sampleWhensGroupedForLifespans.head.last) {
-            case Finite(_) => true
-          }
-
-      if firstAnnihilationHasBeenAlignedWithADefiniteWhen
     } yield new RecordingsForAPhoenixId(
       historyId,
       historiesFrom,
