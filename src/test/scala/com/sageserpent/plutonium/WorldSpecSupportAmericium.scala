@@ -38,6 +38,19 @@ trait WorldSpecSupportAmericium extends Assertions {
 
   def instantTrials: Trials[Instant] = api.instants
 
+  def unboundedInstantTrials: Trials[Unbounded[Instant]] =
+    api.alternateWithWeights(
+      1  -> api.only(NegativeInfinity),
+      1  -> api.only(PositiveInfinity),
+      10 -> instantTrials.map(Finite.apply[Instant])
+    )
+
+  def changeWhenTrials: Trials[Unbounded[Instant]] =
+    api.alternateWithWeights(
+      1  -> api.only(NegativeInfinity),
+      10 -> instantTrials.map(Finite.apply[Instant])
+    )
+
   def stringIdTrials: Trials[String] =
     api.uniqueIds.map("Name: " + _.toString)
 
@@ -794,6 +807,17 @@ trait WorldSpecSupportAmericium extends Assertions {
         numberOfEventsForLifespans,
         eventWhens
       )
+
+      noAnnihilationsToWorryAbout =
+        finalLifespanIsOngoing && 1 == sampleWhensGroupedForLifespans.size
+
+      firstAnnihilationHasBeenAlignedWithADefiniteWhen =
+        noAnnihilationsToWorryAbout ||
+          PartialFunction.cond(sampleWhensGroupedForLifespans.head.last) {
+            case Finite(_) => true
+          }
+
+      if firstAnnihilationHasBeenAlignedWithADefiniteWhen
     } yield new RecordingsForAPhoenixId(
       historyId,
       historiesFrom,
