@@ -22,6 +22,10 @@ import scala.reflect.runtime.universe.{Scope => _, _}
 
 object WorldSpecSupportAmericium {
   val changeError = new RuntimeException("Error in making a change.")
+
+  implicit class TrialsApiExtension[Case](trials: Trials[Case]) {
+    def nonEmptyLists: Trials[List[Case]] = trials.lists.flatMap(tail => trials.map(_ :: tail))
+  }
 }
 
 trait WorldSpecSupportAmericium extends Assertions {
@@ -36,7 +40,7 @@ trait WorldSpecSupportAmericium extends Assertions {
 
   def unboundedInstantTrials: Trials[Unbounded[Instant]] = api.alternateWithWeights(
     1  -> api.choose(NegativeInfinity, PositiveInfinity),
-    10 -> (instantTrials map (Finite(_)))
+    10 -> instantTrials.map(Finite(_))
   )
 
   def changeWhenTrials: Trials[Unbounded[Instant]] = api.alternateWithWeights(
@@ -45,9 +49,9 @@ trait WorldSpecSupportAmericium extends Assertions {
   )
 
   def stringIdTrials: Trials[String] =
-    api.integers(50, 100).map("Name: " + _.toString)
+    api.uniqueIds.map("Name: " + _.toString)
 
-  def integerIdTrials: Trials[Int] = api.integers(-20, 20)
+  def integerIdTrials: Trials[Int] = api.uniqueIds
 
   def fooHistoryIdTrials = stringIdTrials
 
@@ -318,138 +322,74 @@ trait WorldSpecSupportAmericium extends Assertions {
     mixedRecordingsGroupedByIdTrials(forbidAnnihilations = forbidAnnihilations)
 
   def mixedRecordingsGroupedByIdTrials(
-      faulty: Boolean = false,
-      forbidAnnihilations: Boolean
-  ): Trials[List[RecordingsForAPhoenixId with RecordingsForAnIdContracts]] = {
+                                        faulty: Boolean = false,
+                                        forbidAnnihilations: Boolean
+                                      ): Trials[List[RecordingsForAPhoenixId with RecordingsForAnIdContracts]] = {
     val leftHandDataSamplesForAnIdTrials = api.alternateWithWeights(
       Seq(
-      1 -> dataSamplesForAnIdTrials[FooHistory](
-        fooHistoryIdTrials,
-        api.alternate(
+        1 -> dataSamplesForAnIdTrials[FooHistory](
+          fooHistoryIdTrials,
+          api.alternate(
             fooHistoryDataSampleTrials1(faulty),
             moreSpecificFooHistoryDataSampleTrials(faulty)
           ),
           fooHistoryDataSampleTrials2(faulty)
-      ),
-      1 -> dataSamplesForAnIdTrials[MoreSpecificFooHistory](
-        moreSpecificFooHistoryIdTrials,
-        moreSpecificFooHistoryDataSampleTrials(faulty)
-      )
-      )
-    )
-
-    val rightHandDataSamplesForAnIdTrials = api.alternateWithWeights(
-      Seq(
-      1 -> dataSamplesForAnIdTrials[BarHistory](
-        barHistoryIdTrials,
-        barHistoryDataSampleTrials1(faulty),
-          barHistoryDataSampleTrials2(faulty),
-          barHistoryDataSampleTrials3(faulty)
-      ),
-      1 -> dataSamplesForAnIdTrials[IntegerHistory](
-        integerHistoryIdTrials,
-        integerHistoryDataSampleTrials(faulty)
-      )
-      )
-    )
-
-    val disjointLeftHandRecordingsGroupedByIdTrials =
-      recordingsGroupedByIdTrials_(
-        leftHandDataSamplesForAnIdTrials,
-        forbidAnnihilations = faulty || forbidAnnihilations
-      )
-
-    val disjointRightHandRecordingsGroupedByIdTrials =
-      recordingsGroupedByIdTrials_(
-        rightHandDataSamplesForAnIdTrials,
-        forbidAnnihilations = faulty || forbidAnnihilations
-      )
-
-    api.alternateWithWeights(
-      1 -> (for {
-        leftHand <- disjointLeftHandRecordingsGroupedByIdTrials
-        rightHand <- disjointRightHandRecordingsGroupedByIdTrials
-        // Constructively force sharing: pick an ID from leftHand and use it for one recording in rightHand.
-        idToShare <- api.choose(leftHand.map(_.historyId))
-        // We replace one recording in rightHand with one using the shared ID.
-        indexToReplace <- api.integers(0, rightHand.size - 1)
-        sharedRecording <- recordingsForSpecificIdTrials(
-           idToShare,
-           rightHandDataSamplesForAnIdTrials,
-           faulty || forbidAnnihilations
+        ),
+        1 -> dataSamplesForAnIdTrials[MoreSpecificFooHistory](
+          moreSpecificFooHistoryIdTrials,
+          moreSpecificFooHistoryDataSampleTrials(faulty)
         )
-      } yield leftHand ++ rightHand.updated(indexToReplace, sharedRecording)),
-      3 -> (for {
-        leftHand <- disjointLeftHandRecordingsGroupedByIdTrials
-        rightHand <- disjointRightHandRecordingsGroupedByIdTrials
-      } yield leftHand ++ rightHand)
+      )
     )
-  }
 
-  def recordingsForSpecificIdTrials(
-      id: Any,
-      dataSamplesForAnIdTrials: Trials[
-        (
-            Any,
-            ItemCache => Seq[History],
-            Seq[(Int, Any, Unbounded[Instant] => Event)],
-            Instant => Annihilation,
-            Unbounded[Instant] => Event
-        )
-      ],
-      forbidAnnihilations: Boolean
-  ): Trials[RecordingsForAPhoenixId with RecordingsForAnIdContracts] = {
     for {
-      (
-        _,
-        historiesFrom,
-        dataSamples,
-        annihilationFor,
-        ineffectiveEventFor
-      ) <- dataSamplesForAnIdTrials
-      dataSamplesGroupedForLifespans <-
-        if (forbidAnnihilations)
-          api.only(List(dataSamples))
-        else api.splitsIntoNonEmptyPieces(dataSamples.toSeq).map(_.toList)
-      finalLifespanIsOngoing <-
-        if (forbidAnnihilations) api.only(true)
-        else api.booleans
-      numberOfEventsForLifespans = {
-        def numberOfEventsForLimitedLifespans(
-            dataSamplesGroupedForLimitedLifespans: List[
-              Iterable[(Int, Any, (Unbounded[Instant]) => Event)]
-            ]
-        ): List[Int] = {
-          // Add an extra when for the annihilation at the end of the
-          // lifespan...
-          dataSamplesGroupedForLimitedLifespans map (1 + _.size)
-        }
+      leftHandRecordingsGroupedById <-
+        recordingsGroupedByIdTrials_(
+          leftHandDataSamplesForAnIdTrials,
+          forbidAnnihilations = faulty || forbidAnnihilations
+        )
 
-        if (finalLifespanIsOngoing) {
-          val (
-            dataSamplesGroupedForLimitedLifespans,
-            Seq(dataSamplesGroupForEternalLife)
-          ) =
-            dataSamplesGroupedForLifespans splitAt (dataSamplesGroupedForLifespans.size - 1)
-          numberOfEventsForLimitedLifespans(
-            dataSamplesGroupedForLimitedLifespans
-          ) :+ dataSamplesGroupForEternalLife.size
-        } else
-          numberOfEventsForLimitedLifespans(dataSamplesGroupedForLifespans)
-      }
-      sampleWhensGroupedForLifespans <- chunksTrials(
-        numberOfEventsForLifespans,
-        changeWhenTrials
+      forceSharingOfId <- api.chooseWithWeights(1 -> true, 3 -> false)
+
+      shareableIds =
+        if (forceSharingOfId)
+          leftHandRecordingsGroupedById
+            .map(_.historyId)
+            .collect { case historyId: IntegerHistory#Id => historyId }
+        else Nil
+
+      if !forceSharingOfId || shareableIds.nonEmpty
+
+      rightHandDataSamplesForAnIdTrials = api.alternateWithWeights(
+        Seq(
+          1 -> dataSamplesForAnIdTrials[BarHistory](
+            barHistoryIdTrials,
+            barHistoryDataSampleTrials1(faulty),
+            barHistoryDataSampleTrials2(faulty),
+            barHistoryDataSampleTrials3(faulty)
+          ),
+          1 -> dataSamplesForAnIdTrials[IntegerHistory](
+            if (shareableIds.nonEmpty) api.choose(shareableIds) else integerHistoryIdTrials,
+            integerHistoryDataSampleTrials(faulty)
+          )
+        )
       )
-    } yield new RecordingsForAPhoenixId(
-      id,
-      historiesFrom,
-      annihilationFor,
-      ineffectiveEventFor,
-      dataSamplesGroupedForLifespans,
-      sampleWhensGroupedForLifespans
-    ) with RecordingsForAnIdContracts
+
+      rightHandRecordingsGroupedById <-
+        recordingsGroupedByIdTrials_(
+          rightHandDataSamplesForAnIdTrials,
+          forbidAnnihilations = faulty || forbidAnnihilations
+        )
+
+      if !forceSharingOfId ||
+        leftHandRecordingsGroupedById
+          .map(_.historyId)
+          .toSet
+          .intersect(rightHandRecordingsGroupedById.map(_.historyId).toSet)
+          .nonEmpty
+    } yield leftHandRecordingsGroupedById ++ rightHandRecordingsGroupedById
   }
+
 
   def fooHistoryDataSampleTrials1(faulty: Boolean): Trials[
     (String, (Unbounded[Instant], FooHistory#Id) => Event)
@@ -733,8 +673,7 @@ trait WorldSpecSupportAmericium extends Assertions {
         .alternateWithWeights(dataSampleTrials.zipWithIndex map {
           case (trials, index) => 1 -> (trials map (sample => index -> sample))
         })
-        .lists
-        .filter(_.nonEmpty)
+        .nonEmptyLists
 
     for {
       dataSamples             <- dataSamplesGenerator
@@ -827,7 +766,7 @@ trait WorldSpecSupportAmericium extends Assertions {
       numberOfEventsForLifespans = {
         def numberOfEventsForLimitedLifespans(
             dataSamplesGroupedForLimitedLifespans: List[
-              Iterable[(Int, Any, (Unbounded[Instant]) => Event)]
+              Iterable[(Int, Any, Unbounded[Instant] => Event)]
             ]
         ): List[Int] = {
           // Add an extra when for the annihilation at the end of the
@@ -888,16 +827,15 @@ trait WorldSpecSupportAmericium extends Assertions {
         ) <- parametersTrials
       )
         yield new RecordingsForAPhoenixId(
-          historyId,
-          historiesFrom,
-          annihilationFor,
-          ineffectiveEventFor,
-          dataSamplesGroupedForLifespans,
-          sampleWhensGroupedForLifespans
-        ) with RecordingsForAnIdContracts
+      historyId,
+      historiesFrom,
+      annihilationFor,
+      ineffectiveEventFor,
+      dataSamplesGroupedForLifespans,
+      sampleWhensGroupedForLifespans
+    ) with RecordingsForAnIdContracts
 
-
-    recordingsForAnIdTrials.lists.map(recordings => {
+    recordingsForAnIdTrials.nonEmptyLists.map(recordings => {
       val seenIds = scala.collection.mutable.Set[Any]()
       recordings.filter(recording => seenIds.add(recording.historyId))
     }).filter(_.nonEmpty)
