@@ -1,20 +1,18 @@
 package com.sageserpent.plutonium
 
+import java.time.Instant
+import scala.util.Using
+
 import com.sageserpent.americium.Trials
 import com.sageserpent.americium.Trials.api
 import com.sageserpent.americium.utilities.seqEnrichment._
 import com.sageserpent.plutonium.World._
 import com.sageserpent.plutonium.efficient.WorldEfficientInMemoryImplementation
 import com.sageserpent.plutonium.reference.WorldReferenceImplementation
-import com.sageserpent.plutonium.utilities.{
-  Finite,
-  NegativeInfinity,
-  PositiveInfinity,
-  Unbounded
-}
+import com.sageserpent.plutonium.utilities.{Finite, NegativeInfinity, PositiveInfinity, Unbounded}
 import org.scalatest.Assertions
 
-import java.time.Instant
+import scala.jdk.CollectionConverters._
 import scala.collection.Searching._
 import scala.collection.immutable.TreeMap
 import scala.language.postfixOps
@@ -22,10 +20,6 @@ import scala.reflect.runtime.universe.{Scope => _, _}
 
 object WorldSpecSupportAmericium {
   val changeError = new RuntimeException("Error in making a change.")
-
-  implicit class TrialsApiExtension[Case](trials: Trials[Case]) {
-    def nonEmptyLists: Trials[List[Case]] = trials.lists.flatMap(tail => trials.map(_ :: tail))
-  }
 }
 
 trait WorldSpecSupportAmericium extends Assertions {
@@ -34,14 +28,22 @@ trait WorldSpecSupportAmericium extends Assertions {
 
   def restrictedStrings = api.choose('a' to 'z').several[String]
 
-  // Replacement for SharedGenerators
-
   def instantTrials: Trials[Instant] = api.instants
 
-  def stringIdTrials: Trials[String] =
-    api.uniqueIds.map("Name: " + _.toString)
+  def unboundedInstantTrials: Trials[Unbounded[Instant]] = api.alternateWithWeights(
+    1  -> api.choose(NegativeInfinity, PositiveInfinity),
+    10 -> (instantTrials map (Finite(_)))
+  )
 
-  def integerIdTrials: Trials[Int] = api.uniqueIds
+  def changeWhenTrials: Trials[Unbounded[Instant]] = api.alternateWithWeights(
+    1  -> api.only(NegativeInfinity),
+    10 -> (instantTrials map (Finite(_)))
+  )
+
+  def stringIdTrials: Trials[String] =
+    api.integers(50, 100).map("Name: " + _.toString)
+
+  def integerIdTrials: Trials[Int] = api.integers(-20, 20)
 
   def fooHistoryIdTrials = stringIdTrials
 
@@ -51,7 +53,7 @@ trait WorldSpecSupportAmericium extends Assertions {
 
   def abstractedOrImplementingHistoryIdTrials = stringIdTrials
   def moreSpecificFooHistoryIdTrials =
-    fooHistoryIdTrials // Just making a point that both kinds of bitemporal will use the same type of ids.
+    fooHistoryIdTrials
   def nonConflictingDataSamplesForAnIdTrials =
     mixedNonConflictingDataSamplesForAnIdTrials()
   def nonConflictingRecordingsGroupedByIdTrials =
@@ -110,7 +112,7 @@ trait WorldSpecSupportAmericium extends Assertions {
 
                 if (faulty)
                   referringHistory
-                    .forceInvariantBreakage() // Modelling breakage of the bitemporal invariant.
+                    .forceInvariantBreakage()
 
                 assertThrows[UnsupportedOperationException](
                   referringHistory.datums
@@ -167,7 +169,7 @@ trait WorldSpecSupportAmericium extends Assertions {
 
                 if (faulty)
                   referencedItem
-                    .forceInvariantBreakage() // Modelling breakage of a non-local bitemporal invariant via a related item.
+                    .forceInvariantBreakage()
 
                 referringHistory.forget(referencedItem)
               }
@@ -177,10 +179,6 @@ trait WorldSpecSupportAmericium extends Assertions {
   def shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
       recordingsGroupedById: List[RecordingsForAnId]
   ): Trials[Seq[(Unbounded[Instant], Event)]] = {
-    // PLAN: shuffle each lots of events on a per-id basis, keeping the
-    // annihilations out of the way. Then merge the results using random
-    // picking.
-
     val shuffledEventsPerItemTrials = recordingsGroupedById
       .map(_.events)
       .map(
@@ -200,10 +198,6 @@ trait WorldSpecSupportAmericium extends Assertions {
   def shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhenForAGivenItem(
       events: List[(Unbounded[Instant], Event)]
   ): Trials[Seq[(Unbounded[Instant], Event)]] = {
-    // NOTE: 'groupBy' actually destroys the sort order, so we have to sort
-    // after grouping. We have to do this to
-    // keep the annihilations after the events that define the lifespan of the
-    // items that get annihilated.
     val recordingsGroupedByWhen =
       (events groupBy (_._1)).toSeq sortBy (_._1) map (_._2)
 
@@ -242,7 +236,7 @@ trait WorldSpecSupportAmericium extends Assertions {
       bigShuffledHistoryOverLotsOfThings,
       asOfs,
       world
-    ) map (_.apply) // Actually a piece of imperative code that looks functional - 'world' is being mutated as a side-effect; but the revisions are harvested functionally.
+    ) map (_.apply)
   }
 
   def revisionActions(
@@ -310,48 +304,27 @@ trait WorldSpecSupportAmericium extends Assertions {
       forbidAnnihilations: Boolean
   ): Trials[List[RecordingsForAnId]] =
     mixedRecordingsGroupedByIdTrials(forbidAnnihilations = forbidAnnihilations)
+      .map(_.asInstanceOf[List[RecordingsForAnId]])
 
   def mixedRecordingsGroupedByIdTrials(
-                                        faulty: Boolean = false,
-                                        forbidAnnihilations: Boolean
-                                      ): Trials[List[RecordingsForAPhoenixId with RecordingsForAnIdContracts]] = {
-    val leftHandDataSamplesForAnIdTrials = api.alternateWithWeights(
-      Seq(
-        1 -> dataSamplesForAnIdTrials[FooHistory](
-          fooHistoryIdTrials,
-          api.alternate(
-            fooHistoryDataSampleTrials1(faulty),
+      faulty: Boolean = false,
+      forbidAnnihilations: Boolean
+  ): Trials[List[RecordingsForAPhoenixId with RecordingsForAnIdContracts]] = {
+    recordingsGroupedByIdTrials_(
+      api.alternateWithWeights(
+        Seq(
+          1 -> dataSamplesForAnIdTrials[FooHistory](
+            fooHistoryIdTrials,
+            api.alternate(
+              fooHistoryDataSampleTrials1(faulty),
+              moreSpecificFooHistoryDataSampleTrials(faulty)
+            ),
+            fooHistoryDataSampleTrials2(faulty)
+          ),
+          1 -> dataSamplesForAnIdTrials[MoreSpecificFooHistory](
+            moreSpecificFooHistoryIdTrials,
             moreSpecificFooHistoryDataSampleTrials(faulty)
           ),
-          fooHistoryDataSampleTrials2(faulty)
-        ),
-        1 -> dataSamplesForAnIdTrials[MoreSpecificFooHistory](
-          moreSpecificFooHistoryIdTrials,
-          moreSpecificFooHistoryDataSampleTrials(faulty)
-        )
-      )
-    )
-
-    for {
-      leftHandRecordingsGroupedById <-
-        recordingsGroupedByIdTrials_(
-          leftHandDataSamplesForAnIdTrials,
-          forbidAnnihilations = faulty || forbidAnnihilations
-        )
-
-      forceSharingOfId <- api.chooseWithWeights(1 -> true, 3 -> false)
-
-      shareableIds =
-        if (forceSharingOfId)
-          leftHandRecordingsGroupedById
-            .map(_.historyId)
-            .collect { case historyId: IntegerHistory#Id => historyId }
-        else Nil
-
-      if !forceSharingOfId || shareableIds.nonEmpty
-
-      rightHandDataSamplesForAnIdTrials = api.alternateWithWeights(
-        Seq(
           1 -> dataSamplesForAnIdTrials[BarHistory](
             barHistoryIdTrials,
             barHistoryDataSampleTrials1(faulty),
@@ -359,27 +332,14 @@ trait WorldSpecSupportAmericium extends Assertions {
             barHistoryDataSampleTrials3(faulty)
           ),
           1 -> dataSamplesForAnIdTrials[IntegerHistory](
-            if (shareableIds.nonEmpty) api.choose(shareableIds) else integerHistoryIdTrials,
+            integerHistoryIdTrials,
             integerHistoryDataSampleTrials(faulty)
           )
         )
-      )
-
-      rightHandRecordingsGroupedById <-
-        recordingsGroupedByIdTrials_(
-          rightHandDataSamplesForAnIdTrials,
-          forbidAnnihilations = faulty || forbidAnnihilations
-        )
-
-      if !forceSharingOfId ||
-        leftHandRecordingsGroupedById
-          .map(_.historyId)
-          .toSet
-          .intersect(rightHandRecordingsGroupedById.map(_.historyId).toSet)
-          .nonEmpty
-    } yield leftHandRecordingsGroupedById ++ rightHandRecordingsGroupedById
+      ),
+      forbidAnnihilations = faulty || forbidAnnihilations
+    )
   }
-
 
   def fooHistoryDataSampleTrials1(faulty: Boolean): Trials[
     (String, (Unbounded[Instant], FooHistory#Id) => Event)
@@ -392,8 +352,6 @@ trait WorldSpecSupportAmericium extends Assertions {
             .apply(
               fooHistoryId,
               (fooHistory: FooHistory) => {
-                // Changes are not allowed to read from the items they work on,
-                // with the exception of the 'id' property.
                 assert(fooHistoryId == fooHistory.id)
                 assertThrows[UnsupportedOperationException](fooHistory.datums)
                 assertThrows[UnsupportedOperationException](
@@ -411,8 +369,6 @@ trait WorldSpecSupportAmericium extends Assertions {
             .apply(
               fooHistoryId,
               (fooHistory: BadFooHistory) => {
-                // Changes are not allowed to read from the items they work on,
-                // with the exception of the 'id' property.
                 assert(fooHistoryId == fooHistory.id)
                 assertThrows[UnsupportedOperationException](fooHistory.datums)
                 assertThrows[UnsupportedOperationException](
@@ -438,8 +394,6 @@ trait WorldSpecSupportAmericium extends Assertions {
             .apply(
               fooHistoryId,
               (fooHistory: FooHistory) => {
-                // Changes are not allowed to read from the items they work on,
-                // with the exception of the 'id' property.
                 assert(fooHistoryId == fooHistory.id)
                 assertThrows[UnsupportedOperationException](fooHistory.datums)
                 assertThrows[UnsupportedOperationException](
@@ -457,8 +411,6 @@ trait WorldSpecSupportAmericium extends Assertions {
             .apply(
               fooHistoryId,
               (fooHistory: BadFooHistory) => {
-                // Changes are not allowed to read from the items they work on,
-                // with the exception of the 'id' property.
                 assert(fooHistoryId == fooHistory.id)
                 assertThrows[UnsupportedOperationException](fooHistory.datums)
                 assertThrows[UnsupportedOperationException](
@@ -486,8 +438,6 @@ trait WorldSpecSupportAmericium extends Assertions {
           .apply(
             fooHistoryId,
             (fooHistory: MoreSpecificFooHistory) => {
-              // Changes are not allowed to read from the items they work on,
-              // with the exception of the 'id' property.
               assert(fooHistoryId == fooHistory.id)
               assertThrows[UnsupportedOperationException](fooHistory.datums)
               assertThrows[UnsupportedOperationException](fooHistory.property1)
@@ -497,18 +447,11 @@ trait WorldSpecSupportAmericium extends Assertions {
 
               if (faulty)
                 fooHistory
-                  .forceInvariantBreakage() // Modelling breakage of the bitemporal invariant.
+                  .forceInvariantBreakage()
             }
           )
     )
 
-  // These recordings don't allow the possibility of the same id being shared by
-  // bitemporals of related (but different)
-  // types when these are plugged into tests that use them to correct one world
-  // history into another. Note that we don't
-  // mind sharing the same id between these samples and the previous ones for
-  // the *same* type - all that means is that
-  // we can see weird histories for an id when doing step-by-step corrections.
   def mixedNonConflictingDataSamplesForAnIdTrials(faulty: Boolean = false) =
     api.alternateWithWeights(
       Seq(
@@ -537,10 +480,8 @@ trait WorldSpecSupportAmericium extends Assertions {
             (barHistory: BarHistory) => {
               if (faulty)
                 barHistory
-                  .forceInvariantBreakage() // Modelling breakage of the bitemporal invariant.
+                  .forceInvariantBreakage()
 
-              // Changes are not allowed to read from the items they work on,
-              // with the exception of the 'id' property.
               assert(barHistory.id == barHistoryId)
               assertThrows[UnsupportedOperationException](barHistory.datums)
               assertThrows[UnsupportedOperationException](barHistory.property1)
@@ -563,8 +504,6 @@ trait WorldSpecSupportAmericium extends Assertions {
           .apply(
             barHistoryId,
             (barHistory: BarHistory) => {
-              // Changes are not allowed to read from the items they work on,
-              // with the exception of the 'id' property.
               assert(barHistory.id == barHistoryId)
               assertThrows[UnsupportedOperationException](barHistory.datums)
               assertThrows[UnsupportedOperationException](barHistory.property1)
@@ -573,7 +512,7 @@ trait WorldSpecSupportAmericium extends Assertions {
 
               if (faulty)
                 barHistory
-                  .forceInvariantBreakage() // Modelling breakage of the bitemporal invariant.
+                  .forceInvariantBreakage()
             }
           )
     )
@@ -592,8 +531,6 @@ trait WorldSpecSupportAmericium extends Assertions {
           .apply(
             barHistoryId,
             (barHistory: BarHistory) => {
-              // Changes are not allowed to read from the items they work on,
-              // with the exception of the 'id' property.
               assert(barHistory.id == barHistoryId)
               assertThrows[UnsupportedOperationException](barHistory.datums)
               assertThrows[UnsupportedOperationException](barHistory.property1)
@@ -602,7 +539,7 @@ trait WorldSpecSupportAmericium extends Assertions {
 
               if (faulty)
                 barHistory
-                  .forceInvariantBreakage() // Modelling breakage of the bitemporal invariant.
+                  .forceInvariantBreakage()
             }
           )
     )
@@ -620,8 +557,6 @@ trait WorldSpecSupportAmericium extends Assertions {
           .apply(
             integerHistoryId,
             (integerHistory: IntegerHistory) => {
-              // Changes are not allowed to read from the items they work on,
-              // with the exception of the 'id' property.
               assert(integerHistoryId == integerHistory.id)
               assertThrows[UnsupportedOperationException](integerHistory.datums)
               assertThrows[UnsupportedOperationException](
@@ -630,7 +565,7 @@ trait WorldSpecSupportAmericium extends Assertions {
 
               if (faulty)
                 integerHistory
-                  .forceInvariantBreakage() // Modelling breakage of the bitemporal invariant.
+                  .forceInvariantBreakage()
 
               integerHistory.integerProperty = data
             }
@@ -654,16 +589,13 @@ trait WorldSpecSupportAmericium extends Assertions {
       Instant => Annihilation,
       Unbounded[Instant] => Event
   )] = {
-    // It makes no sense to have an id without associated data samples - the act
-    // of
-    // recording a data sample via a change is what introduces an id into the
-    // world.
     val dataSamplesGenerator: Trials[Seq[(Int, (Any, (Unbounded[Instant], AHistory#Id) => Event))]] =
       api
         .alternateWithWeights(dataSampleTrials.zipWithIndex map {
           case (trials, index) => 1 -> (trials map (sample => index -> sample))
         })
-        .nonEmptyLists
+        .lists
+        .filter(_.nonEmpty)
 
     for {
       dataSamples             <- dataSamplesGenerator
@@ -686,30 +618,24 @@ trait WorldSpecSupportAmericium extends Assertions {
           Change.forOneItem(_: Unbounded[Instant])(
             historyId,
             (item: AHistory) => {
-              // A useless change: nothing changes!
             }
           )
         else
           Change.forOneItem(_: Unbounded[Instant])(
             historyId,
             (item: History) => {
-              // A useless change: nothing changes - and the event refers to the
-              // item type abstractly to boot.
             }
           )
       else if (anotherRoundOfHeadsItIs)
         Change.forOneItem(_: Unbounded[Instant])(
           historyId,
           (item: AHistory) => {
-            // A useless change: nothing changes!
           }
         )
       else
         Change.forOneItem(_: Unbounded[Instant])(
           historyId,
           (item: History) => {
-            // A useless change: nothing changes - and the event refers to the
-            // item type abstractly to boot.
           }
         )
     )
@@ -738,7 +664,7 @@ trait WorldSpecSupportAmericium extends Assertions {
       ],
       forbidAnnihilations: Boolean = false
   ): Trials[List[RecordingsForAPhoenixId with RecordingsForAnIdContracts]] = {
-    val recordingsForAnIdTrials = for {
+    val unconstrainedParametersTrials = for {
       (
         historyId,
         historiesFrom,
@@ -749,18 +675,16 @@ trait WorldSpecSupportAmericium extends Assertions {
       dataSamplesGroupedForLifespans <-
         if (forbidAnnihilations)
           api.only(List(dataSamples))
-        else api.splitsIntoNonEmptyPieces(dataSamples).map(_.toList)
+        else api.splitsIntoNonEmptyPieces(dataSamples.toSeq).map(_.toList)
       finalLifespanIsOngoing <-
         if (forbidAnnihilations) api.only(true)
         else api.booleans
       numberOfEventsForLifespans = {
         def numberOfEventsForLimitedLifespans(
             dataSamplesGroupedForLimitedLifespans: List[
-              Iterable[(Int, Any, Unbounded[Instant] => Event)]
+              Iterable[(Int, Any, (Unbounded[Instant]) => Event)]
             ]
         ): List[Int] = {
-          // Add an extra when for the annihilation at the end of the
-          // lifespan...
           dataSamplesGroupedForLimitedLifespans map (1 + _.size)
         }
 
@@ -776,43 +700,66 @@ trait WorldSpecSupportAmericium extends Assertions {
         } else
           numberOfEventsForLimitedLifespans(dataSamplesGroupedForLifespans)
       }
-
-      noAnnihilationsToWorryAbout =
-        finalLifespanIsOngoing && 1 == numberOfEventsForLifespans.size
-
-      eventWhens <-
-        (if (noAnnihilationsToWorryAbout)
-          api.alternate(api.only(NegativeInfinity), instantTrials.map(Finite(_))).listsOfSize(numberOfEventsForLifespans.sum)
-        else
-          api.only(NegativeInfinity)
-            .listsOfSize(numberOfEventsForLifespans.head - 1)
-            .flatMap(prefixLeadingUpToFirstAnnihilation => instantTrials.map(Finite(_))
-              .listsOfSize(1 + numberOfEventsForLifespans.tail.sum)
-              .map(prefixLeadingUpToFirstAnnihilation ++ _))).map(_.sorted)
-
-      sampleWhensGroupedForLifespans = chunks(
+      sampleWhensGroupedForLifespans <- chunksTrials(
         numberOfEventsForLifespans,
-        eventWhens
+        changeWhenTrials
       )
-    } yield new RecordingsForAPhoenixId(
+      noAnnihilationsToWorryAbout =
+        finalLifespanIsOngoing && 1 == sampleWhensGroupedForLifespans.size
+      firstAnnihilationHasBeenAlignedWithADefiniteWhen =
+        noAnnihilationsToWorryAbout ||
+          PartialFunction.cond(sampleWhensGroupedForLifespans.head.last) {
+            case Finite(_) => true
+          }
+    } yield firstAnnihilationHasBeenAlignedWithADefiniteWhen -> (
       historyId,
       historiesFrom,
       annihilationFor,
       ineffectiveEventFor,
       dataSamplesGroupedForLifespans,
       sampleWhensGroupedForLifespans
-    ) with RecordingsForAnIdContracts
+    )
 
-    recordingsForAnIdTrials.nonEmptyLists.map(recordings => {
+    val parametersTrials = unconstrainedParametersTrials
+      .flatMap {
+        case (true, parameters) => api.only(parameters)
+        case (false, _)         => api.impossible
+      }
+
+    val recordingsForAnIdTrials =
+      for (
+        (
+          historyId,
+          historiesFrom,
+          annihilationFor,
+          ineffectiveEventFor,
+          dataSamplesGroupedForLifespans,
+          sampleWhensGroupedForLifespans
+        ) <- parametersTrials
+      )
+        yield new RecordingsForAPhoenixId(
+          historyId,
+          historiesFrom,
+          annihilationFor,
+          ineffectiveEventFor,
+          dataSamplesGroupedForLifespans,
+          sampleWhensGroupedForLifespans
+        ) with RecordingsForAnIdContracts
+
+    recordingsForAnIdTrials.lists.map(recordings => {
       val seenIds = scala.collection.mutable.Set[Any]()
       recordings.filter(recording => seenIds.add(recording.historyId))
     }).filter(_.nonEmpty)
   }
 
-  def chunks[Article](
+  def chunksTrials[Article: Ordering](
       chunkSizes: List[Int],
-      articles: List[Article]
-  ): Vector[List[Article]] = {
+      stuffTrials: Trials[Article]
+  ): Trials[Vector[List[Article]]] = {
+    val numberOfEventsOverall = chunkSizes.sum
+    for {
+      articles <- stuffTrials.listsOfSize(numberOfEventsOverall).map(_.sorted)
+    } yield {
       def chunksOf(
           chunkSizes: Seq[Int],
           articles: List[Article]
@@ -826,6 +773,7 @@ trait WorldSpecSupportAmericium extends Assertions {
 
       chunksOf(chunkSizes, articles).toVector
     }
+  }
 
   trait RecordingsForAnId {
     val historyId: Any
@@ -899,14 +847,16 @@ trait WorldSpecSupportAmericium extends Assertions {
         dataSamplesGroupedForLifespans zip sampleWhensGroupedForLifespans
     } yield {
       val numberOfChanges = dataSamples.size
-      // NOTE: we may have an extra event when - 'zip' will disregard this.
       val changes = dataSamples.toSeq zip eventWhens map {
         case ((_, _, changeFor), eventWhen) =>
           changeFor(eventWhen)
       }
       eventWhens zip (if (numberOfChanges < eventWhens.size)
-                        changes :+ annihilationFor(eventWhens.last match {
-                          case Finite(definiteWhen) => definiteWhen
+                        changes :+ (eventWhens.last match {
+                          case Finite(definiteWhen) =>
+                            annihilationFor(definiteWhen)
+                          case _ =>
+                            ineffectiveEventFor(eventWhens.last)
                         })
                       else
                         changes)
@@ -922,7 +872,6 @@ trait WorldSpecSupportAmericium extends Assertions {
           dataSamplesGroupedForLifespans zip sampleWhensGroupedForLifespans
       } yield {
         val numberOfChanges = dataSamples.size
-        // NOTE: we may have an extra event when - 'zip' will disregard this.
         val data = dataSamples.toSeq zip eventWhens map {
           case ((_, dataSample, _), eventWhen) =>
             s"Change: $dataSample"
@@ -967,9 +916,6 @@ trait WorldSpecSupportAmericium extends Assertions {
           if (beyondTheFinalDemise)
             doesNotExist
           else {
-            // If 'when' comes beyond the last event (which in this case won't
-            // be an annihilation),
-            // use the last group.
             val clampedRelevantGroupIndex =
               relevantGroupIndex min (sampleWhensGroupedForLifespans.size - 1)
             if (
@@ -1036,9 +982,6 @@ trait WorldSpecSupportAmericium extends Assertions {
           if (beyondTheFinalDemise)
             None
           else {
-            // If 'when' comes beyond the last event (which in this case won't
-            // be an annihilation),
-            // use the last group.
             val clampedRelevantGroupIndex =
               relevantGroupIndex min (sampleWhensGroupedForLifespans.size - 1)
             if (

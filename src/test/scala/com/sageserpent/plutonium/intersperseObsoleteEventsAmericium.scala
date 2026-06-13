@@ -134,8 +134,8 @@ object intersperseObsoleteEventsAmericium {
   }
 
   def chunkKeepingEventIdsUniquePerChunk[EventRelatedThing](
-      eventIdPieces: Seq[(EventRelatedThing, EventId)]
-  ): Trials[Seq[Seq[(EventRelatedThing, EventId)]]] = {
+      eventIdPieces: Seq[(Option[EventRelatedThing], EventId)]
+  ): Trials[Seq[Seq[(Option[EventRelatedThing], EventId)]]] = {
     api.splitsIntoNonEmptyPieces(eventIdPieces).flatMap { chunks =>
       val processedChunksTrials = chunks.map { chunk =>
         val chunkSeq = chunk.toSeq
