@@ -97,6 +97,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
         .listsOfSize(bigShuffledHistoryOverLotsOfThings.size)
         .map(_.sorted)
       queryWhen <- unboundedInstantTrials
+      if recordingsGroupedById.exists(_.thePartNoLaterThan(queryWhen).isDefined)
     } yield HistoryTestCase(
       recordingsGroupedById,
       bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toVector,
@@ -122,24 +123,19 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
           val checks = for {
             recording <- recordingsGroupedById
             RecordingsNoLaterThan(
-              historyId,
+              _,
               historiesFrom,
               pertinentRecordings,
               _,
               _
             ) <- recording.thePartNoLaterThan(queryWhen).toList
             Seq(history) = historiesFrom(scope)
-          } yield (
-            historyId,
-            history.datums,
-            pertinentRecordings.map(_._1)
-          )
+          } yield history.datums -> pertinentRecordings.map(_._1)
 
-          for ((_, actualHistory, expectedHistory) <- checks) {
-            assert(actualHistory.length == expectedHistory.length)
-            for (((actual, expected), _) <- (actualHistory zip expectedHistory).zipWithIndex) {
-              assert(actual == expected)
-            }
+          assert(checks.nonEmpty)
+
+          for ((actualHistory, expectedHistory) <- checks) {
+            assert(actualHistory == expectedHistory)
           }
         }
     }
@@ -170,6 +166,13 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
         .listsOfSize(bigShuffledHistoryOverLotsOfThings.size)
         .map(_.sorted)
       queryWhen <- unboundedInstantTrials
+      if (for {
+        referringHistoryRecording <- referringHistoryRecordingsGroupedById
+        _ <- referringHistoryRecording.thePartNoLaterThan(queryWhen).toList
+        referencedHistoryRecording <-
+          referencedHistoryRecordingsGroupedById
+        _ <- referencedHistoryRecording.thePartNoLaterThan(queryWhen).toList
+      } yield ()).nonEmpty
     } yield RelatedItemTestCase(
       referencedHistoryRecordingsGroupedById,
       referringHistoryRecordingsGroupedById,
@@ -198,7 +201,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
             for {
               referringHistoryRecording <- referringHistoryRecordingsGroupedById
               RecordingsNoLaterThan(
-                referringHistoryId,
+                _,
                 referringHistoriesFrom,
                 _,
                 _,
@@ -213,34 +216,18 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
                 _,
                 _
               ) <- referencedHistoryRecording.thePartNoLaterThan(queryWhen).toList
-              referringHistories = referringHistoriesFrom(scope)
-              if referringHistories.nonEmpty
-              referringHistory =
-                referringHistories.head.asInstanceOf[ReferringHistory]
+              Seq(referringHistory: ReferringHistory) =
+                referringHistoriesFrom(scope)
               if referringHistory.referencedHistories
                 .get(referencedHistoryId)
                 .exists(!_.asInstanceOf[ItemExtensionApi].isGhost)
-            } yield (
-              referringHistoryId,
-              referencedHistoryId,
-              referringHistory.referencedDatums(referencedHistoryId),
-              pertinentRecordings.map(_._1)
-            )
+            } yield referringHistory.referencedDatums(
+              referencedHistoryId
+            ) -> pertinentRecordings.map(_._1)
 
-          for {
-            (
-              referringHistoryId,
-              referencedHistoryId,
-              actualHistory,
-              expectedHistory
-            ) <- checks
-          } {
-            assert(actualHistory.length == expectedHistory.length)
-            for (
-              ((actual, expected), _) <-
-                (actualHistory zip expectedHistory).zipWithIndex
-            ) {
-              assert(actual == expected)
+          if (checks.nonEmpty) {
+            for ((actualHistory, expectedHistory) <- checks) {
+              assert(actualHistory == expectedHistory)
             }
           }
         }
@@ -272,6 +259,13 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
         .listsOfSize(bigShuffledHistoryOverLotsOfThings.size)
         .map(_.sorted)
       queryWhen <- unboundedInstantTrials
+      if (for {
+        referringHistoryRecording <- referringHistoryRecordingsGroupedById
+        _ <- referringHistoryRecording.thePartNoLaterThan(queryWhen).toList
+        referencedHistoryRecording <-
+          referencedHistoryRecordingsGroupedById
+        _ <- referencedHistoryRecording.doesNotExistAt(queryWhen).toList
+      } yield ()).nonEmpty
     } yield RelatedItemTestCase(
       referencedHistoryRecordingsGroupedById,
       referringHistoryRecordingsGroupedById,
@@ -296,7 +290,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
 
           val scope = world.scopeFor(queryWhen, world.nextRevision)
 
-          val checks: List[(Any, History)] =
+          val checks: List[History] =
             for {
               referringHistoryRecording <- referringHistoryRecordingsGroupedById
               RecordingsNoLaterThan(
@@ -313,18 +307,18 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
                 referencedHistoriesFrom,
                 _
               ) <- referencedHistoryRecording.doesNotExistAt(queryWhen).toList
-              referringHistories = referringHistoriesFrom(scope)
-              if referringHistories.nonEmpty
-              referringHistory =
-                referringHistories.head.asInstanceOf[ReferringHistory]
+              Seq(referringHistory: ReferringHistory) =
+                referringHistoriesFrom(scope)
               if referringHistory.referencedHistories
                 .get(referencedHistoryId)
                 .exists(!_.asInstanceOf[ItemExtensionApi].isGhost)
               Seq(referencedHistory) = referencedHistoriesFrom(scope)
-            } yield (referencedHistoryId, referencedHistory)
+            } yield referencedHistory
 
-          for ((_, actualHistory) <- checks) {
-            assert(actualHistory.datums.isEmpty)
+          if (checks.nonEmpty) {
+            for (referencedHistory <- checks) {
+              assert(referencedHistory.datums.isEmpty)
+            }
           }
         }
     }
