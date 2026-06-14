@@ -4,7 +4,7 @@ import com.sageserpent.americium.Trials.api
 import com.sageserpent.americium.junit5._
 import com.sageserpent.plutonium.World.Revision
 import com.sageserpent.plutonium.utilities.Unbounded
-import org.junit.jupiter.api.TestFactory
+import org.junit.jupiter.api.{Test, TestFactory}
 
 import _root_.java.time.Instant
 import scala.util.Using
@@ -68,12 +68,10 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-  @TestFactory
-  def haveNoCurrentRevision() = {
-    api.only(()).withLimit(1).dynamicTests { _ =>
-      Using.resource(makeWorld()) { world =>
-        assert(World.initialRevision == world.nextRevision)
-      }
+  @Test
+  def haveNoCurrentRevision(): Unit = {
+    Using.resource(makeWorld()) { world =>
+      assert(World.initialRevision == world.nextRevision)
     }
   }
 
