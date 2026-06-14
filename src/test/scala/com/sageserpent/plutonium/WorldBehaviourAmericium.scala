@@ -1,6 +1,8 @@
 package com.sageserpent.plutonium
 
+import com.sageserpent.americium.Trials
 import com.sageserpent.americium.Trials.api
+import com.sageserpent.americium.java.CasesLimitStrategy
 import com.sageserpent.americium.junit5._
 import com.sageserpent.plutonium.World.Revision
 import com.sageserpent.plutonium.utilities.Unbounded
@@ -10,15 +12,6 @@ import _root_.java.time.Instant
 import scala.util.Using
 
 object WorldBehaviourAmericium {
-  object ExpectyFlavouredAssert {
-    import com.eed3si9n.expecty.Expecty
-
-    val assert: Expecty = new Expecty {
-      override val showLocation: Boolean = true
-      override val showTypes: Boolean    = true
-    }
-  }
-
   case class RelatedItemTestCase(
       referencedHistoryRecordingsGroupedById: List[
         WorldSpecSupportAmericium#RecordingsForAnId
@@ -48,8 +41,8 @@ object WorldBehaviourAmericium {
 trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
   this: WorldResourceAmericium =>
 
-  import WorldBehaviourAmericium.ExpectyFlavouredAssert.assert
   import WorldBehaviourAmericium.{HistoryTestCase, RelatedItemTestCase}
+  import ExpectyFlavouredAssert.assert
 
   @TestFactory
   def worldWithNoHistory() = {
@@ -97,7 +90,6 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
         .listsOfSize(bigShuffledHistoryOverLotsOfThings.size)
         .map(_.sorted)
       queryWhen <- unboundedInstantTrials
-      if recordingsGroupedById.exists(_.thePartNoLaterThan(queryWhen).isDefined)
     } yield HistoryTestCase(
       recordingsGroupedById,
       bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toVector,
@@ -132,7 +124,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
             Seq(history) = historiesFrom(scope)
           } yield history.datums -> pertinentRecordings.map(_._1)
 
-          assert(checks.nonEmpty)
+          if (checks.isEmpty) Trials.reject()
 
           for ((actualHistory, expectedHistory) <- checks) {
             assert(actualHistory == expectedHistory)
@@ -166,13 +158,6 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
         .listsOfSize(bigShuffledHistoryOverLotsOfThings.size)
         .map(_.sorted)
       queryWhen <- unboundedInstantTrials
-      if (for {
-        referringHistoryRecording <- referringHistoryRecordingsGroupedById
-        _ <- referringHistoryRecording.thePartNoLaterThan(queryWhen).toList
-        referencedHistoryRecording <-
-          referencedHistoryRecordingsGroupedById
-        _ <- referencedHistoryRecording.thePartNoLaterThan(queryWhen).toList
-      } yield ()).nonEmpty
     } yield RelatedItemTestCase(
       referencedHistoryRecordingsGroupedById,
       referringHistoryRecordingsGroupedById,
@@ -180,7 +165,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
       asOfs,
       queryWhen
     )
-    testCaseTrials.withLimit(200).dynamicTests {
+    testCaseTrials.withStrategy(_ => CasesLimitStrategy.counted(100, 20)).dynamicTests {
       case RelatedItemTestCase(
             referencedHistoryRecordingsGroupedById,
             referringHistoryRecordingsGroupedById,
@@ -199,23 +184,20 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
 
           val checks =
             for {
-              referringHistoryRecording <- referringHistoryRecordingsGroupedById
               RecordingsNoLaterThan(
                 _,
                 referringHistoriesFrom,
                 _,
                 _,
                 _
-              ) <- referringHistoryRecording.thePartNoLaterThan(queryWhen).toList
-              referencedHistoryRecording <-
-                referencedHistoryRecordingsGroupedById
+              ) <- referringHistoryRecordingsGroupedById.flatMap(_.thePartNoLaterThan(queryWhen))
               RecordingsNoLaterThan(
                 referencedHistoryId,
                 _,
                 pertinentRecordings,
                 _,
                 _
-              ) <- referencedHistoryRecording.thePartNoLaterThan(queryWhen).toList
+              ) <- referencedHistoryRecordingsGroupedById.flatMap(_.thePartNoLaterThan(queryWhen))
               Seq(referringHistory: ReferringHistory) =
                 referringHistoriesFrom(scope)
               if referringHistory.referencedHistories
@@ -225,10 +207,10 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
               referencedHistoryId
             ) -> pertinentRecordings.map(_._1)
 
-          if (checks.nonEmpty) {
-            for ((actualHistory, expectedHistory) <- checks) {
-              assert(actualHistory == expectedHistory)
-            }
+          if (checks.isEmpty) Trials.reject()
+
+          for ((actualHistory, expectedHistory) <- checks) {
+            assert(actualHistory == expectedHistory)
           }
         }
     }
@@ -259,13 +241,6 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
         .listsOfSize(bigShuffledHistoryOverLotsOfThings.size)
         .map(_.sorted)
       queryWhen <- unboundedInstantTrials
-      if (for {
-        referringHistoryRecording <- referringHistoryRecordingsGroupedById
-        _ <- referringHistoryRecording.thePartNoLaterThan(queryWhen).toList
-        referencedHistoryRecording <-
-          referencedHistoryRecordingsGroupedById
-        _ <- referencedHistoryRecording.doesNotExistAt(queryWhen).toList
-      } yield ()).nonEmpty
     } yield RelatedItemTestCase(
       referencedHistoryRecordingsGroupedById,
       referringHistoryRecordingsGroupedById,
@@ -273,7 +248,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
       asOfs,
       queryWhen
     )
-    testCaseTrials.withLimit(12).dynamicTests {
+    testCaseTrials.withStrategy(_ => CasesLimitStrategy.counted(100, 20)).dynamicTests {
       case RelatedItemTestCase(
             referencedHistoryRecordingsGroupedById,
             referringHistoryRecordingsGroupedById,
@@ -292,21 +267,18 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
 
           val checks: List[History] =
             for {
-              referringHistoryRecording <- referringHistoryRecordingsGroupedById
               RecordingsNoLaterThan(
                 _,
                 referringHistoriesFrom,
                 _,
                 _,
                 _
-              ) <- referringHistoryRecording.thePartNoLaterThan(queryWhen).toList
-              referencedHistoryRecording <-
-                referencedHistoryRecordingsGroupedById
+              ) <- referringHistoryRecordingsGroupedById.flatMap(_.thePartNoLaterThan(queryWhen))
               NonExistentRecordings(
                 referencedHistoryId,
                 referencedHistoriesFrom,
                 _
-              ) <- referencedHistoryRecording.doesNotExistAt(queryWhen).toList
+              ) <- referencedHistoryRecordingsGroupedById.flatMap(_.doesNotExistAt(queryWhen))
               Seq(referringHistory: ReferringHistory) =
                 referringHistoriesFrom(scope)
               if referringHistory.referencedHistories
@@ -315,10 +287,10 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
               Seq(referencedHistory) = referencedHistoriesFrom(scope)
             } yield referencedHistory
 
-          if (checks.nonEmpty) {
-            for (referencedHistory <- checks) {
-              assert(referencedHistory.datums.isEmpty)
-            }
+          if (checks.isEmpty) Trials.reject()
+
+          for (referencedHistory <- checks) {
+            assert(referencedHistory.datums.isEmpty)
           }
         }
     }
