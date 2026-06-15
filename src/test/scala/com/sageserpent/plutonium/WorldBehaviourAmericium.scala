@@ -6,7 +6,7 @@ import com.sageserpent.americium.java.CasesLimitStrategy
 import com.sageserpent.americium.junit5._
 import com.sageserpent.plutonium.World.Revision
 import com.sageserpent.plutonium.utilities.ExpectyFlavouredAssert.assert
-import com.sageserpent.plutonium.utilities.Unbounded
+import com.sageserpent.plutonium.utilities.{Finite, Unbounded}
 import org.junit.jupiter.api.Assertions._
 import org.junit.jupiter.api.{Test, TestFactory}
 
@@ -48,16 +48,19 @@ object WorldBehaviourAmericium {
       asOfs: List[Instant],
       referencingEventWhen: Unbounded[Instant]
   )
+
+  case class RevisionTestCase(
+      bigShuffledHistoryOverLotsOfThings: Seq[
+        Seq[(Option[(Unbounded[Instant], Event)], intersperseObsoleteEventsAmericium.EventId)]
+      ],
+      asOfs: List[Instant]
+  )
 }
 
 trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
   this: WorldResourceAmericium =>
 
-  import WorldBehaviourAmericium.{
-    GhostTestCase,
-    HistoryTestCase,
-    RelatedItemTestCase
-  }
+  import WorldBehaviourAmericium._
 
   import cats.implicits._
 
@@ -163,14 +166,12 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
         referringHistoryRecordingsGroupedByIdTrials()
       obsoleteRecordingsGroupedById <-
         nonConflictingRecordingsGroupedByIdTrials
-      shuffledRecordings <-
-        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
-          referencedHistoryRecordingsGroupedById ++ referringHistoryRecordingsGroupedById
-        )
-      shuffledObsoleteRecordings <-
-        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
-          obsoleteRecordingsGroupedById
-        )
+      shuffledRecordings <- shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+        referencedHistoryRecordingsGroupedById ++ referringHistoryRecordingsGroupedById
+      )
+      shuffledObsoleteRecordings <- shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+        obsoleteRecordingsGroupedById
+      )
       bigShuffledHistoryOverLotsOfThings <- intersperseObsoleteEventsAmericium(
         shuffledRecordings,
         shuffledObsoleteRecordings
@@ -254,14 +255,12 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
         referringHistoryRecordingsGroupedByIdTrials()
       obsoleteRecordingsGroupedById <-
         nonConflictingRecordingsGroupedByIdTrials
-      shuffledRecordings <-
-        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
-          referencedHistoryRecordingsGroupedById ++ referringHistoryRecordingsGroupedById
-        )
-      shuffledObsoleteRecordings <-
-        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
-          obsoleteRecordingsGroupedById
-        )
+      shuffledRecordings <- shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+        referencedHistoryRecordingsGroupedById ++ referringHistoryRecordingsGroupedById
+      )
+      shuffledObsoleteRecordings <- shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+        obsoleteRecordingsGroupedById
+      )
       bigShuffledHistoryOverLotsOfThings <- intersperseObsoleteEventsAmericium(
         shuffledRecordings,
         shuffledObsoleteRecordings
@@ -342,14 +341,12 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
         referringHistoryRecordingsGroupedByIdTrials()
       obsoleteRecordingsGroupedById <-
         nonConflictingRecordingsGroupedByIdTrials
-      shuffledRecordings <-
-        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
-          referencedHistoryRecordingsGroupedById ++ referringHistoryRecordingsGroupedById
-        )
-      shuffledObsoleteRecordings <-
-        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
-          obsoleteRecordingsGroupedById
-        )
+      shuffledRecordings <- shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+        referencedHistoryRecordingsGroupedById ++ referringHistoryRecordingsGroupedById
+      )
+      shuffledObsoleteRecordings <- shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+        obsoleteRecordingsGroupedById
+      )
       bigShuffledHistoryOverLotsOfThings <- intersperseObsoleteEventsAmericium(
         shuffledRecordings,
         shuffledObsoleteRecordings
@@ -664,7 +661,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
 
           val theReferrerId = "The Referrer"
 
-          for (((referencedHistoryId, _), index) <- checks zipWithIndex) {
+          for (((referencedHistoryId, _), index) <- checks.zipWithIndex) {
             world.revise(
               Map(
                 -1 - index -> Some(
@@ -789,7 +786,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
 
           val theReferrerId = "The Referrer"
 
-          for (((referencedHistoryId, _), index) <- checks zipWithIndex) {
+          for (((referencedHistoryId, _), index) <- checks.zipWithIndex) {
             world.revise(
               Map(
                 -1 - index -> Some(
@@ -811,7 +808,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
             )
           }
 
-          for (((referencedHistoryId, whenAnnihilated), index) <- checks zipWithIndex) {
+          for (((referencedHistoryId, whenAnnihilated), index) <- checks.zipWithIndex) {
             assertThrows(
               classOf[RuntimeException],
               () =>
@@ -854,6 +851,363 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
                 )
             )
           }
+        }
+    }
+  }
+
+  @TestFactory
+  def notPermitTheAnnihilationOfAnItemAtAQueryTimeComingBeforeItsFirstDefiningEvent() = {
+    val testCaseTrials = for {
+      recordingsGroupedById <- integerHistoryRecordingsGroupedByIdTrials
+      obsoleteRecordingsGroupedById <-
+        nonConflictingRecordingsGroupedByIdTrials
+      shuffledRecordings <-
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          recordingsGroupedById
+        )
+      shuffledObsoleteRecordings <-
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          obsoleteRecordingsGroupedById
+        )
+      bigShuffledHistoryOverLotsOfThings <- intersperseObsoleteEventsAmericium(
+        shuffledRecordings,
+        shuffledObsoleteRecordings
+      )
+      asOfs <- instantTrials
+        .listsOfSize(bigShuffledHistoryOverLotsOfThings.size)
+        .map(_.sorted)
+      definiteQueryWhen <- instantTrials
+    } yield (
+      recordingsGroupedById,
+      bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toVector,
+      asOfs,
+      definiteQueryWhen
+    )
+
+    testCaseTrials.withLimit(200).dynamicTests {
+      case (
+            recordingsGroupedById,
+            bigShuffledHistoryOverLotsOfThings,
+            asOfs,
+            definiteQueryWhen
+          ) =>
+        Using.resource(makeWorld()) { world =>
+          recordEventsInWorld(
+            bigShuffledHistoryOverLotsOfThings,
+            asOfs,
+            world
+          )
+
+          val scope =
+            world.scopeFor(Finite(definiteQueryWhen), world.nextRevision)
+
+          val checks = for {
+            NonExistentRecordings(historyId, historiesFrom, _) <-
+              recordingsGroupedById flatMap (_.doesNotExistAt(
+                Finite(definiteQueryWhen)
+              ))
+            histories = historiesFrom(scope)
+          } yield historyId
+
+          if (checks.isEmpty) Trials.reject()
+
+          for (historyId <- checks) {
+            assertThrows(
+              classOf[RuntimeException],
+              () => {
+                val eventIdForAnnihilation = -1
+                world.revise(
+                  eventIdForAnnihilation,
+                  Annihilation[IntegerHistory](
+                    definiteQueryWhen,
+                    historyId.asInstanceOf[String]
+                  ),
+                  asOfs.last
+                )
+              }
+            )
+          }
+        }
+    }
+  }
+
+  @TestFactory
+  def haveANextRevisionThatReflectsTheLastAddedRevision() = {
+    val testCaseTrials = for {
+      recordingsGroupedById <- recordingsGroupedByIdTrials(
+        forbidAnnihilations = false
+      )
+      obsoleteRecordingsGroupedById <-
+        nonConflictingRecordingsGroupedByIdTrials
+      shuffledRecordings <-
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          recordingsGroupedById
+        )
+      shuffledObsoleteRecordings <-
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          obsoleteRecordingsGroupedById
+        )
+      bigShuffledHistoryOverLotsOfThings <- intersperseObsoleteEventsAmericium(
+        shuffledRecordings,
+        shuffledObsoleteRecordings
+      )
+      asOfs <- instantTrials
+        .listsOfSize(bigShuffledHistoryOverLotsOfThings.size)
+        .map(_.sorted)
+    } yield RevisionTestCase(
+      bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toVector,
+      asOfs
+    )
+
+    testCaseTrials.withLimit(200).dynamicTests {
+      case RevisionTestCase(bigShuffledHistoryOverLotsOfThings, asOfs) =>
+        Using.resource(makeWorld()) { world =>
+          val revisions = recordEventsInWorld(
+            bigShuffledHistoryOverLotsOfThings,
+            asOfs,
+            world
+          )
+
+          assert(1 + revisions.last == world.nextRevision)
+        }
+    }
+  }
+
+  @TestFactory
+  def haveAVersionTimelineThatRecordsTheAsOfTimeForEachOfItsRevisions() = {
+    val testCaseTrials = for {
+      recordingsGroupedById <- recordingsGroupedByIdTrials(
+        forbidAnnihilations = false
+      )
+      obsoleteRecordingsGroupedById <-
+        nonConflictingRecordingsGroupedByIdTrials
+      shuffledRecordings <-
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          recordingsGroupedById
+        )
+      shuffledObsoleteRecordings <-
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          obsoleteRecordingsGroupedById
+        )
+      bigShuffledHistoryOverLotsOfThings <- intersperseObsoleteEventsAmericium(
+        shuffledRecordings,
+        shuffledObsoleteRecordings
+      )
+      asOfs <- instantTrials
+        .listsOfSize(bigShuffledHistoryOverLotsOfThings.size)
+        .map(_.sorted)
+    } yield RevisionTestCase(
+      bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toVector,
+      asOfs
+    )
+
+    testCaseTrials.withLimit(200).dynamicTests {
+      case RevisionTestCase(bigShuffledHistoryOverLotsOfThings, asOfs) =>
+        Using.resource(makeWorld()) { world =>
+          recordEventsInWorld(
+            bigShuffledHistoryOverLotsOfThings,
+            asOfs,
+            world
+          )
+
+          assert(asOfs == world.revisionAsOfs.toList)
+        }
+    }
+  }
+
+  @TestFactory
+  def haveASortedVersionTimeline() = {
+    val testCaseTrials = for {
+      recordingsGroupedById <- recordingsGroupedByIdTrials(
+        forbidAnnihilations = false
+      )
+      obsoleteRecordingsGroupedById <-
+        nonConflictingRecordingsGroupedByIdTrials
+      shuffledRecordings <-
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          recordingsGroupedById
+        )
+      shuffledObsoleteRecordings <-
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          obsoleteRecordingsGroupedById
+        )
+      bigShuffledHistoryOverLotsOfThings <- intersperseObsoleteEventsAmericium(
+        shuffledRecordings,
+        shuffledObsoleteRecordings
+      )
+      asOfs <- instantTrials
+        .listsOfSize(bigShuffledHistoryOverLotsOfThings.size)
+        .map(_.sorted)
+    } yield RevisionTestCase(
+      bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toVector,
+      asOfs
+    )
+
+    testCaseTrials.withLimit(200).dynamicTests {
+      case RevisionTestCase(bigShuffledHistoryOverLotsOfThings, asOfs) =>
+        Using.resource(makeWorld()) { world =>
+          recordEventsInWorld(
+            bigShuffledHistoryOverLotsOfThings,
+            asOfs,
+            world
+          )
+
+          assert(world.revisionAsOfs.zip(world.revisionAsOfs.tail).forall {
+            case (first, second) => !first.isAfter(second)
+          })
+        }
+    }
+  }
+
+  @TestFactory
+  def allocateRevisionNumbersSequentially() = {
+    val testCaseTrials = for {
+      recordingsGroupedById <- recordingsGroupedByIdTrials(
+        forbidAnnihilations = false
+      )
+      obsoleteRecordingsGroupedById <-
+        nonConflictingRecordingsGroupedByIdTrials
+      shuffledRecordings <-
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          recordingsGroupedById
+        )
+      shuffledObsoleteRecordings <-
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          obsoleteRecordingsGroupedById
+        )
+      bigShuffledHistoryOverLotsOfThings <- intersperseObsoleteEventsAmericium(
+        shuffledRecordings,
+        shuffledObsoleteRecordings
+      )
+      asOfs <- instantTrials
+        .listsOfSize(bigShuffledHistoryOverLotsOfThings.size)
+        .map(_.sorted)
+    } yield RevisionTestCase(
+      bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toVector,
+      asOfs
+    )
+
+    testCaseTrials.withLimit(200).dynamicTests {
+      case RevisionTestCase(bigShuffledHistoryOverLotsOfThings, asOfs) =>
+        Using.resource(makeWorld()) { world =>
+          val revisions = recordEventsInWorld(
+            bigShuffledHistoryOverLotsOfThings,
+            asOfs,
+            world
+          )
+
+          assert(revisions.zipWithIndex.forall { case (revision, index) =>
+            index == revision
+          })
+        }
+    }
+  }
+
+  @TestFactory
+  def haveANextRevisionNumberThatIsTheSizeOfItsVersionTimeline() = {
+    val testCaseTrials = for {
+      recordingsGroupedById <- recordingsGroupedByIdTrials(
+        forbidAnnihilations = false
+      )
+      obsoleteRecordingsGroupedById <-
+        nonConflictingRecordingsGroupedByIdTrials
+      shuffledRecordings <-
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          recordingsGroupedById
+        )
+      shuffledObsoleteRecordings <-
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          obsoleteRecordingsGroupedById
+        )
+      bigShuffledHistoryOverLotsOfThings <- intersperseObsoleteEventsAmericium(
+        shuffledRecordings,
+        shuffledObsoleteRecordings
+      )
+      asOfs <- instantTrials
+        .listsOfSize(bigShuffledHistoryOverLotsOfThings.size)
+        .map(_.sorted)
+    } yield RevisionTestCase(
+      bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toVector,
+      asOfs
+    )
+
+    testCaseTrials.withLimit(200).dynamicTests {
+      case RevisionTestCase(bigShuffledHistoryOverLotsOfThings, asOfs) =>
+        Using.resource(makeWorld()) { world =>
+          recordEventsInWorld(
+            bigShuffledHistoryOverLotsOfThings,
+            asOfs,
+            world
+          )
+
+          assert(world.nextRevision == world.revisionAsOfs.length)
+        }
+    }
+  }
+
+  @TestFactory
+  def notPermitTheAsOfTimeForANewRevisionToBeLessThanThatOfAnyExistingRevision() = {
+    val testCaseTrials = for {
+      recordingsGroupedById <- recordingsGroupedByIdTrials(
+        forbidAnnihilations = false
+      )
+      obsoleteRecordingsGroupedById <-
+        nonConflictingRecordingsGroupedByIdTrials
+      shuffledRecordings <-
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          recordingsGroupedById
+        )
+      shuffledObsoleteRecordings <-
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          obsoleteRecordingsGroupedById
+        )
+      bigShuffledHistoryOverLotsOfThings <- intersperseObsoleteEventsAmericium(
+        shuffledRecordings,
+        shuffledObsoleteRecordings
+      )
+      asOfs <- instantTrials
+        .listsOfSize(bigShuffledHistoryOverLotsOfThings.size)
+        .map(_.sorted)
+      if 1 < asOfs.toSet.size
+      candidateIndicesToStartATranspose =
+        asOfs.zip(asOfs.tail).zipWithIndex filter {
+          case ((first, second), index) => first isBefore second
+        } map (_._2)
+      indexOfFirstAsOfBeingTransposed <- api.choose(candidateIndicesToStartATranspose)
+    } yield (
+      bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toVector,
+      asOfs,
+      indexOfFirstAsOfBeingTransposed
+    )
+
+    testCaseTrials.withLimit(200).dynamicTests {
+      case (
+            bigShuffledHistoryOverLotsOfThings,
+            asOfs,
+            indexOfFirstAsOfBeingTransposed
+          ) =>
+        Using.resource(makeWorld()) { world =>
+          val asOfsWithIncorrectTransposition =
+            asOfs.splitAt(indexOfFirstAsOfBeingTransposed) match {
+              case (
+                    asOfsBeforeTransposition,
+                    Seq(first, second, asOfsAfterTransposition @ _*)
+                  ) =>
+                asOfsBeforeTransposition ++ Seq(
+                  second,
+                  first
+                ) ++ asOfsAfterTransposition
+            }
+
+          assertThrows(
+            classOf[IllegalArgumentException],
+            () =>
+              recordEventsInWorld(
+                bigShuffledHistoryOverLotsOfThings,
+                asOfsWithIncorrectTransposition,
+                world
+              )
+          )
         }
     }
   }
