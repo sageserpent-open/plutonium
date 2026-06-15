@@ -6,19 +6,24 @@ import com.sageserpent.americium.utilities.seqEnrichment._
 import com.sageserpent.plutonium.World._
 import com.sageserpent.plutonium.efficient.WorldEfficientInMemoryImplementation
 import com.sageserpent.plutonium.reference.WorldReferenceImplementation
-import com.sageserpent.plutonium.utilities.{
-  Finite,
-  NegativeInfinity,
-  PositiveInfinity,
-  Unbounded
-}
-import org.scalatest.Assertions
+import com.sageserpent.plutonium.utilities.{Finite, NegativeInfinity, PositiveInfinity, Unbounded}
 
 import java.time.Instant
 import scala.collection.Searching._
 import scala.collection.immutable.TreeMap
 import scala.language.postfixOps
 import scala.reflect.runtime.universe.{Scope => _, _}
+import ExpectyFlavouredAssert.assert
+import org.junit.jupiter.api.Assertions.assertThrows
+
+object ExpectyFlavouredAssert {
+  import com.eed3si9n.expecty.Expecty
+
+  val assert: Expecty = new Expecty {
+    override val showLocation: Boolean = true
+    override val showTypes: Boolean    = true
+  }
+}
 
 object WorldSpecSupportAmericium {
   val changeError = new RuntimeException("Error in making a change.")
@@ -28,7 +33,7 @@ object WorldSpecSupportAmericium {
   }
 }
 
-trait WorldSpecSupportAmericium extends Assertions {
+trait WorldSpecSupportAmericium {
 
   import WorldSpecSupportAmericium._
 
@@ -37,6 +42,19 @@ trait WorldSpecSupportAmericium extends Assertions {
   // Replacement for SharedGenerators
 
   def instantTrials: Trials[Instant] = api.instants
+
+  def unboundedInstantTrials: Trials[Unbounded[Instant]] =
+    api.alternateWithWeights(
+      1  -> api.only(NegativeInfinity),
+      1  -> api.only(PositiveInfinity),
+      10 -> instantTrials.map(Finite.apply[Instant])
+    )
+
+  def changeWhenTrials: Trials[Unbounded[Instant]] =
+    api.alternateWithWeights(
+      1  -> api.only(NegativeInfinity),
+      10 -> instantTrials.map(Finite.apply[Instant])
+    )
 
   def stringIdTrials: Trials[String] =
     api.uniqueIds.map("Name: " + _.toString)
@@ -112,14 +130,14 @@ trait WorldSpecSupportAmericium extends Assertions {
                   referringHistory
                     .forceInvariantBreakage() // Modelling breakage of the bitemporal invariant.
 
-                assertThrows[UnsupportedOperationException](
-                  referringHistory.datums
+                assertThrows(classOf[UnsupportedOperationException],
+                  () => referringHistory.datums
                 )
-                assertThrows[UnsupportedOperationException](
-                  referringHistory.referencedDatums
+                assertThrows(classOf[UnsupportedOperationException],
+                  () => referringHistory.referencedDatums
                 )
-                assertThrows[UnsupportedOperationException](
-                  referringHistory.referencedHistories
+                assertThrows(classOf[UnsupportedOperationException],
+                  () => referringHistory.referencedHistories
                 )
 
                 referringHistory.referTo(referencedItem)
@@ -155,14 +173,15 @@ trait WorldSpecSupportAmericium extends Assertions {
             (referringHistory: ReferringHistory, referencedItem: FooHistory) =>
               {
                 assert(referringHistoryId == referringHistory.id)
-                assertThrows[UnsupportedOperationException](
-                  referringHistory.datums
+
+                assertThrows(classOf[UnsupportedOperationException],
+                  () => referringHistory.datums
                 )
-                assertThrows[UnsupportedOperationException](
-                  referringHistory.referencedDatums
+                assertThrows(classOf[UnsupportedOperationException],
+                  () => referringHistory.referencedDatums
                 )
-                assertThrows[UnsupportedOperationException](
-                  referringHistory.referencedHistories
+                assertThrows(classOf[UnsupportedOperationException],
+                  () => referringHistory.referencedHistories
                 )
 
                 if (faulty)
@@ -395,13 +414,9 @@ trait WorldSpecSupportAmericium extends Assertions {
                 // Changes are not allowed to read from the items they work on,
                 // with the exception of the 'id' property.
                 assert(fooHistoryId == fooHistory.id)
-                assertThrows[UnsupportedOperationException](fooHistory.datums)
-                assertThrows[UnsupportedOperationException](
-                  fooHistory.property1
-                )
-                assertThrows[UnsupportedOperationException](
-                  fooHistory.property2
-                )
+                assertThrows(classOf[UnsupportedOperationException], () => fooHistory.datums)
+                assertThrows(classOf[UnsupportedOperationException], () => fooHistory.property1)
+                assertThrows(classOf[UnsupportedOperationException], () => fooHistory.property2)
 
                 fooHistory.property1 = data
               }
@@ -414,13 +429,9 @@ trait WorldSpecSupportAmericium extends Assertions {
                 // Changes are not allowed to read from the items they work on,
                 // with the exception of the 'id' property.
                 assert(fooHistoryId == fooHistory.id)
-                assertThrows[UnsupportedOperationException](fooHistory.datums)
-                assertThrows[UnsupportedOperationException](
-                  fooHistory.property1
-                )
-                assertThrows[UnsupportedOperationException](
-                  fooHistory.property2
-                )
+                assertThrows(classOf[UnsupportedOperationException], () => fooHistory.datums)
+                assertThrows(classOf[UnsupportedOperationException], () => fooHistory.property1)
+                assertThrows(classOf[UnsupportedOperationException], () => fooHistory.property2)
 
                 fooHistory.property1 = data
               }
@@ -441,13 +452,9 @@ trait WorldSpecSupportAmericium extends Assertions {
                 // Changes are not allowed to read from the items they work on,
                 // with the exception of the 'id' property.
                 assert(fooHistoryId == fooHistory.id)
-                assertThrows[UnsupportedOperationException](fooHistory.datums)
-                assertThrows[UnsupportedOperationException](
-                  fooHistory.property1
-                )
-                assertThrows[UnsupportedOperationException](
-                  fooHistory.property2
-                )
+                assertThrows(classOf[UnsupportedOperationException], () => fooHistory.datums)
+                assertThrows(classOf[UnsupportedOperationException], () => fooHistory.property1)
+                assertThrows(classOf[UnsupportedOperationException], () => fooHistory.property2)
 
                 fooHistory.property2 = data
               }
@@ -460,13 +467,9 @@ trait WorldSpecSupportAmericium extends Assertions {
                 // Changes are not allowed to read from the items they work on,
                 // with the exception of the 'id' property.
                 assert(fooHistoryId == fooHistory.id)
-                assertThrows[UnsupportedOperationException](fooHistory.datums)
-                assertThrows[UnsupportedOperationException](
-                  fooHistory.property1
-                )
-                assertThrows[UnsupportedOperationException](
-                  fooHistory.property2
-                )
+                assertThrows(classOf[UnsupportedOperationException], () => fooHistory.datums)
+                assertThrows(classOf[UnsupportedOperationException], () => fooHistory.property1)
+                assertThrows(classOf[UnsupportedOperationException], () => fooHistory.property2)
 
                 fooHistory.property2 = data
               }
@@ -489,9 +492,9 @@ trait WorldSpecSupportAmericium extends Assertions {
               // Changes are not allowed to read from the items they work on,
               // with the exception of the 'id' property.
               assert(fooHistoryId == fooHistory.id)
-              assertThrows[UnsupportedOperationException](fooHistory.datums)
-              assertThrows[UnsupportedOperationException](fooHistory.property1)
-              assertThrows[UnsupportedOperationException](fooHistory.property2)
+              assertThrows(classOf[UnsupportedOperationException], () => fooHistory.datums)
+              assertThrows(classOf[UnsupportedOperationException], () => fooHistory.property1)
+              assertThrows(classOf[UnsupportedOperationException], () => fooHistory.property2)
 
               fooHistory.property1 = data
 
@@ -542,8 +545,8 @@ trait WorldSpecSupportAmericium extends Assertions {
               // Changes are not allowed to read from the items they work on,
               // with the exception of the 'id' property.
               assert(barHistory.id == barHistoryId)
-              assertThrows[UnsupportedOperationException](barHistory.datums)
-              assertThrows[UnsupportedOperationException](barHistory.property1)
+              assertThrows(classOf[UnsupportedOperationException], () => barHistory.datums)
+              assertThrows(classOf[UnsupportedOperationException], () => barHistory.property1)
 
               barHistory.property1 = data
             }
@@ -566,8 +569,8 @@ trait WorldSpecSupportAmericium extends Assertions {
               // Changes are not allowed to read from the items they work on,
               // with the exception of the 'id' property.
               assert(barHistory.id == barHistoryId)
-              assertThrows[UnsupportedOperationException](barHistory.datums)
-              assertThrows[UnsupportedOperationException](barHistory.property1)
+              assertThrows(classOf[UnsupportedOperationException], () => barHistory.datums)
+              assertThrows(classOf[UnsupportedOperationException], () => barHistory.property1)
 
               barHistory.method1(data1, data2)
 
@@ -595,8 +598,8 @@ trait WorldSpecSupportAmericium extends Assertions {
               // Changes are not allowed to read from the items they work on,
               // with the exception of the 'id' property.
               assert(barHistory.id == barHistoryId)
-              assertThrows[UnsupportedOperationException](barHistory.datums)
-              assertThrows[UnsupportedOperationException](barHistory.property1)
+              assertThrows(classOf[UnsupportedOperationException], () => barHistory.datums)
+              assertThrows(classOf[UnsupportedOperationException], () => barHistory.property1)
 
               barHistory.method2(data1, data2, data3)
 
@@ -623,10 +626,8 @@ trait WorldSpecSupportAmericium extends Assertions {
               // Changes are not allowed to read from the items they work on,
               // with the exception of the 'id' property.
               assert(integerHistoryId == integerHistory.id)
-              assertThrows[UnsupportedOperationException](integerHistory.datums)
-              assertThrows[UnsupportedOperationException](
-                integerHistory.integerProperty
-              )
+              assertThrows(classOf[UnsupportedOperationException], () => integerHistory.datums)
+              assertThrows(classOf[UnsupportedOperationException], () => integerHistory.integerProperty)
 
               if (faulty)
                 integerHistory
