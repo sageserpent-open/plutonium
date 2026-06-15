@@ -7,6 +7,7 @@ import com.sageserpent.americium.junit5._
 import com.sageserpent.plutonium.UniqueItemSpecification
 import com.sageserpent.plutonium.efficient.BlobStorage
 import com.sageserpent.plutonium.efficient.BlobStorage.Timeslice
+import com.sageserpent.plutonium.utilities.ExpectyFlavouredAssert.assert
 import org.junit.jupiter.api.TestFactory
 
 trait OneKindOfThing
@@ -14,15 +15,6 @@ trait OneKindOfThing
 trait AnotherKindOfThing
 
 trait NoKindOfThing
-
-object ExpectyFlavouredAssert {
-  import com.eed3si9n.expecty.Expecty
-
-  val assert: Expecty = new Expecty {
-    override val showLocation: Boolean = true
-    override val showTypes: Boolean    = true
-  }
-}
 
 object BlobStorageReferenceImplementationTest {
   type RecordingId  = Int
@@ -286,7 +278,6 @@ object BlobStorageReferenceImplementationTest {
 
 class BlobStorageReferenceImplementationTest {
   import BlobStorageReferenceImplementationTest._
-  import ExpectyFlavouredAssert.assert
 
   @TestFactory
   def queryingForAUniqueItemSnapshotNoEarlierThanWhenItWasBooked()

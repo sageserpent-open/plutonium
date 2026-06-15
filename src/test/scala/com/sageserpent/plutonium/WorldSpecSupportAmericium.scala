@@ -13,17 +13,8 @@ import scala.collection.Searching._
 import scala.collection.immutable.TreeMap
 import scala.language.postfixOps
 import scala.reflect.runtime.universe.{Scope => _, _}
-import ExpectyFlavouredAssert.assert
+import com.sageserpent.plutonium.utilities.ExpectyFlavouredAssert.assert
 import org.junit.jupiter.api.Assertions.assertThrows
-
-object ExpectyFlavouredAssert {
-  import com.eed3si9n.expecty.Expecty
-
-  val assert: Expecty = new Expecty {
-    override val showLocation: Boolean = true
-    override val showTypes: Boolean    = true
-  }
-}
 
 object WorldSpecSupportAmericium {
   val changeError = new RuntimeException("Error in making a change.")
@@ -34,7 +25,6 @@ object WorldSpecSupportAmericium {
 }
 
 trait WorldSpecSupportAmericium {
-
   import WorldSpecSupportAmericium._
 
   def restrictedStrings = api.choose('a' to 'z').several[String]

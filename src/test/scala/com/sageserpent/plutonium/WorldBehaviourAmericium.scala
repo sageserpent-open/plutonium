@@ -5,6 +5,7 @@ import com.sageserpent.americium.Trials.api
 import com.sageserpent.americium.java.CasesLimitStrategy
 import com.sageserpent.americium.junit5._
 import com.sageserpent.plutonium.World.Revision
+import com.sageserpent.plutonium.utilities.ExpectyFlavouredAssert.assert
 import com.sageserpent.plutonium.utilities.Unbounded
 import org.junit.jupiter.api.Assertions._
 import org.junit.jupiter.api.{Test, TestFactory}
@@ -14,15 +15,6 @@ import scala.language.postfixOps
 import scala.util.Using
 
 object WorldBehaviourAmericium {
-  object ExpectyFlavouredAssert {
-    import com.eed3si9n.expecty.Expecty
-
-    val assert: Expecty = new Expecty {
-      override val showLocation: Boolean = true
-      override val showTypes: Boolean    = true
-    }
-  }
-
   case class HistoryTestCase(
       recordingsGroupedById: List[WorldSpecSupportAmericium#RecordingsForAnId],
       bigShuffledHistoryOverLotsOfThings: Vector[
@@ -66,7 +58,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     HistoryTestCase,
     RelatedItemTestCase
   }
-  import ExpectyFlavouredAssert.assert
+
   import cats.implicits._
 
   @TestFactory
