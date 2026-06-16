@@ -775,7 +775,7 @@ trait WorldSpecSupportAmericium {
         (if (noAnnihilationsToWorryAbout)
           api.alternate(api.only(NegativeInfinity), instantTrials.map(Finite(_))).listsOfSize(numberOfEventsForLifespans.sum)
         else
-          api.only(NegativeInfinity)
+          api.alternate(api.only(NegativeInfinity), instantTrials.map(Finite(_)))
             .listsOfSize(numberOfEventsForLifespans.head - 1)
             .flatMap(prefixLeadingUpToFirstAnnihilation => instantTrials.map(Finite(_))
               .listsOfSize(1 + numberOfEventsForLifespans.tail.sum)
