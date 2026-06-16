@@ -5,7 +5,7 @@ import com.sageserpent.americium.Trials.api
 import com.sageserpent.americium.java.CasesLimitStrategy
 import com.sageserpent.americium.junit5._
 import com.sageserpent.plutonium.World.Revision
-import com.sageserpent.plutonium.utilities.ExpectyFlavouredAssert.assert
+import com.sageserpent.plutonium.utilities.ExpectyFlavouredAssert.{assert, withClue}
 import com.sageserpent.plutonium.utilities.{Finite, Unbounded}
 import org.junit.jupiter.api.Assertions._
 import org.junit.jupiter.api.{Test, TestFactory}
@@ -209,7 +209,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
             val checks =
               for {
                 RecordingsNoLaterThan(
-                  _,
+                  referringHistoryId,
                   referringHistoriesFrom,
                   _,
                   _,
@@ -231,14 +231,22 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
                 if referringHistory.referencedHistories
                   .get(referencedHistoryId)
                   .exists(!_.asInstanceOf[ItemExtensionApi].isGhost)
-              } yield referringHistory
-                .referencedDatums(referencedHistoryId)
-                .toList -> pertinentRecordings.map(_._1).toList
+              } yield (
+                referringHistoryId,
+                referencedHistoryId,
+                referringHistory.referencedDatums(referencedHistoryId),
+                pertinentRecordings.map(_._1)
+              )
 
             if (checks.isEmpty) Trials.reject()
 
-            for ((actualHistory, expectedHistory) <- checks) {
-              assert(actualHistory == expectedHistory)
+            for ((
+                   referringHistoryId,
+                   referencedHistoryId,
+                   actualHistory,
+                   expectedHistory
+                 ) <- checks) {
+              withClue(s"For referring history id: $referringHistoryId, history mismatch for referenced history id: $referencedHistoryId.")(assert(actualHistory == expectedHistory))
             }
           }
       }
