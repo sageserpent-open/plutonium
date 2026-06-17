@@ -7,4 +7,11 @@ object ExpectyFlavouredAssert {
     override val showLocation: Boolean = true
     override val showTypes: Boolean    = true
   }
+
+  def withClue[A](clue: String)(block: => A): A =
+    try block
+    catch {
+      case e: AssertionError =>
+        throw new AssertionError(s"[$clue] ${e.getMessage}", e)
+    }
 }

@@ -773,12 +773,10 @@ trait WorldSpecSupportAmericium {
 
       eventWhens <-
         (if (noAnnihilationsToWorryAbout)
-          api.alternate(api.only(NegativeInfinity), instantTrials.map(Finite(_))).listsOfSize(numberOfEventsForLifespans.sum)
+          listsWithATendencyToHarbourDuplicatesOfSize(api.alternate(api.only(NegativeInfinity), instantTrials.map(Finite(_))), numberOfEventsForLifespans.sum)
         else
-          api.only(NegativeInfinity)
-            .listsOfSize(numberOfEventsForLifespans.head - 1)
-            .flatMap(prefixLeadingUpToFirstAnnihilation => instantTrials.map(Finite(_))
-              .listsOfSize(1 + numberOfEventsForLifespans.tail.sum)
+          listsWithATendencyToHarbourDuplicatesOfSize(api.alternate(api.only(NegativeInfinity), instantTrials.map(Finite(_))), numberOfEventsForLifespans.head - 1)
+            .flatMap(prefixLeadingUpToFirstAnnihilation => listsWithATendencyToHarbourDuplicatesOfSize(instantTrials.map(Finite(_)), 1 + numberOfEventsForLifespans.tail.sum)
               .map(prefixLeadingUpToFirstAnnihilation ++ _))).map(_.sorted)
 
       sampleWhensGroupedForLifespans = chunks(
@@ -799,6 +797,9 @@ trait WorldSpecSupportAmericium {
       recordings.filter(recording => seenIds.add(recording.historyId))
     }).filter(_.nonEmpty)
   }
+
+  def listsWithATendencyToHarbourDuplicatesOfSize[Article](trials: Trials[Article], size: Int): Trials[List[Article]] =
+    trials.listsOfSize((2 * size / 3) max 1).flatMap(api.choose(_).listsOfSize(size))
 
   def chunks[Article](
       chunkSizes: List[Int],
