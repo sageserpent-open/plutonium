@@ -7,7 +7,6 @@ import org.scalatest.matchers.should.Matchers
 import com.sageserpent.plutonium.utilities.Finite
 
 class AmericiumInfrastructureSmokeTest extends AnyFlatSpec with Matchers with WorldSpecSupportAmericium {
-  import org.junit.jupiter.api.Assertions._
   "WorldSpecSupportAmericium" should "generate recordings" in {
     val trials = mixedRecordingsGroupedByIdTrials(forbidAnnihilations = false)
 
