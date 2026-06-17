@@ -16,36 +16,36 @@ import scala.util.Using
 
 object WorldBehaviourAmericium {
   case class HistoryTestCase(
-      recordingsGroupedById: List[WorldSpecSupportAmericium#RecordingsForAnId],
-      bigShuffledHistoryOverLotsOfThings: Vector[
+      recordingsGroupedById: Seq[WorldSpecSupportAmericium#RecordingsForAnId],
+      bigShuffledHistoryOverLotsOfThings: Seq[
         Seq[(Option[(Unbounded[Instant], Event)], intersperseObsoleteEventsAmericium.EventId)]
       ],
-      asOfs: List[Instant],
+      asOfs: Seq[Instant],
       queryWhen: Unbounded[Instant]
   )
 
   case class RelatedItemTestCase(
-      referencedHistoryRecordingsGroupedById: List[
+      referencedHistoryRecordingsGroupedById: Seq[
         WorldSpecSupportAmericium#RecordingsForAnId
       ],
-      referringHistoryRecordingsGroupedById: List[
+      referringHistoryRecordingsGroupedById: Seq[
         WorldSpecSupportAmericium#RecordingsForAnId
       ],
-      bigShuffledHistoryOverLotsOfThings: Vector[
+      bigShuffledHistoryOverLotsOfThings: Seq[
         Seq[(Option[(Unbounded[Instant], Event)], intersperseObsoleteEventsAmericium.EventId)]
       ],
-      asOfs: List[Instant],
+      asOfs: Seq[Instant],
       queryWhen: Unbounded[Instant]
   )
 
   case class GhostTestCase(
-      referencedHistoryRecordingsGroupedById: List[
+      referencedHistoryRecordingsGroupedById: Seq[
         WorldSpecSupportAmericium#RecordingsForAnId
       ],
-      bigShuffledHistoryOverLotsOfThings: Vector[
+      bigShuffledHistoryOverLotsOfThings: Seq[
         Seq[(Option[(Unbounded[Instant], Event)], intersperseObsoleteEventsAmericium.EventId)]
       ],
-      asOfs: List[Instant],
+      asOfs: Seq[Instant],
       referencingEventWhen: Unbounded[Instant]
   )
 
@@ -53,7 +53,7 @@ object WorldBehaviourAmericium {
       bigShuffledHistoryOverLotsOfThings: Seq[
         Seq[(Option[(Unbounded[Instant], Event)], intersperseObsoleteEventsAmericium.EventId)]
       ],
-      asOfs: List[Instant]
+      asOfs: Seq[Instant]
   )
 }
 
@@ -76,7 +76,9 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
         val scope = world.scopeFor(when = when, asOf = asOf)
         val exampleBitemporal = Bitemporal.wildcard[NonExistentHistory]()
 
-        assert(scope.render(exampleBitemporal).isEmpty)
+        withClue(s"Scope at when: $when, asOf: $asOf should be empty.")(
+          assert(scope.render(exampleBitemporal).isEmpty)
+        )
       }
     }
   }
@@ -84,7 +86,9 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
   @Test
   def haveNoCurrentRevision(): Unit = {
     Using.resource(makeWorld()) { world =>
-      assert(World.initialRevision == world.nextRevision)
+      withClue(
+        s"Initial revision of a world ${world.nextRevision} should be: ${World.initialRevision}."
+      )(assert(World.initialRevision == world.nextRevision))
     }
   }
 
@@ -114,7 +118,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
       queryWhen <- unboundedInstantTrials
     } yield HistoryTestCase(
       recordingsGroupedById,
-      bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toVector,
+      bigShuffledHistoryOverLotsOfThings,
       asOfs,
       queryWhen
     )
@@ -137,19 +141,21 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
           val checks = for {
             recording <- recordingsGroupedById
             RecordingsNoLaterThan(
-              _,
+              historyId,
               historiesFrom,
               pertinentRecordings,
               _,
               _
-            ) <- recording.thePartNoLaterThan(queryWhen).toList
+            ) <- recording.thePartNoLaterThan(queryWhen)
             Seq(history) = historiesFrom(scope)
-          } yield history.datums.toList -> pertinentRecordings.map(_._1).toList
+          } yield (historyId, history.datums, pertinentRecordings.map(_._1))
 
           if (checks.isEmpty) Trials.reject()
 
-          for ((actualHistory, expectedHistory) <- checks) {
-            assert(actualHistory == expectedHistory)
+          for ((historyId, actualHistory, expectedHistory) <- checks) {
+            withClue(s"History mismatch for history id: $historyId.")(
+              assert(actualHistory == expectedHistory)
+            )
           }
         }
     }
@@ -183,7 +189,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     } yield RelatedItemTestCase(
       referencedHistoryRecordingsGroupedById,
       referringHistoryRecordingsGroupedById,
-      bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toVector,
+      bigShuffledHistoryOverLotsOfThings,
       asOfs,
       queryWhen
     )
@@ -246,7 +252,9 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
                    actualHistory,
                    expectedHistory
                  ) <- checks) {
-              withClue(s"For referring history id: $referringHistoryId, history mismatch for referenced history id: $referencedHistoryId.")(assert(actualHistory == expectedHistory))
+              withClue(
+                s"For referring history id: $referringHistoryId, history mismatch for referenced history id: $referencedHistoryId."
+              )(assert(actualHistory == expectedHistory))
             }
           }
       }
@@ -280,7 +288,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     } yield RelatedItemTestCase(
       referencedHistoryRecordingsGroupedById,
       referringHistoryRecordingsGroupedById,
-      bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toVector,
+      bigShuffledHistoryOverLotsOfThings,
       asOfs,
       queryWhen
     )
@@ -327,12 +335,14 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
                   .get(referencedHistoryId)
                   .exists(!_.asInstanceOf[ItemExtensionApi].isGhost)
                 Seq(referencedHistory) = referencedHistoriesFrom(scope)
-              } yield referencedHistory
+              } yield (referencedHistoryId, referencedHistory)
 
             if (checks.isEmpty) Trials.reject()
 
-            for (referencedHistory <- checks) {
-              assert(referencedHistory.datums.isEmpty)
+            for ((referencedHistoryId, referencedHistory) <- checks) {
+              withClue(
+                s"Referenced history id: $referencedHistoryId should be defined by the reference."
+              )(assert(referencedHistory.datums.isEmpty))
             }
           }
       }
@@ -366,7 +376,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     } yield RelatedItemTestCase(
       referencedHistoryRecordingsGroupedById,
       referringHistoryRecordingsGroupedById,
-      bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toVector,
+      bigShuffledHistoryOverLotsOfThings,
       asOfs,
       queryWhen
     )
@@ -442,8 +452,12 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
                 )
               ) =
                 scope.render(agglomeratedBitemporalQuery)
-              assert(
-                directlyAccessedReferencedHistory eq indirectlyAccessedReferencedHistory
+              withClue(
+                s"For referring history id: $referringHistoryId and referenced history id: $referencedHistoryId."
+              )(
+                assert(
+                  directlyAccessedReferencedHistory eq indirectlyAccessedReferencedHistory
+                )
               )
             }
           }
@@ -476,7 +490,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
       queryWhen <- unboundedInstantTrials
     } yield HistoryTestCase(
       recordingsGroupedById,
-      bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toVector,
+      bigShuffledHistoryOverLotsOfThings,
       asOfs,
       queryWhen
     )
@@ -506,7 +520,9 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
           if (checks.isEmpty) Trials.reject()
 
           for ((historyId, histories) <- checks) {
-            assert(histories.isEmpty)
+            withClue(
+              s"History with id: $historyId should not be revealed at $queryWhen."
+            )(assert(histories.isEmpty))
           }
         }
     }
@@ -538,7 +554,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
       queryWhen <- unboundedInstantTrials
     } yield HistoryTestCase(
       recordingsGroupedById,
-      bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toVector,
+      bigShuffledHistoryOverLotsOfThings,
       asOfs,
       queryWhen
     )
@@ -593,7 +609,9 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
           if (checks.isEmpty) Trials.reject()
 
           for ((historyId, histories) <- checks) {
-            assert(histories.isEmpty)
+            withClue(
+              s"Ineffective event should not define history with id: $historyId at $queryWhen."
+            )(assert(histories.isEmpty))
           }
         }
     }
@@ -626,7 +644,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
       referencingEventWhen <- unboundedInstantTrials
     } yield GhostTestCase(
       referencedHistoryRecordingsGroupedById,
-      bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toVector,
+      bigShuffledHistoryOverLotsOfThings,
       asOfs,
       referencingEventWhen
     )
@@ -661,7 +679,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
             // *after* the event making the reference to it,
             // otherwise that event will have caused the creation of a new
             // lifecycle for the referenced item instead.
-            whenAnnihilated <- whenAnnihilated.toList
+            whenAnnihilated <- whenAnnihilated
             if whenAnnihilated > referencingEventWhen
           } yield (referencedHistoryId, whenAnnihilated)
 
@@ -701,7 +719,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
               laterQueryWhenAtAnnihilation,
               world.nextRevision
             )
-            val Seq(referringHistory) = scope.render(
+            val Seq(referringHistory: ReferringHistory) = scope.render(
               Bitemporal.withId[ReferringHistory](theReferrerId)
             )
             val ghostItem =
@@ -717,8 +735,12 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
               classOf[RuntimeException],
               () => ghostItem.datums
             ) // It's not OK to ask any other questions - it will just go 'Whooh' at you.
-            assert(idOfGhost == referencedHistoryId)
-            assert(itIsAGhost)
+            withClue(s"Referenced history id: $referencedHistoryId.")(
+              assert(idOfGhost == referencedHistoryId)
+            )
+            withClue(s"Referenced history id: $referencedHistoryId should be a ghost.")(
+              assert(itIsAGhost)
+            )
           }
         }
     }
@@ -751,7 +773,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
       referencingEventWhen <- unboundedInstantTrials
     } yield GhostTestCase(
       referencedHistoryRecordingsGroupedById,
-      bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toVector,
+      bigShuffledHistoryOverLotsOfThings,
       asOfs,
       referencingEventWhen
     )
@@ -786,7 +808,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
             // *after* the event making the reference to it,
             // otherwise that event will have caused the creation of a new
             // lifecycle for the referenced item instead.
-            whenAnnihilated <- whenAnnihilated.toList
+            whenAnnihilated <- whenAnnihilated
             if whenAnnihilated > referencingEventWhen
           } yield (referencedHistoryId, whenAnnihilated)
 
@@ -817,46 +839,54 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
           }
 
           for (((referencedHistoryId, whenAnnihilated), index) <- checks.zipWithIndex) {
-            assertThrows(
-              classOf[RuntimeException],
-              () =>
-                world.revise(
-                  Map(
-                    -2 - index -> Some(
-                      Change.forOneItem[ReferringHistory](
-                        whenAnnihilated
-                      )(
-                        theReferrerId,
-                        (referringHistory: ReferringHistory) => {
-                          referringHistory
-                            .mutateRelatedItem(referencedHistoryId)
-                        }
+            withClue(
+              s"Mutation of ghost with id: $referencedHistoryId should be forbidden."
+            )(
+              assertThrows(
+                classOf[RuntimeException],
+                () =>
+                  world.revise(
+                    Map(
+                      -2 - index -> Some(
+                        Change.forOneItem[ReferringHistory](
+                          whenAnnihilated
+                        )(
+                          theReferrerId,
+                          (referringHistory: ReferringHistory) => {
+                            referringHistory
+                              .mutateRelatedItem(referencedHistoryId)
+                          }
+                        )
                       )
-                    )
-                  ),
-                  world.revisionAsOfs.last
-                )
+                    ),
+                    world.revisionAsOfs.last
+                  )
+              )
             )
 
-            assertThrows(
-              classOf[RuntimeException],
-              () =>
-                world.revise(
-                  Map(
-                    -3 - index -> Some(
-                      Change.forOneItem[ReferringHistory](
-                        whenAnnihilated
-                      )(
-                        theReferrerId,
-                        (referringHistory: ReferringHistory) => {
-                          referringHistory
-                            .referToRelatedItem(referencedHistoryId)
-                        }
+            withClue(
+              s"Referral to ghost with id: $referencedHistoryId should be forbidden."
+            )(
+              assertThrows(
+                classOf[RuntimeException],
+                () =>
+                  world.revise(
+                    Map(
+                      -3 - index -> Some(
+                        Change.forOneItem[ReferringHistory](
+                          whenAnnihilated
+                        )(
+                          theReferrerId,
+                          (referringHistory: ReferringHistory) => {
+                            referringHistory
+                              .referToRelatedItem(referencedHistoryId)
+                          }
+                        )
                       )
-                    )
-                  ),
-                  world.revisionAsOfs.last
-                )
+                    ),
+                    world.revisionAsOfs.last
+                  )
+              )
             )
           }
         }
@@ -887,7 +917,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
       definiteQueryWhen <- instantTrials
     } yield (
       recordingsGroupedById,
-      bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toVector,
+      bigShuffledHistoryOverLotsOfThings,
       asOfs,
       definiteQueryWhen
     )
@@ -920,19 +950,23 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
           if (checks.isEmpty) Trials.reject()
 
           for (historyId <- checks) {
-            assertThrows(
-              classOf[RuntimeException],
-              () => {
-                val eventIdForAnnihilation = -1
-                world.revise(
-                  eventIdForAnnihilation,
-                  Annihilation[IntegerHistory](
-                    definiteQueryWhen,
-                    historyId.asInstanceOf[String]
-                  ),
-                  asOfs.last
-                )
-              }
+            withClue(
+              s"Annihilation of non-existent item with id: $historyId at $definiteQueryWhen should be forbidden."
+            )(
+              assertThrows(
+                classOf[RuntimeException],
+                () => {
+                  val eventIdForAnnihilation = -1
+                  world.revise(
+                    eventIdForAnnihilation,
+                    Annihilation[IntegerHistory](
+                      definiteQueryWhen,
+                      historyId.asInstanceOf[String]
+                    ),
+                    asOfs.last
+                  )
+                }
+              )
             )
           }
         }
@@ -963,7 +997,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
         .listsOfSize(bigShuffledHistoryOverLotsOfThings.size)
         .map(_.sorted)
     } yield RevisionTestCase(
-      bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toVector,
+      bigShuffledHistoryOverLotsOfThings,
       asOfs
     )
 
@@ -976,7 +1010,9 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
             world
           )
 
-          assert(1 + revisions.last == world.nextRevision)
+          withClue(s"1 + ${revisions.last} === ${world.nextRevision}")(
+            assert(1 + revisions.last == world.nextRevision)
+          )
         }
     }
   }
@@ -1005,7 +1041,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
         .listsOfSize(bigShuffledHistoryOverLotsOfThings.size)
         .map(_.sorted)
     } yield RevisionTestCase(
-      bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toVector,
+      bigShuffledHistoryOverLotsOfThings,
       asOfs
     )
 
@@ -1018,7 +1054,9 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
             world
           )
 
-          assert(asOfs == world.revisionAsOfs.toList)
+          withClue(s"$asOfs === ${world.revisionAsOfs.toSeq}")(
+            assert(asOfs == world.revisionAsOfs.toSeq)
+          )
         }
     }
   }
@@ -1047,7 +1085,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
         .listsOfSize(bigShuffledHistoryOverLotsOfThings.size)
         .map(_.sorted)
     } yield RevisionTestCase(
-      bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toVector,
+      bigShuffledHistoryOverLotsOfThings,
       asOfs
     )
 
@@ -1060,9 +1098,11 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
             world
           )
 
-          assert(world.revisionAsOfs.zip(world.revisionAsOfs.tail).forall {
-            case (first, second) => !first.isAfter(second)
-          })
+          withClue("Sorted version timeline check failed.")(
+            assert(world.revisionAsOfs.zip(world.revisionAsOfs.tail).forall {
+              case (first, second) => !first.isAfter(second)
+            })
+          )
         }
     }
   }
@@ -1091,7 +1131,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
         .listsOfSize(bigShuffledHistoryOverLotsOfThings.size)
         .map(_.sorted)
     } yield RevisionTestCase(
-      bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toVector,
+      bigShuffledHistoryOverLotsOfThings,
       asOfs
     )
 
@@ -1104,9 +1144,11 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
             world
           )
 
-          assert(revisions.zipWithIndex.forall { case (revision, index) =>
-            index == revision
-          })
+          withClue("Revision numbers should be allocated sequentially.")(
+            assert(revisions.zipWithIndex.forall { case (revision, index) =>
+              index == revision
+            })
+          )
         }
     }
   }
@@ -1135,7 +1177,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
         .listsOfSize(bigShuffledHistoryOverLotsOfThings.size)
         .map(_.sorted)
     } yield RevisionTestCase(
-      bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toVector,
+      bigShuffledHistoryOverLotsOfThings,
       asOfs
     )
 
@@ -1148,7 +1190,9 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
             world
           )
 
-          assert(world.nextRevision == world.revisionAsOfs.length)
+          withClue(s"${world.nextRevision} === ${world.revisionAsOfs.length}")(
+            assert(world.nextRevision == world.revisionAsOfs.length)
+          )
         }
     }
   }
@@ -1183,7 +1227,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
         } map (_._2)
       indexOfFirstAsOfBeingTransposed <- api.choose(candidateIndicesToStartATranspose)
     } yield (
-      bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toVector,
+      bigShuffledHistoryOverLotsOfThings,
       asOfs,
       indexOfFirstAsOfBeingTransposed
     )
