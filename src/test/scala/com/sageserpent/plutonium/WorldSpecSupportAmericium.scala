@@ -192,8 +192,8 @@ trait WorldSpecSupportAmericium {
 
     val shuffledEventsPerItemTrials = recordingsGroupedById
       .map(_.events)
-      .map(
-        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhenForAGivenItem
+      .map(events =>
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhenForAGivenItem(events.toList)
       )
 
     api
@@ -244,7 +244,7 @@ trait WorldSpecSupportAmericium {
       bigShuffledHistoryOverLotsOfThings: Seq[Iterable[
         (Option[(Unbounded[Instant], Event)], intersperseObsoleteEventsAmericium.EventId)
       ]],
-      asOfs: List[Instant],
+      asOfs: Seq[Instant],
       world: World
   ): Seq[Revision] = {
     revisionActions(
@@ -258,7 +258,7 @@ trait WorldSpecSupportAmericium {
       bigShuffledHistoryOverLotsOfThings: Seq[Iterable[
         (Option[(Unbounded[Instant], Event)], intersperseObsoleteEventsAmericium.EventId)
       ]],
-      asOfs: List[Instant],
+      asOfs: Seq[Instant],
       world: World
   ): Seq[() => Revision] = {
     assert(bigShuffledHistoryOverLotsOfThings.length == asOfs.length)
@@ -299,7 +299,7 @@ trait WorldSpecSupportAmericium {
       bigShuffledHistoryOverLotsOfThings: Seq[Iterable[
         (Option[(Unbounded[Instant], Event)], intersperseObsoleteEventsAmericium.EventId)
       ]],
-      asOfs: List[Instant],
+      asOfs: Seq[Instant],
       world: World
   ): Unit = {
     for (
@@ -824,7 +824,7 @@ trait WorldSpecSupportAmericium {
 
     val historiesFrom: ItemCache => Seq[History]
 
-    val events: List[(Unbounded[Instant], Event)]
+    val events: Seq[(Unbounded[Instant], Event)]
 
     val whenFinalEventHappened: Unbounded[Instant]
 
@@ -845,7 +845,7 @@ trait WorldSpecSupportAmericium {
   case class RecordingsNoLaterThan(
       historyId: Any,
       historiesFrom: ItemCache => Seq[History],
-      datums: List[(Any, Unbounded[Instant])],
+      datums: Seq[(Any, Unbounded[Instant])],
       ineffectiveEventFor: Unbounded[Instant] => Event,
       whenAnnihilated: Option[Unbounded[Instant]]
   )
@@ -861,10 +861,8 @@ trait WorldSpecSupportAmericium {
       override val historiesFrom: ItemCache => Seq[History],
       val annihilationFor: Instant => Annihilation,
       val ineffectiveEventFor: Unbounded[Instant] => Event,
-      val dataSamplesGroupedForLifespans: Seq[
-        Iterable[(Int, Any, Unbounded[Instant] => Event)]
-      ],
-      val sampleWhensGroupedForLifespans: Seq[List[Unbounded[Instant]]]
+      val dataSamplesGroupedForLifespans: Seq[Iterable[(Int, Any, Unbounded[Instant] => Event)]],
+      val sampleWhensGroupedForLifespans: Seq[Seq[Unbounded[Instant]]]
   ) extends RecordingsForAnId {
     require(
       dataSamplesGroupedForLifespans.size == sampleWhensGroupedForLifespans.size
@@ -886,7 +884,7 @@ trait WorldSpecSupportAmericium {
       }
     )
 
-    override val events: List[(Unbounded[Instant], Event)] = (for {
+    override val events: Seq[(Unbounded[Instant], Event)] = (for {
       (dataSamples, eventWhens) <-
         dataSamplesGroupedForLifespans zip sampleWhensGroupedForLifespans
     } yield {
@@ -902,7 +900,7 @@ trait WorldSpecSupportAmericium {
                         })
                       else
                         changes)
-    }).toList flatten
+    }).flatten
     override val whenFinalEventHappened: Unbounded[Instant] =
       sampleWhensGroupedForLifespans.last.last
     private val lastLifespanIsLimited =
@@ -982,7 +980,7 @@ trait WorldSpecSupportAmericium {
           relevantGroupIndex: Int
       ): Some[RecordingsNoLaterThan] = {
         val dataSampleAndWhenPairs =
-          dataSamplesGroupedForLifespans(relevantGroupIndex).toList.map {
+          dataSamplesGroupedForLifespans(relevantGroupIndex).map {
             case (_, dataSample, _) => dataSample
           } zip sampleWhensGroupedForLifespans(relevantGroupIndex)
 
@@ -997,9 +995,9 @@ trait WorldSpecSupportAmericium {
           RecordingsNoLaterThan(
             historyId = historyId,
             historiesFrom = historiesFrom,
-            datums = dataSampleAndWhenPairs takeWhile { case (_, eventWhen) =>
+            datums = (dataSampleAndWhenPairs takeWhile { case (_, eventWhen) =>
               eventWhen <= when
-            },
+            }).toSeq,
             ineffectiveEventFor = ineffectiveEventFor,
             whenAnnihilated = whenAnnihilated
           )
