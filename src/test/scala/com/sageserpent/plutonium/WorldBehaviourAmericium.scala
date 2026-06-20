@@ -196,7 +196,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
       .withStrategy(_ => CasesLimitStrategy.counted(400, 20))
       .withComplexityLimit(500)
       .dynamicTests {
-        case RelatedItemTestCase(
+        case testCase @ RelatedItemTestCase(
           referencedHistoryRecordingsGroupedById,
           referringHistoryRecordingsGroupedById,
           bigShuffledHistoryOverLotsOfThings,
@@ -252,7 +252,13 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
                    actualHistory,
                    expectedHistory
                  ) <- checks) {
-              withClue(s"For referring history id: $referringHistoryId, history mismatch for referenced history id: $referencedHistoryId, query when: $queryWhen, revision: ${world.nextRevision}."              )(assert(actualHistory == expectedHistory))
+              withClue(
+                s"""For referring history id: $referringHistoryId
+                   |, history mismatch for referenced history id: $referencedHistoryId
+                   |, query when: $queryWhen
+                   |, revision: ${world.nextRevision}.
+                   |Full test case:
+                   |${pprint.apply(testCase)}""".stripMargin)(assert(actualHistory == expectedHistory))
             }
           }
       }
