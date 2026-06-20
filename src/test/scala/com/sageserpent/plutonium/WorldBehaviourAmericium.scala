@@ -193,7 +193,8 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
       queryWhen
     )
     testCaseTrials
-      .withStrategy(_ => CasesLimitStrategy.counted(200, 20))
+      .withStrategy(_ => CasesLimitStrategy.counted(400, 20))
+      .withComplexityLimit(500)
       .dynamicTests {
         case RelatedItemTestCase(
           referencedHistoryRecordingsGroupedById,

@@ -656,7 +656,7 @@ trait WorldSpecSupportAmericium {
         })
         .nonEmptyLists
 
-    for {
+  for {
       dataSamples             <- dataSamplesGenerator
       historyId               <- historyIdTrials
       headsItIs               <- api.booleans
