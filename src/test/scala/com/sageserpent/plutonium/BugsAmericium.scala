@@ -24,7 +24,7 @@ trait BugsAmericium extends WorldResourceAmericium {
 
     val events: Seq[Event] = Seq(
       // Refer to Louie.
-      Change.forTwoItems(Instant.EPOCH.plusSeconds(6))(
+      Change.forTwoItems(Instant.EPOCH.plusSeconds(3))(
         referrerZero,
         referredToLouie,
         { (referrer: ReferringHistory, referredTo: FooHistory) =>
@@ -40,7 +40,7 @@ trait BugsAmericium extends WorldResourceAmericium {
 
       // Annihilate the hapless item 0...
       Annihilation[ReferringHistory](
-        Instant.EPOCH.plusSeconds(7),
+        Instant.EPOCH.plusSeconds(4),
         referrerZero
       ),
 
@@ -51,7 +51,7 @@ trait BugsAmericium extends WorldResourceAmericium {
       ),
 
       // After it was annihilated, resurrect item 0 by referring to Louie.
-      Change.forTwoItems(Instant.EPOCH.plusSeconds(8))(
+      Change.forTwoItems(Instant.EPOCH.plusSeconds(5))(
         referrerZero,
         referredToLouie,
         { (referrer: ReferringHistory, referredTo: FooHistory) =>
@@ -61,16 +61,6 @@ trait BugsAmericium extends WorldResourceAmericium {
 
       // Mutate Louie again, resurrecting him...
       Change.forOneItem(Instant.EPOCH.plusSeconds(2))(
-        referredToLouie,
-        { referredTo: FooHistory => referredTo.property1 = "" }
-      ),
-      // ... and then annihilate him all over again...
-      Annihilation[FooHistory](
-        Instant.EPOCH.plusSeconds(3),
-        referredToLouie
-      ),
-      // ...only to resurrect him one more time!
-      Change.forOneItem(Instant.EPOCH.plusSeconds(5))(
         referredToLouie,
         { referredTo: FooHistory => referredTo.property2 = true }
       )
