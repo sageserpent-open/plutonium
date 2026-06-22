@@ -24,7 +24,7 @@ trait BugsAmericium extends WorldResourceAmericium {
 
     val events: Seq[Event] = Seq(
       // Refer to Louie.
-      Change.forTwoItems(Instant.parse("1970-01-01T00:00:05.333Z"))(
+      Change.forTwoItems(Instant.EPOCH.plusSeconds(6))(
         referrerZero,
         referredToLouie,
         { (referrer: ReferringHistory, referredTo: FooHistory) =>
@@ -33,26 +33,25 @@ trait BugsAmericium extends WorldResourceAmericium {
       ),
 
       // Mutate Louie...
-      Change.forOneItem(NegativeInfinity)(
+      Change.forOneItem(Instant.EPOCH)(
         referredToLouie,
         { referredTo: FooHistory => referredTo.property2 = false }
       ),
 
       // Annihilate the hapless item 0...
       Annihilation[ReferringHistory](
-        Instant.parse("1970-01-01T00:02:16.704Z"),
+        Instant.EPOCH.plusSeconds(7),
         referrerZero
       ),
 
-      // Annihilate the poor fellow!
+      // Annihilate Louie!
       Annihilation[FooHistory](
-        Instant.parse("1969-12-31T23:42:56.421Z"),
+        Instant.EPOCH.plusSeconds(1),
         referredToLouie
       ),
 
-      // Immediately after it was annihilated, resurrect item 0 by referring to
-      // the resurrected Louie.
-      Change.forTwoItems(Instant.parse("1970-01-01T00:02:16.704Z"))(
+      // After it was annihilated, resurrect item 0 by referring to Louie.
+      Change.forTwoItems(Instant.EPOCH.plusSeconds(8))(
         referrerZero,
         referredToLouie,
         { (referrer: ReferringHistory, referredTo: FooHistory) =>
@@ -61,17 +60,17 @@ trait BugsAmericium extends WorldResourceAmericium {
       ),
 
       // Mutate Louie again, resurrecting him...
-      Change.forOneItem(Instant.parse("1969-12-31T23:59:58.130Z"))(
+      Change.forOneItem(Instant.EPOCH.plusSeconds(2))(
         referredToLouie,
         { referredTo: FooHistory => referredTo.property1 = "" }
       ),
-      // ... and then immediately annihilate him all over again...
+      // ... and then annihilate him all over again...
       Annihilation[FooHistory](
-        Instant.parse("1969-12-31T23:59:58.130Z"),
+        Instant.EPOCH.plusSeconds(3),
         referredToLouie
       ),
-      // ...only to resurrect him at once!
-      Change.forOneItem(Instant.parse("1969-12-31T23:59:58.130Z"))(
+      // ...only to resurrect him one more time!
+      Change.forOneItem(Instant.EPOCH.plusSeconds(5))(
         referredToLouie,
         { referredTo: FooHistory => referredTo.property2 = true }
       )
