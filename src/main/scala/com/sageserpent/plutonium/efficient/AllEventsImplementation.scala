@@ -1003,12 +1003,17 @@ class AllEventsImplementation(
       finalNewLifecycles.flatMap(_.referencingLifecycles(finalLifecyclesById)).flatMap(_.itemStateUpdates(finalLifecyclesById))
 
     val itemStateUpdateKeysThatNeedToBeRevoked: Set[ItemStateUpdateKey] =
-      (itemStateUpdatesFromDefunctLifecycles ++ itemStateUpdatesReferencingDefunctLifecycles -- itemStateUpdatesFromNewOrModifiedLifecycles)
+      (itemStateUpdatesFromDefunctLifecycles
+        ++ itemStateUpdatesReferencingDefunctLifecycles
+        -- itemStateUpdatesFromNewOrModifiedLifecycles
+        -- itemStateUpdatesReferencingNewOrModifiedLifecycles)
         .map(_._1)
 
     val newOrModifiedItemStateUpdates
     : Map[ItemStateUpdateKey, ItemStateUpdate] =
-      (itemStateUpdatesFromNewOrModifiedLifecycles ++ itemStateUpdatesReferencingNewOrModifiedLifecycles -- itemStateUpdatesFromDefunctLifecycles).toMap
+      (itemStateUpdatesFromNewOrModifiedLifecycles
+        ++ itemStateUpdatesReferencingNewOrModifiedLifecycles
+        -- itemStateUpdatesFromDefunctLifecycles).toMap
 
     val allEventIdsBookedIn: collection.Set[EventId] =
       events.keySet.asInstanceOf[collection.Set[EventId]]
