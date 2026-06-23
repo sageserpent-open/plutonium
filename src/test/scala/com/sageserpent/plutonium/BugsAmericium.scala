@@ -750,17 +750,12 @@ trait BugsAmericium extends WorldResourceAmericium {
   @TestFactory
   def eventsThatReferToItemsUsingInconsistentTypesShouldBeRejected(): DynamicTests = {
     val instantGenerator = api.instants
+    val sharedAsOf       = Instant.ofEpochSecond(0)
+    val itemId           = "Frieda"
+
     val trials = for {
       threeWhens <- instantGenerator.listsOfSize(4)
-      seed       <- api.longs
-    } yield (threeWhens, seed)
-
-    trials.withLimit(200).dynamicTests { case (threeWhens, seed) =>
-      val sharedAsOf = Instant.ofEpochSecond(0)
-      val itemId     = "Frieda"
-      val random     = new Random(seed)
-
-      val actions = Vector(
+      actions = Vector(
         { world: World =>
           world.revise(
             1,
@@ -811,12 +806,14 @@ trait BugsAmericium extends WorldResourceAmericium {
           )
         }
       )
+      permutedActions <- api.shuffles(actions)
+    } yield permutedActions
 
+    trials.withLimit(200).dynamicTests { permutedActions =>
       Using.resource(makeWorld()) { world =>
         assertThrows(
           classOf[RuntimeException],
           () => {
-            val permutedActions = random.shuffle(actions)
             for (action <- permutedActions) {
               action(world)
             }
