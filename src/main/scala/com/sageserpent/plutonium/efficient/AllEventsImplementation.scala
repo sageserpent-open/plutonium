@@ -990,27 +990,25 @@ class AllEventsImplementation(
     // either makes it all the way through in the above code to
     // 'finalLifecyclesById', or is made defunct itself and thrown away by the
     // balancing done when flat-mapping a 'CalculationState'.
-    val itemStateUpdatesFromDefunctLifecycles
-        : Set[(ItemStateUpdateKey, ItemStateUpdate)] =
-      (finalDefunctLifecycles ++ finalDefunctLifecycles.flatMap(
-        _.referencingLifecycles(lifecyclesById)
-      ))
-        .flatMap(_.itemStateUpdates(lifecyclesById))
+    val itemStateUpdatesFromDefunctLifecycles: Set[(ItemStateUpdateKey, ItemStateUpdate)] =
+      finalDefunctLifecycles.flatMap(_.itemStateUpdates(lifecyclesById))
 
-    val itemStateUpdatesFromNewOrModifiedLifecycles
-        : Set[(ItemStateUpdateKey, ItemStateUpdate)] =
-      (finalNewLifecycles ++ finalNewLifecycles.flatMap(
-        _.referencingLifecycles(finalLifecyclesById)
-      ))
-        .flatMap(_.itemStateUpdates(finalLifecyclesById))
+    val itemStateUpdatesReferencingDefunctLifecycles: Set[(ItemStateUpdateKey, ItemStateUpdate)] =
+      finalDefunctLifecycles.flatMap(_.referencingLifecycles(lifecyclesById)).flatMap(_.itemStateUpdates(lifecyclesById))
+
+    val itemStateUpdatesFromNewOrModifiedLifecycles: Set[(ItemStateUpdateKey, ItemStateUpdate)] =
+      finalNewLifecycles.flatMap(_.itemStateUpdates(finalLifecyclesById))
+
+    val itemStateUpdatesReferencingNewOrModifiedLifecycles: Set[(ItemStateUpdateKey, ItemStateUpdate)] =
+      finalNewLifecycles.flatMap(_.referencingLifecycles(finalLifecyclesById)).flatMap(_.itemStateUpdates(finalLifecyclesById))
 
     val itemStateUpdateKeysThatNeedToBeRevoked: Set[ItemStateUpdateKey] =
-      itemStateUpdatesFromDefunctLifecycles
+      (itemStateUpdatesFromDefunctLifecycles ++ itemStateUpdatesReferencingDefunctLifecycles -- itemStateUpdatesFromNewOrModifiedLifecycles)
         .map(_._1)
 
     val newOrModifiedItemStateUpdates
-        : Map[ItemStateUpdateKey, ItemStateUpdate] =
-      itemStateUpdatesFromNewOrModifiedLifecycles.toMap
+    : Map[ItemStateUpdateKey, ItemStateUpdate] =
+      (itemStateUpdatesFromNewOrModifiedLifecycles ++ itemStateUpdatesReferencingNewOrModifiedLifecycles -- itemStateUpdatesFromDefunctLifecycles).toMap
 
     val allEventIdsBookedIn: collection.Set[EventId] =
       events.keySet.asInstanceOf[collection.Set[EventId]]
