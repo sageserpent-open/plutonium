@@ -94,6 +94,8 @@ object AllEventsImplementation {
 
     require(eventsArrangedInReverseTimeOrder.nonEmpty)
 
+    require(1 == eventsArrangedInReverseTimeOrder.values.map(_.uniqueItemSpecification.id).toSet.size)
+
     require(
       !eventsArrangedInReverseTimeOrder.tail.exists(PartialFunction.cond(_) {
         case (_, _: EndOfLifecycle) => true
@@ -538,7 +540,7 @@ object AllEventsImplementation {
       }.toSet
   }
 
-  // NOTE: an event footprint an cover several item state updates, each of which
+  // NOTE: an event footprint can cover several item state updates, each of which
   // in turn can affect several items.
   case class EventFootprint(when: Unbounded[Instant], itemIds: Set[Any])
 
@@ -755,17 +757,17 @@ object AllEventsImplementation {
       )
 
     def fromArgumentTypeReference(
-        eventId: EventId,
-        itemStateUpdateKey: ItemStateUpdateKey,
-        uniqueItemSpecification: UniqueItemSpecification,
-        targetUniqueItemSpecification: UniqueItemSpecification
-    ): Lifecycle = {
+                                   eventId: EventId,
+                                   itemStateUpdateKey: ItemStateUpdateKey,
+                                   argumentItemSpecification: UniqueItemSpecification,
+                                   targetItemSpecification: UniqueItemSpecification
+                                 ): Lifecycle = {
       Lifecycle(
         eventId = eventId,
         itemStateUpdateKey = itemStateUpdateKey,
         indivisibleEvent = ArgumentReference(
-          uniqueItemSpecification,
-          targetUniqueItemSpecification
+          argumentItemSpecification,
+          targetItemSpecification
         )
       )
     }
@@ -882,18 +884,19 @@ object AllEventsImplementation {
     }
 
     case class ArgumentReference(
-        override val uniqueItemSpecification: UniqueItemSpecification,
-        targetUniqueItemSpecification: UniqueItemSpecification
-    ) extends IndivisibleEvent {}
+                                  argumentItemSpecification: UniqueItemSpecification,
+                                  targetItemSpecification: UniqueItemSpecification
+                                ) extends IndivisibleEvent {
+      // NOTE: an argument reference represents an event on some other item that *references* this lifecycle's item.
+      override def uniqueItemSpecification: UniqueItemSpecification = argumentItemSpecification
+    }
 
-    case class IndivisibleChange(patch: AbstractPatch)
-        extends IndivisibleEvent {
+    case class IndivisibleChange(patch: AbstractPatch) extends IndivisibleEvent {
       override def uniqueItemSpecification: UniqueItemSpecification =
         patch.targetItemSpecification
     }
 
-    case class EndOfLifecycle(annihilation: Annihilation)
-        extends IndivisibleEvent {
+    case class EndOfLifecycle(annihilation: Annihilation) extends IndivisibleEvent {
       override def uniqueItemSpecification: UniqueItemSpecification =
         annihilation.uniqueItemSpecification
     }
@@ -987,27 +990,30 @@ class AllEventsImplementation(
     // either makes it all the way through in the above code to
     // 'finalLifecyclesById', or is made defunct itself and thrown away by the
     // balancing done when flat-mapping a 'CalculationState'.
-    val itemStateUpdatesFromDefunctLifecycles
-        : Set[(ItemStateUpdateKey, ItemStateUpdate)] =
-      (finalDefunctLifecycles ++ finalDefunctLifecycles.flatMap(
-        _.referencingLifecycles(lifecyclesById)
-      ))
-        .flatMap(_.itemStateUpdates(lifecyclesById))
+    val itemStateUpdatesFromDefunctLifecycles: Set[(ItemStateUpdateKey, ItemStateUpdate)] =
+      finalDefunctLifecycles.flatMap(_.itemStateUpdates(lifecyclesById))
 
-    val itemStateUpdatesFromNewOrModifiedLifecycles
-        : Set[(ItemStateUpdateKey, ItemStateUpdate)] =
-      (finalNewLifecycles ++ finalNewLifecycles.flatMap(
-        _.referencingLifecycles(finalLifecyclesById)
-      ))
-        .flatMap(_.itemStateUpdates(finalLifecyclesById))
+    val itemStateUpdatesReferencingDefunctLifecycles: Set[(ItemStateUpdateKey, ItemStateUpdate)] =
+      finalDefunctLifecycles.flatMap(_.referencingLifecycles(lifecyclesById)).flatMap(_.itemStateUpdates(lifecyclesById))
+
+    val itemStateUpdatesFromNewOrModifiedLifecycles: Set[(ItemStateUpdateKey, ItemStateUpdate)] =
+      finalNewLifecycles.flatMap(_.itemStateUpdates(finalLifecyclesById))
+
+    val itemStateUpdatesReferencingNewOrModifiedLifecycles: Set[(ItemStateUpdateKey, ItemStateUpdate)] =
+      finalNewLifecycles.flatMap(_.referencingLifecycles(finalLifecyclesById)).flatMap(_.itemStateUpdates(finalLifecyclesById))
 
     val itemStateUpdateKeysThatNeedToBeRevoked: Set[ItemStateUpdateKey] =
-      (itemStateUpdatesFromDefunctLifecycles -- itemStateUpdatesFromNewOrModifiedLifecycles)
+      (itemStateUpdatesFromDefunctLifecycles
+        ++ itemStateUpdatesReferencingDefunctLifecycles
+        -- itemStateUpdatesFromNewOrModifiedLifecycles
+        -- itemStateUpdatesReferencingNewOrModifiedLifecycles)
         .map(_._1)
 
     val newOrModifiedItemStateUpdates
-        : Map[ItemStateUpdateKey, ItemStateUpdate] =
-      (itemStateUpdatesFromNewOrModifiedLifecycles -- itemStateUpdatesFromDefunctLifecycles).toMap
+    : Map[ItemStateUpdateKey, ItemStateUpdate] =
+      (itemStateUpdatesFromNewOrModifiedLifecycles
+        ++ itemStateUpdatesReferencingNewOrModifiedLifecycles
+        -- itemStateUpdatesFromDefunctLifecycles).toMap
 
     val allEventIdsBookedIn: collection.Set[EventId] =
       events.keySet.asInstanceOf[collection.Set[EventId]]
@@ -1140,13 +1146,13 @@ class AllEventsImplementation(
                 itemStateUpdateKey,
                 patch = patch
               ) +: patch.argumentItemSpecifications.collect {
-                case uniqueItemSpecification
-                    if patch.targetItemSpecification != uniqueItemSpecification =>
+                case argumentItemSpecification
+                  if patch.targetItemSpecification != argumentItemSpecification =>
                   Lifecycle.fromArgumentTypeReference(
                     eventId = eventId,
                     itemStateUpdateKey = itemStateUpdateKey,
-                    uniqueItemSpecification = uniqueItemSpecification,
-                    targetUniqueItemSpecification =
+                    argumentItemSpecification = argumentItemSpecification,
+                    targetItemSpecification =
                       patch.targetItemSpecification
                   )
               }

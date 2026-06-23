@@ -46,6 +46,7 @@ lazy val settings = Seq(
   libraryDependencies += "org.typelevel" %% "cats-testkit-scalatest" % "2.1.5" % "test",
   libraryDependencies += "com.github.alexarchambault" %% "scalacheck-shapeless_1.14" % "1.2.5" % "test",
   libraryDependencies += "org.scala-lang.modules" %% "scala-parallel-collections" % "1.2.0" % "test",
+  libraryDependencies += "com.lihaoyi" %% "pprint" % "0.9.6" % "test",
   publishMavenStyle := true,
   licenses += ("MIT", url("http://opensource.org/licenses/MIT")),
   bintrayVcsUrl := Some("git@github.com:sageserpent-open/plutonium.git"),

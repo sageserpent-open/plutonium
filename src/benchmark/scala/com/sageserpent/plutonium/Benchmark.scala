@@ -23,8 +23,7 @@ trait Benchmark extends WorldEfficientInMemoryImplementationResource {
 
     Using.resource(makeWorld()) { world =>
       for (step <- 0 until size) {
-        val eventId = step - randomBehaviour
-          .chooseAnyNumberFromZeroToOneLessThan(20)
+        val eventId = if (0 < step) step - randomBehaviour.chooseAnyNumberFromZeroToOneLessThan(step min 20) else 0
 
         val probabilityOfNotBackdatingAnEvent = 0 < randomBehaviour
           .chooseAnyNumberFromZeroToOneLessThan(3)
@@ -33,7 +32,7 @@ trait Benchmark extends WorldEfficientInMemoryImplementationResource {
           if (probabilityOfNotBackdatingAnEvent) step
           else
             step - randomBehaviour
-              .chooseAnyNumberFromOneTo(20)
+              .chooseAnyNumberFromOneTo(step min 20)
 
         val idOffset = (step / idWindowSize) * idWindowSize
 
@@ -42,10 +41,10 @@ trait Benchmark extends WorldEfficientInMemoryImplementationResource {
 
         if (probabilityOfBookingANewOrCorrectingEvent) {
           val oneId =
-            randomBehaviour.chooseOneOfRange(idSet.map(_ + idOffset))
+            randomBehaviour.chooseOneOfRange(idSet) + idOffset
 
           val anotherId =
-            randomBehaviour.chooseOneOfRange(idSet.map(_ + idOffset))
+            randomBehaviour.chooseOneOfRange(idSet) + idOffset
 
           world.revise(
             eventId,

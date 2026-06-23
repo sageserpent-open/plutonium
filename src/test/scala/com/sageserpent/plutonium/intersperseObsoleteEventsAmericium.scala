@@ -147,7 +147,7 @@ object intersperseObsoleteEventsAmericium {
           chunkKeepingEventIdsUniquePerChunk(chunkSeq)
         else
           api.only(Seq(chunkSeq))
-      }.toSeq
+      }
       api.sequences(processedChunksTrials).map(_.flatten)
     }
   }
