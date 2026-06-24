@@ -20,11 +20,11 @@ import scala.util.{Random, Using}
 trait BugsAmericium extends WorldResourceAmericium {
   @Test
   def eventsThatHaveBeenRevisedShouldNoLongerContributeHistoryToAnItemEvenWhenTheRevisedEventRefersToAnotherItem(): Unit = {
-    val firstItemId  = "Number One"
-    val secondItemId = "Number Two"
-    val Seq(eventBeingRevised: EventId, firstFinalEventForFirstItem: EventId) =
-      1 to 2
-    val timeOfObsoleteEvent = Instant.ofEpochSecond(1L)
+    val firstItemId                 = "Number One"
+    val secondItemId                = "Number Two"
+    val eventBeingRevised: EventId  = 1
+    val firstFinalEventForFirstItem = 2
+    val timeOfObsoleteEvent         = Instant.ofEpochSecond(1L)
     val expectedFinalValue  = -20
     val sharedAsOf          = Instant.ofEpochSecond(0)
 
@@ -77,10 +77,10 @@ trait BugsAmericium extends WorldResourceAmericium {
 
   @Test
   def eventsThatHaveBeenRevisedShouldNoLongerContributeHistoryToAnItemEvenWhenTheRevisedEventRefersToAnotherItemWithATwist(): Unit = {
-    val firstItemId  = "Number One"
-    val secondItemId = "Number Two"
-    val Seq(eventBeingRevised: EventId, firstFinalEventForFirstItem: EventId) =
-      1 to 2
+    val firstItemId                 = "Number One"
+    val secondItemId                = "Number Two"
+    val eventBeingRevised: EventId  = 1
+    val firstFinalEventForFirstItem = 2
     val sharedTimeOfFinalAndObsoleteEvent = Instant.ofEpochSecond(1L)
     val expectedFinalValue                = -20
     val sharedAsOf                        = Instant.ofEpochSecond(0)
@@ -754,12 +754,12 @@ trait BugsAmericium extends WorldResourceAmericium {
     val itemId           = "Frieda"
 
     val trials = for {
-      threeWhens <- instantGenerator.listsOfSize(4)
+      eventWhens <- instantGenerator.listsOfSize(4)
       actions = Vector(
         { world: World =>
           world.revise(
             1,
-            Change.forOneItem[History](threeWhens(0))(
+            Change.forOneItem[History](eventWhens(0))(
               itemId,
               { item =>
                 item.shouldBeUnchanged = true
@@ -771,7 +771,7 @@ trait BugsAmericium extends WorldResourceAmericium {
         { world: World =>
           world.revise(
             2,
-            Change.forOneItem[FooHistory](threeWhens(1))(
+            Change.forOneItem[FooHistory](eventWhens(1))(
               itemId,
               { item =>
                 item.property1 = "La-di-dah"
@@ -783,7 +783,7 @@ trait BugsAmericium extends WorldResourceAmericium {
         { world: World =>
           world.revise(
             3,
-            Change.forOneItem[MoreSpecificFooHistory](threeWhens(2))(
+            Change.forOneItem[MoreSpecificFooHistory](eventWhens(2))(
               itemId,
               { item =>
                 item.property1 = "Gunner"
@@ -796,7 +796,7 @@ trait BugsAmericium extends WorldResourceAmericium {
           world.revise(
             4,
             Change
-              .forOneItem[AnotherSpecificFooHistory](threeWhens(3))(
+              .forOneItem[AnotherSpecificFooHistory](eventWhens(3))(
                 itemId,
                 { item =>
                   item.property1 = "Graham"
