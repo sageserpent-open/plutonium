@@ -161,6 +161,63 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
   }
 
   @TestFactory
+  def notMysteriouslyFailToYieldItems(): DynamicTests = {
+    val testCaseTrials = for {
+      referringHistoryRecordingsGroupedById <-
+        referringHistoryRecordingsGroupedByIdTrials()
+      shuffledRecordings <- shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+        referringHistoryRecordingsGroupedById
+      )
+      bigShuffledHistoryOverLotsOfThings <- api.splitsIntoNonEmptyPieces(shuffledRecordings.zipWithIndex)
+      asOfs <- instantTrials.listsOfSize(bigShuffledHistoryOverLotsOfThings.size).map(_.sorted)
+      queryWhen <- unboundedInstantTrials
+    } yield HistoryTestCase(
+      referringHistoryRecordingsGroupedById,
+      liftRecordings(bigShuffledHistoryOverLotsOfThings),
+      asOfs,
+      queryWhen
+    )
+
+    testCaseTrials.withLimit(200).dynamicTests {
+      case HistoryTestCase(
+        referringHistoryRecordingsGroupedById,
+        bigShuffledHistoryOverLotsOfThings,
+        asOfs,
+        queryWhen
+      ) =>
+        Using.resource(makeWorld()) { world =>
+          recordEventsInWorld(
+            bigShuffledHistoryOverLotsOfThings,
+            asOfs,
+            world
+          )
+
+          val scope = world.scopeFor(queryWhen, world.nextRevision)
+
+          val checks = (for {
+            recording <- referringHistoryRecordingsGroupedById
+            RecordingsNoLaterThan(
+              referringHistoryId,
+              referringHistoriesFrom,
+              _,
+              _,
+              _
+            ) <- recording.thePartNoLaterThan(queryWhen)
+          } yield referringHistoryId -> referringHistoriesFrom(scope))
+
+          if (checks.isEmpty) Trials.reject()
+
+          for ((id, itemSingletonSequence) <- checks) {
+            withClue(s"Expected there to be a single item for id: $id.")(
+              assert(1 == itemSingletonSequence.size)
+            )
+          }
+        }
+    }
+  }
+
+
+  @TestFactory
   def revealAllTheHistoryOfARelatedItemUpToTheWhenLimitOfAScopeMadeFromIt(): DynamicTests = {
     val testCaseTrials = for {
       referencedHistoryRecordingsGroupedById <-
