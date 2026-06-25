@@ -4,7 +4,6 @@ import cats.syntax.all._
 import com.sageserpent.americium.Trials
 import com.sageserpent.americium.Trials.api
 import com.sageserpent.americium.junit5.{DynamicTests, Syntax}
-import com.sageserpent.americium.utilities.randomEnrichment._
 import com.sageserpent.plutonium.utilities.ExpectyFlavouredAssert.{
   assert,
   withClue
@@ -15,18 +14,19 @@ import org.junit.jupiter.api.{Test, TestFactory}
 
 import java.time.Instant
 import scala.collection.immutable.{SortedMap, TreeMap}
-import scala.util.{Random, Using}
+import scala.util.Using
 
 trait BugsAmericium extends WorldResourceAmericium {
   @Test
-  def eventsThatHaveBeenRevisedShouldNoLongerContributeHistoryToAnItemEvenWhenTheRevisedEventRefersToAnotherItem(): Unit = {
+  def eventsThatHaveBeenRevisedShouldNoLongerContributeHistoryToAnItemEvenWhenTheRevisedEventRefersToAnotherItem()
+      : Unit = {
     val firstItemId                 = "Number One"
     val secondItemId                = "Number Two"
     val eventBeingRevised: EventId  = 1
     val firstFinalEventForFirstItem = 2
     val timeOfObsoleteEvent         = Instant.ofEpochSecond(1L)
-    val expectedFinalValue  = -20
-    val sharedAsOf          = Instant.ofEpochSecond(0)
+    val expectedFinalValue          = -20
+    val sharedAsOf                  = Instant.ofEpochSecond(0)
 
     Using.resource(makeWorld()) { world =>
       world.revise(
@@ -76,11 +76,12 @@ trait BugsAmericium extends WorldResourceAmericium {
   }
 
   @Test
-  def eventsThatHaveBeenRevisedShouldNoLongerContributeHistoryToAnItemEvenWhenTheRevisedEventRefersToAnotherItemWithATwist(): Unit = {
-    val firstItemId                 = "Number One"
-    val secondItemId                = "Number Two"
-    val eventBeingRevised: EventId  = 1
-    val firstFinalEventForFirstItem = 2
+  def eventsThatHaveBeenRevisedShouldNoLongerContributeHistoryToAnItemEvenWhenTheRevisedEventRefersToAnotherItemWithATwist()
+      : Unit = {
+    val firstItemId                       = "Number One"
+    val secondItemId                      = "Number Two"
+    val eventBeingRevised: EventId        = 1
+    val firstFinalEventForFirstItem       = 2
     val sharedTimeOfFinalAndObsoleteEvent = Instant.ofEpochSecond(1L)
     val expectedFinalValue                = -20
     val sharedAsOf                        = Instant.ofEpochSecond(0)
@@ -134,7 +135,8 @@ trait BugsAmericium extends WorldResourceAmericium {
   }
 
   @Test
-  def eventsThatHaveTheSameEffectOnAnItemShouldBeApplicableAcrossSeveralItemLifecyclesEvenIfTheItemUnifiedTypeChanges(): Unit = {
+  def eventsThatHaveTheSameEffectOnAnItemShouldBeApplicableAcrossSeveralItemLifecyclesEvenIfTheItemUnifiedTypeChanges()
+      : Unit = {
     val lizId       = "Liz"
     val sharedAsOf  = Instant.ofEpochSecond(0)
     val commonValue = "Foo"
@@ -209,7 +211,7 @@ trait BugsAmericium extends WorldResourceAmericium {
       }
 
       {
-        val scope = world.scopeFor(Instant.ofEpochSecond(4L), sharedAsOf)
+        val scope     = world.scopeFor(Instant.ofEpochSecond(4L), sharedAsOf)
         val Seq(item) = scope.render(Bitemporal.withId[FooHistory](lizId))
         assert(item.datums == List(commonValue))
       }
@@ -217,9 +219,10 @@ trait BugsAmericium extends WorldResourceAmericium {
   }
 
   @Test
-  def aRelatedItemThatWasAnnihilatedWhereThatItemIsResurrectedJustAfterItIsAnnihilatedShouldBeDetectedAsAGhostByAnEventThatAttemptsToMutateIt(): Unit = {
-    val referrerId = "The Referrer of"
-    val referredId = "The Referred to"
+  def aRelatedItemThatWasAnnihilatedWhereThatItemIsResurrectedJustAfterItIsAnnihilatedShouldBeDetectedAsAGhostByAnEventThatAttemptsToMutateIt()
+      : Unit = {
+    val referrerId          = "The Referrer of"
+    val referredId          = "The Referred to"
     val startOfRelationship = Instant.ofEpochSecond(0L)
     val whenAnnihilationAndResurrectionTakesPlace =
       startOfRelationship plusSeconds 1L
@@ -281,9 +284,10 @@ trait BugsAmericium extends WorldResourceAmericium {
   }
 
   @Test
-  def aRelatedItemThatWasAnnihilatedWhereThatItemIsResurrectedJustAfterItIsAnnihilatedShouldBeDetectedAsAGhostByAnEventThatAttemptsToMutateItWithATwist(): Unit = {
-    val referrerId = "The Referrer of"
-    val referredId = "The Referred to"
+  def aRelatedItemThatWasAnnihilatedWhereThatItemIsResurrectedJustAfterItIsAnnihilatedShouldBeDetectedAsAGhostByAnEventThatAttemptsToMutateItWithATwist()
+      : Unit = {
+    val referrerId          = "The Referrer of"
+    val referredId          = "The Referred to"
     val startOfRelationship = Instant.ofEpochSecond(0L)
     val whenAnnihilationAndResurrectionTakesPlace =
       startOfRelationship plusSeconds 1L
@@ -347,9 +351,9 @@ trait BugsAmericium extends WorldResourceAmericium {
 
   @Test
   def bookingInSimpleChangesInTheSameSingleRevisionShouldWork(): Unit = {
-    val fooId = "Name: 50"
-    val barId = 9
-    val asOf  = Instant.ofEpochSecond(0)
+    val fooId         = "Name: 50"
+    val barId         = 9
+    val asOf          = Instant.ofEpochSecond(0)
     val barChangeWhen = Instant.ofEpochSecond(0L)
     val fooChangeWhen = barChangeWhen plusSeconds 1L
 
@@ -389,8 +393,8 @@ trait BugsAmericium extends WorldResourceAmericium {
 
   @Test
   def bookingInEventsInReverseOrderOfPhysicalTimeShouldWork(): Unit = {
-    val itemId         = "Fred"
-    val sharedAsOf     = Instant.ofEpochSecond(0)
+    val itemId          = "Fred"
+    val sharedAsOf      = Instant.ofEpochSecond(0)
     val expectedHistory = Seq("The Real Thing", true)
 
     Using.resource(makeWorld()) { world =>
@@ -425,9 +429,10 @@ trait BugsAmericium extends WorldResourceAmericium {
   }
 
   @Test
-  def annihilatingAnItemShouldNotAffectEventsOccurringInASubsequentLifecycle(): Unit = {
-    val itemId         = "Fred"
-    val sharedAsOf     = Instant.ofEpochSecond(0)
+  def annihilatingAnItemShouldNotAffectEventsOccurringInASubsequentLifecycle()
+      : Unit = {
+    val itemId          = "Fred"
+    val sharedAsOf      = Instant.ofEpochSecond(0)
     val expectedHistory = Seq(1, 2)
 
     Using.resource(makeWorld()) { world =>
@@ -480,7 +485,8 @@ trait BugsAmericium extends WorldResourceAmericium {
   }
 
   @Test
-  def forgettingToSupplyATypeTagWhenAnnihilatingAnItemShouldResultInAUsefulDiagnostic(): Unit = {
+  def forgettingToSupplyATypeTagWhenAnnihilatingAnItemShouldResultInAUsefulDiagnostic()
+      : Unit = {
     val itemId     = "Fred"
     val sharedAsOf = Instant.ofEpochSecond(0)
 
@@ -514,7 +520,8 @@ trait BugsAmericium extends WorldResourceAmericium {
   }
 
   @TestFactory
-  def annihilatingAnItemAndThenResurrectingItAtTheSamePhysicalTimeShouldResultInAHistoryForTheResurrectedItem(): DynamicTests = {
+  def annihilatingAnItemAndThenResurrectingItAtTheSamePhysicalTimeShouldResultInAHistoryForTheResurrectedItem()
+      : DynamicTests = {
     val firstReferringId  = "Victim"
     val secondReferringId = "Bystander"
     val sharedAsOf        = Instant.ofEpochSecond(0)
@@ -589,9 +596,9 @@ trait BugsAmericium extends WorldResourceAmericium {
 
   @Test
   def correctingAnEventByMovingItInPhysicalTimeShouldWorkProperly(): Unit = {
-    val itemId         = "Fred"
-    val sharedAsOf     = Instant.ofEpochSecond(0)
-    val expectedHistory = Seq(99, 88, 55555, 77)
+    val itemId                        = "Fred"
+    val sharedAsOf                    = Instant.ofEpochSecond(0)
+    val expectedHistory               = Seq(99, 88, 55555, 77)
     val eventBeingMovedInPhysicalTime = 1
 
     Using.resource(makeWorld()) { world =>
@@ -652,10 +659,11 @@ trait BugsAmericium extends WorldResourceAmericium {
   }
 
   @Test
-  def annullingAnAnnihilationShouldFuseTheEarlierLifecycleWithASubsequentOne(): Unit = {
-    val itemId         = "Fred"
-    val sharedAsOf     = Instant.ofEpochSecond(0)
-    val expectedHistory = Seq(1, 2)
+  def annullingAnAnnihilationShouldFuseTheEarlierLifecycleWithASubsequentOne()
+      : Unit = {
+    val itemId            = "Fred"
+    val sharedAsOf        = Instant.ofEpochSecond(0)
+    val expectedHistory   = Seq(1, 2)
     val annihilationEvent = 1
 
     Using.resource(makeWorld()) { world =>
@@ -700,8 +708,8 @@ trait BugsAmericium extends WorldResourceAmericium {
 
   @Test
   def bookingInEventsInAMixedUpOrderOfPhysicalTimeShouldWork(): Unit = {
-    val itemId         = "Fred"
-    val sharedAsOf     = Instant.ofEpochSecond(0)
+    val itemId          = "Fred"
+    val sharedAsOf      = Instant.ofEpochSecond(0)
     val expectedHistory = Seq(55, 66, 77)
 
     Using.resource(makeWorld()) { world =>
@@ -748,7 +756,8 @@ trait BugsAmericium extends WorldResourceAmericium {
   }
 
   @TestFactory
-  def eventsThatReferToItemsUsingInconsistentTypesShouldBeRejected(): DynamicTests = {
+  def eventsThatReferToItemsUsingInconsistentTypesShouldBeRejected()
+      : DynamicTests = {
     val instantGenerator = api.instants
     val sharedAsOf       = Instant.ofEpochSecond(0)
     val itemId           = "Frieda"
@@ -939,7 +948,8 @@ trait BugsAmericium extends WorldResourceAmericium {
   }
 
   @Test
-  def annullingAllEventsShouldYieldAHistoryWithTheSameEffectsAsPriorToTheAnnulments(): Unit = {
+  def annullingAllEventsShouldYieldAHistoryWithTheSameEffectsAsPriorToTheAnnulments()
+      : Unit = {
     val itemId      = "Name: 84"
     val bystanderId = "Name: 50"
     val sharedAsOf  = Instant.ofEpochSecond(0)
@@ -1000,7 +1010,8 @@ trait BugsAmericium extends WorldResourceAmericium {
   }
 
   @Test
-  def annullingAnEventThatSharesAnArgumentReferenceWithAnotherEventToAnItemThatIsNotDirectlyReferencedAsATargetShouldWork(): Unit = {
+  def annullingAnEventThatSharesAnArgumentReferenceWithAnotherEventToAnItemThatIsNotDirectlyReferencedAsATargetShouldWork()
+      : Unit = {
     val firstReferringId  = "The Central Scrutinizer"
     val secondReferringId = "Big Brother"
     val referredId        = "Joe"
@@ -1097,7 +1108,8 @@ trait BugsAmericium extends WorldResourceAmericium {
   }
 
   @TestFactory
-  def correctingEventsThatRelateACommonPoolOfItemsToEachOtherShouldWork(): DynamicTests = {
+  def correctingEventsThatRelateACommonPoolOfItemsToEachOtherShouldWork()
+      : DynamicTests = {
     val idGenerator = api.integers(10, 20)
 
     case class Booking(eventId: Int, referrerId: Int, referredId: Int)
@@ -1157,7 +1169,8 @@ trait BugsAmericium extends WorldResourceAmericium {
   }
 
   @Test
-  def usingRelatedItemsWithoutAnyAnnihilationsShouldNotReferenceAnyGhosts(): Unit = {
+  def usingRelatedItemsWithoutAnyAnnihilationsShouldNotReferenceAnyGhosts()
+      : Unit = {
     case class Booking(eventId: Int, referrerId: Int, referredId: Int)
 
     val eventIdToBeCorrected = 0
@@ -1230,56 +1243,58 @@ trait BugsAmericium extends WorldResourceAmericium {
     val referrerZero: ReferringHistory#Id = 0.toString
     val referredToLouie: FooHistory#Id    = "Louie"
 
-    val events: Seq[Event] = Seq(
-      // Refer to Louie.
-      Change.forTwoItems(Instant.EPOCH.plusSeconds(3))(
-        referrerZero,
-        referredToLouie,
-        { (referrer: ReferringHistory, referredTo: FooHistory) =>
-          referrer.referTo(referredTo)
-        }
-      ),
-
-      // Mutate Louie...
-      Change.forOneItem(Instant.EPOCH)(
-        referredToLouie,
-        { referredTo: FooHistory => referredTo.property2 = false }
-      ),
-
-      // Annihilate the hapless item 0...
-      Annihilation[ReferringHistory](
-        Instant.EPOCH.plusSeconds(4),
-        referrerZero
-      ),
-
-      // Annihilate Louie!
-      Annihilation[FooHistory](
-        Instant.EPOCH.plusSeconds(1),
-        referredToLouie
-      ),
-
-      // After it was annihilated, resurrect item 0 by referring to Louie.
-      Change.forTwoItems(Instant.EPOCH.plusSeconds(5))(
-        referrerZero,
-        referredToLouie,
-        { (referrer: ReferringHistory, referredTo: FooHistory) =>
-          referrer.referTo(referredTo)
-        }
-      ),
-
-      // Mutate Louie again, resurrecting him...
-      Change.forOneItem(Instant.EPOCH.plusSeconds(2))(
-        referredToLouie,
-        { referredTo: FooHistory => referredTo.property2 = true }
+    def eventsWithPossibleTwist(twistWithTheReferrer: Boolean): Seq[Event] =
+      Seq(
+        // Refer to Louie.
+        Change.forTwoItems(Instant.EPOCH.plusSeconds(3))(
+          referrerZero,
+          referredToLouie,
+          { (referrer: ReferringHistory, referredTo: FooHistory) =>
+            referrer.referTo(referredTo)
+          }
+        ),
+        // Mutate Louie...
+        Change.forOneItem(Instant.EPOCH)(
+          referredToLouie,
+          { referredTo: FooHistory => referredTo.property2 = false }
+        )
+      ) ++ Option.when(twistWithTheReferrer)(
+        // Annihilate the hapless item 0...
+        Annihilation[ReferringHistory](
+          Instant.EPOCH.plusSeconds(4),
+          referrerZero
+        )
+      ) ++ Seq(
+        // Annihilate Louie!
+        Annihilation[FooHistory](
+          Instant.EPOCH.plusSeconds(1),
+          referredToLouie
+        )
+      ) ++ Option.when(twistWithTheReferrer)(
+        // After it was annihilated, resurrect item 0 by referring to Louie.
+        Change.forTwoItems(Instant.EPOCH.plusSeconds(5))(
+          referrerZero,
+          referredToLouie,
+          { (referrer: ReferringHistory, referredTo: FooHistory) =>
+            referrer.referTo(referredTo)
+          }
+        )
+      ) ++ Seq(
+        // Mutate Louie again, resurrecting him...
+        Change.forOneItem(Instant.EPOCH.plusSeconds(2))(
+          referredToLouie,
+          { referredTo: FooHistory => referredTo.property2 = true }
+        )
       )
-    )
 
     case class RevisionData(
         events: Map[EventId, Option[Event]],
         asOf: Instant
     )
 
-    val trials: Trials[Seq[RevisionData]] = for {
+    val trials: Trials[(Boolean, Seq[RevisionData])] = for {
+      twisted <- api.booleans
+      events = eventsWithPossibleTwist(twisted)
       numberOfRevisions <- api.integers(1, events.size)
       eventsGroupedForRevisions <- api.splitsIntoPieces(
         events,
@@ -1291,7 +1306,7 @@ trait BugsAmericium extends WorldResourceAmericium {
         .map(_.map(Instant.EPOCH.plusSeconds(_)))
     } yield {
       import cats.data.Nested
-      import cats.syntax.traverse._
+        import cats.syntax.traverse._
 
       val eventsForRevisions: Seq[Map[EventId, Option[Event]]] =
         Nested(eventsGroupedForRevisions)
@@ -1301,12 +1316,12 @@ trait BugsAmericium extends WorldResourceAmericium {
           .value
           .map(SortedMap.from(_))
 
-      eventsForRevisions.zip(asOfs).map { case (events, asOf) =>
+      twisted -> eventsForRevisions.zip(asOfs).map { case (events, asOf) =>
         RevisionData(events, asOf)
       }
     }
 
-    trials.withLimit(200).dynamicTests { revisions =>
+    trials.withLimit(200).dynamicTests { case (twisted, revisions) =>
       Using.resource(makeWorld()) { world =>
         revisions.foreach { case RevisionData(events, asOf) =>
           try {
@@ -1331,7 +1346,9 @@ trait BugsAmericium extends WorldResourceAmericium {
         val referencedHistory =
           singleReferringItem.referencedHistories(referredToLouie)
 
-        withClue(s"Test case: ${pprint.apply(revisions)}") {
+        withClue(
+          s"Test case is twisted: $twisted, revisions: ${pprint.apply(revisions)}"
+        ) {
           assert(referencedHistory == singleReferredToItem)
 
           val referencedDatums = referencedHistory.datums

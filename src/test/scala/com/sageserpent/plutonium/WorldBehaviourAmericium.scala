@@ -5,15 +5,42 @@ import com.sageserpent.americium.Trials.api
 import com.sageserpent.americium.java.CasesLimitStrategy
 import com.sageserpent.americium.junit5._
 import com.sageserpent.plutonium.utilities.ExpectyFlavouredAssert.{assert, withClue}
-import com.sageserpent.plutonium.utilities.{Finite, Unbounded}
+import com.sageserpent.plutonium.utilities.{
+  Finite,
+  NegativeInfinity,
+  PositiveInfinity,
+  Unbounded
+}
 import org.junit.jupiter.api.Assertions._
 import org.junit.jupiter.api.{Test, TestFactory}
 
 import _root_.java.time.Instant
+import com.sageserpent.americium.utilities.seqEnrichment._
+
+import scala.collection.immutable.TreeMap
 import scala.language.postfixOps
+import scala.reflect.runtime.universe.TypeTag
 import scala.util.Using
 
 object WorldBehaviourAmericium {
+  case class OrderedHistoryTestCase(
+      recordingsGroupedById: Seq[WorldSpecSupportAmericium#RecordingsForAnId],
+      bigHistoryOverLotsOfThingsSortedInEventWhenOrder: Seq[
+        Seq[((Unbounded[Instant], Event), Int)]
+      ],
+      asOfs: Seq[Instant],
+      queryWhen: Instant,
+      asOfToLatestEventWhenMap: TreeMap[Instant, Unbounded[Instant]],
+      asOfsIncludingAllEventsNoLaterThanTheQueryWhen: Seq[Instant]
+  )
+
+  case class DeduceTypeTestCase(
+      fooHistoryIdsToLinearizationIndices: Map[FooHistory#Id, Int],
+      referringHistoryIds: Set[ReferringHistory#Id],
+      referringHistoryIdGroups: Seq[Seq[ReferringHistory#Id]],
+      eventConstructorIndicesGroups: Seq[Seq[Int]]
+  )
+
   case class HistoryTestCase(
       recordingsGroupedById: Seq[WorldSpecSupportAmericium#RecordingsForAnId],
       bigShuffledHistoryOverLotsOfThings: Seq[
@@ -61,6 +88,18 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
 
   import WorldBehaviourAmericium._
 
+  val chunksShareTheSameEventWhens: (
+      ((Unbounded[Instant], Unbounded[Instant]), Instant),
+      ((Unbounded[Instant], Unbounded[Instant]), Instant)
+  ) => Boolean = {
+    case (((_, trailingEventWhen), _), ((leadingEventWhen, _), _)) => true
+  }
+
+  def eventWhenFrom(
+      recording: ((Unbounded[Instant], Event), Int)
+  ): Unbounded[Instant] =
+    recording._1._1
+
   import cats.implicits._
 
   @TestFactory
@@ -88,6 +127,240 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
       withClue(
         s"Initial revision of a world ${world.nextRevision} should be: ${World.initialRevision}."
       )(assert(World.initialRevision == world.nextRevision))
+    }
+  }
+
+  @TestFactory
+  def revealAllHistoryUpToTheAsOfLimitOfAScopeMadeFromIt(): DynamicTests = {
+    val testCaseTrials: Trials[OrderedHistoryTestCase] = for {
+      recordingsGroupedById <- recordingsGroupedByIdTrials(
+        forbidAnnihilations = false
+      )
+      bigHistoryOverLotsOfThingsSortedInEventWhenOrder <- api
+        .splitsIntoNonEmptyPieces(
+          (recordingsGroupedById.flatMap(_.events) sortBy {
+            case (eventWhen, _) => eventWhen
+          }).zipWithIndex
+        )
+        .map(_.map(_.toSeq).toSeq)
+      asOfs <- instantTrials
+        .listsOfSize(bigHistoryOverLotsOfThingsSortedInEventWhenOrder.size)
+        .map(_.sorted)
+      asOfToLatestEventWhenMap = TreeMap(
+        asOfs zip (bigHistoryOverLotsOfThingsSortedInEventWhenOrder map (_.last) map eventWhenFrom): _*
+      )
+      chunksForRevisions =
+        bigHistoryOverLotsOfThingsSortedInEventWhenOrder map (
+          recordingAndEventIdPairs =>
+            eventWhenFrom(recordingAndEventIdPairs.head) -> eventWhenFrom(
+              recordingAndEventIdPairs.last
+            )
+        ) zip asOfs
+      latestAsOfsThatMapUnambiguouslyToEventWhens = chunksForRevisions
+        .groupWhile(chunksShareTheSameEventWhens) map (_.last._2)
+      latestEventWhenForEarliestAsOf: Unbounded[Instant] = asOfToLatestEventWhenMap(
+        latestAsOfsThatMapUnambiguouslyToEventWhens.head
+      )
+      queryWhen <- (latestEventWhenForEarliestAsOf match {
+        case NegativeInfinity => instantTrials
+        case PositiveInfinity => api.only(Instant.EPOCH).filter(_ => false)
+        case Finite(latestDefiniteEventWhenForEarliestAsOf) =>
+          api.alternateWithWeights(
+            3 -> api
+              .longs(1, 1000000L)
+              .map(latestDefiniteEventWhenForEarliestAsOf.plusSeconds(_)),
+            1 -> api.only(latestDefiniteEventWhenForEarliestAsOf)
+          )
+      }): Trials[Instant]
+      asOfsIncludingAllEventsNoLaterThanTheQueryWhen =
+        latestAsOfsThatMapUnambiguouslyToEventWhens takeWhile (asOf =>
+          asOfToLatestEventWhenMap(asOf) <= Finite(queryWhen)
+        )
+    } yield OrderedHistoryTestCase(
+      recordingsGroupedById,
+      bigHistoryOverLotsOfThingsSortedInEventWhenOrder,
+      asOfs,
+      queryWhen,
+      asOfToLatestEventWhenMap,
+      asOfsIncludingAllEventsNoLaterThanTheQueryWhen
+    )
+
+    testCaseTrials.withLimit(200).dynamicTests {
+      case OrderedHistoryTestCase(
+            recordingsGroupedById,
+            bigHistoryOverLotsOfThingsSortedInEventWhenOrder,
+            asOfs,
+            queryWhen,
+            asOfToLatestEventWhenMap,
+            asOfsIncludingAllEventsNoLaterThanTheQueryWhen
+          ) =>
+        Using.resource(makeWorld()) { world =>
+          recordEventsInWorld(
+            liftRecordings(
+              bigHistoryOverLotsOfThingsSortedInEventWhenOrder
+            ),
+            asOfs,
+            world
+          )
+
+          assert(asOfsIncludingAllEventsNoLaterThanTheQueryWhen.nonEmpty)
+
+          val checks =
+            for {
+              asOf <- asOfsIncludingAllEventsNoLaterThanTheQueryWhen
+              scope = world.scopeFor(Finite(queryWhen), asOf)
+              eventWhenAlignedWithAsOf = asOfToLatestEventWhenMap(asOf)
+              recording <- recordingsGroupedById
+              RecordingsNoLaterThan(
+                historyId,
+                historiesFrom,
+                pertinentRecordings,
+                _,
+                _
+              ) <- recording.thePartNoLaterThan(
+                implicitly[Ordering[Unbounded[Instant]]]
+                  .min(Finite(queryWhen), eventWhenAlignedWithAsOf)
+              )
+              Seq(history) = {
+                assert(pertinentRecordings.nonEmpty)
+                historiesFrom(scope)
+              }
+            } yield (
+              historyId,
+              history.datums,
+              pertinentRecordings.map(_._1)
+            )
+
+          if (checks.isEmpty) Trials.reject()
+
+          for ((historyId, actualHistory, expectedHistory) <- checks) {
+            withClue(s"History mismatch for history id: $historyId.")(
+              assert(actualHistory == expectedHistory)
+            )
+          }
+        }
+    }
+  }
+
+  @TestFactory
+  def deduceTheMostAccurateTypeForItemsBasedOnTheEventsThatReferToThem(): DynamicTests = {
+    val testCaseTrials = for {
+      fooHistoryIds <- setTrials(
+        fooHistoryIdTrials.map("Foo_" + _),
+        api.integers(1, 10)
+      )
+      numberOfReferrers <- api.integers(1, 4)
+      referringHistoryIds <- setTrials(
+        referringHistoryIdTrials.map("Referring" + _),
+        api.only(numberOfReferrers)
+      )
+      fooHistoryIdsToLinearizationIndices <- api
+        .sequences(fooHistoryIds.toSeq.map(_ => api.integers(0, 2)))
+        .map(fooHistoryIds.toSeq.zip(_).toMap)
+      referringHistoryIdGroups <- api.sequences(
+        fooHistoryIds.toSeq.map(_ =>
+          api
+            .integers(1, referringHistoryIds.size)
+            .flatMap(size =>
+              api
+                .choose(referringHistoryIds)
+                .listsOfSize(size)
+                .map(_.toSet)
+                .filter(_.size == size)
+                .map(_.toSeq)
+            )
+        )
+      )
+      eventConstructorIndicesGroups <- api.sequences(
+        fooHistoryIds.toSeq.zip(referringHistoryIdGroups).map {
+          case (fooHistoryId, referrers) =>
+            val linearizationIndex =
+              fooHistoryIdsToLinearizationIndices(fooHistoryId)
+            api
+              .sequences(
+                Seq.fill(referrers.size - 1)(
+                  api.integers(0, linearizationIndex)
+                ) :+ api.only(linearizationIndex)
+              )
+              .flatMap(api.shuffles(_))
+        }
+      )
+    } yield DeduceTypeTestCase(
+      fooHistoryIdsToLinearizationIndices,
+      referringHistoryIds,
+      referringHistoryIdGroups,
+      eventConstructorIndicesGroups
+    )
+
+    testCaseTrials.withLimit(200).dynamicTests {
+      case DeduceTypeTestCase(
+            fooHistoryIdsToLinearizationIndices,
+            referringHistoryIds,
+            referringHistoryIdGroups,
+            eventConstructorIndicesGroups
+          ) =>
+        val sharedAsOf = Instant.ofEpochSecond(0L)
+        Using.resource(makeWorld()) { world =>
+          val events = (for {
+            ((fooHistoryId, referrers), constructorIndices) <-
+              fooHistoryIdsToLinearizationIndices.keys.toSeq zip referringHistoryIdGroups zip eventConstructorIndicesGroups
+          } yield {
+            def referTo[AHistory <: History: TypeTag](
+                referringHistoryId: ReferringHistory#Id
+            ) =
+              Change.forTwoItems[ReferringHistory, AHistory](
+                NegativeInfinity
+              )(
+                referringHistoryId,
+                fooHistoryId,
+                {
+                  (
+                      referringHistory: ReferringHistory,
+                      history: AHistory
+                  ) =>
+                    referringHistory.referTo(history)
+                }
+              )
+
+            val waysOfReferringToAFooHistory: Array[ReferringHistory#Id => Event] =
+              Array(
+                referTo[History] _,
+                referTo[FooHistory] _,
+                referTo[MoreSpecificFooHistory] _
+              )
+
+            constructorIndices zip referrers map {
+              case (index, referringHistoryId) =>
+                waysOfReferringToAFooHistory(index)(referringHistoryId)
+            }
+          }).flatten
+
+          for ((event, eventId) <- events.zipWithIndex) {
+            world.revise(eventId, event, sharedAsOf)
+          }
+
+          val scope = world.scopeFor(NegativeInfinity, sharedAsOf)
+
+          for (fooHistoryId <- fooHistoryIdsToLinearizationIndices.keys) {
+            def fetch[AHistory <: History: TypeTag] =
+              scope.render(Bitemporal.withId[AHistory](fooHistoryId))
+            val waysOfFetchingHistory =
+              Array(
+                fetch[History],
+                fetch[FooHistory],
+                fetch[MoreSpecificFooHistory]
+              )
+            val Seq(bitemporalWithExpectedFlavourOfHistory) =
+              waysOfFetchingHistory(
+                fooHistoryIdsToLinearizationIndices(fooHistoryId)
+              )
+            withClue(
+              s"Expected to have a single bitemporal of id: $fooHistoryId, but got one of id: ${bitemporalWithExpectedFlavourOfHistory.id}"
+            )(
+              assert(bitemporalWithExpectedFlavourOfHistory.id == fooHistoryId)
+            )
+          }
+        }
     }
   }
 
@@ -159,6 +432,63 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
         }
     }
   }
+
+  @TestFactory
+  def notMysteriouslyFailToYieldItems(): DynamicTests = {
+    val testCaseTrials = for {
+      referringHistoryRecordingsGroupedById <-
+        referringHistoryRecordingsGroupedByIdTrials()
+      shuffledRecordings <- shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+        referringHistoryRecordingsGroupedById
+      )
+      bigShuffledHistoryOverLotsOfThings <- api.splitsIntoNonEmptyPieces(shuffledRecordings.zipWithIndex)
+      asOfs <- instantTrials.listsOfSize(bigShuffledHistoryOverLotsOfThings.size).map(_.sorted)
+      queryWhen <- unboundedInstantTrials
+    } yield HistoryTestCase(
+      referringHistoryRecordingsGroupedById,
+      liftRecordings(bigShuffledHistoryOverLotsOfThings),
+      asOfs,
+      queryWhen
+    )
+
+    testCaseTrials.withLimit(200).dynamicTests {
+      case HistoryTestCase(
+        referringHistoryRecordingsGroupedById,
+        bigShuffledHistoryOverLotsOfThings,
+        asOfs,
+        queryWhen
+      ) =>
+        Using.resource(makeWorld()) { world =>
+          recordEventsInWorld(
+            bigShuffledHistoryOverLotsOfThings,
+            asOfs,
+            world
+          )
+
+          val scope = world.scopeFor(queryWhen, world.nextRevision)
+
+          val checks = (for {
+            recording <- referringHistoryRecordingsGroupedById
+            RecordingsNoLaterThan(
+              referringHistoryId,
+              referringHistoriesFrom,
+              _,
+              _,
+              _
+            ) <- recording.thePartNoLaterThan(queryWhen)
+          } yield referringHistoryId -> referringHistoriesFrom(scope))
+
+          if (checks.isEmpty) Trials.reject()
+
+          for ((id, itemSingletonSequence) <- checks) {
+            withClue(s"Expected there to be a single item for id: $id.")(
+              assert(1 == itemSingletonSequence.size)
+            )
+          }
+        }
+    }
+  }
+
 
   @TestFactory
   def revealAllTheHistoryOfARelatedItemUpToTheWhenLimitOfAScopeMadeFromIt(): DynamicTests = {

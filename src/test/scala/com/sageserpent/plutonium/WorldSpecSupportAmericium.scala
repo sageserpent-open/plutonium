@@ -16,6 +16,8 @@ import scala.reflect.runtime.universe.{Scope => _, _}
 import com.sageserpent.plutonium.utilities.ExpectyFlavouredAssert.assert
 import org.junit.jupiter.api.Assertions.assertThrows
 
+import scala.collection.mutable.ListBuffer
+
 object WorldSpecSupportAmericium {
   val changeError = new RuntimeException("Error in making a change.")
 
@@ -50,6 +52,14 @@ trait WorldSpecSupportAmericium {
     api.uniqueIds.map("Name: " + _.toString)
 
   def integerIdTrials: Trials[Int] = api.uniqueIds
+
+  def setTrials[Case](
+      elementTrials: Trials[Case],
+      sizeTrials: Trials[Int]
+  ): Trials[Set[Case]] =
+    sizeTrials.flatMap(size =>
+      elementTrials.listsOfSize(size).map(_.toSet).filter(_.size == size)
+    )
 
   def fooHistoryIdTrials = stringIdTrials
 
@@ -186,7 +196,7 @@ trait WorldSpecSupportAmericium {
   def shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
       recordingsGroupedById: List[RecordingsForAnId]
   ): Trials[Seq[(Unbounded[Instant], Event)]] = {
-    // PLAN: shuffle each lots of events on a per-id basis, keeping the
+    // PLAN: shuffle each lot of events on a per-id basis, keeping the
     // annihilations out of the way. Then merge the results using random
     // picking.
 
@@ -241,17 +251,25 @@ trait WorldSpecSupportAmericium {
       ) flatMap (_.datums) map (recordingsForAnId.historyId -> _)) flatten
 
   def recordEventsInWorld(
-      bigShuffledHistoryOverLotsOfThings: Seq[Iterable[
-        (Option[(Unbounded[Instant], Event)], intersperseObsoleteEventsAmericium.EventId)
-      ]],
-      asOfs: Seq[Instant],
-      world: World
-  ): Seq[Revision] = {
+                           bigShuffledHistoryOverLotsOfThings: Seq[Iterable[
+                             (Option[(Unbounded[Instant], Event)], intersperseObsoleteEventsAmericium.EventId)
+                           ]],
+                           asOfs: Seq[Instant],
+                           world: World
+                         ): Seq[Revision] = {
+    // NOTE: have to use imperative code as `bigShuffledHistoryOverLotsOfThings` turns out to be a `LazyList`
+    // at runtime. Given the revision actions aren't pure either, it seems the right thing to do anyway.
+    val revisions = ListBuffer.empty[Revision]
+
     revisionActions(
       bigShuffledHistoryOverLotsOfThings,
       asOfs,
       world
-    ) map (_.apply) // Actually a piece of imperative code that looks functional - 'world' is being mutated as a side-effect; but the revisions are harvested functionally.
+    ).foreach { action =>
+      revisions.addOne(action())
+    }
+
+    revisions.result()
   }
 
   def revisionActions(
@@ -284,10 +302,10 @@ trait WorldSpecSupportAmericium {
   }
 
   def liftRecordings(
-      bigShuffledHistoryOverLotsOfThings: Seq[Iterable[
+      bigShuffledHistoryOverLotsOfThings: Seq[Seq[
         ((Unbounded[Instant], Event), intersperseObsoleteEventsAmericium.EventId)
       ]]
-  ): Seq[Iterable[
+  ): Seq[Seq[
     (Some[(Unbounded[Instant], Event)], intersperseObsoleteEventsAmericium.EventId)
   ]] = {
     bigShuffledHistoryOverLotsOfThings map (_ map { case (recording, eventId) =>
