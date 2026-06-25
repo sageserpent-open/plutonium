@@ -7,7 +7,7 @@ import com.sageserpent.plutonium.utilities.ExpectyFlavouredAssert.{
   assert,
   withClue
 }
-import com.sageserpent.plutonium.utilities.{NegativeInfinity, PositiveInfinity}
+import com.sageserpent.plutonium.utilities.PositiveInfinity
 import org.junit.jupiter.api.TestFactory
 
 import java.time.Instant
@@ -22,56 +22,58 @@ trait BugsAmericium extends WorldResourceAmericium {
     val referrerZero: ReferringHistory#Id = 0.toString
     val referredToLouie: FooHistory#Id    = "Louie"
 
-    val events: Seq[Event] = Seq(
-      // Refer to Louie.
-      Change.forTwoItems(Instant.EPOCH.plusSeconds(3))(
-        referrerZero,
-        referredToLouie,
-        { (referrer: ReferringHistory, referredTo: FooHistory) =>
-          referrer.referTo(referredTo)
-        }
-      ),
-
-      // Mutate Louie...
-      Change.forOneItem(Instant.EPOCH)(
-        referredToLouie,
-        { referredTo: FooHistory => referredTo.property2 = false }
-      ),
-
-      // Annihilate the hapless item 0...
-      Annihilation[ReferringHistory](
-        Instant.EPOCH.plusSeconds(4),
-        referrerZero
-      ),
-
-      // Annihilate Louie!
-      Annihilation[FooHistory](
-        Instant.EPOCH.plusSeconds(1),
-        referredToLouie
-      ),
-
-      // After it was annihilated, resurrect item 0 by referring to Louie.
-      Change.forTwoItems(Instant.EPOCH.plusSeconds(5))(
-        referrerZero,
-        referredToLouie,
-        { (referrer: ReferringHistory, referredTo: FooHistory) =>
-          referrer.referTo(referredTo)
-        }
-      ),
-
-      // Mutate Louie again, resurrecting him...
-      Change.forOneItem(Instant.EPOCH.plusSeconds(2))(
-        referredToLouie,
-        { referredTo: FooHistory => referredTo.property2 = true }
+    def eventsWithPossibleTwist(twistWithTheReferrer: Boolean): Seq[Event] =
+      Seq(
+        // Refer to Louie.
+        Change.forTwoItems(Instant.EPOCH.plusSeconds(3))(
+          referrerZero,
+          referredToLouie,
+          { (referrer: ReferringHistory, referredTo: FooHistory) =>
+            referrer.referTo(referredTo)
+          }
+        ),
+        // Mutate Louie...
+        Change.forOneItem(Instant.EPOCH)(
+          referredToLouie,
+          { referredTo: FooHistory => referredTo.property2 = false }
+        )
+      ) ++ Option.when(twistWithTheReferrer)(
+        // Annihilate the hapless item 0...
+        Annihilation[ReferringHistory](
+          Instant.EPOCH.plusSeconds(4),
+          referrerZero
+        )
+      ) ++ Seq(
+        // Annihilate Louie!
+        Annihilation[FooHistory](
+          Instant.EPOCH.plusSeconds(1),
+          referredToLouie
+        )
+      ) ++ Option.when(twistWithTheReferrer)(
+        // After it was annihilated, resurrect item 0 by referring to Louie.
+        Change.forTwoItems(Instant.EPOCH.plusSeconds(5))(
+          referrerZero,
+          referredToLouie,
+          { (referrer: ReferringHistory, referredTo: FooHistory) =>
+            referrer.referTo(referredTo)
+          }
+        )
+      ) ++ Seq(
+        // Mutate Louie again, resurrecting him...
+        Change.forOneItem(Instant.EPOCH.plusSeconds(2))(
+          referredToLouie,
+          { referredTo: FooHistory => referredTo.property2 = true }
+        )
       )
-    )
 
     case class RevisionData(
         events: Map[EventId, Option[Event]],
         asOf: Instant
     )
 
-    val trials: Trials[Seq[RevisionData]] = for {
+    val trials: Trials[(Boolean, Seq[RevisionData])] = for {
+      twisted <- api.booleans
+      events = eventsWithPossibleTwist(twisted)
       numberOfRevisions <- api.integers(1, events.size)
       eventsGroupedForRevisions <- api.splitsIntoPieces(
         events,
@@ -93,12 +95,12 @@ trait BugsAmericium extends WorldResourceAmericium {
           .value
           .map(SortedMap.from(_))
 
-      eventsForRevisions.zip(asOfs).map { case (events, asOf) =>
+      twisted -> eventsForRevisions.zip(asOfs).map { case (events, asOf) =>
         RevisionData(events, asOf)
       }
     }
 
-    trials.withLimit(200).dynamicTests { revisions =>
+    trials.withLimit(200).dynamicTests { case (twisted, revisions) =>
       Using.resource(makeWorld()) { world =>
         revisions.foreach { case RevisionData(events, asOf) =>
           try {
@@ -123,7 +125,9 @@ trait BugsAmericium extends WorldResourceAmericium {
         val referencedHistory =
           singleReferringItem.referencedHistories(referredToLouie)
 
-        withClue(s"Test case: ${pprint.apply(revisions)}") {
+        withClue(
+          s"Test case is twisted: $twisted, revisions: ${pprint.apply(revisions)}"
+        ) {
           assert(referencedHistory == singleReferredToItem)
 
           val referencedDatums = referencedHistory.datums
