@@ -16,6 +16,7 @@ import org.junit.jupiter.api.{Test, TestFactory}
 
 import _root_.java.time.Instant
 import com.sageserpent.americium.utilities.seqEnrichment._
+import WorldSpecSupportAmericium.TrialsApiExtension
 
 import scala.collection.immutable.TreeMap
 import scala.language.postfixOps
@@ -142,7 +143,6 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
             case (eventWhen, _) => eventWhen
           }).zipWithIndex
         )
-        .map(_.map(_.toSeq).toSeq)
       asOfs <- instantTrials
         .listsOfSize(bigHistoryOverLotsOfThingsSortedInEventWhenOrder.size)
         .map(_.sorted)
@@ -163,7 +163,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
       )
       queryWhen <- (latestEventWhenForEarliestAsOf match {
         case NegativeInfinity => instantTrials
-        case PositiveInfinity => api.only(Instant.EPOCH).filter(_ => false)
+        case PositiveInfinity => api.impossible
         case Finite(latestDefiniteEventWhenForEarliestAsOf) =>
           api.alternateWithWeights(
             3 -> api
@@ -245,32 +245,16 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
   @TestFactory
   def deduceTheMostAccurateTypeForItemsBasedOnTheEventsThatReferToThem(): DynamicTests = {
     val testCaseTrials = for {
-      fooHistoryIds <- setTrials(
-        fooHistoryIdTrials.map("Foo_" + _),
-        api.integers(1, 10)
-      )
+      fooHistoryIds <- fooHistoryIdTrials.map("Foo_" + _).nonEmptySets
       numberOfReferrers <- api.integers(1, 4)
       referringHistoryIds <- setTrials(
         referringHistoryIdTrials.map("Referring" + _),
-        api.only(numberOfReferrers)
+        numberOfReferrers
       )
-      fooHistoryIdsToLinearizationIndices <- api
-        .sequences(fooHistoryIds.toSeq.map(_ => api.integers(0, 2)))
-        .map(fooHistoryIds.toSeq.zip(_).toMap)
-      referringHistoryIdGroups <- api.sequences(
-        fooHistoryIds.toSeq.map(_ =>
-          api
-            .integers(1, referringHistoryIds.size)
-            .flatMap(size =>
-              api
-                .choose(referringHistoryIds)
-                .listsOfSize(size)
-                .map(_.toSet)
-                .filter(_.size == size)
-                .map(_.toSeq)
-            )
-        )
-      )
+      fooHistoryIdsToLinearizationIndices <- api.integers(0, 2).listsOfSize(fooHistoryIds.size)
+        .map(fooHistoryIds.zip(_).toMap)
+      referringHistoryIdGroups <-
+        api.integers(1, referringHistoryIds.size).flatMap(api.chooseSeveralOf(referringHistoryIds, _)).listsOfSize(fooHistoryIds.size)
       eventConstructorIndicesGroups <- api.sequences(
         fooHistoryIds.toSeq.zip(referringHistoryIdGroups).map {
           case (fooHistoryId, referrers) =>
@@ -294,29 +278,27 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
 
     testCaseTrials.withLimit(200).dynamicTests {
       case DeduceTypeTestCase(
-            fooHistoryIdsToLinearizationIndices,
-            referringHistoryIds,
-            referringHistoryIdGroups,
-            eventConstructorIndicesGroups
-          ) =>
+        fooHistoryIdsToLinearizationIndices,
+        referringHistoryIds,
+        referringHistoryIdGroups,
+        eventConstructorIndicesGroups
+      ) =>
         val sharedAsOf = Instant.ofEpochSecond(0L)
         Using.resource(makeWorld()) { world =>
           val events = (for {
             ((fooHistoryId, referrers), constructorIndices) <-
               fooHistoryIdsToLinearizationIndices.keys.toSeq zip referringHistoryIdGroups zip eventConstructorIndicesGroups
           } yield {
-            def referTo[AHistory <: History: TypeTag](
-                referringHistoryId: ReferringHistory#Id
-            ) =
+            def referTo[AHistory <: History : TypeTag](
+                                                        referringHistoryId: ReferringHistory#Id
+                                                      ) =
               Change.forTwoItems[ReferringHistory, AHistory](
-                NegativeInfinity
-              )(
                 referringHistoryId,
                 fooHistoryId,
                 {
                   (
-                      referringHistory: ReferringHistory,
-                      history: AHistory
+                    referringHistory: ReferringHistory,
+                    history: AHistory
                   ) =>
                     referringHistory.referTo(history)
                 }
@@ -342,8 +324,9 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
           val scope = world.scopeFor(NegativeInfinity, sharedAsOf)
 
           for (fooHistoryId <- fooHistoryIdsToLinearizationIndices.keys) {
-            def fetch[AHistory <: History: TypeTag] =
+            def fetch[AHistory <: History : TypeTag] =
               scope.render(Bitemporal.withId[AHistory](fooHistoryId))
+
             val waysOfFetchingHistory =
               Array(
                 fetch[History],

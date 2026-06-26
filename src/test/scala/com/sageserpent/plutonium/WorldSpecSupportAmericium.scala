@@ -1,6 +1,6 @@
 package com.sageserpent.plutonium
 
-import com.sageserpent.americium.Trials
+import com.sageserpent.americium.{Trials, TrialsApi}
 import com.sageserpent.americium.Trials.api
 import com.sageserpent.americium.utilities.seqEnrichment._
 import com.sageserpent.plutonium.World._
@@ -21,8 +21,13 @@ import scala.collection.mutable.ListBuffer
 object WorldSpecSupportAmericium {
   val changeError = new RuntimeException("Error in making a change.")
 
-  implicit class TrialsApiExtension[Case](trials: Trials[Case]) {
-    def nonEmptyLists: Trials[List[Case]] = trials.lists.flatMap(tail => trials.map(_ :: tail))
+  implicit class TrialsApiExtension(api: TrialsApi) {
+    def chooseSeveralOf[Element](candidates: Iterable[Element],
+                                 numberToChoose: Int): Trials[Seq[Element]] = {
+      require(numberToChoose <= candidates.size)
+
+      api.splitsIntoNonEmptyPieces(candidates, numberToChoose).map(_.map(_.head))
+    }
   }
 }
 
@@ -54,12 +59,9 @@ trait WorldSpecSupportAmericium {
   def integerIdTrials: Trials[Int] = api.uniqueIds
 
   def setTrials[Case](
-      elementTrials: Trials[Case],
-      sizeTrials: Trials[Int]
-  ): Trials[Set[Case]] =
-    sizeTrials.flatMap(size =>
-      elementTrials.listsOfSize(size).map(_.toSet).filter(_.size == size)
-    )
+                       elementTrials: Trials[Case],
+                       size: Int
+                     ): Trials[Set[Case]] = elementTrials.listsOfSize(size).map(_.toSet).filter(_.size == size)
 
   def fooHistoryIdTrials = stringIdTrials
 
