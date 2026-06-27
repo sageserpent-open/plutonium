@@ -16,7 +16,6 @@ import org.junit.jupiter.api.{Test, TestFactory}
 
 import _root_.java.time.Instant
 import com.sageserpent.americium.utilities.seqEnrichment._
-
 import scala.collection.immutable.TreeMap
 import scala.language.postfixOps
 import scala.reflect.runtime.universe.TypeTag
@@ -675,7 +674,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
       queryWhen <- unboundedInstantTrials
     } yield HistoryTestCase(
       referringHistoryRecordingsGroupedById,
-      liftRecordings(bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toSeq).map(_.toSeq).toSeq,
+      liftRecordings(bigShuffledHistoryOverLotsOfThings),
       asOfs,
       queryWhen
     )

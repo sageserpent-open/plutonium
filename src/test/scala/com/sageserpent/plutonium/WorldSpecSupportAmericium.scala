@@ -306,10 +306,10 @@ trait WorldSpecSupportAmericium {
   }
 
   def liftRecordings(
-      bigShuffledHistoryOverLotsOfThings: Seq[Iterable[
+      bigShuffledHistoryOverLotsOfThings: Seq[Seq[
         ((Unbounded[Instant], Event), intersperseObsoleteEventsAmericium.EventId)
       ]]
-  ): Seq[Iterable[
+  ): Seq[Seq[
     (Some[(Unbounded[Instant], Event)], intersperseObsoleteEventsAmericium.EventId)
   ]] = {
     bigShuffledHistoryOverLotsOfThings map (_ map { case (recording, eventId) =>
