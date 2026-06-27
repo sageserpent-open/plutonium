@@ -1,6 +1,6 @@
 package com.sageserpent.plutonium
 
-import com.sageserpent.americium.{Trials, TrialsApi}
+import com.sageserpent.americium.Trials
 import com.sageserpent.americium.Trials.api
 import com.sageserpent.americium.utilities.seqEnrichment._
 import com.sageserpent.plutonium.World._
@@ -19,15 +19,10 @@ import org.junit.jupiter.api.Assertions.assertThrows
 import scala.collection.mutable.ListBuffer
 
 object WorldSpecSupportAmericium {
-  val changeError = new RuntimeException("Error in making a change.")
+  val changeError = WorldSpecSupport.changeError
 
-  implicit class TrialsApiExtension(api: TrialsApi) {
-    def chooseSeveralOf[Element](candidates: Iterable[Element],
-                                 numberToChoose: Int): Trials[Seq[Element]] = {
-      require(numberToChoose <= candidates.size)
-
-      api.splitsIntoNonEmptyPieces(candidates, numberToChoose).map(_.map(_.head))
-    }
+  implicit class TrialsApiExtension[Case](trials: Trials[Case]) {
+    def nonEmptyLists: Trials[List[Case]] = trials.lists.flatMap(tail => trials.map(_ :: tail))
   }
 }
 
@@ -59,9 +54,12 @@ trait WorldSpecSupportAmericium {
   def integerIdTrials: Trials[Int] = api.uniqueIds
 
   def setTrials[Case](
-                       elementTrials: Trials[Case],
-                       size: Int
-                     ): Trials[Set[Case]] = elementTrials.listsOfSize(size).map(_.toSet).filter(_.size == size)
+      elementTrials: Trials[Case],
+      sizeTrials: Trials[Int]
+  ): Trials[Set[Case]] =
+    sizeTrials.flatMap(size =>
+      elementTrials.listsOfSize(size).map(_.toSet).filter(_.size == size)
+    )
 
   def fooHistoryIdTrials = stringIdTrials
 
@@ -196,7 +194,7 @@ trait WorldSpecSupportAmericium {
     )
 
   def shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
-      recordingsGroupedById: List[RecordingsForAnId]
+      recordingsGroupedById: Seq[WorldSpecSupportAmericium#RecordingsForAnId]
   ): Trials[Seq[(Unbounded[Instant], Event)]] = {
     // PLAN: shuffle each lot of events on a per-id basis, keeping the
     // annihilations out of the way. Then merge the results using random
@@ -244,13 +242,17 @@ trait WorldSpecSupportAmericium {
     api.sequences(shuffledGroupsTrials).map(_.flatten.flatten)
   }
 
-  def historyFrom(world: World, recordingsGroupedById: List[RecordingsForAnId])(
+  def historyFrom(world: World, recordingsGroupedById: Seq[WorldSpecSupportAmericium#RecordingsForAnId])(
       scope: Scope
   ): List[(Any, Any)] =
-    (for (recordingsForAnId <- recordingsGroupedById)
-      yield recordingsForAnId.historiesFrom(
-        scope
-      ) flatMap (_.datums) map (recordingsForAnId.historyId -> _)) flatten
+    recordingsGroupedById.toList.flatMap(recordingsForAnId =>
+      recordingsForAnId
+        .historiesFrom(
+          scope
+        )
+        .flatMap(_.datums)
+        .map(recordingsForAnId.historyId -> _)
+    )
 
   def recordEventsInWorld(
                            bigShuffledHistoryOverLotsOfThings: Seq[Iterable[
@@ -304,10 +306,10 @@ trait WorldSpecSupportAmericium {
   }
 
   def liftRecordings(
-      bigShuffledHistoryOverLotsOfThings: Seq[Seq[
+      bigShuffledHistoryOverLotsOfThings: Seq[Iterable[
         ((Unbounded[Instant], Event), intersperseObsoleteEventsAmericium.EventId)
       ]]
-  ): Seq[Seq[
+  ): Seq[Iterable[
     (Some[(Unbounded[Instant], Event)], intersperseObsoleteEventsAmericium.EventId)
   ]] = {
     bigShuffledHistoryOverLotsOfThings map (_ map { case (recording, eventId) =>
@@ -324,7 +326,7 @@ trait WorldSpecSupportAmericium {
   ): Unit = {
     for (
       revisionAction <- revisionActions(
-        bigShuffledHistoryOverLotsOfThings,
+        bigShuffledHistoryOverLotsOfThings.map(_.toVector).toVector,
         asOfs,
         world
       )
@@ -334,6 +336,14 @@ trait WorldSpecSupportAmericium {
       case exception if changeError == exception =>
     }
   }
+
+
+  def faultyRecordingsGroupedByIdTrials
+      : Trials[List[RecordingsForAnId]] =
+    mixedRecordingsGroupedByIdTrials(
+      faulty = true,
+      forbidAnnihilations = false
+    )
 
   def recordingsGroupedByIdTrials(
       forbidAnnihilations: Boolean
