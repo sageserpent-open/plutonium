@@ -20,10 +20,6 @@ import scala.collection.mutable.ListBuffer
 
 object WorldSpecSupportAmericium {
   val changeError = WorldSpecSupport.changeError
-
-  implicit class TrialsApiExtension[Case](trials: Trials[Case]) {
-    def nonEmptyLists: Trials[List[Case]] = trials.lists.flatMap(tail => trials.map(_ :: tail))
-  }
 }
 
 trait WorldSpecSupportAmericium {
@@ -55,11 +51,8 @@ trait WorldSpecSupportAmericium {
 
   def setTrials[Case](
       elementTrials: Trials[Case],
-      sizeTrials: Trials[Int]
-  ): Trials[Set[Case]] =
-    sizeTrials.flatMap(size =>
-      elementTrials.listsOfSize(size).map(_.toSet).filter(_.size == size)
-    )
+                       size: Int
+                     ): Trials[Set[Case]] = elementTrials.listsOfSize(size).map(_.toSet).filter(_.size == size)
 
   def fooHistoryIdTrials = stringIdTrials
 
@@ -326,7 +319,7 @@ trait WorldSpecSupportAmericium {
   ): Unit = {
     for (
       revisionAction <- revisionActions(
-        bigShuffledHistoryOverLotsOfThings.map(_.toVector).toVector,
+        bigShuffledHistoryOverLotsOfThings,
         asOfs,
         world
       )

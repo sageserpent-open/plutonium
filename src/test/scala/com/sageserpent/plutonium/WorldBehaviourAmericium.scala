@@ -277,7 +277,6 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
             case (eventWhen, _) => eventWhen
           }).zipWithIndex
         )
-        .map(_.map(_.toSeq).toSeq)
       asOfs <- instantTrials
         .listsOfSize(bigHistoryOverLotsOfThingsSortedInEventWhenOrder.size)
         .map(_.sorted)
@@ -298,7 +297,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
       )
       queryWhen <- (latestEventWhenForEarliestAsOf match {
         case NegativeInfinity => instantTrials
-        case PositiveInfinity => api.only(Instant.EPOCH).filter(_ => false)
+        case PositiveInfinity => api.impossible
         case Finite(latestDefiniteEventWhenForEarliestAsOf) =>
           api.alternateWithWeights(
             3 -> api
@@ -380,32 +379,15 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
   @TestFactory
   def deduceTheMostAccurateTypeForItemsBasedOnTheEventsThatReferToThem(): DynamicTests = {
     val testCaseTrials = for {
-      fooHistoryIds <- setTrials(
-        fooHistoryIdTrials.map("Foo_" + _),
-        api.integers(1, 10)
-      )
+      fooHistoryIds <- fooHistoryIdTrials.map("Foo_" + _).nonEmptySets
       numberOfReferrers <- api.integers(1, 4)
       referringHistoryIds <- setTrials(
         referringHistoryIdTrials.map("Referring" + _),
-        api.only(numberOfReferrers)
-      )
-      fooHistoryIdsToLinearizationIndices <- api
-        .sequences(fooHistoryIds.toSeq.map(_ => api.integers(0, 2)))
-        .map(fooHistoryIds.toSeq.zip(_).toMap)
-      referringHistoryIdGroups <- api.sequences(
-        fooHistoryIds.toSeq.map(_ =>
-          api
-            .integers(1, referringHistoryIds.size)
-            .flatMap(size =>
-              api
-                .choose(referringHistoryIds)
-                .listsOfSize(size)
-                .map(_.toSet)
-                .filter(_.size == size)
-                .map(_.toSeq)
-            )
-        )
-      )
+        numberOfReferrers)
+      fooHistoryIdsToLinearizationIndices <- api.integers(0, 2).listsOfSize(fooHistoryIds.size)
+        .map(fooHistoryIds.zip(_).toMap)
+      referringHistoryIdGroups <-
+        api.integers(1, referringHistoryIds.size).flatMap(api.chooseSeveralOf(referringHistoryIds, _)).listsOfSize(fooHistoryIds.size)
       eventConstructorIndicesGroups <- api.sequences(
         fooHistoryIds.toSeq.zip(referringHistoryIdGroups).map {
           case (fooHistoryId, referrers) =>
@@ -444,8 +426,6 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
                 referringHistoryId: ReferringHistory#Id
             ) =
               Change.forTwoItems[ReferringHistory, AHistory](
-                NegativeInfinity
-              )(
                 referringHistoryId,
                 fooHistoryId,
                 {
@@ -618,7 +598,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
       queryWhen <- unboundedInstantTrials
     } yield HistoryTestCase(
       recordingsGroupedById,
-      bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toSeq,
+      bigShuffledHistoryOverLotsOfThings,
       asOfs,
       queryWhen
     )
@@ -746,7 +726,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     } yield RelatedItemTestCase(
       referencedHistoryRecordingsGroupedById,
       referringHistoryRecordingsGroupedById,
-      bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toSeq,
+      bigShuffledHistoryOverLotsOfThings,
       asOfs,
       queryWhen
     )
@@ -850,7 +830,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     } yield RelatedItemTestCase(
       referencedHistoryRecordingsGroupedById,
       referringHistoryRecordingsGroupedById,
-      bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toSeq,
+      bigShuffledHistoryOverLotsOfThings,
       asOfs,
       queryWhen
     )
@@ -938,7 +918,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     } yield RelatedItemTestCase(
       referencedHistoryRecordingsGroupedById,
       referringHistoryRecordingsGroupedById,
-      bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toSeq,
+      bigShuffledHistoryOverLotsOfThings,
       asOfs,
       queryWhen
     )
@@ -1052,7 +1032,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
       queryWhen <- unboundedInstantTrials
     } yield HistoryTestCase(
       recordingsGroupedById,
-      bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toSeq,
+      bigShuffledHistoryOverLotsOfThings,
       asOfs,
       queryWhen
     )
@@ -1116,7 +1096,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
       queryWhen <- unboundedInstantTrials
     } yield HistoryTestCase(
       recordingsGroupedById,
-      bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toSeq,
+      bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toVector,
       asOfs,
       queryWhen
     )
@@ -1206,7 +1186,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
       referencingEventWhen <- unboundedInstantTrials
     } yield GhostTestCase(
       referencedHistoryRecordingsGroupedById,
-      bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toSeq,
+      bigShuffledHistoryOverLotsOfThings,
       asOfs,
       referencingEventWhen
     )
@@ -1335,7 +1315,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
       referencingEventWhen <- unboundedInstantTrials
     } yield GhostTestCase(
       referencedHistoryRecordingsGroupedById,
-      bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toSeq,
+      bigShuffledHistoryOverLotsOfThings,
       asOfs,
       referencingEventWhen
     )
@@ -1479,7 +1459,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
       definiteQueryWhen <- instantTrials
     } yield (
       recordingsGroupedById,
-      bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toSeq,
+      bigShuffledHistoryOverLotsOfThings,
       asOfs,
       definiteQueryWhen
     )
@@ -1559,7 +1539,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
         .listsOfSize(bigShuffledHistoryOverLotsOfThings.size)
         .map(_.sorted)
     } yield RevisionTestCase(
-      bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toSeq,
+      bigShuffledHistoryOverLotsOfThings,
       asOfs
     )
 
@@ -1603,7 +1583,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
         .listsOfSize(bigShuffledHistoryOverLotsOfThings.size)
         .map(_.sorted)
     } yield RevisionTestCase(
-      bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toSeq,
+      bigShuffledHistoryOverLotsOfThings,
       asOfs
     )
 
@@ -1647,7 +1627,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
         .listsOfSize(bigShuffledHistoryOverLotsOfThings.size)
         .map(_.sorted)
     } yield RevisionTestCase(
-      bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toSeq,
+      bigShuffledHistoryOverLotsOfThings,
       asOfs
     )
 
@@ -1693,7 +1673,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
         .listsOfSize(bigShuffledHistoryOverLotsOfThings.size)
         .map(_.sorted)
     } yield RevisionTestCase(
-      bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toSeq,
+      bigShuffledHistoryOverLotsOfThings,
       asOfs
     )
 
@@ -1739,7 +1719,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
         .listsOfSize(bigShuffledHistoryOverLotsOfThings.size)
         .map(_.sorted)
     } yield RevisionTestCase(
-      bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toSeq,
+      bigShuffledHistoryOverLotsOfThings,
       asOfs
     )
 
@@ -2252,7 +2232,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
         } map (_._2)
       indexOfFirstAsOfBeingTransposed <- api.choose(candidateIndicesToStartATranspose)
     } yield (
-      bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toSeq,
+      bigShuffledHistoryOverLotsOfThings,
       asOfs,
       indexOfFirstAsOfBeingTransposed
     )
