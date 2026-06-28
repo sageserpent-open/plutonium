@@ -77,6 +77,104 @@ trait WorldSpecSupportAmericium {
     )
   def integerHistoryRecordingsGroupedByIdTrials =
     recordingsGroupedByIdTrials_(integerDataSamplesForAnIdTrials)
+
+  def abstractedHistoryPositiveIntegerDataSampleTrials(faulty: Boolean): Trials[
+    (Int, (Unbounded[Instant], AbstractedHistory#Id) => Event)
+  ] =
+    for { data <- api.integers.filter(0 < _) } yield (
+      data,
+      (
+          when: Unbounded[Instant],
+          abstractedHistoryId: AbstractedHistory#Id
+      ) =>
+        eventConstructorReferringToOneItem[AbstractedHistory](when)
+          .apply(
+            abstractedHistoryId,
+            (abstractedHistory: AbstractedHistory) => {
+              // Changes are not allowed to read from the items they work on,
+              // with the exception of the 'id' property.
+              assert(abstractedHistoryId == abstractedHistory.id)
+              assertThrows(
+                classOf[UnsupportedOperationException],
+                () => abstractedHistory.datums
+              )
+              assertThrows(
+                classOf[UnsupportedOperationException],
+                () => abstractedHistory.property
+              )
+
+              if (faulty)
+                abstractedHistory
+                  .forceInvariantBreakage() // Modelling breakage of the bitemporal invariant.
+
+              abstractedHistory.property = data
+            }
+          )
+    )
+
+  def implementingHistoryNegativeIntegerDataSampleTrials(faulty: Boolean): Trials[
+    (Int, (Unbounded[Instant], ImplementingHistory#Id) => Event)
+  ] =
+    for { data <- api.integers.filter(0 > _) } yield (
+      data,
+      (
+          when: Unbounded[Instant],
+          implementingHistoryId: ImplementingHistory#Id
+      ) =>
+        eventConstructorReferringToOneItem[ImplementingHistory](when)
+          .apply(
+            implementingHistoryId,
+            (implementingHistory: ImplementingHistory) => {
+              // Changes are not allowed to read from the items they work on,
+              // with the exception of the 'id' property.
+              assert(implementingHistoryId == implementingHistory.id)
+              assertThrows(
+                classOf[UnsupportedOperationException],
+                () => implementingHistory.datums
+              )
+              assertThrows(
+                classOf[UnsupportedOperationException],
+                () => implementingHistory.property
+              )
+
+              if (faulty)
+                implementingHistory
+                  .forceInvariantBreakage() // Modelling breakage of the bitemporal invariant.
+
+              implementingHistory.property = data
+            }
+          )
+    )
+
+  def abstractedDataSamplesForAnIdTrials =
+    dataSamplesForAnIdTrials[AbstractedHistory](
+      abstractedOrImplementingHistoryIdTrials,
+      abstractedHistoryPositiveIntegerDataSampleTrials(faulty = false)
+    )
+
+  def implementingDataSamplesForAnIdTrials =
+    dataSamplesForAnIdTrials[ImplementingHistory](
+      abstractedOrImplementingHistoryIdTrials,
+      implementingHistoryNegativeIntegerDataSampleTrials(faulty = false)
+    )
+
+  def mixedAbstractedAndImplementingDataSamplesForAnIdTrials =
+    dataSamplesForAnIdTrials[AbstractedHistory](
+      abstractedOrImplementingHistoryIdTrials,
+      api.alternateWithWeights(
+        1 -> abstractedHistoryPositiveIntegerDataSampleTrials(faulty = false),
+        3 -> implementingHistoryNegativeIntegerDataSampleTrials(faulty = false)
+      )
+    )
+
+  def mixedAbstractedAndImplementingRecordingsGroupedByIdTrials(
+      forbidAnnihilations: Boolean
+  ) =
+    recordingsGroupedByIdTrials_(
+      mixedAbstractedAndImplementingDataSamplesForAnIdTrials,
+      forbidAnnihilations = forbidAnnihilations
+    )
+
   def referringHistoryIdTrials = stringIdTrials
   def referenceToItemDataSamplesForAnIdTrials =
     dataSamplesForAnIdTrials[ReferringHistory](

@@ -215,6 +215,35 @@ object WorldBehaviourAmericium {
       asOfsAnotherWay: Seq[Instant],
       queryWhen: Unbounded[Instant]
   )
+
+  case class PreciseTypeAnnihilationTestCase(
+      recordingsGroupedById: Seq[WorldSpecSupportAmericium#RecordingsForAnId],
+      bigShuffledHistoryOverLotsOfThings: Seq[
+        Seq[
+          (
+              Option[(Unbounded[Instant], Event)],
+              intersperseObsoleteEventsAmericium.EventId
+          )
+        ]
+      ],
+      asOfs: Seq[Instant],
+      whenAnAnnihilationOccurs: Instant,
+      queryWhen: Instant
+  )
+
+  case class AbsenceFollowingAnnihilationTestCase(
+      recordingsGroupedById: Seq[WorldSpecSupportAmericium#RecordingsForAnId],
+      bigShuffledHistoryOverLotsOfThings: Seq[
+        Seq[
+          (
+              Option[(Unbounded[Instant], Event)],
+              intersperseObsoleteEventsAmericium.EventId
+          )
+        ]
+      ],
+      asOfs: Seq[Instant],
+      queryWhen: Instant
+  )
 }
 
 trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
@@ -253,6 +282,226 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
           assert(scope.render(exampleBitemporal).isEmpty)
         )
       }
+    }
+  }
+
+  @TestFactory
+  def takeIntoAccountThePreciseTypeOfTheItemReferencedByAnAnnihilationWhenOtherEventsReferToTheSameItemViaLooserTypes()
+      : DynamicTests = {
+    val testCaseTrials = for {
+      recordingsGroupedById <-
+        mixedAbstractedAndImplementingRecordingsGroupedByIdTrials(
+          forbidAnnihilations = true
+        )
+      obsoleteRecordingsGroupedById <-
+        nonConflictingRecordingsGroupedByIdTrials
+      shuffledRecordings <-
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          recordingsGroupedById
+        )
+      shuffledObsoleteRecordings <-
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          obsoleteRecordingsGroupedById
+        )
+      bigShuffledHistoryOverLotsOfThings <-
+        intersperseObsoleteEventsAmericium(
+          shuffledRecordings,
+          shuffledObsoleteRecordings
+        )
+      asOfs <- instantTrials.listsOfSize(
+        bigShuffledHistoryOverLotsOfThings.length
+      )
+      whenAnAnnihilationOccurs <- instantTrials
+      queryWhenLeadsAnnihilationBy <- api.integers.filter(0 < _)
+    } yield PreciseTypeAnnihilationTestCase(
+      recordingsGroupedById,
+      bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toSeq,
+      asOfs.sorted,
+      whenAnAnnihilationOccurs,
+      whenAnAnnihilationOccurs.minusMillis(queryWhenLeadsAnnihilationBy)
+    )
+
+    testCaseTrials.withLimit(200).dynamicTests {
+      case PreciseTypeAnnihilationTestCase(
+            recordingsGroupedById,
+            bigShuffledHistoryOverLotsOfThings,
+            asOfs,
+            whenAnAnnihilationOccurs,
+            queryWhen
+          ) =>
+        Using.resource(makeWorld()) { world =>
+          recordEventsInWorld(
+            bigShuffledHistoryOverLotsOfThings,
+            asOfs,
+            world
+          )
+
+          for {
+            (recordingNoLaterThan, eventIdForAnnihilation) <- recordingsGroupedById
+              .flatMap(
+                _.thePartNoLaterThan(Finite(queryWhen))
+              )
+              .zip(LazyList.from(-1, -1))
+          } {
+            world.revise(
+              eventIdForAnnihilation,
+              Annihilation[NegatingImplementingHistory](
+                whenAnAnnihilationOccurs,
+                recordingNoLaterThan.historyId.asInstanceOf[String]
+              ),
+              world.revisionAsOfs.last
+            )
+          }
+
+          val scopeThatShouldPickOutNegatingImplementingHistories =
+            world.scopeFor(Finite(queryWhen), world.nextRevision)
+
+          for {
+            (recordingNoLaterThan, eventIdForAnnihilation) <- recordingsGroupedById
+              .flatMap(
+                _.thePartNoLaterThan(Finite(queryWhen))
+              )
+              .zip(LazyList.from(-1, -1))
+          } {
+            world.revise(
+              eventIdForAnnihilation,
+              Annihilation[ImplementingHistory](
+                whenAnAnnihilationOccurs,
+                recordingNoLaterThan.historyId.asInstanceOf[String]
+              ),
+              world.revisionAsOfs.last
+            )
+          }
+
+          val scopeThatShouldPickOutImplementingHistories =
+            world.scopeFor(Finite(queryWhen), world.nextRevision)
+
+          val checks =
+            for {
+              recordingsNoLaterThan <-
+                recordingsGroupedById flatMap (_.thePartNoLaterThan(
+                  Finite(queryWhen)
+                ))
+              Seq(negatedHistory) = recordingsNoLaterThan.historiesFrom(
+                scopeThatShouldPickOutNegatingImplementingHistories
+              )
+              Seq(history) = recordingsNoLaterThan.historiesFrom(
+                scopeThatShouldPickOutImplementingHistories
+              )
+            } yield (
+              recordingsNoLaterThan.historyId,
+              negatedHistory.datums,
+              history.datums
+            )
+
+          if (checks.isEmpty) Trials.reject()
+
+          for ((historyId, negatedHistory, expectedHistory) <- checks) {
+            assert(
+              negatedHistory.length == expectedHistory.length,
+              s"For $historyId, ${negatedHistory.length} == expectedHistory.length"
+            )
+            for (
+              ((actual, expected), step) <- negatedHistory
+                .zip(expectedHistory)
+                .zipWithIndex
+            ) {
+              val negatedExpectedValue = -expected.asInstanceOf[Int]
+              assert(
+                actual == negatedExpectedValue,
+                s"For $historyId, @step $step, $actual == $negatedExpectedValue"
+              )
+            }
+          }
+        }
+    }
+  }
+
+  @TestFactory
+  def reflectTheAbsenceOfAllItemsOfACompatibleTypeRelevantToAScopeThatShareAnIdFollowingAnAnnihilationUsingThatId()
+      : DynamicTests = {
+    val testCaseTrials = for {
+      recordingsGroupedById <-
+        recordingsGroupedByIdTrials(
+          forbidAnnihilations = true
+        )
+      queryWhen <- instantTrials
+      obsoleteRecordingsGroupedById <-
+        nonConflictingRecordingsGroupedByIdTrials
+      shuffledRecordings <-
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          recordingsGroupedById
+        )
+      shuffledObsoleteRecordings <-
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          obsoleteRecordingsGroupedById
+        )
+      bigShuffledHistoryOverLotsOfThings <-
+        intersperseObsoleteEventsAmericium(
+          shuffledRecordings,
+          shuffledObsoleteRecordings
+        )
+      asOfs <- instantTrials.listsOfSize(
+        bigShuffledHistoryOverLotsOfThings.length
+      )
+    } yield AbsenceFollowingAnnihilationTestCase(
+      recordingsGroupedById,
+      bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toSeq,
+      asOfs.sorted,
+      queryWhen
+    )
+
+    testCaseTrials.withLimit(200).dynamicTests {
+      case AbsenceFollowingAnnihilationTestCase(
+            recordingsGroupedById,
+            bigShuffledHistoryOverLotsOfThings,
+            asOfs,
+            queryWhen
+          ) =>
+        val possiblyEmptySetOfIdsThatEachReferToMoreThanOneItem =
+          ((recordingsGroupedById flatMap (_.thePartNoLaterThan(
+            Finite(queryWhen)
+          )) map (_.historyId)) groupBy identity collect {
+            case (id, group) if 1 < group.size => id
+          }).toSet
+
+        if (possiblyEmptySetOfIdsThatEachReferToMoreThanOneItem.isEmpty)
+          Trials.reject()
+
+        Using.resource(makeWorld()) { world =>
+          recordEventsInWorld(
+            bigShuffledHistoryOverLotsOfThings,
+            asOfs,
+            world
+          )
+
+          val maximumEventId =
+            bigShuffledHistoryOverLotsOfThings.flatten.map(_._2).max
+
+          val annihilationEvents =
+            possiblyEmptySetOfIdsThatEachReferToMoreThanOneItem.zipWithIndex.map {
+              case (idThatEachRefersToMoreThanOneItem, index) =>
+                (
+                  1 + maximumEventId + index,
+                  Some(
+                    Annihilation[History](
+                      queryWhen,
+                      idThatEachRefersToMoreThanOneItem
+                        .asInstanceOf[History#Id]
+                    )
+                  )
+                )
+            }.toMap
+
+          world.revise(annihilationEvents, world.revisionAsOfs.last)
+
+          val scope = world.scopeFor(Finite(queryWhen), world.nextRevision)
+
+          for (id <- possiblyEmptySetOfIdsThatEachReferToMoreThanOneItem) {
+            val items = scope.render(Bitemporal.withId[History](id))
+            assert(items.isEmpty)
+          }
+        }
     }
   }
 
