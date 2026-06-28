@@ -1,0 +1,49 @@
+not contain any identifiables
+have no current revision
+reveal all history up to the 'asOf' limit of a scope made from it
+not mysteriously fail to yield items
+deduce the most accurate type for items based on the events that refer to them
+reveal the same lack of history from a scope with an 'asOf' limit that comes at or after that revision but before the following revision
+reveal the same history from a scope with an 'asOf' limit that comes at or after that revision but before the following revision
+reveal the same next revision from a scope with an 'asOf' limit that comes at or after that revision but before the following revision
+not permit an inconsistent revision to be made
+reveal all the history up to the 'when' limit of a scope made from it
+build an item's state in a manner consistent with the history experienced by the item due to events that define changes on it.
+allow an item to be rendered from a bitemporal if the 'when' limit of the scope includes a relevant event that defines said item.
+not allow the history to be altered by ineffective events.
+reveal all the history of a related item up to the 'when' limit of a scope made from it
+yield the same identity for a related item as when that item is directly queried for
+not reveal an item at a query time coming before its first defining event
+not consider an ineffective event as being defining
+consider a reference to a related item in an event as being defining
+treat an annihilated item accessed via a reference to a related item as being a ghost
+not allow an event to either refer to or to mutate the state of a related item that is a ghost
+not permit the annihilation of an item at a query time coming before its first defining event
+have a next revision that reflects the last added revision
+have a version timeline that records the 'asOf' time for each of its revisions
+have a sorted version timeline
+allocate revision numbers sequentially
+have a next revision number that is the size of its version timeline
+not permit the 'asOf' time for a new revision to be less than that of any existing revision.
+create a scope whose properties relate to the call to 'scopeFor' when using the next revision overload
+create a scope whose properties relate to the call to 'scopeFor' when using the 'asOf' time overload
+create a scope that is a snapshot unaffected by subsequent revisions
+create revisions with the strong exception-safety guarantee
+yield the same histories for scopes including all changes at the latest revision, regardless of how changes are grouped into revisions
+allow events to vary in their view of the type of an item referenced by an id
+forbid recording of events that have inconsistent views of the type of an item referenced by an id
+allow events to refer to an item via an abstract type provided it is defined concretely in other events
+allow events to refer to an item via a concrete type when it is defined abstractly in other events
+record bookings from events using abstract types in the same manner as for concrete types
+forbid the booking of events that only ever refer to an item via an abstract type
+take into account the precise type of the item referenced by an annihilation when other events refer to the same item via looser types
+reflect the absence of all items of a compatible type relevant to a scope that share an id following an annihilation using that id.
+extend the history of an item whose annihilation is annulled to pick up any subsequent events relating to that item.
+build an item's state in a manner consistent with the history experienced by the item regardless of any corrected history.
+build an item's state in a manner consistent with the history experienced by the item regardless of any corrected history - with a twist.
+build an item's state in a manner consistent with the history experienced by the item regardless of any corrected history - with another twist.
+yield a history at the final revision based only on the latest corrections
+allow an entire history to be completely annulled and then rewritten
+yield a history whose versions of events reflect the revision of a scope made from it
+yield a history whose versions of events reflect arbitrary scopes made from it at varying revisions
+allow an entire history to be completely annulled and then rewritten at the same asOf
