@@ -568,7 +568,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
         .listsOfSize(bigShuffledHistoryOverLotsOfThings.size)
         .map(_.sorted)
     } yield AnnulledAnnihilationTestCase(
-      liftRecordings(bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toSeq),
+      liftRecordings(bigShuffledHistoryOverLotsOfThings),
       asOfs,
       steps,
       annihilationWhen
@@ -874,7 +874,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
       })
     } yield LackOfHistoryTestCase(
       recordingsGroupedById,
-      bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toSeq,
+      bigShuffledHistoryOverLotsOfThings,
       asOfs,
       queryWhen,
       laterAsOfs
@@ -1466,7 +1466,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
       queryWhen <- unboundedInstantTrials
     } yield HistoryTestCase(
       recordingsGroupedById,
-      bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toVector,
+      bigShuffledHistoryOverLotsOfThings,
       asOfs,
       queryWhen
     )
@@ -2242,7 +2242,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
           }
       )
     } yield ScopeAsOfTestCase(
-      bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toSeq,
+      bigShuffledHistoryOverLotsOfThings,
       asOfs,
       queryWhen,
       offsets
@@ -2326,7 +2326,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
       queryWhen <- unboundedInstantTrials
     } yield ConsistencyTestCase(
       recordingsGroupedById,
-      bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toSeq,
+      bigShuffledHistoryOverLotsOfThings,
       asOfs,
       queryWhen
     )
@@ -2402,7 +2402,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
         .map(liftRecordings)
       bigShuffledFaultyHistoryOverLotsOfThings <- api
         .splitsIntoNonEmptyPieces(shuffledFaultyRecordings.zipWithIndex)
-        .map(_.map(_.toSeq).toSeq map (_.map { case (recording, index) =>
+        .map(_ map (_.map { case (recording, index) =>
           Some(recording) -> (-1 - index)
         }))
       asOfs <- instantTrials
@@ -2414,7 +2414,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
       queryWhen <- unboundedInstantTrials
     } yield ExceptionSafetyTestCase(
       recordingsGroupedById,
-      bigShuffledHistoryOverLotsOfThings.map(_.toSeq).toSeq,
+      bigShuffledHistoryOverLotsOfThings,
       bigShuffledFaultyHistoryOverLotsOfThings,
       asOfs,
       faultyAsOfs,
@@ -2432,7 +2432,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
           ) =>
         Using.resources(makeWorld(), makeWorld()) { (utopia, distopia) =>
           val (mergedShuffledHistoryOverLotsOfThings, mergedAsOfs) =
-            ((bigShuffledHistoryOverLotsOfThings zip asOfs) ++ (bigShuffledFaultyHistoryOverLotsOfThings zip bigShuffledHistoryOverLotsOfThings.toSeq
+            ((bigShuffledHistoryOverLotsOfThings zip asOfs) ++ (bigShuffledFaultyHistoryOverLotsOfThings zip bigShuffledHistoryOverLotsOfThings
               .padTo(
                 bigShuffledFaultyHistoryOverLotsOfThings.size,
                 Nil
@@ -2449,8 +2449,8 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
             utopia
           )
           recordEventsInWorldWithoutGivingUpOnFailure(
-            mergedShuffledHistoryOverLotsOfThings.map(_.toSeq).toSeq,
-            mergedAsOfs.toSeq,
+            mergedShuffledHistoryOverLotsOfThings,
+            mergedAsOfs,
             distopia
           )
 
@@ -2496,7 +2496,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
         shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
           recordingsGroupedById
         )
-      shuffledRecordingAndEventPairs = shuffledRecordings.zipWithIndex.toSeq
+      shuffledRecordingAndEventPairs = shuffledRecordings.zipWithIndex
       bigShuffledHistoryOverLotsOfThingsOneWay <- api
         .splitsIntoNonEmptyPieces(shuffledRecordingAndEventPairs)
         .map(liftRecordings)
@@ -2512,8 +2512,8 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
       queryWhen <- unboundedInstantTrials
     } yield GroupingTestCase(
       recordingsGroupedById,
-      bigShuffledHistoryOverLotsOfThingsOneWay.map(_.toSeq).toSeq,
-      bigShuffledHistoryOverLotsOfThingsAnotherWay.map(_.toSeq).toSeq,
+      bigShuffledHistoryOverLotsOfThingsOneWay,
+      bigShuffledHistoryOverLotsOfThingsAnotherWay,
       asOfsOneWay,
       asOfsAnotherWay,
       queryWhen
