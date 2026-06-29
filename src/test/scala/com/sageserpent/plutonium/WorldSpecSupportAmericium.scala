@@ -19,11 +19,7 @@ import org.junit.jupiter.api.Assertions.assertThrows
 import scala.collection.mutable.ListBuffer
 
 object WorldSpecSupportAmericium {
-  val changeError = new RuntimeException("Error in making a change.")
-
-  implicit class TrialsApiExtension[Case](trials: Trials[Case]) {
-    def nonEmptyLists: Trials[List[Case]] = trials.lists.flatMap(tail => trials.map(_ :: tail))
-  }
+  val changeError = WorldSpecSupport.changeError
 }
 
 trait WorldSpecSupportAmericium {
@@ -53,6 +49,11 @@ trait WorldSpecSupportAmericium {
 
   def integerIdTrials: Trials[Int] = api.uniqueIds
 
+  def setTrials[Case](
+      elementTrials: Trials[Case],
+                       size: Int
+                     ): Trials[Set[Case]] = elementTrials.listsOfSize(size).map(_.toSet).filter(_.size == size)
+
   def fooHistoryIdTrials = stringIdTrials
 
   def barHistoryIdTrials = integerIdTrials
@@ -76,6 +77,104 @@ trait WorldSpecSupportAmericium {
     )
   def integerHistoryRecordingsGroupedByIdTrials =
     recordingsGroupedByIdTrials_(integerDataSamplesForAnIdTrials)
+
+  def abstractedHistoryPositiveIntegerDataSampleTrials(faulty: Boolean): Trials[
+    (Int, (Unbounded[Instant], AbstractedHistory#Id) => Event)
+  ] =
+    for { data <- api.integers.filter(0 < _) } yield (
+      data,
+      (
+          when: Unbounded[Instant],
+          abstractedHistoryId: AbstractedHistory#Id
+      ) =>
+        eventConstructorReferringToOneItem[AbstractedHistory](when)
+          .apply(
+            abstractedHistoryId,
+            (abstractedHistory: AbstractedHistory) => {
+              // Changes are not allowed to read from the items they work on,
+              // with the exception of the 'id' property.
+              assert(abstractedHistoryId == abstractedHistory.id)
+              assertThrows(
+                classOf[UnsupportedOperationException],
+                () => abstractedHistory.datums
+              )
+              assertThrows(
+                classOf[UnsupportedOperationException],
+                () => abstractedHistory.property
+              )
+
+              if (faulty)
+                abstractedHistory
+                  .forceInvariantBreakage() // Modelling breakage of the bitemporal invariant.
+
+              abstractedHistory.property = data
+            }
+          )
+    )
+
+  def implementingHistoryNegativeIntegerDataSampleTrials(faulty: Boolean): Trials[
+    (Int, (Unbounded[Instant], ImplementingHistory#Id) => Event)
+  ] =
+    for { data <- api.integers.filter(0 > _) } yield (
+      data,
+      (
+          when: Unbounded[Instant],
+          implementingHistoryId: ImplementingHistory#Id
+      ) =>
+        eventConstructorReferringToOneItem[ImplementingHistory](when)
+          .apply(
+            implementingHistoryId,
+            (implementingHistory: ImplementingHistory) => {
+              // Changes are not allowed to read from the items they work on,
+              // with the exception of the 'id' property.
+              assert(implementingHistoryId == implementingHistory.id)
+              assertThrows(
+                classOf[UnsupportedOperationException],
+                () => implementingHistory.datums
+              )
+              assertThrows(
+                classOf[UnsupportedOperationException],
+                () => implementingHistory.property
+              )
+
+              if (faulty)
+                implementingHistory
+                  .forceInvariantBreakage() // Modelling breakage of the bitemporal invariant.
+
+              implementingHistory.property = data
+            }
+          )
+    )
+
+  def abstractedDataSamplesForAnIdTrials =
+    dataSamplesForAnIdTrials[AbstractedHistory](
+      abstractedOrImplementingHistoryIdTrials,
+      abstractedHistoryPositiveIntegerDataSampleTrials(faulty = false)
+    )
+
+  def implementingDataSamplesForAnIdTrials =
+    dataSamplesForAnIdTrials[ImplementingHistory](
+      abstractedOrImplementingHistoryIdTrials,
+      implementingHistoryNegativeIntegerDataSampleTrials(faulty = false)
+    )
+
+  def mixedAbstractedAndImplementingDataSamplesForAnIdTrials =
+    dataSamplesForAnIdTrials[AbstractedHistory](
+      abstractedOrImplementingHistoryIdTrials,
+      api.alternateWithWeights(
+        1 -> abstractedHistoryPositiveIntegerDataSampleTrials(faulty = false),
+        3 -> implementingHistoryNegativeIntegerDataSampleTrials(faulty = false)
+      )
+    )
+
+  def mixedAbstractedAndImplementingRecordingsGroupedByIdTrials(
+      forbidAnnihilations: Boolean
+  ) =
+    recordingsGroupedByIdTrials_(
+      mixedAbstractedAndImplementingDataSamplesForAnIdTrials,
+      forbidAnnihilations = forbidAnnihilations
+    )
+
   def referringHistoryIdTrials = stringIdTrials
   def referenceToItemDataSamplesForAnIdTrials =
     dataSamplesForAnIdTrials[ReferringHistory](
@@ -186,7 +285,7 @@ trait WorldSpecSupportAmericium {
     )
 
   def shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
-      recordingsGroupedById: List[RecordingsForAnId]
+      recordingsGroupedById: Seq[WorldSpecSupportAmericium#RecordingsForAnId]
   ): Trials[Seq[(Unbounded[Instant], Event)]] = {
     // PLAN: shuffle each lot of events on a per-id basis, keeping the
     // annihilations out of the way. Then merge the results using random
@@ -234,13 +333,17 @@ trait WorldSpecSupportAmericium {
     api.sequences(shuffledGroupsTrials).map(_.flatten.flatten)
   }
 
-  def historyFrom(world: World, recordingsGroupedById: List[RecordingsForAnId])(
+  def historyFrom(world: World, recordingsGroupedById: Seq[WorldSpecSupportAmericium#RecordingsForAnId])(
       scope: Scope
   ): List[(Any, Any)] =
-    (for (recordingsForAnId <- recordingsGroupedById)
-      yield recordingsForAnId.historiesFrom(
-        scope
-      ) flatMap (_.datums) map (recordingsForAnId.historyId -> _)) flatten
+    recordingsGroupedById.toList.flatMap(recordingsForAnId =>
+      recordingsForAnId
+        .historiesFrom(
+          scope
+        )
+        .flatMap(_.datums)
+        .map(recordingsForAnId.historyId -> _)
+    )
 
   def recordEventsInWorld(
                            bigShuffledHistoryOverLotsOfThings: Seq[Iterable[
@@ -324,6 +427,14 @@ trait WorldSpecSupportAmericium {
       case exception if changeError == exception =>
     }
   }
+
+
+  def faultyRecordingsGroupedByIdTrials
+      : Trials[List[RecordingsForAnId]] =
+    mixedRecordingsGroupedByIdTrials(
+      faulty = true,
+      forbidAnnihilations = false
+    )
 
   def recordingsGroupedByIdTrials(
       forbidAnnihilations: Boolean
