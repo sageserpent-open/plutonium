@@ -156,6 +156,20 @@ object WorldBehaviourAmericium {
       asOfs: Seq[Instant]
   )
 
+  case class MixedAbstractConcreteTestCase(
+      recordingsGroupedById: Seq[WorldSpecSupportAmericium#RecordingsForAnId],
+      bigShuffledHistoryOverLotsOfThings: Seq[
+        Seq[
+          (
+              Option[(Unbounded[Instant], Event)],
+              intersperseObsoleteEventsAmericium.EventId
+          )
+        ]
+      ],
+      asOfs: Seq[Instant],
+      queryWhen: Unbounded[Instant]
+  )
+
   case class ScopeAsOfTestCase(
       bigShuffledHistoryOverLotsOfThings: Seq[
         Seq[
@@ -3120,6 +3134,96 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
   }
 
 @TestFactory
+  def recordBookingsFromEventsUsingAbstractTypesInTheSameMannerAsForConcreteTypes(): DynamicTests = {
+    val testCaseTrials: Trials[MixedAbstractConcreteTestCase] = for {
+      recordingsGroupedById <- mixedAbstractedAndImplementingRecordingsGroupedByIdTrials(
+        forbidAnnihilations = true
+      )
+      obsoleteRecordingsGroupedById <-
+        nonConflictingRecordingsGroupedByIdTrials
+      shuffledRecordings <-
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          recordingsGroupedById
+        )
+      shuffledObsoleteRecordings <-
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          obsoleteRecordingsGroupedById
+        )
+      bigShuffledHistoryOverLotsOfThings <- intersperseObsoleteEventsAmericium(
+        shuffledRecordings,
+        shuffledObsoleteRecordings
+      )
+      asOfs <- instantTrials
+        .listsOfSize(bigShuffledHistoryOverLotsOfThings.size)
+        .map(_.sorted)
+      queryWhen <- unboundedInstantTrials
+    } yield MixedAbstractConcreteTestCase(
+      recordingsGroupedById,
+      bigShuffledHistoryOverLotsOfThings,
+      asOfs,
+      queryWhen
+    )
+
+    testCaseTrials.withLimit(200).dynamicTests {
+      case MixedAbstractConcreteTestCase(
+            recordingsGroupedById,
+            bigShuffledHistoryOverLotsOfThings,
+            asOfs,
+            queryWhen
+          ) =>
+        Using.resource(makeWorld()) { world =>
+          try {
+            recordEventsInWorld(
+              bigShuffledHistoryOverLotsOfThings,
+              asOfs,
+              world
+            )
+
+            val scope =
+              world.scopeFor(queryWhen, world.nextRevision)
+
+            val checks =
+              for {
+                recording <- recordingsGroupedById
+                RecordingsNoLaterThan(
+                  historyId,
+                  historiesFrom,
+                  pertinentRecordings,
+                  _,
+                  _
+                ) <-
+                  recording.thePartNoLaterThan(
+                    queryWhen
+                  )
+                Seq(history) = historiesFrom(scope)
+                haveBothAnAbstractedAndAnImplementingDatumSomewhere =
+                  history.datums
+                    .exists { case datum: Int =>
+                      datum > 0
+                    } && history.datums
+                    .exists { case datum: Int => datum < 0 }
+                if haveBothAnAbstractedAndAnImplementingDatumSomewhere
+              } yield (
+                historyId,
+                history.datums,
+                pertinentRecordings.map(_._1)
+              )
+
+            if (checks.isEmpty) Trials.reject()
+
+            for ((historyId, actualHistory, expectedHistory) <- checks) {
+              withClue(s"History mismatch for history id: $historyId.") {
+                assert(actualHistory == expectedHistory)
+              }
+            }
+          } catch {
+            case _: UnsupportedOperationException => Trials.reject()
+          }
+        }
+    }
+  }
+
+@TestFactory
   def extendTheHistoryOfAnItemWhoseAnnihilationIsAnnulledToPickUpAnySubsequentEventsRelatingToThatItem()
       : DynamicTests = {
     val itemId = "Fred"
@@ -3432,6 +3536,8 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
         }
     }
   }
+
+
 
 
 
