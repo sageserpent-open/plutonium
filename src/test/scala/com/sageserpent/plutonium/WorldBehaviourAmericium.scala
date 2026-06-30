@@ -293,7 +293,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
 
   import cats.implicits._
 
-  @TestFactory
+@TestFactory
   def worldWithNoHistory(): DynamicTests = {
     val scopeTrials = for {
       when <- unboundedInstantTrials
@@ -312,326 +312,96 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-  @TestFactory
-  def buildAnItemStateInAMannerConsistentWithTheHistoryExperiencedByTheItemRegardlessOfAnyCorrectedHistory()
-      : DynamicTests = {
-    val itemId = "Fred"
-
-    val testCaseTrials = for {
-      eventTimes <- instantTrials.nonEmptyLists.map(_.sorted)
-      steps = 1 to eventTimes.size
-      recordings: List[(Unbounded[Instant], Event)] =
-        eventTimes.zip(steps).map { case (when, step) =>
-          Finite(when) -> Change
-            .forOneItem[IntegerHistory](when)(
-              itemId,
-              { item: IntegerHistory =>
-                item.integerProperty = step
-              }
-            )
-        }
-      obsoleteEventTimes <- instantTrials.nonEmptyLists
-      obsoleteSteps = 1 to obsoleteEventTimes.size
-      obsoleteRecordings: List[(Unbounded[Instant], Event)] =
-        obsoleteEventTimes.zip(obsoleteSteps).map { case (when, step) =>
-          Finite(when) -> Change
-            .forOneItem[IntegerHistory](when)(
-              itemId,
-              { item: IntegerHistory =>
-                item.integerProperty = step
-              }
-            )
-        }
-      shuffledRecordings <-
-        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhenForAGivenItem(
-          recordings
-        )
-      shuffledObsoleteRecordings <-
-        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhenForAGivenItem(
-          obsoleteRecordings
-        )
-      bigShuffledHistoryOverLotsOfThings <-
-        intersperseObsoleteEventsAmericium(
-          shuffledRecordings,
-          shuffledObsoleteRecordings
-        )
-      asOfs <- instantTrials
-        .listsOfSize(bigShuffledHistoryOverLotsOfThings.size)
-        .map(_.sorted)
-    } yield StateConsistencyTestCase(
-      bigShuffledHistoryOverLotsOfThings,
-      asOfs,
-      steps
-    )
-
-    testCaseTrials.withLimit(200).dynamicTests {
-      case StateConsistencyTestCase(
-            bigShuffledHistoryOverLotsOfThings,
-            asOfs,
-            steps
-          ) =>
-        Using.resource(makeWorld()) { world =>
-          recordEventsInWorld(
-            bigShuffledHistoryOverLotsOfThings,
-            asOfs,
-            world
-          )
-
-          val scope =
-            world
-              .scopeFor(PositiveInfinity, world.nextRevision)
-
-          val fredTheItem = scope
-            .render(Bitemporal.withId[IntegerHistory](itemId))
-            .toList
-
-          assert(steps == fredTheItem.head.datums)
-        }
-    }
-  }
-
-  @TestFactory
-  def buildAnItemStateInAMannerConsistentWithTheHistoryExperiencedByTheItemRegardlessOfAnyCorrectedHistoryWithATwist()
-      : DynamicTests = {
-    val itemId = "Fred"
-
-    val testCaseTrials = for {
-      eventTimes <- instantTrials.nonEmptyLists.map(_.sorted)
-      steps = 1 to eventTimes.size
-      recordings: List[(Unbounded[Instant], Event)] =
-        eventTimes.zip(steps).map { case (when, step) =>
-          Finite(when) -> Change
-            .forOneItem[IntegerHistory](when)(
-              itemId,
-              { item: IntegerHistory =>
-                item.integerProperty = step
-              }
-            )
-        }
-      shuffledRecordings <-
-        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhenForAGivenItem(
-          recordings
-        )
-      shuffledObsoleteRecordings <-
-        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhenForAGivenItem(
-          recordings
-        )
-      bigShuffledHistoryOverLotsOfThings <-
-        intersperseObsoleteEventsAmericium(
-          shuffledRecordings,
-          shuffledObsoleteRecordings
-        )
-      asOfs <- instantTrials
-        .listsOfSize(bigShuffledHistoryOverLotsOfThings.size)
-        .map(_.sorted)
-    } yield StateConsistencyTestCase(
-      bigShuffledHistoryOverLotsOfThings,
-      asOfs,
-      steps
-    )
-
-    testCaseTrials.withLimit(200).dynamicTests {
-      case StateConsistencyTestCase(
-            bigShuffledHistoryOverLotsOfThings,
-            asOfs,
-            steps
-          ) =>
-        Using.resource(makeWorld()) { world =>
-          recordEventsInWorld(
-            bigShuffledHistoryOverLotsOfThings,
-            asOfs,
-            world
-          )
-
-          val scope =
-            world
-              .scopeFor(PositiveInfinity, world.nextRevision)
-
-          val fredTheItem = scope
-            .render(Bitemporal.withId[IntegerHistory](itemId))
-            .toList
-
-          assert(steps == fredTheItem.head.datums)
-        }
-    }
-  }
-
-  @TestFactory
-  def buildAnItemStateInAMannerConsistentWithTheHistoryExperiencedByTheItemRegardlessOfAnyCorrectedHistoryWithAnotherTwist()
-      : DynamicTests = {
-    val itemId = "Fred"
-
-    val testCaseTrials = for {
-      eventTimes <- api
-        .integers(0, 50)
-        .map(0 to _ toList)
-        .map(
-          _.map(timeInSeconds =>
-            Instant.ofEpochSecond(24 * 60 * 60 * timeInSeconds)
-          )
-        )
-      steps = 1 to eventTimes.size
-      recordings: List[(Unbounded[Instant], Event)] =
-        eventTimes.zip(steps).map { case (when, step) =>
-          Finite(when) -> Change
-            .forOneItem[IntegerHistory](when)(
-              itemId,
-              { item: IntegerHistory =>
-                item.integerProperty = step
-              }
-            )
-        }
-      shuffledObsoleteEventTimes <- api.shuffles(eventTimes)
-      obsoleteSteps = 1 to shuffledObsoleteEventTimes.size
-      obsoleteRecordings: List[(Unbounded[Instant], Event)] =
-        shuffledObsoleteEventTimes.zip(obsoleteSteps).map { case (when, step) =>
-          Finite(when) -> Change
-            .forOneItem[IntegerHistory](when)(
-              itemId,
-              { item: IntegerHistory =>
-                item.integerProperty = step
-              }
-            )
-        }
-
-      pairsOfObsoleteAndSucceedingEvents =
-        obsoleteRecordings.zipWithIndex.zip(recordings.zipWithIndex)
-
-      historyOverLotsOfThings = pairsOfObsoleteAndSucceedingEvents
-        .flatMap { case (obsolete, succeeding) =>
-          Seq(Seq(obsolete), Seq(succeeding))
-        }
-
-      asOfs <- instantTrials
-        .listsOfSize(historyOverLotsOfThings.length)
-        .map(_.sorted)
-    } yield StateConsistencyTestCase(
-      liftRecordings(historyOverLotsOfThings),
-      asOfs,
-      steps
-    )
-
-    testCaseTrials.withLimit(200).dynamicTests {
-      case StateConsistencyTestCase(
-            historyOverLotsOfThings,
-            asOfs,
-            steps
-          ) =>
-        Using.resource(makeWorld()) { world =>
-          recordEventsInWorld(
-            historyOverLotsOfThings,
-            asOfs,
-            world
-          )
-
-          val scope =
-            world
-              .scopeFor(PositiveInfinity, world.nextRevision)
-
-          val fredTheItem = scope
-            .render(Bitemporal.withId[IntegerHistory](itemId))
-            .toList
-
-          assert(steps.toSet == fredTheItem.head.datums.toSet)
-        }
-    }
-  }
-
-  @TestFactory
-  def extendTheHistoryOfAnItemWhoseAnnihilationIsAnnulledToPickUpAnySubsequentEventsRelatingToThatItem()
-      : DynamicTests = {
-    val itemId = "Fred"
-
-    val testCaseTrials = for {
-      eventTimes <- instantTrials.nonEmptyLists.map(_.sorted)
-      annihilationWhen <- instantTrials.filter(when =>
-        when.isAfter(eventTimes.head) && !when.isAfter(eventTimes.last)
-      )
-      steps = 1 to eventTimes.size
-      recordings: List[(Unbounded[Instant], Event)] =
-        eventTimes.zip(steps).map { case (when, step) =>
-          Finite(when) -> Change
-            .forOneItem[IntegerHistory](when)(
-              itemId,
-              { item: IntegerHistory =>
-                item.integerProperty = step
-              }
-            )
-        }
-      shuffledRecordings <-
-        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhenForAGivenItem(
-          recordings
-        )
-      bigShuffledHistoryOverLotsOfThings <- api
-        .splitsIntoNonEmptyPieces(shuffledRecordings.zipWithIndex)
-      asOfs <- instantTrials
-        .listsOfSize(bigShuffledHistoryOverLotsOfThings.size)
-        .map(_.sorted)
-    } yield AnnulledAnnihilationTestCase(
-      liftRecordings(bigShuffledHistoryOverLotsOfThings),
-      asOfs,
-      steps,
-      annihilationWhen
-    )
-
-    testCaseTrials.withLimit(200).dynamicTests {
-      case AnnulledAnnihilationTestCase(
-            bigShuffledHistoryOverLotsOfThings,
-            asOfs,
-            steps,
-            annihilationWhen
-          ) =>
-        Using.resource(makeWorld()) { world =>
-          val initialEventId = -2
-
-          world.revise(
-            initialEventId,
-            Change.forOneItem[IntegerHistory](annihilationWhen)(
-              itemId,
-              { item: IntegerHistory =>
-                item.integerProperty = -1
-              }
-            ),
-            asOfs.head
-          )
-
-          val annihilationEventId = -1
-
-          world.revise(
-            annihilationEventId,
-            Annihilation[Any](annihilationWhen, itemId),
-            asOfs.head
-          )
-
-          recordEventsInWorld(
-            bigShuffledHistoryOverLotsOfThings,
-            asOfs,
-            world
-          )
-
-          world.annul(initialEventId, asOfs.last)
-
-          world.annul(annihilationEventId, asOfs.last)
-
-          val scope =
-            world
-              .scopeFor(PositiveInfinity, world.nextRevision)
-
-          val fredTheItem = scope
-            .render(Bitemporal.withId[IntegerHistory](itemId))
-            .toList
-
-          assert(steps == fredTheItem.head.datums)
-        }
-    }
-  }
-
-  @Test
+@Test
   def haveNoCurrentRevision(): Unit = {
     Using.resource(makeWorld()) { world =>
       withClue(
         s"Initial revision of a world ${world.nextRevision} should be: ${World.initialRevision}."
       )(assert(World.initialRevision == world.nextRevision))
+    }
+  }
+
+@TestFactory
+  def revealTheSameHistoryFromAScopeWithAnAsOfLimitThatComesAtOrAfterThatRevisionButBeforeTheFollowingRevision()
+      : DynamicTests = {
+    val testCaseTrials = for {
+      recordingsGroupedById <- recordingsGroupedByIdTrials(
+        forbidAnnihilations = false
+      )
+      shuffledRecordings <-
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          recordingsGroupedById
+        )
+      bigShuffledHistoryOverLotsOfThings <- api
+        .splitsIntoNonEmptyPieces(shuffledRecordings.zipWithIndex)
+        .map(liftRecordings)
+      asOfs <- instantTrials
+        .listsOfSize(bigShuffledHistoryOverLotsOfThings.size)
+        .map(_.sorted)
+      queryWhen <- unboundedInstantTrials
+      laterAsOfs <- api.sequences(asOfs.zip(asOfs.tail :+ asOfs.last.plusSeconds(10L)).map {
+        case (earlier, later) if earlier isBefore later =>
+          api.longs(earlier.getEpochSecond, later.getEpochSecond - 1).map(Instant.ofEpochSecond).filter(_ isAfter earlier)
+        case (earlier, _) => api.only(earlier)
+      })
+    } yield HistoryConsistencyTestCase(
+      recordingsGroupedById,
+      bigShuffledHistoryOverLotsOfThings,
+      asOfs,
+      queryWhen,
+      laterAsOfs
+    )
+
+    testCaseTrials.withLimit(200).dynamicTests {
+      case HistoryConsistencyTestCase(
+            recordingsGroupedById,
+            bigShuffledHistoryOverLotsOfThings,
+            asOfs,
+            queryWhen,
+            laterAsOfs
+          ) =>
+        Using.resource(makeWorld()) { world =>
+          val revisions = recordEventsInWorld(
+            bigShuffledHistoryOverLotsOfThings,
+            asOfs,
+            world
+          )
+
+          val checks = for {
+            (
+              (earlierAsOfCorrespondingToRevision, revision),
+              laterAsOfSharingTheSameRevisionAsTheEarlierOne
+            ) <- asOfs zip revisions zip laterAsOfs
+            if earlierAsOfCorrespondingToRevision isBefore laterAsOfSharingTheSameRevisionAsTheEarlierOne
+
+            baselineScope = world
+              .scopeFor(queryWhen, earlierAsOfCorrespondingToRevision)
+            scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne =
+              world
+                .scopeFor(
+                  queryWhen,
+                  laterAsOfSharingTheSameRevisionAsTheEarlierOne
+                )
+            recording <- recordingsGroupedById
+            RecordingsNoLaterThan(historyId, historiesFrom, _, _, _) <-
+              recording.thePartNoLaterThan(
+                queryWhen
+              )
+            if historiesFrom(baselineScope).nonEmpty
+            Seq(baselineHistory) = historiesFrom(baselineScope)
+            Seq(historyUnderTest) = historiesFrom(
+              scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne
+            )
+          } yield (historyId, baselineHistory.datums, historyUnderTest.datums)
+
+          if (checks.isEmpty) Trials.reject()
+
+          for ((historyId, baselineDatums, testDatums) <- checks) {
+            withClue(s"For history id: $historyId.") {
+              assert(baselineDatums == testDatums)
+            }
+          }
+        }
     }
   }
 
@@ -746,7 +516,63 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-  @TestFactory
+@TestFactory
+  def notMysteriouslyFailToYieldItems(): DynamicTests = {
+    val testCaseTrials = for {
+      referringHistoryRecordingsGroupedById <-
+        referringHistoryRecordingsGroupedByIdTrials()
+      shuffledRecordings <- shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+        referringHistoryRecordingsGroupedById
+      )
+      bigShuffledHistoryOverLotsOfThings <- api.splitsIntoNonEmptyPieces(shuffledRecordings.zipWithIndex)
+      asOfs <- instantTrials.listsOfSize(bigShuffledHistoryOverLotsOfThings.size).map(_.sorted)
+      queryWhen <- unboundedInstantTrials
+    } yield HistoryTestCase(
+      referringHistoryRecordingsGroupedById,
+      liftRecordings(bigShuffledHistoryOverLotsOfThings),
+      asOfs,
+      queryWhen
+    )
+
+    testCaseTrials.withLimit(200).dynamicTests {
+      case HistoryTestCase(
+        referringHistoryRecordingsGroupedById,
+        bigShuffledHistoryOverLotsOfThings,
+        asOfs,
+        queryWhen
+      ) =>
+        Using.resource(makeWorld()) { world =>
+          recordEventsInWorld(
+            bigShuffledHistoryOverLotsOfThings,
+            asOfs,
+            world
+          )
+
+          val scope = world.scopeFor(queryWhen, world.nextRevision)
+
+          val checks = (for {
+            recording <- referringHistoryRecordingsGroupedById
+            RecordingsNoLaterThan(
+              referringHistoryId,
+              referringHistoriesFrom,
+              _,
+              _,
+              _
+            ) <- recording.thePartNoLaterThan(queryWhen)
+          } yield referringHistoryId -> referringHistoriesFrom(scope))
+
+          if (checks.isEmpty) Trials.reject()
+
+          for ((id, itemSingletonSequence) <- checks) {
+            withClue(s"Expected there to be a single item for id: $id.")(
+              assert(1 == itemSingletonSequence.size)
+            )
+          }
+        }
+    }
+  }
+
+@TestFactory
   def deduceTheMostAccurateTypeForItemsBasedOnTheEventsThatReferToThem(): DynamicTests = {
     val testCaseTrials = for {
       fooHistoryIds <- fooHistoryIdTrials.map("Foo_" + _).nonEmptySets
@@ -849,7 +675,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-  @TestFactory
+@TestFactory
   def revealTheSameLackOfHistoryFromAScopeWithAnAsOfLimitThatComesAtOrAfterThatRevisionButBeforeTheFollowingRevision()
       : DynamicTests = {
     val testCaseTrials = for {
@@ -942,7 +768,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-  @TestFactory
+@TestFactory
   def revealAllTheHistoryUpToTheWhenLimitOfAScopeMadeFromIt(): DynamicTests = {
     val testCaseTrials = for {
       recordingsGroupedById <- recordingsGroupedByIdTrials(
@@ -1011,64 +837,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-  @TestFactory
-  def notMysteriouslyFailToYieldItems(): DynamicTests = {
-    val testCaseTrials = for {
-      referringHistoryRecordingsGroupedById <-
-        referringHistoryRecordingsGroupedByIdTrials()
-      shuffledRecordings <- shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
-        referringHistoryRecordingsGroupedById
-      )
-      bigShuffledHistoryOverLotsOfThings <- api.splitsIntoNonEmptyPieces(shuffledRecordings.zipWithIndex)
-      asOfs <- instantTrials.listsOfSize(bigShuffledHistoryOverLotsOfThings.size).map(_.sorted)
-      queryWhen <- unboundedInstantTrials
-    } yield HistoryTestCase(
-      referringHistoryRecordingsGroupedById,
-      liftRecordings(bigShuffledHistoryOverLotsOfThings),
-      asOfs,
-      queryWhen
-    )
-
-    testCaseTrials.withLimit(200).dynamicTests {
-      case HistoryTestCase(
-        referringHistoryRecordingsGroupedById,
-        bigShuffledHistoryOverLotsOfThings,
-        asOfs,
-        queryWhen
-      ) =>
-        Using.resource(makeWorld()) { world =>
-          recordEventsInWorld(
-            bigShuffledHistoryOverLotsOfThings,
-            asOfs,
-            world
-          )
-
-          val scope = world.scopeFor(queryWhen, world.nextRevision)
-
-          val checks = (for {
-            recording <- referringHistoryRecordingsGroupedById
-            RecordingsNoLaterThan(
-              referringHistoryId,
-              referringHistoriesFrom,
-              _,
-              _,
-              _
-            ) <- recording.thePartNoLaterThan(queryWhen)
-          } yield referringHistoryId -> referringHistoriesFrom(scope))
-
-          if (checks.isEmpty) Trials.reject()
-
-          for ((id, itemSingletonSequence) <- checks) {
-            withClue(s"Expected there to be a single item for id: $id.")(
-              assert(1 == itemSingletonSequence.size)
-            )
-          }
-        }
-    }
-  }
-
-
-  @TestFactory
+@TestFactory
   def revealAllTheHistoryOfARelatedItemUpToTheWhenLimitOfAScopeMadeFromIt(): DynamicTests = {
     val testCaseTrials = for {
       referencedHistoryRecordingsGroupedById <-
@@ -1172,95 +941,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
       }
   }
 
-  @TestFactory
-  def considerAReferenceToARelatedItemInAnEventAsBeingDefining(): DynamicTests = {
-    val testCaseTrials = for {
-      referencedHistoryRecordingsGroupedById <-
-        referencedHistoryRecordingsGroupedByIdTrials(
-          forbidAnnihilations = false
-        )
-      referringHistoryRecordingsGroupedById <-
-        referringHistoryRecordingsGroupedByIdTrials()
-      obsoleteRecordingsGroupedById <-
-        nonConflictingRecordingsGroupedByIdTrials
-      shuffledRecordings <- shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
-        referencedHistoryRecordingsGroupedById ++ referringHistoryRecordingsGroupedById
-      )
-      shuffledObsoleteRecordings <- shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
-        obsoleteRecordingsGroupedById
-      )
-      bigShuffledHistoryOverLotsOfThings <- intersperseObsoleteEventsAmericium(
-        shuffledRecordings,
-        shuffledObsoleteRecordings
-      )
-      asOfs <- instantTrials
-        .listsOfSize(bigShuffledHistoryOverLotsOfThings.size)
-        .map(_.sorted)
-      queryWhen <- unboundedInstantTrials
-    } yield RelatedItemTestCase(
-      referencedHistoryRecordingsGroupedById,
-      referringHistoryRecordingsGroupedById,
-      bigShuffledHistoryOverLotsOfThings,
-      asOfs,
-      queryWhen
-    )
-    testCaseTrials
-      .withStrategy(_ => CasesLimitStrategy.counted(200, 20))
-      .dynamicTests {
-        case RelatedItemTestCase(
-              referencedHistoryRecordingsGroupedById,
-              referringHistoryRecordingsGroupedById,
-              bigShuffledHistoryOverLotsOfThings,
-              asOfs,
-              queryWhen
-            ) =>
-          Using.resource(makeWorld()) { world =>
-            recordEventsInWorld(
-              bigShuffledHistoryOverLotsOfThings,
-              asOfs,
-              world
-            )
-
-            val scope = world.scopeFor(queryWhen, world.nextRevision)
-
-            val checks =
-              for {
-                RecordingsNoLaterThan(
-                  _,
-                  referringHistoriesFrom,
-                  _,
-                  _,
-                  _
-                ) <- referringHistoryRecordingsGroupedById.flatMap(
-                  _.thePartNoLaterThan(queryWhen)
-                )
-                NonExistentRecordings(
-                  referencedHistoryId,
-                  referencedHistoriesFrom,
-                  _
-                ) <- referencedHistoryRecordingsGroupedById.flatMap(
-                  _.doesNotExistAt(queryWhen)
-                )
-                Seq(referringHistory: ReferringHistory) =
-                  referringHistoriesFrom(scope)
-                if referringHistory.referencedHistories
-                  .get(referencedHistoryId)
-                  .exists(!_.asInstanceOf[ItemExtensionApi].isGhost)
-                Seq(referencedHistory) = referencedHistoriesFrom(scope)
-              } yield (referencedHistoryId, referencedHistory)
-
-            if (checks.isEmpty) Trials.reject()
-
-            for ((referencedHistoryId, referencedHistory) <- checks) {
-              withClue(
-                s"Referenced history id: $referencedHistoryId should be defined by the reference."
-              )(assert(referencedHistory.datums.isEmpty))
-            }
-          }
-      }
-  }
-
-  @TestFactory
+@TestFactory
   def yieldTheSameIdentityForARelatedItemAsWhenThatItemIsDirectlyQueriedFor(): DynamicTests = {
     val testCaseTrials = for {
       referencedHistoryRecordingsGroupedById <-
@@ -1376,7 +1057,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
       }
   }
 
-  @TestFactory
+@TestFactory
   def notRevealAnItemAtAQueryTimeComingBeforeItsFirstDefiningEvent(): DynamicTests = {
     val testCaseTrials = for {
       recordingsGroupedById <- recordingsGroupedByIdTrials(
@@ -1440,7 +1121,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-  @TestFactory
+@TestFactory
   def notConsiderAnIneffectiveEventAsBeingDefining(): DynamicTests = {
     val testCaseTrials = for {
       recordingsGroupedById <- recordingsGroupedByIdTrials(
@@ -1529,7 +1210,95 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-  @TestFactory
+@TestFactory
+  def considerAReferenceToARelatedItemInAnEventAsBeingDefining(): DynamicTests = {
+    val testCaseTrials = for {
+      referencedHistoryRecordingsGroupedById <-
+        referencedHistoryRecordingsGroupedByIdTrials(
+          forbidAnnihilations = false
+        )
+      referringHistoryRecordingsGroupedById <-
+        referringHistoryRecordingsGroupedByIdTrials()
+      obsoleteRecordingsGroupedById <-
+        nonConflictingRecordingsGroupedByIdTrials
+      shuffledRecordings <- shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+        referencedHistoryRecordingsGroupedById ++ referringHistoryRecordingsGroupedById
+      )
+      shuffledObsoleteRecordings <- shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+        obsoleteRecordingsGroupedById
+      )
+      bigShuffledHistoryOverLotsOfThings <- intersperseObsoleteEventsAmericium(
+        shuffledRecordings,
+        shuffledObsoleteRecordings
+      )
+      asOfs <- instantTrials
+        .listsOfSize(bigShuffledHistoryOverLotsOfThings.size)
+        .map(_.sorted)
+      queryWhen <- unboundedInstantTrials
+    } yield RelatedItemTestCase(
+      referencedHistoryRecordingsGroupedById,
+      referringHistoryRecordingsGroupedById,
+      bigShuffledHistoryOverLotsOfThings,
+      asOfs,
+      queryWhen
+    )
+    testCaseTrials
+      .withStrategy(_ => CasesLimitStrategy.counted(200, 20))
+      .dynamicTests {
+        case RelatedItemTestCase(
+              referencedHistoryRecordingsGroupedById,
+              referringHistoryRecordingsGroupedById,
+              bigShuffledHistoryOverLotsOfThings,
+              asOfs,
+              queryWhen
+            ) =>
+          Using.resource(makeWorld()) { world =>
+            recordEventsInWorld(
+              bigShuffledHistoryOverLotsOfThings,
+              asOfs,
+              world
+            )
+
+            val scope = world.scopeFor(queryWhen, world.nextRevision)
+
+            val checks =
+              for {
+                RecordingsNoLaterThan(
+                  _,
+                  referringHistoriesFrom,
+                  _,
+                  _,
+                  _
+                ) <- referringHistoryRecordingsGroupedById.flatMap(
+                  _.thePartNoLaterThan(queryWhen)
+                )
+                NonExistentRecordings(
+                  referencedHistoryId,
+                  referencedHistoriesFrom,
+                  _
+                ) <- referencedHistoryRecordingsGroupedById.flatMap(
+                  _.doesNotExistAt(queryWhen)
+                )
+                Seq(referringHistory: ReferringHistory) =
+                  referringHistoriesFrom(scope)
+                if referringHistory.referencedHistories
+                  .get(referencedHistoryId)
+                  .exists(!_.asInstanceOf[ItemExtensionApi].isGhost)
+                Seq(referencedHistory) = referencedHistoriesFrom(scope)
+              } yield (referencedHistoryId, referencedHistory)
+
+            if (checks.isEmpty) Trials.reject()
+
+            for ((referencedHistoryId, referencedHistory) <- checks) {
+              withClue(
+                s"Referenced history id: $referencedHistoryId should be defined by the reference."
+              )(assert(referencedHistory.datums.isEmpty))
+            }
+          }
+      }
+  }
+
+@TestFactory
   def treatAnAnnihilatedItemAccessedViaAReferenceToARelatedItemAsBeingAGhost(): DynamicTests = {
     val testCaseTrials = for {
       referencedHistoryRecordingsGroupedById <-
@@ -1658,7 +1427,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-  @TestFactory
+@TestFactory
   def notAllowAnEventToEitherReferToOrToMutateTheStateOfARelatedItemThatIsAGhost(): DynamicTests = {
     val testCaseTrials = for {
       referencedHistoryRecordingsGroupedById <-
@@ -1805,7 +1574,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-  @TestFactory
+@TestFactory
   def notPermitTheAnnihilationOfAnItemAtAQueryTimeComingBeforeItsFirstDefiningEvent(): DynamicTests = {
     val testCaseTrials = for {
       recordingsGroupedById <- integerHistoryRecordingsGroupedByIdTrials
@@ -1885,7 +1654,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-  @TestFactory
+@TestFactory
   def haveANextRevisionThatReflectsTheLastAddedRevision(): DynamicTests = {
     val testCaseTrials = for {
       recordingsGroupedById <- recordingsGroupedByIdTrials(
@@ -1929,7 +1698,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-  @TestFactory
+@TestFactory
   def haveAVersionTimelineThatRecordsTheAsOfTimeForEachOfItsRevisions(): DynamicTests = {
     val testCaseTrials = for {
       recordingsGroupedById <- recordingsGroupedByIdTrials(
@@ -1973,7 +1742,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-  @TestFactory
+@TestFactory
   def haveASortedVersionTimeline(): DynamicTests = {
     val testCaseTrials = for {
       recordingsGroupedById <- recordingsGroupedByIdTrials(
@@ -2019,7 +1788,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-  @TestFactory
+@TestFactory
   def allocateRevisionNumbersSequentially(): DynamicTests = {
     val testCaseTrials = for {
       recordingsGroupedById <- recordingsGroupedByIdTrials(
@@ -2065,7 +1834,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-  @TestFactory
+@TestFactory
   def haveANextRevisionNumberThatIsTheSizeOfItsVersionTimeline(): DynamicTests = {
     val testCaseTrials = for {
       recordingsGroupedById <- recordingsGroupedByIdTrials(
@@ -2109,7 +1878,74 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-  @TestFactory
+@TestFactory
+  def notPermitTheAsOfTimeForANewRevisionToBeLessThanThatOfAnyExistingRevision(): DynamicTests = {
+    val testCaseTrials = for {
+      recordingsGroupedById <- recordingsGroupedByIdTrials(
+        forbidAnnihilations = false
+      )
+      obsoleteRecordingsGroupedById <-
+        nonConflictingRecordingsGroupedByIdTrials
+      shuffledRecordings <-
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          recordingsGroupedById
+        )
+      shuffledObsoleteRecordings <-
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          obsoleteRecordingsGroupedById
+        )
+      bigShuffledHistoryOverLotsOfThings <- intersperseObsoleteEventsAmericium(
+        shuffledRecordings,
+        shuffledObsoleteRecordings
+      )
+      asOfs <- instantTrials
+        .listsOfSize(bigShuffledHistoryOverLotsOfThings.size)
+        .map(_.sorted)
+      if 1 < asOfs.toSet.size
+      candidateIndicesToStartATranspose =
+        asOfs.zip(asOfs.tail).zipWithIndex filter {
+          case ((first, second), index) => first isBefore second
+        } map (_._2)
+      indexOfFirstAsOfBeingTransposed <- api.choose(candidateIndicesToStartATranspose)
+    } yield (
+      bigShuffledHistoryOverLotsOfThings,
+      asOfs,
+      indexOfFirstAsOfBeingTransposed
+    )
+
+    testCaseTrials.withLimit(200).dynamicTests {
+      case (
+            bigShuffledHistoryOverLotsOfThings,
+            asOfs,
+            indexOfFirstAsOfBeingTransposed
+          ) =>
+        Using.resource(makeWorld()) { world =>
+          val asOfsWithIncorrectTransposition =
+            asOfs.splitAt(indexOfFirstAsOfBeingTransposed) match {
+              case (
+                    asOfsBeforeTransposition,
+                    Seq(first, second, asOfsAfterTransposition @ _*)
+                  ) =>
+                asOfsBeforeTransposition ++ Seq(
+                  second,
+                  first
+                ) ++ asOfsAfterTransposition
+            }
+
+          assertThrows(
+            classOf[IllegalArgumentException],
+            () =>
+              recordEventsInWorld(
+                bigShuffledHistoryOverLotsOfThings,
+                asOfsWithIncorrectTransposition,
+                world
+              )
+          )
+        }
+    }
+  }
+
+@TestFactory
   def createAScopeWhosePropertiesRelateToTheCallToScopeForWhenUsingTheNextRevisionOverload(): DynamicTests = {
     val testCaseTrials = for {
       recordingsGroupedById <- recordingsGroupedByIdTrials(
@@ -2208,7 +2044,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-  @TestFactory
+@TestFactory
   def createAScopeWhosePropertiesRelateToTheCallToScopeForWhenUsingTheAsOfTimeOverload(): DynamicTests = {
     val testCaseTrials = for {
       recordingsGroupedById <- recordingsGroupedByIdTrials(
@@ -2300,7 +2136,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-  @TestFactory
+@TestFactory
   def createAScopeThatIsASnapshotUnaffectedBySubsequentRevisions(): DynamicTests = {
     val testCaseTrials = for {
       recordingsGroupedById <- recordingsGroupedByIdTrials(
@@ -2384,7 +2220,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-  @TestFactory
+@TestFactory
   def createRevisionsWithTheStrongExceptionSafetyGuarantee(): DynamicTests = {
     val testCaseTrials = for {
       recordingsGroupedById <- nonConflictingRecordingsGroupedByIdTrials
@@ -2485,7 +2321,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-  @TestFactory
+@TestFactory
   def yieldTheSameHistoriesForScopesIncludingAllChangesAtTheLatestRevisionRegardlessOfHowChangesAreGroupedIntoRevisions()
       : DynamicTests = {
     val testCaseTrials = for {
@@ -2572,72 +2408,321 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-  @TestFactory
-  def notPermitTheAsOfTimeForANewRevisionToBeLessThanThatOfAnyExistingRevision(): DynamicTests = {
+@TestFactory
+  def extendTheHistoryOfAnItemWhoseAnnihilationIsAnnulledToPickUpAnySubsequentEventsRelatingToThatItem()
+      : DynamicTests = {
+    val itemId = "Fred"
+
     val testCaseTrials = for {
-      recordingsGroupedById <- recordingsGroupedByIdTrials(
-        forbidAnnihilations = false
+      eventTimes <- instantTrials.nonEmptyLists.map(_.sorted)
+      annihilationWhen <- instantTrials.filter(when =>
+        when.isAfter(eventTimes.head) && !when.isAfter(eventTimes.last)
       )
-      obsoleteRecordingsGroupedById <-
-        nonConflictingRecordingsGroupedByIdTrials
+      steps = 1 to eventTimes.size
+      recordings: List[(Unbounded[Instant], Event)] =
+        eventTimes.zip(steps).map { case (when, step) =>
+          Finite(when) -> Change
+            .forOneItem[IntegerHistory](when)(
+              itemId,
+              { item: IntegerHistory =>
+                item.integerProperty = step
+              }
+            )
+        }
       shuffledRecordings <-
-        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
-          recordingsGroupedById
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhenForAGivenItem(
+          recordings
         )
-      shuffledObsoleteRecordings <-
-        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
-          obsoleteRecordingsGroupedById
-        )
-      bigShuffledHistoryOverLotsOfThings <- intersperseObsoleteEventsAmericium(
-        shuffledRecordings,
-        shuffledObsoleteRecordings
-      )
+      bigShuffledHistoryOverLotsOfThings <- api
+        .splitsIntoNonEmptyPieces(shuffledRecordings.zipWithIndex)
       asOfs <- instantTrials
         .listsOfSize(bigShuffledHistoryOverLotsOfThings.size)
         .map(_.sorted)
-      if 1 < asOfs.toSet.size
-      candidateIndicesToStartATranspose =
-        asOfs.zip(asOfs.tail).zipWithIndex filter {
-          case ((first, second), index) => first isBefore second
-        } map (_._2)
-      indexOfFirstAsOfBeingTransposed <- api.choose(candidateIndicesToStartATranspose)
-    } yield (
-      bigShuffledHistoryOverLotsOfThings,
+    } yield AnnulledAnnihilationTestCase(
+      liftRecordings(bigShuffledHistoryOverLotsOfThings),
       asOfs,
-      indexOfFirstAsOfBeingTransposed
+      steps,
+      annihilationWhen
     )
 
     testCaseTrials.withLimit(200).dynamicTests {
-      case (
+      case AnnulledAnnihilationTestCase(
             bigShuffledHistoryOverLotsOfThings,
             asOfs,
-            indexOfFirstAsOfBeingTransposed
+            steps,
+            annihilationWhen
           ) =>
         Using.resource(makeWorld()) { world =>
-          val asOfsWithIncorrectTransposition =
-            asOfs.splitAt(indexOfFirstAsOfBeingTransposed) match {
-              case (
-                    asOfsBeforeTransposition,
-                    Seq(first, second, asOfsAfterTransposition @ _*)
-                  ) =>
-                asOfsBeforeTransposition ++ Seq(
-                  second,
-                  first
-                ) ++ asOfsAfterTransposition
-            }
+          val initialEventId = -2
 
-          assertThrows(
-            classOf[IllegalArgumentException],
-            () =>
-              recordEventsInWorld(
-                bigShuffledHistoryOverLotsOfThings,
-                asOfsWithIncorrectTransposition,
-                world
-              )
+          world.revise(
+            initialEventId,
+            Change.forOneItem[IntegerHistory](annihilationWhen)(
+              itemId,
+              { item: IntegerHistory =>
+                item.integerProperty = -1
+              }
+            ),
+            asOfs.head
           )
+
+          val annihilationEventId = -1
+
+          world.revise(
+            annihilationEventId,
+            Annihilation[Any](annihilationWhen, itemId),
+            asOfs.head
+          )
+
+          recordEventsInWorld(
+            bigShuffledHistoryOverLotsOfThings,
+            asOfs,
+            world
+          )
+
+          world.annul(initialEventId, asOfs.last)
+
+          world.annul(annihilationEventId, asOfs.last)
+
+          val scope =
+            world
+              .scopeFor(PositiveInfinity, world.nextRevision)
+
+          val fredTheItem = scope
+            .render(Bitemporal.withId[IntegerHistory](itemId))
+            .toList
+
+          assert(steps == fredTheItem.head.datums)
         }
     }
   }
+
+@TestFactory
+  def buildAnItemStateInAMannerConsistentWithTheHistoryExperiencedByTheItemRegardlessOfAnyCorrectedHistory()
+      : DynamicTests = {
+    val itemId = "Fred"
+
+    val testCaseTrials = for {
+      eventTimes <- instantTrials.nonEmptyLists.map(_.sorted)
+      steps = 1 to eventTimes.size
+      recordings: List[(Unbounded[Instant], Event)] =
+        eventTimes.zip(steps).map { case (when, step) =>
+          Finite(when) -> Change
+            .forOneItem[IntegerHistory](when)(
+              itemId,
+              { item: IntegerHistory =>
+                item.integerProperty = step
+              }
+            )
+        }
+      obsoleteEventTimes <- instantTrials.nonEmptyLists
+      obsoleteSteps = 1 to obsoleteEventTimes.size
+      obsoleteRecordings: List[(Unbounded[Instant], Event)] =
+        obsoleteEventTimes.zip(obsoleteSteps).map { case (when, step) =>
+          Finite(when) -> Change
+            .forOneItem[IntegerHistory](when)(
+              itemId,
+              { item: IntegerHistory =>
+                item.integerProperty = step
+              }
+            )
+        }
+      shuffledRecordings <-
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhenForAGivenItem(
+          recordings
+        )
+      shuffledObsoleteRecordings <-
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhenForAGivenItem(
+          obsoleteRecordings
+        )
+      bigShuffledHistoryOverLotsOfThings <-
+        intersperseObsoleteEventsAmericium(
+          shuffledRecordings,
+          shuffledObsoleteRecordings
+        )
+      asOfs <- instantTrials
+        .listsOfSize(bigShuffledHistoryOverLotsOfThings.size)
+        .map(_.sorted)
+    } yield StateConsistencyTestCase(
+      bigShuffledHistoryOverLotsOfThings,
+      asOfs,
+      steps
+    )
+
+    testCaseTrials.withLimit(200).dynamicTests {
+      case StateConsistencyTestCase(
+            bigShuffledHistoryOverLotsOfThings,
+            asOfs,
+            steps
+          ) =>
+        Using.resource(makeWorld()) { world =>
+          recordEventsInWorld(
+            bigShuffledHistoryOverLotsOfThings,
+            asOfs,
+            world
+          )
+
+          val scope =
+            world
+              .scopeFor(PositiveInfinity, world.nextRevision)
+
+          val fredTheItem = scope
+            .render(Bitemporal.withId[IntegerHistory](itemId))
+            .toList
+
+          assert(steps == fredTheItem.head.datums)
+        }
+    }
+  }
+
+@TestFactory
+  def buildAnItemStateInAMannerConsistentWithTheHistoryExperiencedByTheItemRegardlessOfAnyCorrectedHistoryWithATwist()
+      : DynamicTests = {
+    val itemId = "Fred"
+
+    val testCaseTrials = for {
+      eventTimes <- instantTrials.nonEmptyLists.map(_.sorted)
+      steps = 1 to eventTimes.size
+      recordings: List[(Unbounded[Instant], Event)] =
+        eventTimes.zip(steps).map { case (when, step) =>
+          Finite(when) -> Change
+            .forOneItem[IntegerHistory](when)(
+              itemId,
+              { item: IntegerHistory =>
+                item.integerProperty = step
+              }
+            )
+        }
+      shuffledRecordings <-
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhenForAGivenItem(
+          recordings
+        )
+      shuffledObsoleteRecordings <-
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhenForAGivenItem(
+          recordings
+        )
+      bigShuffledHistoryOverLotsOfThings <-
+        intersperseObsoleteEventsAmericium(
+          shuffledRecordings,
+          shuffledObsoleteRecordings
+        )
+      asOfs <- instantTrials
+        .listsOfSize(bigShuffledHistoryOverLotsOfThings.size)
+        .map(_.sorted)
+    } yield StateConsistencyTestCase(
+      bigShuffledHistoryOverLotsOfThings,
+      asOfs,
+      steps
+    )
+
+    testCaseTrials.withLimit(200).dynamicTests {
+      case StateConsistencyTestCase(
+            bigShuffledHistoryOverLotsOfThings,
+            asOfs,
+            steps
+          ) =>
+        Using.resource(makeWorld()) { world =>
+          recordEventsInWorld(
+            bigShuffledHistoryOverLotsOfThings,
+            asOfs,
+            world
+          )
+
+          val scope =
+            world
+              .scopeFor(PositiveInfinity, world.nextRevision)
+
+          val fredTheItem = scope
+            .render(Bitemporal.withId[IntegerHistory](itemId))
+            .toList
+
+          assert(steps == fredTheItem.head.datums)
+        }
+    }
+  }
+
+@TestFactory
+  def buildAnItemStateInAMannerConsistentWithTheHistoryExperiencedByTheItemRegardlessOfAnyCorrectedHistoryWithAnotherTwist()
+      : DynamicTests = {
+    val itemId = "Fred"
+
+    val testCaseTrials = for {
+      eventTimes <- api
+        .integers(0, 50)
+        .map(0 to _ toList)
+        .map(
+          _.map(timeInSeconds =>
+            Instant.ofEpochSecond(24 * 60 * 60 * timeInSeconds)
+          )
+        )
+      steps = 1 to eventTimes.size
+      recordings: List[(Unbounded[Instant], Event)] =
+        eventTimes.zip(steps).map { case (when, step) =>
+          Finite(when) -> Change
+            .forOneItem[IntegerHistory](when)(
+              itemId,
+              { item: IntegerHistory =>
+                item.integerProperty = step
+              }
+            )
+        }
+      shuffledObsoleteEventTimes <- api.shuffles(eventTimes)
+      obsoleteSteps = 1 to shuffledObsoleteEventTimes.size
+      obsoleteRecordings: List[(Unbounded[Instant], Event)] =
+        shuffledObsoleteEventTimes.zip(obsoleteSteps).map { case (when, step) =>
+          Finite(when) -> Change
+            .forOneItem[IntegerHistory](when)(
+              itemId,
+              { item: IntegerHistory =>
+                item.integerProperty = step
+              }
+            )
+        }
+
+      pairsOfObsoleteAndSucceedingEvents =
+        obsoleteRecordings.zipWithIndex.zip(recordings.zipWithIndex)
+
+      historyOverLotsOfThings = pairsOfObsoleteAndSucceedingEvents
+        .flatMap { case (obsolete, succeeding) =>
+          Seq(Seq(obsolete), Seq(succeeding))
+        }
+
+      asOfs <- instantTrials
+        .listsOfSize(historyOverLotsOfThings.length)
+        .map(_.sorted)
+    } yield StateConsistencyTestCase(
+      liftRecordings(historyOverLotsOfThings),
+      asOfs,
+      steps
+    )
+
+    testCaseTrials.withLimit(200).dynamicTests {
+      case StateConsistencyTestCase(
+            historyOverLotsOfThings,
+            asOfs,
+            steps
+          ) =>
+        Using.resource(makeWorld()) { world =>
+          recordEventsInWorld(
+            historyOverLotsOfThings,
+            asOfs,
+            world
+          )
+
+          val scope =
+            world
+              .scopeFor(PositiveInfinity, world.nextRevision)
+
+          val fredTheItem = scope
+            .render(Bitemporal.withId[IntegerHistory](itemId))
+            .toList
+
+          assert(steps.toSet == fredTheItem.head.datums.toSet)
+        }
+    }
+  }
+
+
 
   abstract class NonExistentHistory extends History {
     override type Id = NonExistentId
