@@ -324,6 +324,36 @@ object WorldBehaviourAmericium {
       revisionOffsetToCheckAt: Int
   )
 
+  case class ArbitraryScopesTestCase(
+      testCaseSubsections: Seq[
+        (List[WorldSpecSupportAmericium#RecordingsForAnId], Seq[Seq[(Option[(Unbounded[Instant], Event)], intersperseObsoleteEventsAmericium.EventId)]])
+      ],
+      asOfsForSubsections: Seq[Seq[Instant]],
+      queryWhen: Unbounded[Instant]
+  )
+
+  case class AnnulAndRewriteAtSameAsOfTestCase(
+      recordingsGroupedById: Seq[WorldSpecSupportAmericium#RecordingsForAnId],
+      bigShuffledHistoryOverLotsOfThings: Seq[
+        Seq[
+          (
+              Option[(Unbounded[Instant], Event)],
+              intersperseObsoleteEventsAmericium.EventId
+          )
+        ]
+      ],
+      annulmentsGalore: Seq[
+        Seq[
+          (
+              Option[(Unbounded[Instant], Event)],
+              intersperseObsoleteEventsAmericium.EventId
+          )
+        ]
+      ],
+      asOfs: Seq[Instant],
+      queryWhen: Unbounded[Instant]
+  )
+
   case class AnnulledAnnihilationTestCase(
       bigShuffledHistoryOverLotsOfThings: Seq[
         Seq[
@@ -373,7 +403,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
   import cats.implicits._
 
 @TestFactory
-  def worldWithNoHistory(): DynamicTests = {
+  def notContainAnyIdentifiables(): DynamicTests = {
     val scopeTrials = for {
       when <- unboundedInstantTrials
       asOf <- instantTrials
@@ -4139,6 +4169,301 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
         }
     }
   }
+
+@TestFactory
+  def yieldAHistoryWhoseVersionsOfEventsReflectArbitraryScopesMadeFromItAtVaryingRevisions(): DynamicTests = {
+    val testCaseSubSectionTrials = for {
+      recordingsGroupedById <- recordingsGroupedByIdTrials(
+        forbidAnnihilations = false
+      )
+      obsoleteRecordingsGroupedById <-
+        nonConflictingRecordingsGroupedByIdTrials
+      shuffledRecordings <-
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          recordingsGroupedById
+        )
+      shuffledObsoleteRecordings <-
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          obsoleteRecordingsGroupedById
+        )
+      bigShuffledHistoryOverLotsOfThings <- intersperseObsoleteEventsAmericium(
+        shuffledRecordings,
+        shuffledObsoleteRecordings
+      )
+    } yield (recordingsGroupedById, bigShuffledHistoryOverLotsOfThings)
+
+    val testCaseTrials = for {
+      testCaseSubsections <- testCaseSubSectionTrials.listsOfSize(4)
+      subsectionLengths = testCaseSubsections.map(_._2.length)
+      asOfsForSubsections <- {
+        val numberOfEventsOverall = subsectionLengths.sum
+        instantTrials.listsOfSize(numberOfEventsOverall).map(_.sorted).map(allAsOfs => {
+          def chunksOf(
+                        chunkSizes: Seq[Int],
+                        articles: List[Instant]
+                      ): List[List[Instant]] =
+            chunkSizes match {
+              case chunkSize :: remainingChunkSizes =>
+                val (chunkOfStuff, remainingArticles) = articles splitAt chunkSize
+                chunkOfStuff :: chunksOf(remainingChunkSizes, remainingArticles)
+              case Nil => Nil
+            }
+
+          chunksOf(subsectionLengths, allAsOfs)
+        })
+      }
+      queryWhen <- unboundedInstantTrials
+    } yield ArbitraryScopesTestCase(
+      testCaseSubsections,
+      asOfsForSubsections,
+      queryWhen
+    )
+
+    testCaseTrials.withLimit(200).dynamicTests {
+      case ArbitraryScopesTestCase(
+            testCaseSubsections,
+            asOfsForSubsections,
+            queryWhen
+          ) =>
+        Using.resource(makeWorld()) { world =>
+          def listOfRevisionsToCheckAtAndRecordingsGroupedById(
+              subsections: Seq[
+                (
+                    (
+                        List[WorldSpecSupportAmericium#RecordingsForAnId],
+                        Seq[
+                          Seq[
+                            (
+                                Option[(Unbounded[Instant], Event)],
+                                intersperseObsoleteEventsAmericium.EventId
+                            )
+                          ]
+                        ]
+                    ),
+                    Seq[Instant]
+                )
+              ],
+              maximumEventIdFromPreviousSubsection: intersperseObsoleteEventsAmericium.EventId
+          ): LazyList[(World.Revision, List[WorldSpecSupportAmericium#RecordingsForAnId])] =
+            subsections match {
+              case (
+                    (
+                      recordingsGroupedById,
+                      bigShuffledHistoryOverLotsOfThings
+                    ),
+                    asOfs
+                  ) :: remainingSubsections =>
+                val sortedEventIds =
+                  (bigShuffledHistoryOverLotsOfThings.flatMap(_.map(_._2))).sorted.distinct
+                assert(0 == sortedEventIds.head)
+                assert((sortedEventIds zip sortedEventIds.tail).forall {
+                  case (first, second) => 1 + first == second
+                })
+                val maximumEventIdFromThisSubsection =
+                  sortedEventIds.last
+                val annulmentsForExtraEventIdsNotCorrectedInThisSubsection =
+                  Seq(
+                    (1 + maximumEventIdFromThisSubsection) to maximumEventIdFromPreviousSubsection map ((None: Option[
+                      (Unbounded[Instant], Event)
+                    ]) -> _)
+                  )
+                val asOfForAnnulments = asOfs.head
+                try {
+                  if (world.revisionAsOfs.nonEmpty && asOfForAnnulments.isBefore(world.revisionAsOfs.last)) {
+                    throw new RuntimeException("Inconsistent asOf for annulments")
+                  }
+                  recordEventsInWorld(
+                    annulmentsForExtraEventIdsNotCorrectedInThisSubsection,
+                    List(asOfForAnnulments),
+                    world
+                  )
+                  if (asOfs.nonEmpty && asOfs.head.isBefore(world.revisionAsOfs.last)) {
+                    throw new RuntimeException("Inconsistent asOf for history")
+                  }
+                  recordEventsInWorld(
+                    bigShuffledHistoryOverLotsOfThings,
+                    asOfs.toList,
+                    world
+                  )
+                } catch {
+                  case _: RuntimeException =>
+                    assert(World.initialRevision != world.nextRevision)
+                    val asOfForAllCorrections = asOfs.last
+
+                    val annulmentsGalore = List(
+                      (0 to (maximumEventIdFromPreviousSubsection max maximumEventIdFromThisSubsection)) map ((None: Option[
+                        (Unbounded[Instant], Event)
+                      ]) -> _)
+                    )
+
+                    recordEventsInWorld(
+                      annulmentsGalore,
+                      List(asOfForAllCorrections),
+                      world
+                    )
+                    recordEventsInWorld(
+                      bigShuffledHistoryOverLotsOfThings,
+                      List.fill(asOfs.length)(asOfForAllCorrections),
+                      world
+                    )
+                }
+
+                (world.nextRevision -> recordingsGroupedById) #:: listOfRevisionsToCheckAtAndRecordingsGroupedById(
+                  remainingSubsections,
+                  maximumEventIdFromThisSubsection
+                )
+              case _ => LazyList.empty
+            }
+
+          val checks = (for {
+            (revision, recordingsGroupedById) <-
+              listOfRevisionsToCheckAtAndRecordingsGroupedById(
+                testCaseSubsections zip asOfsForSubsections,
+                -1
+              )
+          } yield {
+            val scope = world.scopeFor(queryWhen, revision)
+
+            val checks = for {
+              recording <- recordingsGroupedById
+              RecordingsNoLaterThan(
+                historyId,
+                historiesFrom,
+                pertinentRecordings,
+                _,
+                _
+              ) <- recording.thePartNoLaterThan(
+                queryWhen
+              )
+              Seq(history) = historiesFrom(scope)
+            } yield (
+              historyId,
+              history.datums,
+              pertinentRecordings.map(_._1)
+            )
+
+            for ((historyId, actualHistory, expectedHistory) <- checks) {
+              withClue(s"History mismatch for history id: $historyId.") {
+                assert(actualHistory == expectedHistory)
+              }
+            }
+          }).toList
+
+          if (checks.isEmpty) Trials.reject()
+        }
+    }
+  }
+
+@TestFactory
+  def allowAnEntireHistoryToBeCompletelyAnnulledAndThenRewrittenAtTheSameAsOf(): DynamicTests = {
+    val testCaseTrials = for {
+      recordingsGroupedById <- recordingsGroupedByIdTrials(
+        forbidAnnihilations = false
+      )
+      shuffledRecordings <-
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          recordingsGroupedById
+        )
+      bigShuffledHistoryOverLotsOfThings <- api
+        .splitsIntoNonEmptyPieces(shuffledRecordings.zipWithIndex)
+        .map(liftRecordings)
+      allEventIds = bigShuffledHistoryOverLotsOfThings.flatten.map(_._2)
+      annulmentsGalore = List(
+        allEventIds.map((None: Option[(Unbounded[Instant], Event)]) -> _)
+      )
+      historyLength = bigShuffledHistoryOverLotsOfThings.length
+      asOfs <- instantTrials
+        .listsOfSize(historyLength)
+        .map(_.sorted)
+      queryWhen <- unboundedInstantTrials
+    } yield AnnulAndRewriteAtSameAsOfTestCase(
+      recordingsGroupedById,
+      bigShuffledHistoryOverLotsOfThings,
+      annulmentsGalore,
+      asOfs,
+      queryWhen
+    )
+
+    testCaseTrials.withLimit(200).dynamicTests {
+      case AnnulAndRewriteAtSameAsOfTestCase(
+            recordingsGroupedById,
+            bigShuffledHistoryOverLotsOfThings,
+            annulmentsGalore,
+            asOfs,
+            queryWhen
+          ) =>
+        Using.resource(makeWorld()) { world =>
+          // Define a history the first time around...
+
+          recordEventsInWorld(
+            bigShuffledHistoryOverLotsOfThings,
+            asOfs,
+            world
+          )
+
+          val scopeForFirstHistory =
+            world.scopeFor(queryWhen, world.nextRevision)
+
+          val firstHistory =
+            historyFrom(world, recordingsGroupedById)(
+              scopeForFirstHistory
+            )
+
+          // Annul that history completely...
+
+          val asOfForCorrections = asOfs.last
+
+          recordEventsInWorld(
+            annulmentsGalore,
+            List(asOfForCorrections),
+            world
+          )
+
+          val scopeAfterAnnulments =
+            world.scopeFor(queryWhen, world.nextRevision)
+
+          val historyAfterAnnulments =
+            historyFrom(world, recordingsGroupedById)(
+              scopeAfterAnnulments
+            )
+
+          // ...and then recreate what should be the same history.
+
+          recordEventsInWorld(
+            bigShuffledHistoryOverLotsOfThings,
+            List.fill(bigShuffledHistoryOverLotsOfThings.length)(
+              asOfForCorrections
+            ),
+            world
+          )
+
+          val scopeForSecondHistory =
+            world.scopeFor(queryWhen, world.nextRevision)
+
+          val secondHistory =
+            historyFrom(world, recordingsGroupedById)(
+              scopeForSecondHistory
+            )
+
+          withClue(s"History after annulments should be empty.") {
+            assert(historyAfterAnnulments.isEmpty)
+          }
+          withClue(s"History after rewrite should match first history.") {
+            assert(firstHistory == secondHistory)
+          }
+        }
+    }
+  }
+
+
+
+
+
+
+
+
+
+
 
 
 
