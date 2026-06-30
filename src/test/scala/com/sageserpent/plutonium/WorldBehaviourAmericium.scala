@@ -851,6 +851,46 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
   }
 
 @TestFactory
+  def notPermitAnInconsistentRevisionToBeMade(): DynamicTests = {
+    val testCaseTrials: Trials[FaultyRevisionTestCase] = for {
+      faultyRecordingsGroupedById <- faultyRecordingsGroupedByIdTrials
+      bigShuffledFaultyHistoryOverLotsOfThings <-
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          faultyRecordingsGroupedById
+        ).flatMap(shuffled => api.splitsIntoNonEmptyPieces(shuffled.zipWithIndex)).map(liftRecordings)
+      asOfs <- instantTrials
+        .listsOfSize(bigShuffledFaultyHistoryOverLotsOfThings.size)
+        .map(_.sorted)
+      queryWhen <- unboundedInstantTrials
+    } yield FaultyRevisionTestCase(
+      faultyRecordingsGroupedById,
+      bigShuffledFaultyHistoryOverLotsOfThings,
+      asOfs,
+      queryWhen
+    )
+
+    testCaseTrials.withLimit(200).dynamicTests {
+      case FaultyRevisionTestCase(
+            _,
+            bigShuffledFaultyHistoryOverLotsOfThings,
+            asOfs,
+            _
+          ) =>
+        Using.resource(makeWorld()) { world =>
+          assertThrows(
+            WorldSpecSupport.changeError.getClass,
+            () =>
+              recordEventsInWorld(
+                bigShuffledFaultyHistoryOverLotsOfThings,
+                asOfs,
+                world
+              )
+          )
+        }
+    }
+  }
+
+@TestFactory
   def revealAllTheHistoryUpToTheWhenLimitOfAScopeMadeFromIt(): DynamicTests = {
     val testCaseTrials = for {
       recordingsGroupedById <- recordingsGroupedByIdTrials(
@@ -2803,6 +2843,8 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
         }
     }
   }
+
+
 
 
 
