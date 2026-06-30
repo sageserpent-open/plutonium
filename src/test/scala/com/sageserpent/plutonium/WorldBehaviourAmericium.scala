@@ -322,90 +322,6 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
   }
 
 @TestFactory
-  def revealTheSameHistoryFromAScopeWithAnAsOfLimitThatComesAtOrAfterThatRevisionButBeforeTheFollowingRevision()
-      : DynamicTests = {
-    val testCaseTrials = for {
-      recordingsGroupedById <- recordingsGroupedByIdTrials(
-        forbidAnnihilations = false
-      )
-      shuffledRecordings <-
-        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
-          recordingsGroupedById
-        )
-      bigShuffledHistoryOverLotsOfThings <- api
-        .splitsIntoNonEmptyPieces(shuffledRecordings.zipWithIndex)
-        .map(liftRecordings)
-      asOfs <- instantTrials
-        .listsOfSize(bigShuffledHistoryOverLotsOfThings.size)
-        .map(_.sorted)
-      queryWhen <- unboundedInstantTrials
-      laterAsOfs <- api.sequences(asOfs.zip(asOfs.tail :+ asOfs.last.plusSeconds(10L)).map {
-        case (earlier, later) if earlier isBefore later =>
-          api.longs(earlier.getEpochSecond, later.getEpochSecond - 1).map(Instant.ofEpochSecond).filter(_ isAfter earlier)
-        case (earlier, _) => api.only(earlier)
-      })
-    } yield HistoryConsistencyTestCase(
-      recordingsGroupedById,
-      bigShuffledHistoryOverLotsOfThings,
-      asOfs,
-      queryWhen,
-      laterAsOfs
-    )
-
-    testCaseTrials.withLimit(200).dynamicTests {
-      case HistoryConsistencyTestCase(
-            recordingsGroupedById,
-            bigShuffledHistoryOverLotsOfThings,
-            asOfs,
-            queryWhen,
-            laterAsOfs
-          ) =>
-        Using.resource(makeWorld()) { world =>
-          val revisions = recordEventsInWorld(
-            bigShuffledHistoryOverLotsOfThings,
-            asOfs,
-            world
-          )
-
-          val checks = for {
-            (
-              (earlierAsOfCorrespondingToRevision, revision),
-              laterAsOfSharingTheSameRevisionAsTheEarlierOne
-            ) <- asOfs zip revisions zip laterAsOfs
-            if earlierAsOfCorrespondingToRevision isBefore laterAsOfSharingTheSameRevisionAsTheEarlierOne
-
-            baselineScope = world
-              .scopeFor(queryWhen, earlierAsOfCorrespondingToRevision)
-            scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne =
-              world
-                .scopeFor(
-                  queryWhen,
-                  laterAsOfSharingTheSameRevisionAsTheEarlierOne
-                )
-            recording <- recordingsGroupedById
-            RecordingsNoLaterThan(historyId, historiesFrom, _, _, _) <-
-              recording.thePartNoLaterThan(
-                queryWhen
-              )
-            if historiesFrom(baselineScope).nonEmpty
-            Seq(baselineHistory) = historiesFrom(baselineScope)
-            Seq(historyUnderTest) = historiesFrom(
-              scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne
-            )
-          } yield (historyId, baselineHistory.datums, historyUnderTest.datums)
-
-          if (checks.isEmpty) Trials.reject()
-
-          for ((historyId, baselineDatums, testDatums) <- checks) {
-            withClue(s"For history id: $historyId.") {
-              assert(baselineDatums == testDatums)
-            }
-          }
-        }
-    }
-  }
-
-  @TestFactory
   def revealAllHistoryUpToTheAsOfLimitOfAScopeMadeFromIt(): DynamicTests = {
     val testCaseTrials: Trials[OrderedHistoryTestCase] = for {
       recordingsGroupedById <- recordingsGroupedByIdTrials(
@@ -762,6 +678,90 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
                   scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne
                 ).isEmpty
               )
+            }
+          }
+        }
+    }
+  }
+
+@TestFactory
+  def revealTheSameHistoryFromAScopeWithAnAsOfLimitThatComesAtOrAfterThatRevisionButBeforeTheFollowingRevision()
+      : DynamicTests = {
+    val testCaseTrials = for {
+      recordingsGroupedById <- recordingsGroupedByIdTrials(
+        forbidAnnihilations = false
+      )
+      shuffledRecordings <-
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          recordingsGroupedById
+        )
+      bigShuffledHistoryOverLotsOfThings <- api
+        .splitsIntoNonEmptyPieces(shuffledRecordings.zipWithIndex)
+        .map(liftRecordings)
+      asOfs <- instantTrials
+        .listsOfSize(bigShuffledHistoryOverLotsOfThings.size)
+        .map(_.sorted)
+      queryWhen <- unboundedInstantTrials
+      laterAsOfs <- api.sequences(asOfs.zip(asOfs.tail :+ asOfs.last.plusSeconds(10L)).map {
+        case (earlier, later) if earlier isBefore later =>
+          api.longs(earlier.getEpochSecond, later.getEpochSecond - 1).map(Instant.ofEpochSecond).filter(_ isAfter earlier)
+        case (earlier, _) => api.only(earlier)
+      })
+    } yield HistoryConsistencyTestCase(
+      recordingsGroupedById,
+      bigShuffledHistoryOverLotsOfThings,
+      asOfs,
+      queryWhen,
+      laterAsOfs
+    )
+
+    testCaseTrials.withLimit(200).dynamicTests {
+      case HistoryConsistencyTestCase(
+            recordingsGroupedById,
+            bigShuffledHistoryOverLotsOfThings,
+            asOfs,
+            queryWhen,
+            laterAsOfs
+          ) =>
+        Using.resource(makeWorld()) { world =>
+          val revisions = recordEventsInWorld(
+            bigShuffledHistoryOverLotsOfThings,
+            asOfs,
+            world
+          )
+
+          val checks = for {
+            (
+              (earlierAsOfCorrespondingToRevision, revision),
+              laterAsOfSharingTheSameRevisionAsTheEarlierOne
+            ) <- asOfs zip revisions zip laterAsOfs
+            if earlierAsOfCorrespondingToRevision isBefore laterAsOfSharingTheSameRevisionAsTheEarlierOne
+
+            baselineScope = world
+              .scopeFor(queryWhen, earlierAsOfCorrespondingToRevision)
+            scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne =
+              world
+                .scopeFor(
+                  queryWhen,
+                  laterAsOfSharingTheSameRevisionAsTheEarlierOne
+                )
+            recording <- recordingsGroupedById
+            RecordingsNoLaterThan(historyId, historiesFrom, _, _, _) <-
+              recording.thePartNoLaterThan(
+                queryWhen
+              )
+            if historiesFrom(baselineScope).nonEmpty
+            Seq(baselineHistory) = historiesFrom(baselineScope)
+            Seq(historyUnderTest) = historiesFrom(
+              scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne
+            )
+          } yield (historyId, baselineHistory.datums, historyUnderTest.datums)
+
+          if (checks.isEmpty) Trials.reject()
+
+          for ((historyId, baselineDatums, testDatums) <- checks) {
+            withClue(s"For history id: $historyId.") {
+              assert(baselineDatums == testDatums)
             }
           }
         }
@@ -2721,6 +2721,8 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
         }
     }
   }
+
+
 
 
 
