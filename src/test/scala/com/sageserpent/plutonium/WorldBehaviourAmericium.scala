@@ -3551,11 +3551,12 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
         )
       bigShuffledHistoryOverLotsOfThings <- api
         .splitsIntoNonEmptyPieces(shuffledRecordings.zipWithIndex)
+        .map(liftRecordings)
       asOfs <- instantTrials
         .listsOfSize(bigShuffledHistoryOverLotsOfThings.size)
         .map(_.sorted)
     } yield AnnulledAnnihilationTestCase(
-      liftRecordings(bigShuffledHistoryOverLotsOfThings),
+      bigShuffledHistoryOverLotsOfThings,
       asOfs,
       steps,
       annihilationWhen
@@ -3925,10 +3926,9 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
       )
       bigShuffledHistoryOverLotsOfThings <- intersperseObsoleteEventsAmericium
         .chunkKeepingEventIdsUniquePerChunk(
-          shuffledRecordings.zipWithIndex.map { case (stuff, eventId) =>
-            Some(stuff) -> eventId
-          }
+          shuffledRecordings.zipWithIndex
         )
+        .map(liftRecordings)
       allEventIds = bigShuffledHistoryOverLotsOfThings.flatten.map(_._2)
       maximumEventId = allEventIds.max
       eventIdsThatMayBeSpuriousAndDuplicated <- api
