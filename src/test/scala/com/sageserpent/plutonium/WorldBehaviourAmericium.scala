@@ -309,6 +309,21 @@ object WorldBehaviourAmericium {
       queryWhen: Unbounded[Instant]
   )
 
+  case class VersionReflectionTestCase(
+      recordingsGroupedById: Seq[WorldSpecSupportAmericium#RecordingsForAnId],
+      bigOverallShuffledHistoryOverLotsOfThings: Seq[
+        Seq[
+          (
+              Option[(Unbounded[Instant], Event)],
+              intersperseObsoleteEventsAmericium.EventId
+          )
+        ]
+      ],
+      asOfs: Seq[Instant],
+      queryWhen: Unbounded[Instant],
+      revisionOffsetToCheckAt: Int
+  )
+
   case class AnnulledAnnihilationTestCase(
       bigShuffledHistoryOverLotsOfThings: Seq[
         Seq[
@@ -4028,6 +4043,104 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
         }
     }
   }
+
+@TestFactory
+  def yieldAHistoryWhoseVersionsOfEventsReflectTheRevisionOfAScopeMadeFromIt(): DynamicTests = {
+    val testCaseTrials = for {
+      recordingsGroupedById <- recordingsGroupedByIdTrials(
+        forbidAnnihilations = true
+      )
+      obsoleteRecordingsGroupedById <-
+        nonConflictingRecordingsGroupedByIdTrials
+      followingRecordingsGroupedById <-
+        nonConflictingRecordingsGroupedByIdTrials
+      shuffledRecordings <-
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          recordingsGroupedById
+        )
+      shuffledObsoleteRecordings <-
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          obsoleteRecordingsGroupedById
+        )
+      bigShuffledHistoryOverLotsOfThings <- intersperseObsoleteEventsAmericium(
+        shuffledRecordings,
+        shuffledObsoleteRecordings
+      )
+      shuffledFollowingRecordingAndEventPairs <-
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          followingRecordingsGroupedById
+        ).map(_.zipWithIndex)
+      bigFollowingShuffledHistoryOverLotsOfThings <- api
+        .splitsIntoNonEmptyPieces(shuffledFollowingRecordingAndEventPairs)
+        .map(liftRecordings)
+      bigOverallShuffledHistoryOverLotsOfThings =
+        bigShuffledHistoryOverLotsOfThings ++ bigFollowingShuffledHistoryOverLotsOfThings
+      asOfs <- instantTrials
+        .listsOfSize(bigOverallShuffledHistoryOverLotsOfThings.length)
+        .map(_.sorted)
+      queryWhen <- unboundedInstantTrials
+      revisionOffsetToCheckAt <- api.only(
+        bigShuffledHistoryOverLotsOfThings.length
+      )
+    } yield VersionReflectionTestCase(
+      recordingsGroupedById,
+      bigOverallShuffledHistoryOverLotsOfThings,
+      asOfs,
+      queryWhen,
+      revisionOffsetToCheckAt
+    )
+
+    testCaseTrials.withLimit(200).dynamicTests {
+      case VersionReflectionTestCase(
+            recordingsGroupedById,
+            bigOverallShuffledHistoryOverLotsOfThings,
+            asOfs,
+            queryWhen,
+            revisionOffsetToCheckAt
+          ) =>
+        Using.resource(makeWorld()) { world =>
+          recordEventsInWorld(
+            bigOverallShuffledHistoryOverLotsOfThings,
+            asOfs,
+            world
+          )
+
+          val scope =
+            world.scopeFor(
+              queryWhen,
+              World.initialRevision + revisionOffsetToCheckAt
+            )
+
+          val checks = for {
+            recording <- recordingsGroupedById
+            RecordingsNoLaterThan(
+              historyId,
+              historiesFrom,
+              pertinentRecordings,
+              _,
+              _
+            ) <- recording.thePartNoLaterThan(
+              queryWhen
+            )
+            Seq(history) = historiesFrom(scope)
+          } yield (
+            historyId,
+            history.datums,
+            pertinentRecordings.map(_._1)
+          )
+
+          if (checks.isEmpty) Trials.reject()
+
+          for ((historyId, actualHistory, expectedHistory) <- checks) {
+            withClue(s"History mismatch for history id: $historyId.") {
+              assert(actualHistory == expectedHistory)
+            }
+          }
+        }
+    }
+  }
+
+
 
 
 
