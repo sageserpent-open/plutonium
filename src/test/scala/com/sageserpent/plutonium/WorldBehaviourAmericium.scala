@@ -285,6 +285,30 @@ object WorldBehaviourAmericium {
       queryWhen: Instant
   )
 
+  case class AnnulAndRewriteTestCase(
+      recordingsGroupedById: Seq[WorldSpecSupportAmericium#RecordingsForAnId],
+      bigShuffledHistoryOverLotsOfThings: Seq[
+        Seq[
+          (
+              Option[(Unbounded[Instant], Event)],
+              intersperseObsoleteEventsAmericium.EventId
+          )
+        ]
+      ],
+      annulmentsGalore: Seq[
+        Seq[
+          (
+              Option[(Unbounded[Instant], Event)],
+              intersperseObsoleteEventsAmericium.EventId
+          )
+        ]
+      ],
+      asOfsForFirstHistory: Seq[Instant],
+      asOfsForAnnulments: Seq[Instant],
+      asOfsForSecondHistory: Seq[Instant],
+      queryWhen: Unbounded[Instant]
+  )
+
   case class AnnulledAnnihilationTestCase(
       bigShuffledHistoryOverLotsOfThings: Seq[
         Seq[
@@ -3889,6 +3913,128 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
         }
     }
   }
+
+@TestFactory
+  def allowAnEntireHistoryToBeCompletelyAnnulledAndThenRewritten(): DynamicTests = {
+    val testCaseTrials = for {
+      recordingsGroupedById <- recordingsGroupedByIdTrials(
+        forbidAnnihilations = true
+      )
+      shuffledRecordings <- shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+        recordingsGroupedById
+      )
+      bigShuffledHistoryOverLotsOfThings <- intersperseObsoleteEventsAmericium
+        .chunkKeepingEventIdsUniquePerChunk(
+          shuffledRecordings.zipWithIndex.map { case (stuff, eventId) =>
+            Some(stuff) -> eventId
+          }
+        )
+      allEventIds = bigShuffledHistoryOverLotsOfThings.flatten.map(_._2)
+      maximumEventId = allEventIds.max
+      eventIdsThatMayBeSpuriousAndDuplicated <- api
+        .chooseSeveralOf(
+          allEventIds,
+          1
+        ) // Dummy to get started, need a way to choose any number
+        .flatMap(_ =>
+          api.integers(0, allEventIds.length).flatMap(api.chooseSeveralOf(allEventIds, _))
+        )
+        .map(chosen =>
+          allEventIds ++ chosen ++ (1 + maximumEventId to 10 + maximumEventId)
+        )
+
+      annulmentsGalore <- api
+        .shuffles(eventIdsThatMayBeSpuriousAndDuplicated)
+        .flatMap(shuffledIds =>
+          intersperseObsoleteEventsAmericium.chunkKeepingEventIdsUniquePerChunk(
+            shuffledIds.map((None: Option[(Unbounded[Instant], Event)]) -> _)
+          )
+        )
+      historyLength    = bigShuffledHistoryOverLotsOfThings.length
+      annulmentsLength = annulmentsGalore.length
+      asOfs <- instantTrials
+        .listsOfSize(2 * historyLength + annulmentsLength)
+        .map(_.sorted)
+      (asOfsForFirstHistory, remainingAsOfs) = asOfs splitAt historyLength
+      (asOfsForAnnulments, asOfsForSecondHistory) =
+        remainingAsOfs splitAt annulmentsLength
+      queryWhen <- unboundedInstantTrials
+    } yield AnnulAndRewriteTestCase(
+      recordingsGroupedById,
+      bigShuffledHistoryOverLotsOfThings,
+      annulmentsGalore,
+      asOfsForFirstHistory,
+      asOfsForAnnulments,
+      asOfsForSecondHistory,
+      queryWhen
+    )
+
+    testCaseTrials.withLimit(200).dynamicTests {
+      case testCase @ AnnulAndRewriteTestCase(
+            recordingsGroupedById,
+            bigShuffledHistoryOverLotsOfThings,
+            annulmentsGalore,
+            asOfsForFirstHistory,
+            asOfsForAnnulments,
+            asOfsForSecondHistory,
+            queryWhen
+          ) =>
+        Using.resource(makeWorld()) { world =>
+          // Define a history the first time around...
+
+          recordEventsInWorld(
+            bigShuffledHistoryOverLotsOfThings,
+            asOfsForFirstHistory,
+            world
+          )
+
+          val scopeForFirstHistory =
+            world.scopeFor(queryWhen, world.nextRevision)
+
+          val firstHistory =
+            historyFrom(world, recordingsGroupedById)(
+              scopeForFirstHistory
+            )
+
+          // Annul that history completely...
+
+          recordEventsInWorld(annulmentsGalore, asOfsForAnnulments, world)
+
+          val scopeAfterAnnulments =
+            world.scopeFor(queryWhen, world.nextRevision)
+
+          val historyAfterAnnulments =
+            historyFrom(world, recordingsGroupedById)(
+              scopeAfterAnnulments
+            )
+
+          // ...and then recreate what should be the same history.
+
+          recordEventsInWorld(
+            bigShuffledHistoryOverLotsOfThings,
+            asOfsForSecondHistory,
+            world
+          )
+
+          val scopeForSecondHistory =
+            world.scopeFor(queryWhen, world.nextRevision)
+
+          val secondHistory =
+            historyFrom(world, recordingsGroupedById)(
+              scopeForSecondHistory
+            )
+
+          withClue(s"History after annulments should be empty: $historyAfterAnnulments") {
+            assert(historyAfterAnnulments.isEmpty)
+          }
+          withClue(s"History after rewrite should match first history.") {
+            assert(firstHistory == secondHistory)
+          }
+        }
+    }
+  }
+
+
 
 
 
