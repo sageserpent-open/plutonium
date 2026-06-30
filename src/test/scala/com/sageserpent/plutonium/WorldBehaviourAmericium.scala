@@ -3224,6 +3224,55 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
   }
 
 @TestFactory
+  def forbidTheBookingOfEventsThatOnlyEverReferToAnItemViaAnAbstractType(): DynamicTests = {
+    val testCaseTrials = for {
+      recordingsForAbstractedHistoriesGroupedById <-
+        recordingsGroupedByIdTrials_(
+          abstractedDataSamplesForAnIdTrials,
+          forbidAnnihilations = true
+        )
+      obsoleteRecordingsGroupedById <-
+        nonConflictingRecordingsGroupedByIdTrials
+      shuffledRecordingsForAbstractedHistories <-
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          recordingsForAbstractedHistoriesGroupedById
+        )
+      shuffledObsoleteRecordings <-
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          obsoleteRecordingsGroupedById
+        )
+      bigShuffledHistoryOverLotsOfThings <- intersperseObsoleteEventsAmericium(
+        shuffledRecordingsForAbstractedHistories,
+        shuffledObsoleteRecordings
+      )
+      asOfs <- instantTrials
+        .listsOfSize(bigShuffledHistoryOverLotsOfThings.length)
+        .map(_.sorted)
+    } yield AbstractConcreteTypeTestCase(
+      bigShuffledHistoryOverLotsOfThings,
+      asOfs
+    )
+
+    testCaseTrials.withLimit(200).dynamicTests {
+      case AbstractConcreteTypeTestCase(
+            bigShuffledHistoryOverLotsOfThings,
+            asOfs
+          ) =>
+        Using.resource(makeWorld()) { world =>
+          assertThrows(
+            classOf[UnsupportedOperationException],
+            () =>
+              recordEventsInWorld(
+                bigShuffledHistoryOverLotsOfThings,
+                asOfs,
+                world
+              )
+          )
+        }
+    }
+  }
+
+@TestFactory
   def extendTheHistoryOfAnItemWhoseAnnihilationIsAnnulledToPickUpAnySubsequentEventsRelatingToThatItem()
       : DynamicTests = {
     val itemId = "Fred"
@@ -3536,6 +3585,8 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
         }
     }
   }
+
+
 
 
 
