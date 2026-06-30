@@ -960,6 +960,55 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
   }
 
 @TestFactory
+  def buildAnItemsStateInAMannerConsistentWithTheHistoryExperiencedByTheItemDueToEventsThatDefineChangesOnIt()
+      : DynamicTests = {
+    val itemId = "Fred"
+
+    val testCaseTrials = for {
+      eventTimes <- instantTrials.nonEmptyLists.map(_.sorted)
+      sequence = 1 to eventTimes.size
+      events: List[(Unbounded[Instant], Event)] =
+        eventTimes.zip(sequence).map { case (when, step) =>
+          Finite(when) -> Change
+            .forOneItem[StrictlyIncreasingSequenceConsumer](when)(
+              itemId,
+              { item: StrictlyIncreasingSequenceConsumer =>
+                item.consume(step)
+              }
+            )
+        }
+      bigShuffledHistoryOverLotsOfThings <-
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhenForAGivenItem(
+          events
+        ).flatMap(shuffled => api.splitsIntoNonEmptyPieces(shuffled.zipWithIndex)).map(liftRecordings)
+      asOfs <- instantTrials
+        .listsOfSize(bigShuffledHistoryOverLotsOfThings.size)
+        .map(_.sorted)
+      queryWhen <- unboundedInstantTrials
+    } yield (bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen)
+
+    testCaseTrials.withLimit(200).dynamicTests {
+      case (bigShuffledHistoryOverLotsOfThings, asOfs, queryWhen) =>
+        Using.resource(makeWorld()) { world =>
+          recordEventsInWorld(
+            bigShuffledHistoryOverLotsOfThings,
+            asOfs,
+            world
+          )
+
+          val scope = world.scopeFor(queryWhen, world.nextRevision)
+
+          val _ = scope
+            .render(
+              Bitemporal
+                .withId[StrictlyIncreasingSequenceConsumer](itemId)
+            )
+            .toList
+        }
+    }
+  }
+
+@TestFactory
   def revealAllTheHistoryOfARelatedItemUpToTheWhenLimitOfAScopeMadeFromIt(): DynamicTests = {
     val testCaseTrials = for {
       referencedHistoryRecordingsGroupedById <-
@@ -2843,6 +2892,8 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
         }
     }
   }
+
+
 
 
 
