@@ -4254,7 +4254,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
                     asOfs
                   ) :: remainingSubsections =>
                 val sortedEventIds =
-                  bigShuffledHistoryOverLotsOfThings.flatMap(_.map(_._2)).sorted.distinct
+                  (bigShuffledHistoryOverLotsOfThings.flatMap(_.map(_._2))).sorted.distinct
                 assert(0 == sortedEventIds.head)
                 assert((sortedEventIds zip sortedEventIds.tail).forall {
                   case (first, second) => 1 + first == second
@@ -4269,11 +4269,17 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
                   )
                 val asOfForAnnulments = asOfs.head
                 try {
+                  if (world.revisionAsOfs.nonEmpty && asOfForAnnulments.isBefore(world.revisionAsOfs.last)) {
+                    throw new RuntimeException("Inconsistent asOf for annulments")
+                  }
                   recordEventsInWorld(
                     annulmentsForExtraEventIdsNotCorrectedInThisSubsection,
                     List(asOfForAnnulments),
                     world
                   )
+                  if (asOfs.nonEmpty && asOfs.head.isBefore(world.revisionAsOfs.last)) {
+                    throw new RuntimeException("Inconsistent asOf for history")
+                  }
                   recordEventsInWorld(
                     bigShuffledHistoryOverLotsOfThings,
                     asOfs.toList,
