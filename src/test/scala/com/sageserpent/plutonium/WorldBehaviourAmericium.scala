@@ -769,6 +769,88 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
   }
 
 @TestFactory
+  def revealTheSameNextRevisionFromAScopeWithAnAsOfLimitThatComesAtOrAfterThatRevisionButBeforeTheFollowingRevision()
+      : DynamicTests = {
+    val testCaseTrials = for {
+      recordingsGroupedById <- recordingsGroupedByIdTrials(
+        forbidAnnihilations = false
+      )
+      shuffledRecordings <-
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          recordingsGroupedById
+        )
+      bigShuffledHistoryOverLotsOfThings <- api
+        .splitsIntoNonEmptyPieces(shuffledRecordings.zipWithIndex)
+        .map(liftRecordings)
+      asOfs <- instantTrials
+        .listsOfSize(bigShuffledHistoryOverLotsOfThings.size)
+        .map(_.sorted)
+      queryWhen <- unboundedInstantTrials
+      laterAsOfs <- api.sequences(asOfs.zip(asOfs.tail :+ asOfs.last.plusSeconds(10L)).map {
+        case (earlier, later) if earlier isBefore later =>
+          api.longs(earlier.getEpochSecond, later.getEpochSecond - 1).map(Instant.ofEpochSecond).filter(_ isAfter earlier)
+        case (earlier, _) => api.only(earlier)
+      })
+    } yield NextRevisionConsistencyTestCase(
+      recordingsGroupedById,
+      bigShuffledHistoryOverLotsOfThings,
+      asOfs,
+      queryWhen,
+      laterAsOfs
+    )
+
+    testCaseTrials.withLimit(200).dynamicTests {
+      case NextRevisionConsistencyTestCase(
+            _,
+            bigShuffledHistoryOverLotsOfThings,
+            asOfs,
+            queryWhen,
+            laterAsOfs
+          ) =>
+        Using.resource(makeWorld()) { world =>
+          val revisions = recordEventsInWorld(
+            bigShuffledHistoryOverLotsOfThings,
+            asOfs,
+            world
+          )
+
+          val checks = for {
+            (
+              (earlierAsOfCorrespondingToRevision, revision),
+              laterAsOfSharingTheSameRevisionAsTheEarlierOne
+            ) <- asOfs zip revisions zip laterAsOfs
+            if earlierAsOfCorrespondingToRevision isBefore laterAsOfSharingTheSameRevisionAsTheEarlierOne
+
+            baselineScope = world
+              .scopeFor(queryWhen, earlierAsOfCorrespondingToRevision)
+            scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne =
+              world
+                .scopeFor(
+                  queryWhen,
+                  laterAsOfSharingTheSameRevisionAsTheEarlierOne
+                )
+          } yield (
+            baselineScope,
+            scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne
+          )
+
+          if (checks.isEmpty) Trials.reject()
+
+          for (
+            (
+              baselineScope,
+              scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne
+            ) <- checks
+          ) {
+            assert(
+              baselineScope.nextRevision == scopeForLaterAsOfSharingTheSameRevisionAsTheEarlierOne.nextRevision
+            )
+          }
+        }
+    }
+  }
+
+@TestFactory
   def revealAllTheHistoryUpToTheWhenLimitOfAScopeMadeFromIt(): DynamicTests = {
     val testCaseTrials = for {
       recordingsGroupedById <- recordingsGroupedByIdTrials(
@@ -2721,6 +2803,8 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
         }
     }
   }
+
+
 
 
 
