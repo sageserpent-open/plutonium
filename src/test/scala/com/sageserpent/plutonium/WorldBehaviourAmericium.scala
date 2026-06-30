@@ -230,6 +230,18 @@ object WorldBehaviourAmericium {
       whenAnInconsistentEventOccurs: Unbounded[Instant]
   )
 
+  case class AbstractConcreteTypeTestCase(
+      bigShuffledHistoryOverLotsOfThings: Seq[
+        Seq[
+          (
+              Option[(Unbounded[Instant], Event)],
+              intersperseObsoleteEventsAmericium.EventId
+          )
+        ]
+      ],
+      asOfs: Seq[Instant]
+  )
+
   case class PreciseTypeAnnihilationTestCase(
       recordingsGroupedById: Seq[WorldSpecSupportAmericium#RecordingsForAnId],
       bigShuffledHistoryOverLotsOfThings: Seq[
@@ -2942,6 +2954,172 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
   }
 
 @TestFactory
+  def allowEventsToReferToAnItemViaAnAbstractTypeProvidedItIsDefinedConcretelyInOtherEvents()
+      : DynamicTests = {
+    val testCaseTrials = for {
+      sharedIds <- abstractedOrImplementingHistoryIdTrials.nonEmptySets
+      recordingsForAbstractedHistoriesGroupedById <-
+        recordingsGroupedByIdTrials_(
+          dataSamplesForAnIdTrials[AbstractedHistory](
+            api.choose(sharedIds),
+            abstractedHistoryPositiveIntegerDataSampleTrials(faulty = false)
+          ),
+          forbidAnnihilations = true
+        )
+      recordingsForImplementingHistoriesGroupedById <-
+        recordingsGroupedByIdTrials_(
+          dataSamplesForAnIdTrials[ImplementingHistory](
+            api.choose(sharedIds),
+            implementingHistoryNegativeIntegerDataSampleTrials(faulty = false)
+          ),
+          forbidAnnihilations = true
+        )
+      // Only keep the recordings for IDs that actually ended up being shared.
+      idsForAbstractedHistories =
+        recordingsForAbstractedHistoriesGroupedById
+          .map(_.historyId)
+          .toSet
+      idsForImplementingHistories =
+        recordingsForImplementingHistoriesGroupedById
+          .map(_.historyId)
+          .toSet
+      actuallySharedIds =
+        idsForAbstractedHistories intersect idsForImplementingHistories
+      if actuallySharedIds.nonEmpty
+
+      relevantRecordingsForAbstractedHistoriesGroupedById =
+        recordingsForAbstractedHistoriesGroupedById filter (recordings =>
+          actuallySharedIds.contains(recordings.historyId)
+        )
+      relevantRecordingsForImplementedHistoriesGroupedById =
+        recordingsForImplementingHistoriesGroupedById filter (recordings =>
+          actuallySharedIds.contains(recordings.historyId)
+        )
+
+      shuffledRecordingsForAbstractedHistories <-
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          relevantRecordingsForAbstractedHistoriesGroupedById
+        )
+      shuffledRecordingsForImplementingHistories <-
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          relevantRecordingsForImplementedHistoriesGroupedById
+        )
+      bigShuffledHistoryOverLotsOfThingsThatMakesSureThatAtLeastOneImplementingHistoryGetsBookedInFirst <-
+        api
+          .splitsIntoNonEmptyPieces(
+            (shuffledRecordingsForImplementingHistories ++ shuffledRecordingsForAbstractedHistories).zipWithIndex
+          )
+          .map(liftRecordings)
+
+      asOfs <- instantTrials
+        .listsOfSize(
+          bigShuffledHistoryOverLotsOfThingsThatMakesSureThatAtLeastOneImplementingHistoryGetsBookedInFirst.length
+        )
+        .map(_.sorted)
+    } yield AbstractConcreteTypeTestCase(
+      bigShuffledHistoryOverLotsOfThingsThatMakesSureThatAtLeastOneImplementingHistoryGetsBookedInFirst,
+      asOfs
+    )
+
+    testCaseTrials.withLimit(200).dynamicTests {
+      case AbstractConcreteTypeTestCase(
+            bigShuffledHistoryOverLotsOfThings,
+            asOfs
+          ) =>
+        Using.resource(makeWorld()) { world =>
+          recordEventsInWorld(
+            bigShuffledHistoryOverLotsOfThings,
+            asOfs,
+            world
+          )
+        }
+    }
+  }
+
+@TestFactory
+  def allowEventsToReferToAnItemViaAConcreteTypeWhenItIsDefinedAbstractlyInOtherEvents()
+      : DynamicTests = {
+    val testCaseTrials = for {
+      sharedIds <- abstractedOrImplementingHistoryIdTrials.nonEmptySets
+      recordingsForAbstractedHistoriesGroupedById <-
+        recordingsGroupedByIdTrials_(
+          dataSamplesForAnIdTrials[AbstractedHistory](
+            api.choose(sharedIds),
+            abstractedHistoryPositiveIntegerDataSampleTrials(faulty = false)
+          ),
+          forbidAnnihilations = true
+        )
+      recordingsForImplementingHistoriesGroupedById <-
+        recordingsGroupedByIdTrials_(
+          dataSamplesForAnIdTrials[ImplementingHistory](
+            api.choose(sharedIds),
+            implementingHistoryNegativeIntegerDataSampleTrials(faulty = false)
+          ),
+          forbidAnnihilations = true
+        )
+      // Only keep the recordings for IDs that actually ended up being shared.
+      idsForAbstractedHistories =
+        recordingsForAbstractedHistoriesGroupedById
+          .map(_.historyId)
+          .toSet
+      idsForImplementingHistories =
+        recordingsForImplementingHistoriesGroupedById
+          .map(_.historyId)
+          .toSet
+      actuallySharedIds =
+        idsForAbstractedHistories intersect idsForImplementingHistories
+      if actuallySharedIds.nonEmpty
+
+      relevantRecordingsForAbstractedHistoriesGroupedById =
+        recordingsForAbstractedHistoriesGroupedById filter (recordings =>
+          actuallySharedIds.contains(recordings.historyId)
+        )
+      relevantRecordingsForImplementedHistoriesGroupedById =
+        recordingsForImplementingHistoriesGroupedById filter (recordings =>
+          actuallySharedIds.contains(recordings.historyId)
+        )
+
+      shuffledRecordingsForAbstractedHistories <-
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          relevantRecordingsForAbstractedHistoriesGroupedById
+        )
+      shuffledRecordingsForImplementingHistories <-
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          relevantRecordingsForImplementedHistoriesGroupedById
+        )
+      bigShuffledHistoryOverLotsOfThingsThatMakesSureThatAtLeastOneImplementingHistoryGetsBookedInFirst <-
+        api
+          .splitsIntoNonEmptyPieces(
+            (shuffledRecordingsForImplementingHistories ++ shuffledRecordingsForAbstractedHistories).zipWithIndex
+          )
+          .map(liftRecordings)
+
+      asOfs <- instantTrials
+        .listsOfSize(
+          bigShuffledHistoryOverLotsOfThingsThatMakesSureThatAtLeastOneImplementingHistoryGetsBookedInFirst.length
+        )
+        .map(_.sorted)
+    } yield AbstractConcreteTypeTestCase(
+      bigShuffledHistoryOverLotsOfThingsThatMakesSureThatAtLeastOneImplementingHistoryGetsBookedInFirst,
+      asOfs
+    )
+
+    testCaseTrials.withLimit(200).dynamicTests {
+      case AbstractConcreteTypeTestCase(
+            bigShuffledHistoryOverLotsOfThings,
+            asOfs
+          ) =>
+        Using.resource(makeWorld()) { world =>
+          recordEventsInWorld(
+            bigShuffledHistoryOverLotsOfThings,
+            asOfs,
+            world
+          )
+        }
+    }
+  }
+
+@TestFactory
   def extendTheHistoryOfAnItemWhoseAnnihilationIsAnnulledToPickUpAnySubsequentEventsRelatingToThatItem()
       : DynamicTests = {
     val itemId = "Fred"
@@ -3254,6 +3432,8 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
         }
     }
   }
+
+
 
 
 
