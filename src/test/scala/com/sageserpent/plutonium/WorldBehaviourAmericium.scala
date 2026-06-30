@@ -3932,13 +3932,8 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
       allEventIds = bigShuffledHistoryOverLotsOfThings.flatten.map(_._2)
       maximumEventId = allEventIds.max
       eventIdsThatMayBeSpuriousAndDuplicated <- api
-        .chooseSeveralOf(
-          allEventIds,
-          1
-        ) // Dummy to get started, need a way to choose any number
-        .flatMap(_ =>
-          api.integers(0, allEventIds.length).flatMap(api.chooseSeveralOf(allEventIds, _))
-        )
+        .integers(0, allEventIds.length)
+        .flatMap(api.chooseSeveralOf(allEventIds, _))
         .map(chosen =>
           allEventIds ++ chosen ++ (1 + maximumEventId to 10 + maximumEventId)
         )
