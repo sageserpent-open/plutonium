@@ -70,6 +70,21 @@ trait WorldSpecSupportAmericium {
       nonConflictingDataSamplesForAnIdTrials,
       forbidAnnihilations = true
     )
+
+  def variablyTypedDataSamplesForAnIdTrials =
+    dataSamplesForAnIdTrials[FooHistory](
+      fooHistoryIdTrials.map("Foo_" + _),
+      api.alternate(
+        moreSpecificFooHistoryDataSampleTrials(faulty = false),
+        fooHistoryDataSampleTrials1(faulty = false)
+      )
+    )
+
+  def variablyTypedRecordingsGroupedByIdTrials =
+    recordingsGroupedByIdTrials_(
+      variablyTypedDataSamplesForAnIdTrials,
+      forbidAnnihilations = true
+    )
   def integerDataSamplesForAnIdTrials =
     dataSamplesForAnIdTrials[IntegerHistory](
       integerHistoryIdTrials,

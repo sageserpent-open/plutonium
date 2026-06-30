@@ -2718,6 +2718,79 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
   }
 
 @TestFactory
+  def allowEventsToVaryInTheirViewOfTheTypeOfAnItemReferencedByAnId(): DynamicTests = {
+    val testCaseTrials = for {
+      recordingsGroupedById <- variablyTypedRecordingsGroupedByIdTrials
+      obsoleteRecordingsGroupedById <-
+        nonConflictingRecordingsGroupedByIdTrials
+      shuffledRecordings <-
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          recordingsGroupedById
+        )
+      shuffledObsoleteRecordings <-
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          obsoleteRecordingsGroupedById
+        )
+      bigShuffledHistoryOverLotsOfThings <- intersperseObsoleteEventsAmericium(
+        shuffledRecordings,
+        shuffledObsoleteRecordings
+      )
+      asOfs <- instantTrials
+        .listsOfSize(bigShuffledHistoryOverLotsOfThings.size)
+        .map(_.sorted)
+    } yield HistoryTestCase(
+      recordingsGroupedById,
+      bigShuffledHistoryOverLotsOfThings,
+      asOfs,
+      PositiveInfinity
+    )
+
+    testCaseTrials.withLimit(200).dynamicTests {
+      case HistoryTestCase(
+            recordingsGroupedById,
+            bigShuffledHistoryOverLotsOfThings,
+            asOfs,
+            queryWhen
+          ) =>
+        Using.resource(makeWorld()) { world =>
+          recordEventsInWorld(
+            bigShuffledHistoryOverLotsOfThings,
+            asOfs,
+            world
+          )
+
+          val scope = world.scopeFor(queryWhen, world.nextRevision)
+
+          val checks = for {
+            recording <- recordingsGroupedById
+            RecordingsNoLaterThan(
+              historyId,
+              historiesFrom,
+              pertinentRecordings,
+              _,
+              _
+            ) <- recording.thePartNoLaterThan(
+              queryWhen
+            )
+            Seq(history) = historiesFrom(scope)
+          } yield (
+            historyId,
+            history.datums,
+            pertinentRecordings.map(_._1)
+          )
+
+          if (checks.isEmpty) Trials.reject()
+
+          for ((historyId, actualHistory, expectedHistory) <- checks) {
+            withClue(s"History mismatch for history id: $historyId.") {
+              assert(actualHistory == expectedHistory)
+            }
+          }
+        }
+    }
+  }
+
+@TestFactory
   def extendTheHistoryOfAnItemWhoseAnnihilationIsAnnulledToPickUpAnySubsequentEventsRelatingToThatItem()
       : DynamicTests = {
     val itemId = "Fred"
@@ -3030,6 +3103,8 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
         }
     }
   }
+
+
 
 
 
