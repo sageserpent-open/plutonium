@@ -1009,6 +1009,68 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
   }
 
 @TestFactory
+  def allowAnItemToBeRenderedFromABitemporalIfTheWhenLimitOfTheScopeIncludesARelevantEventThatDefinesSaidItem()
+      : DynamicTests = {
+    val testCaseTrials = for {
+      recordingsGroupedById <- recordingsGroupedByIdTrials(
+        forbidAnnihilations = false
+      )
+      shuffledRecordings <-
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          recordingsGroupedById
+        )
+      bigShuffledHistoryOverLotsOfThings <- api
+        .splitsIntoNonEmptyPieces(shuffledRecordings.zipWithIndex)
+        .map(liftRecordings)
+      asOfs <- instantTrials
+        .listsOfSize(bigShuffledHistoryOverLotsOfThings.size)
+        .map(_.sorted)
+      queryWhen <- unboundedInstantTrials
+    } yield HistoryTestCase(
+      recordingsGroupedById,
+      bigShuffledHistoryOverLotsOfThings,
+      asOfs,
+      queryWhen
+    )
+
+    testCaseTrials.withLimit(200).dynamicTests {
+      case HistoryTestCase(
+            recordingsGroupedById,
+            bigShuffledHistoryOverLotsOfThings,
+            asOfs,
+            queryWhen
+          ) =>
+        Using.resource(makeWorld()) { world =>
+          recordEventsInWorld(
+            bigShuffledHistoryOverLotsOfThings,
+            asOfs,
+            world
+          )
+
+          val scope = world.scopeFor(queryWhen, world.nextRevision)
+
+          val checks = for {
+            recording <- recordingsGroupedById
+            RecordingsNoLaterThan(historyId, historiesFrom, _, _, _) <-
+              recording.thePartNoLaterThan(
+                queryWhen
+              )
+          } yield (historiesFrom, historyId)
+
+          if (checks.isEmpty) Trials.reject()
+
+          for ((historiesFrom, historyId) <- checks) {
+            withClue(s"Could not find a history for id: $historyId.") {
+              assert(historiesFrom(scope) match {
+                case Seq(_) => true
+              })
+            }
+          }
+        }
+    }
+  }
+
+@TestFactory
   def revealAllTheHistoryOfARelatedItemUpToTheWhenLimitOfAScopeMadeFromIt(): DynamicTests = {
     val testCaseTrials = for {
       referencedHistoryRecordingsGroupedById <-
@@ -2892,6 +2954,8 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
         }
     }
   }
+
+
 
 
 
