@@ -216,6 +216,20 @@ object WorldBehaviourAmericium {
       queryWhen: Unbounded[Instant]
   )
 
+  case class InconsistentTypeTestCase(
+      recordingsGroupedById: Seq[WorldSpecSupportAmericium#RecordingsForAnId],
+      bigShuffledHistoryOverLotsOfThings: Seq[
+        Seq[
+          (
+              Option[(Unbounded[Instant], Event)],
+              intersperseObsoleteEventsAmericium.EventId
+          )
+        ]
+      ],
+      asOfs: Seq[Instant],
+      whenAnInconsistentEventOccurs: Unbounded[Instant]
+  )
+
   case class PreciseTypeAnnihilationTestCase(
       recordingsGroupedById: Seq[WorldSpecSupportAmericium#RecordingsForAnId],
       bigShuffledHistoryOverLotsOfThings: Seq[
@@ -2791,6 +2805,143 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
   }
 
 @TestFactory
+  def forbidRecordingOfEventsThatHaveInconsistentViewsOfTheTypeOfAnItemReferencedByAnId(): DynamicTests = {
+    val testCaseTrials = for {
+      recordingsGroupedById <- variablyTypedRecordingsGroupedByIdTrials
+      obsoleteRecordingsGroupedById <-
+        nonConflictingRecordingsGroupedByIdTrials
+      shuffledRecordings <-
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          recordingsGroupedById
+        )
+      shuffledObsoleteRecordings <-
+        shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
+          obsoleteRecordingsGroupedById
+        )
+      bigShuffledHistoryOverLotsOfThings <- intersperseObsoleteEventsAmericium(
+        shuffledRecordings,
+        shuffledObsoleteRecordings
+      )
+      asOfs <- instantTrials
+        .listsOfSize(bigShuffledHistoryOverLotsOfThings.size)
+        .map(_.sorted)
+      whenAnInconsistentEventOccurs <- unboundedInstantTrials
+    } yield InconsistentTypeTestCase(
+      recordingsGroupedById,
+      bigShuffledHistoryOverLotsOfThings,
+      asOfs,
+      whenAnInconsistentEventOccurs
+    )
+
+    testCaseTrials.withLimit(200).dynamicTests {
+      case InconsistentTypeTestCase(
+            recordingsGroupedById,
+            bigShuffledHistoryOverLotsOfThings,
+            asOfs,
+            whenAnInconsistentEventOccurs
+          ) =>
+        Using.resource(makeWorld()) { world =>
+          val numberOfEvents = bigShuffledHistoryOverLotsOfThings.size
+
+          val sizeOfPartOne = 1 min (numberOfEvents / 2)
+
+          val (historyPartOne, historyPartTwo) =
+            bigShuffledHistoryOverLotsOfThings splitAt sizeOfPartOne
+
+          val (asOfsPartOne, asOfsPartTwo) = asOfs splitAt sizeOfPartOne
+
+          recordEventsInWorld(historyPartOne, asOfsPartOne, world)
+
+          val queryScope = world
+            .scopeFor(whenAnInconsistentEventOccurs, world.nextRevision)
+
+          val eventIdForExtraConsistentChange  = -1
+          val eventIdForInconsistentChangeOnly = -2
+
+          val checks = for {
+            recording <- recordingsGroupedById
+            fooHistoryId <- recording.historyId match {
+              case id: MoreSpecificFooHistory#Id => Some(id)
+              case _                             => None
+            }
+            if queryScope
+              .render(
+                Bitemporal.withId[MoreSpecificFooHistory](fooHistoryId)
+              ) exists (_.isInstanceOf[MoreSpecificFooHistory])
+          } yield fooHistoryId
+
+          for (fooHistoryId <- checks) {
+            assertThrows(
+              classOf[RuntimeException],
+              () => {
+                val consistentButLooselyTypedChange =
+                  Change.forOneItem[FooHistory](
+                    fooHistoryId,
+                    { fooHistory: FooHistory =>
+                      fooHistory.property1 = "Hello"
+                    }
+                  )
+                val inconsistentlyTypedChange =
+                  Change.forOneItem[AnotherSpecificFooHistory](
+                    whenAnInconsistentEventOccurs
+                  )(
+                    fooHistoryId
+                      .asInstanceOf[AnotherSpecificFooHistory#Id],
+                    {
+                      anotherSpecificFooHistory: AnotherSpecificFooHistory =>
+                        anotherSpecificFooHistory.property3 =
+                          6 // Have to actually *update* to cause an inconsistency.
+                    }
+                  )
+                world.revise(
+                  Map(
+                    eventIdForExtraConsistentChange -> Some(
+                      consistentButLooselyTypedChange
+                    ),
+                    eventIdForInconsistentChangeOnly -> Some(
+                      inconsistentlyTypedChange
+                    )
+                  ),
+                  world.revisionAsOfs.lastOption.getOrElse(asOfs.head)
+                )
+              }
+            )
+          }
+
+          recordEventsInWorld(historyPartTwo, asOfsPartTwo, world)
+
+          val scope = world.scopeFor(PositiveInfinity, world.nextRevision)
+
+          val finalChecks = for {
+            recording <- recordingsGroupedById
+            RecordingsNoLaterThan(
+              historyId,
+              historiesFrom,
+              pertinentRecordings,
+              _,
+              _
+            ) <- recording.thePartNoLaterThan(
+              PositiveInfinity
+            )
+            Seq(history) = historiesFrom(scope)
+          } yield (
+            historyId,
+            history.datums,
+            pertinentRecordings.map(_._1)
+          )
+
+          if (finalChecks.isEmpty) Trials.reject()
+
+          for ((historyId, actualHistory, expectedHistory) <- finalChecks) {
+            withClue(s"History mismatch for history id: $historyId.") {
+              assert(actualHistory == expectedHistory)
+            }
+          }
+        }
+    }
+  }
+
+@TestFactory
   def extendTheHistoryOfAnItemWhoseAnnihilationIsAnnulledToPickUpAnySubsequentEventsRelatingToThatItem()
       : DynamicTests = {
     val itemId = "Fred"
@@ -3103,6 +3254,8 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
         }
     }
   }
+
+
 
 
 
