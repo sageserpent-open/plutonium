@@ -402,7 +402,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
 
   import cats.implicits._
 
-@TestFactory
+  @TestFactory
   def notContainAnyIdentifiables(): DynamicTests = {
     val scopeTrials = for {
       when <- unboundedInstantTrials
@@ -421,7 +421,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-@Test
+  @Test
   def haveNoCurrentRevision(): Unit = {
     Using.resource(makeWorld()) { world =>
       withClue(
@@ -430,7 +430,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-@TestFactory
+  @TestFactory
   def revealAllHistoryUpToTheAsOfLimitOfAScopeMadeFromIt(): DynamicTests = {
     val testCaseTrials: Trials[OrderedHistoryTestCase] = for {
       recordingsGroupedById <- recordingsGroupedByIdTrials(
@@ -541,7 +541,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-@TestFactory
+  @TestFactory
   def notMysteriouslyFailToYieldItems(): DynamicTests = {
     val testCaseTrials = for {
       referringHistoryRecordingsGroupedById <-
@@ -597,7 +597,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-@TestFactory
+  @TestFactory
   def deduceTheMostAccurateTypeForItemsBasedOnTheEventsThatReferToThem(): DynamicTests = {
     val testCaseTrials = for {
       fooHistoryIds <- fooHistoryIdTrials.map("Foo_" + _).nonEmptySets
@@ -700,7 +700,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-@TestFactory
+  @TestFactory
   def revealTheSameLackOfHistoryFromAScopeWithAnAsOfLimitThatComesAtOrAfterThatRevisionButBeforeTheFollowingRevision()
       : DynamicTests = {
     val testCaseTrials = for {
@@ -793,7 +793,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-@TestFactory
+  @TestFactory
   def revealTheSameHistoryFromAScopeWithAnAsOfLimitThatComesAtOrAfterThatRevisionButBeforeTheFollowingRevision()
       : DynamicTests = {
     val testCaseTrials = for {
@@ -877,7 +877,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-@TestFactory
+  @TestFactory
   def revealTheSameNextRevisionFromAScopeWithAnAsOfLimitThatComesAtOrAfterThatRevisionButBeforeTheFollowingRevision()
       : DynamicTests = {
     val testCaseTrials = for {
@@ -959,7 +959,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-@TestFactory
+  @TestFactory
   def notPermitAnInconsistentRevisionToBeMade(): DynamicTests = {
     val testCaseTrials: Trials[FaultyRevisionTestCase] = for {
       faultyRecordingsGroupedById <- faultyRecordingsGroupedByIdTrials
@@ -999,7 +999,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-@TestFactory
+  @TestFactory
   def revealAllTheHistoryUpToTheWhenLimitOfAScopeMadeFromIt(): DynamicTests = {
     val testCaseTrials = for {
       recordingsGroupedById <- recordingsGroupedByIdTrials(
@@ -1068,7 +1068,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-@TestFactory
+  @TestFactory
   def buildAnItemsStateInAMannerConsistentWithTheHistoryExperiencedByTheItemDueToEventsThatDefineChangesOnIt()
       : DynamicTests = {
     val itemId = "Fred"
@@ -1117,7 +1117,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-@TestFactory
+  @TestFactory
   def allowAnItemToBeRenderedFromABitemporalIfTheWhenLimitOfTheScopeIncludesARelevantEventThatDefinesSaidItem()
       : DynamicTests = {
     val testCaseTrials = for {
@@ -1179,7 +1179,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-@TestFactory
+  @TestFactory
   def notAllowTheHistoryToBeAlteredByIneffectiveEvents(): DynamicTests = {
     val testCaseTrials = for {
       recordingsGroupedById <- recordingsGroupedByIdTrials(
@@ -1255,7 +1255,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-@TestFactory
+  @TestFactory
   def revealAllTheHistoryOfARelatedItemUpToTheWhenLimitOfAScopeMadeFromIt(): DynamicTests = {
     val testCaseTrials = for {
       referencedHistoryRecordingsGroupedById <-
@@ -1359,7 +1359,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
       }
   }
 
-@TestFactory
+  @TestFactory
   def yieldTheSameIdentityForARelatedItemAsWhenThatItemIsDirectlyQueriedFor(): DynamicTests = {
     val testCaseTrials = for {
       referencedHistoryRecordingsGroupedById <-
@@ -1475,7 +1475,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
       }
   }
 
-@TestFactory
+  @TestFactory
   def notRevealAnItemAtAQueryTimeComingBeforeItsFirstDefiningEvent(): DynamicTests = {
     val testCaseTrials = for {
       recordingsGroupedById <- recordingsGroupedByIdTrials(
@@ -1539,7 +1539,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-@TestFactory
+  @TestFactory
   def notConsiderAnIneffectiveEventAsBeingDefining(): DynamicTests = {
     val testCaseTrials = for {
       recordingsGroupedById <- recordingsGroupedByIdTrials(
@@ -1628,7 +1628,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-@TestFactory
+  @TestFactory
   def considerAReferenceToARelatedItemInAnEventAsBeingDefining(): DynamicTests = {
     val testCaseTrials = for {
       referencedHistoryRecordingsGroupedById <-
@@ -1716,7 +1716,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
       }
   }
 
-@TestFactory
+  @TestFactory
   def treatAnAnnihilatedItemAccessedViaAReferenceToARelatedItemAsBeingAGhost(): DynamicTests = {
     val testCaseTrials = for {
       referencedHistoryRecordingsGroupedById <-
@@ -1845,7 +1845,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-@TestFactory
+  @TestFactory
   def notAllowAnEventToEitherReferToOrToMutateTheStateOfARelatedItemThatIsAGhost(): DynamicTests = {
     val testCaseTrials = for {
       referencedHistoryRecordingsGroupedById <-
@@ -1992,7 +1992,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-@TestFactory
+  @TestFactory
   def notPermitTheAnnihilationOfAnItemAtAQueryTimeComingBeforeItsFirstDefiningEvent(): DynamicTests = {
     val testCaseTrials = for {
       recordingsGroupedById <- integerHistoryRecordingsGroupedByIdTrials
@@ -2072,7 +2072,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-@TestFactory
+  @TestFactory
   def haveANextRevisionThatReflectsTheLastAddedRevision(): DynamicTests = {
     val testCaseTrials = for {
       recordingsGroupedById <- recordingsGroupedByIdTrials(
@@ -2116,7 +2116,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-@TestFactory
+  @TestFactory
   def haveAVersionTimelineThatRecordsTheAsOfTimeForEachOfItsRevisions(): DynamicTests = {
     val testCaseTrials = for {
       recordingsGroupedById <- recordingsGroupedByIdTrials(
@@ -2160,7 +2160,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-@TestFactory
+  @TestFactory
   def haveASortedVersionTimeline(): DynamicTests = {
     val testCaseTrials = for {
       recordingsGroupedById <- recordingsGroupedByIdTrials(
@@ -2206,7 +2206,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-@TestFactory
+  @TestFactory
   def allocateRevisionNumbersSequentially(): DynamicTests = {
     val testCaseTrials = for {
       recordingsGroupedById <- recordingsGroupedByIdTrials(
@@ -2252,7 +2252,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-@TestFactory
+  @TestFactory
   def haveANextRevisionNumberThatIsTheSizeOfItsVersionTimeline(): DynamicTests = {
     val testCaseTrials = for {
       recordingsGroupedById <- recordingsGroupedByIdTrials(
@@ -2296,7 +2296,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-@TestFactory
+  @TestFactory
   def notPermitTheAsOfTimeForANewRevisionToBeLessThanThatOfAnyExistingRevision(): DynamicTests = {
     val testCaseTrials = for {
       recordingsGroupedById <- recordingsGroupedByIdTrials(
@@ -2363,7 +2363,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-@TestFactory
+  @TestFactory
   def createAScopeWhosePropertiesRelateToTheCallToScopeForWhenUsingTheNextRevisionOverload(): DynamicTests = {
     val testCaseTrials = for {
       recordingsGroupedById <- recordingsGroupedByIdTrials(
@@ -2462,7 +2462,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-@TestFactory
+  @TestFactory
   def createAScopeWhosePropertiesRelateToTheCallToScopeForWhenUsingTheAsOfTimeOverload(): DynamicTests = {
     val testCaseTrials = for {
       recordingsGroupedById <- recordingsGroupedByIdTrials(
@@ -2554,7 +2554,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-@TestFactory
+  @TestFactory
   def createAScopeThatIsASnapshotUnaffectedBySubsequentRevisions(): DynamicTests = {
     val testCaseTrials = for {
       recordingsGroupedById <- recordingsGroupedByIdTrials(
@@ -2638,7 +2638,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-@TestFactory
+  @TestFactory
   def createRevisionsWithTheStrongExceptionSafetyGuarantee(): DynamicTests = {
     val testCaseTrials = for {
       recordingsGroupedById <- nonConflictingRecordingsGroupedByIdTrials
@@ -2739,7 +2739,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-@TestFactory
+  @TestFactory
   def yieldTheSameHistoriesForScopesIncludingAllChangesAtTheLatestRevisionRegardlessOfHowChangesAreGroupedIntoRevisions()
       : DynamicTests = {
     val testCaseTrials = for {
@@ -2826,7 +2826,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-@TestFactory
+  @TestFactory
   def allowEventsToVaryInTheirViewOfTheTypeOfAnItemReferencedByAnId(): DynamicTests = {
     val testCaseTrials = for {
       recordingsGroupedById <- variablyTypedRecordingsGroupedByIdTrials
@@ -2899,7 +2899,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-@TestFactory
+  @TestFactory
   def forbidRecordingOfEventsThatHaveInconsistentViewsOfTheTypeOfAnItemReferencedByAnId(): DynamicTests = {
     val testCaseTrials = for {
       recordingsGroupedById <- variablyTypedRecordingsGroupedByIdTrials
@@ -3036,7 +3036,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-@TestFactory
+  @TestFactory
   def allowEventsToReferToAnItemViaAnAbstractTypeProvidedItIsDefinedConcretelyInOtherEvents()
       : DynamicTests = {
     val testCaseTrials = for {
@@ -3119,7 +3119,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-@TestFactory
+  @TestFactory
   def allowEventsToReferToAnItemViaAConcreteTypeWhenItIsDefinedAbstractlyInOtherEvents()
       : DynamicTests = {
     val testCaseTrials = for {
@@ -3202,7 +3202,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-@TestFactory
+  @TestFactory
   def recordBookingsFromEventsUsingAbstractTypesInTheSameMannerAsForConcreteTypes(): DynamicTests = {
     val testCaseTrials: Trials[MixedAbstractConcreteTestCase] = for {
       recordingsGroupedById <- mixedAbstractedAndImplementingRecordingsGroupedByIdTrials(
@@ -3292,7 +3292,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-@TestFactory
+  @TestFactory
   def forbidTheBookingOfEventsThatOnlyEverReferToAnItemViaAnAbstractType(): DynamicTests = {
     val testCaseTrials = for {
       recordingsForAbstractedHistoriesGroupedById <-
@@ -3341,7 +3341,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-@TestFactory
+  @TestFactory
   def takeIntoAccountThePreciseTypeOfTheItemReferencedByAnAnnihilationWhenOtherEventsReferToTheSameItemViaLooserTypes()
       : DynamicTests = {
     val testCaseTrials: Trials[PreciseTypeAnnihilationTestCase] = for {
@@ -3467,7 +3467,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-@TestFactory
+  @TestFactory
   def reflectTheAbsenceOfAllItemsOfACompatibleTypeRelevantToAScopeThatShareAnIdFollowingAnAnnihilationUsingThatId()
       : DynamicTests = {
     val testCaseTrials = for {
@@ -3569,7 +3569,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-@TestFactory
+  @TestFactory
   def extendTheHistoryOfAnItemWhoseAnnihilationIsAnnulledToPickUpAnySubsequentEventsRelatingToThatItem()
       : DynamicTests = {
     val itemId = "Fred"
@@ -3659,7 +3659,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-@TestFactory
+  @TestFactory
   def buildAnItemStateInAMannerConsistentWithTheHistoryExperiencedByTheItemRegardlessOfAnyCorrectedHistory()
       : DynamicTests = {
     val itemId = "Fred"
@@ -3737,7 +3737,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-@TestFactory
+  @TestFactory
   def buildAnItemStateInAMannerConsistentWithTheHistoryExperiencedByTheItemRegardlessOfAnyCorrectedHistoryWithATwist()
       : DynamicTests = {
     val itemId = "Fred"
@@ -3803,7 +3803,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-@TestFactory
+  @TestFactory
   def buildAnItemStateInAMannerConsistentWithTheHistoryExperiencedByTheItemRegardlessOfAnyCorrectedHistoryWithAnotherTwist()
       : DynamicTests = {
     val itemId = "Fred"
@@ -3884,7 +3884,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-@TestFactory
+  @TestFactory
   def yieldAHistoryAtTheFinalRevisionBasedOnlyOnTheLatestCorrections(): DynamicTests = {
     val testCaseTrials = for {
       recordingsGroupedById <- recordingsGroupedByIdTrials(
@@ -3960,7 +3960,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-@TestFactory
+  @TestFactory
   def allowAnEntireHistoryToBeCompletelyAnnulledAndThenRewritten(): DynamicTests = {
     val testCaseTrials = for {
       recordingsGroupedById <- recordingsGroupedByIdTrials(
@@ -4074,7 +4074,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-@TestFactory
+  @TestFactory
   def yieldAHistoryWhoseVersionsOfEventsReflectTheRevisionOfAScopeMadeFromIt(): DynamicTests = {
     val testCaseTrials = for {
       recordingsGroupedById <- recordingsGroupedByIdTrials(
@@ -4170,7 +4170,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-@TestFactory
+  @TestFactory
   def yieldAHistoryWhoseVersionsOfEventsReflectArbitraryScopesMadeFromItAtVaryingRevisions(): DynamicTests = {
     val testCaseSubSectionTrials = for {
       recordingsGroupedById <- recordingsGroupedByIdTrials(
@@ -4354,7 +4354,7 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
     }
   }
 
-@TestFactory
+  @TestFactory
   def allowAnEntireHistoryToBeCompletelyAnnulledAndThenRewrittenAtTheSameAsOf(): DynamicTests = {
     val testCaseTrials = for {
       recordingsGroupedById <- recordingsGroupedByIdTrials(
@@ -4454,50 +4454,6 @@ trait WorldBehaviourAmericium extends WorldSpecSupportAmericium {
         }
     }
   }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
   abstract class NonExistentHistory extends History {
     override type Id = NonExistentId
