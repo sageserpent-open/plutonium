@@ -1,7 +1,7 @@
 package com.sageserpent.plutonium.reference
 
-import com.sageserpent.plutonium.{WorldBehaviours, WorldReferenceImplementationResourceAmericium}
+import com.sageserpent.plutonium.{WorldBehaviours, WorldReferenceImplementationResource}
 
 class WorldBehavioursUsingWorldReferenceImplementation
     extends WorldBehaviours
-    with WorldReferenceImplementationResourceAmericium
+    with WorldReferenceImplementationResource

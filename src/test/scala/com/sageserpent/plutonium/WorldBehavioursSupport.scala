@@ -1180,16 +1180,16 @@ trait WorldBehavioursSupport {
   }
 }
 
-trait WorldResourceAmericium {
+trait WorldResource {
   def makeWorld(): World
 }
 
-trait WorldReferenceImplementationResourceAmericium extends WorldResourceAmericium {
+trait WorldReferenceImplementationResource extends WorldResource {
   override def makeWorld(): World =
     new WorldReferenceImplementation with WorldContracts
 }
 
-trait WorldEfficientInMemoryImplementationResourceAmericium extends WorldResourceAmericium {
+trait WorldEfficientInMemoryImplementationResource extends WorldResource {
   override def makeWorld(): World =
     new WorldEfficientInMemoryImplementation with WorldContracts
 }

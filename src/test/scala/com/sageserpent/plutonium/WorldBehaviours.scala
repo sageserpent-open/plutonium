@@ -380,7 +380,7 @@ object WorldBehaviours {
 }
 
 trait WorldBehaviours extends WorldBehavioursSupport {
-  this: WorldResourceAmericium =>
+  this: WorldResource =>
 
   import WorldBehaviours._
 

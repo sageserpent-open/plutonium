@@ -4,8 +4,6 @@ import com.sageserpent.americium.utilities.randomEnrichment._
 import com.sageserpent.americium.utilities.seqEnrichment._
 import com.sageserpent.plutonium.World._
 import com.sageserpent.plutonium.WorldBehavioursSupport.changeError
-import com.sageserpent.plutonium.efficient.WorldEfficientInMemoryImplementation
-import com.sageserpent.plutonium.reference.WorldReferenceImplementation
 import com.sageserpent.plutonium.utilities.{Finite, Unbounded}
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.Assertions
@@ -17,6 +15,7 @@ import scala.language.postfixOps
 import scala.reflect.runtime.universe.{Scope => _, _}
 import scala.util.Random
 
+// TODO: retire this and use `WorldBehavioursSupport` instead.
 trait WorldSpecSupport extends Assertions with SharedGenerators {
   val fooHistoryIdGenerator = stringIdGenerator
 
@@ -1031,17 +1030,4 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
       }
     }
   }
-}
-trait WorldResource {
-  def makeWorld(): World
-}
-
-trait WorldReferenceImplementationResource extends WorldResource {
-  override def makeWorld(): World =
-    new WorldReferenceImplementation with WorldContracts
-}
-
-trait WorldEfficientInMemoryImplementationResource extends WorldResource {
-  override def makeWorld(): World =
-    new WorldEfficientInMemoryImplementation with WorldContracts
 }
