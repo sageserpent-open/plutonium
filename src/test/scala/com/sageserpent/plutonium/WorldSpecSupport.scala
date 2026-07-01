@@ -1,35 +1,23 @@
 package com.sageserpent.plutonium
 
-import java.time.Instant
-import java.util.UUID
-import scala.util.Using
-
-import com.sageserpent.americium
-import com.sageserpent.americium._
 import com.sageserpent.americium.utilities.randomEnrichment._
 import com.sageserpent.americium.utilities.seqEnrichment._
 import com.sageserpent.plutonium.World._
+import com.sageserpent.plutonium.WorldBehavioursSupport.changeError
 import com.sageserpent.plutonium.efficient.WorldEfficientInMemoryImplementation
 import com.sageserpent.plutonium.reference.WorldReferenceImplementation
 import com.sageserpent.plutonium.utilities.{Finite, Unbounded}
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.Assertions
 
-import scala.jdk.CollectionConverters._
+import java.time.Instant
 import scala.collection.Searching._
 import scala.collection.immutable.TreeMap
 import scala.language.postfixOps
 import scala.reflect.runtime.universe.{Scope => _, _}
 import scala.util.Random
 
-object WorldSpecSupport {
-  val changeError = new RuntimeException("Error in making a change.")
-}
-
 trait WorldSpecSupport extends Assertions with SharedGenerators {
-
-  import WorldSpecSupport._
-
   val fooHistoryIdGenerator = stringIdGenerator
 
   val barHistoryIdGenerator = integerIdGenerator
@@ -53,7 +41,6 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
     )
   val integerHistoryRecordingsGroupedByIdGenerator =
     recordingsGroupedByIdGenerator_(integerDataSamplesForAnIdGenerator)
-  var referringHistoryIdGenerator = stringIdGenerator
   val referenceToItemDataSamplesForAnIdGenerator =
     dataSamplesForAnIdGenerator_[ReferringHistory](
       referringHistoryIdGenerator,
@@ -68,6 +55,8 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
       ),
       fooHistoryDataSampleGenerator2(faulty = false)
     )
+  var referringHistoryIdGenerator = stringIdGenerator
+
   def pertainingToAnotherItemDataSampleGenerator(faulty: Boolean) =
     Gen.frequency(
       Seq(
@@ -165,12 +154,14 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
     // annihilations out of the way. Then merge the results using random
     // picking.
 
-    random.pickAlternatelyFrom(
-      recordingsGroupedById map (_.events) map (shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhenForAGivenItem(
-        random,
-        _
-      ))
-    ).toVector
+    random
+      .pickAlternatelyFrom(
+        recordingsGroupedById map (_.events) map (shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhenForAGivenItem(
+          random,
+          _
+        ))
+      )
+      .toVector
   }
 
   def shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhenForAGivenItem(
@@ -548,6 +539,11 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
           )
     )
 
+  def eventConstructorReferringToOneItem[AHistory <: History: TypeTag](
+      when: Unbounded[Instant]
+  ): (AHistory#Id, AHistory => Unit) => Event =
+    Change.forOneItem(when)(_, _)
+
   def barHistoryDataSampleGenerator3(faulty: Boolean) =
     for {
       data1 <- Arbitrary.arbitrary[Int]
@@ -602,11 +598,6 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
             }
           )
     )
-
-  def eventConstructorReferringToOneItem[AHistory <: History: TypeTag](
-      when: Unbounded[Instant]
-  ): (AHistory#Id, AHistory => Unit) => Event =
-    Change.forOneItem(when)(_, _)
 
   def dataSamplesForAnIdGenerator_[AHistory <: History: TypeTag](
       historyIdGenerator: Gen[AHistory#Id],
@@ -675,14 +666,6 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
 
   def referringHistoryRecordingsGroupedByIdGenerator() =
     recordingsGroupedByIdGenerator_(referenceToItemDataSamplesForAnIdGenerator)
-
-  def referencedHistoryRecordingsGroupedByIdGenerator(
-      forbidAnnihilations: Boolean
-  ) =
-    recordingsGroupedByIdGenerator_(
-      mixedRecordingsForReferencedIdGenerator,
-      forbidAnnihilations = forbidAnnihilations
-    )
 
   def recordingsGroupedByIdGenerator_(
       dataSamplesForAnIdGenerator: Gen[
@@ -814,6 +797,14 @@ trait WorldSpecSupport extends Assertions with SharedGenerators {
       chunksOf(chunkSizes, articles).toVector
     }
   }
+
+  def referencedHistoryRecordingsGroupedByIdGenerator(
+      forbidAnnihilations: Boolean
+  ) =
+    recordingsGroupedByIdGenerator_(
+      mixedRecordingsForReferencedIdGenerator,
+      forbidAnnihilations = forbidAnnihilations
+    )
 
   trait RecordingsForAnId {
     val historyId: Any

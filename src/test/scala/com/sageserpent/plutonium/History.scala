@@ -1,5 +1,7 @@
 package com.sageserpent.plutonium
 
+import com.sageserpent.plutonium.WorldBehavioursSupport.changeError
+
 abstract class History {
   type Id
   val id: Id
@@ -33,7 +35,7 @@ abstract class History {
       // to be asked to try to record events that could potentially make the
       // world
       // inconsistent - so we don't use an assertion here.
-      throw WorldSpecSupport.changeError
+      throw changeError
     }
     try {
       shouldBeUnchanged = false

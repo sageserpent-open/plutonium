@@ -1,7 +1,0 @@
-package com.sageserpent.plutonium.efficient
-
-import com.sageserpent.plutonium.{WorldBehaviourAmericium, WorldEfficientInMemoryImplementationResourceAmericium}
-
-class WorldSpecUsingWorldEfficientInMemoryImplementationAmericium
-    extends WorldBehaviourAmericium
-    with WorldEfficientInMemoryImplementationResourceAmericium

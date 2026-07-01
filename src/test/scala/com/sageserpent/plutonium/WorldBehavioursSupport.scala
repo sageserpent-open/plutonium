@@ -18,12 +18,12 @@ import org.junit.jupiter.api.Assertions.assertThrows
 
 import scala.collection.mutable.ListBuffer
 
-object WorldSpecSupportAmericium {
-  val changeError = WorldSpecSupport.changeError
+object WorldBehavioursSupport {
+  val changeError = new RuntimeException("Error in making a change.")
 }
 
-trait WorldSpecSupportAmericium {
-  import WorldSpecSupportAmericium._
+trait WorldBehavioursSupport {
+  import WorldBehavioursSupport._
 
   def restrictedStrings = api.choose('a' to 'z').several[String]
 
@@ -300,7 +300,7 @@ trait WorldSpecSupportAmericium {
     )
 
   def shuffleRecordingsPreservingRelativeOrderOfEventsAtTheSameWhen(
-      recordingsGroupedById: Seq[WorldSpecSupportAmericium#RecordingsForAnId]
+      recordingsGroupedById: Seq[WorldBehavioursSupport#RecordingsForAnId]
   ): Trials[Seq[(Unbounded[Instant], Event)]] = {
     // PLAN: shuffle each lot of events on a per-id basis, keeping the
     // annihilations out of the way. Then merge the results using random
@@ -348,7 +348,7 @@ trait WorldSpecSupportAmericium {
     api.sequences(shuffledGroupsTrials).map(_.flatten.flatten)
   }
 
-  def historyFrom(world: World, recordingsGroupedById: Seq[WorldSpecSupportAmericium#RecordingsForAnId])(
+  def historyFrom(world: World, recordingsGroupedById: Seq[WorldBehavioursSupport#RecordingsForAnId])(
       scope: Scope
   ): List[(Any, Any)] =
     recordingsGroupedById.toList.flatMap(recordingsForAnId =>

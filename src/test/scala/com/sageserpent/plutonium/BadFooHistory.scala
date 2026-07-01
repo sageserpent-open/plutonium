@@ -1,6 +1,7 @@
 package com.sageserpent.plutonium
 
-import com.sageserpent.plutonium.WorldSpecSupport.changeError
+import com.sageserpent.plutonium.WorldBehavioursSupport.changeError
+
 
 abstract class BadFooHistory extends FooHistory {
   override def property1_=(data: String): Unit = {
